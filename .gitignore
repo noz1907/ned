@@ -1,0 +1,8 @@
+__pycache__/
+*.pyc
+/fikstur_*.step
+/fikstur_*.dxf
+/fikstur_*.json
+/fikstur_*.md
+/fikstur_*.png
+/referans.json

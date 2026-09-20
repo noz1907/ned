@@ -1,0 +1,118 @@
+{
+ "dosya": "parca.stp",
+ "secim": "G03",
+ "kati_sayisi": 5,
+ "agirlik_kg": 9.529,
+ "yon_siralamasi": [
+  {
+   "yon": "-Y",
+   "u": [
+    0,
+    -1,
+    0
+   ],
+   "erisim_orani": 0.18656574748228066,
+   "erisim_mm2": 162.7,
+   "oturma_mm2": 233347.5,
+   "yukseklik_mm": 50.0,
+   "puan": 0.5094
+  },
+  {
+   "yon": "+Y",
+   "u": [
+    0,
+    1,
+    0
+   ],
+   "erisim_orani": 0.18656574748228066,
+   "erisim_mm2": 162.7,
+   "oturma_mm2": 233204.9,
+   "yukseklik_mm": 50.0,
+   "puan": 0.5092
+  },
+  {
+   "yon": "-Z",
+   "u": [
+    0,
+    0,
+    -1
+   ],
+   "erisim_orani": 0.4055657568426182,
+   "erisim_mm2": 353.7,
+   "oturma_mm2": 9029.5,
+   "yukseklik_mm": 1948.0,
+   "puan": 0.2549
+  },
+  {
+   "yon": "+X",
+   "u": [
+    1,
+    0,
+    0
+   ],
+   "erisim_orani": 0.0,
+   "erisim_mm2": 0,
+   "oturma_mm2": 12379.7,
+   "yukseklik_mm": 195.0,
+   "puan": 0.1059
+  },
+  {
+   "yon": "-X",
+   "u": [
+    -1,
+    0,
+    0
+   ],
+   "erisim_orani": 0.0,
+   "erisim_mm2": 0,
+   "oturma_mm2": 12379.7,
+   "yukseklik_mm": 195.0,
+   "puan": 0.1059
+  },
+  {
+   "yon": "+Z",
+   "u": [
+    0,
+    0,
+    1
+   ],
+   "erisim_orani": 0.0,
+   "erisim_mm2": 0,
+   "oturma_mm2": 9524.7,
+   "yukseklik_mm": 1948.0,
+   "puan": 0.0122
+  }
+ ],
+ "secilen_yon": "-Y",
+ "datum_A": {
+  "alan_mm2": 171676.2,
+  "normal": [
+   -0.0,
+   1.0,
+   0.0
+  ],
+  "merkez": [
+   -5.68,
+   -52.32,
+   1835.33
+  ]
+ },
+ "uc_nokta": [
+  [
+   -43.9,
+   -52.32,
+   1026.7
+  ],
+  [
+   32.54,
+   -52.32,
+   1026.7
+  ],
+  [
+   -5.68,
+   -52.32,
+   2656.3
+  ]
+ ],
+ "onay": false
+}
