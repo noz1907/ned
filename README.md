@@ -235,16 +235,21 @@ Herhangi bir STEP dosyasından montaj ve komponent bazında DXF görünüşleri 
 ```
 python pf3_olcu.py parca.stp --liste          # komponent listesi
 python pf3_olcu.py parca.stp -o cikti         # DXF + tablo üret
+python pf3_olcu.py parca.stp -o cikti --tek 01.050.000.01 --montaj-yok
+                                              # yalnız tek komponentin çizimi
 ```
 
 ## Çizim kuralları
 
 | katman | çizgi | kalınlık |
 |--------|-------|----------|
-| GORUNEN | düz | 0,50 mm |
-| GIZLI | kesik | 0,35 mm |
-| EKSEN | uzun-kısa | 0,20 mm |
-| OLCU / YAZI | düz | 0,25 mm |
+| GORUNEN | düz | 0,10 mm |
+| GIZLI | kesik | 0,10 mm |
+| EKSEN | uzun-kısa | 0,10 mm |
+| OLCU / YAZI | düz | 0,10 mm |
+
+Görünen kenarla tam üst üste düşen gizli kenar çizilmez (görünen kazanır),
+böylece görünüşler kesik çizgiyle dolmaz.
 
 Ölçüler **milimetre**, birebir ölçek (`dimlfac = 1`). Yazı boyu parçaya göre
 ölçeklenir, `max(boy, en, kalınlık) / 45`, en az 2,5 mm en çok 25 mm.
@@ -254,8 +259,18 @@ açıklığı toplanır; 360°'ye yakınsa delik, değilse kenar yuvarlamasıdı
 radüs tablosunda yarıçap olarak listelenir. Bir delik CAD'de iki yarım silindire
 bölünmüş olsa da eksen konumu aynı olduğu için tek delik sayılır.
 
-Çizimde her delik grubunun çapı `124x Ø6.8` biçiminde ölçülendirilir, delik
-merkezlerine merkez çizgisi konur.
+Çizimde her delik grubunun çapı `124x Ø6.8`, her radüs grubu `4x R3`
+biçiminde ölçülendirilir; delik merkezlerine merkez çizgisi konur.
+
+**Yerleşim.** Ölçü çizgisi her zaman deliğin/yuvarlamanın merkezinden geçer
+(`dimtofl = 1`); yazı, görünüşün üstünde her grup kendi satırına gelecek
+biçimde dizilir, yeri `location` ile doğrudan verilir. Başlık bloğunun yeri
+çizilen her şeyin üst sınırından hesaplanır, tablolar da sağ sınırdan; böylece
+yazılar ne görünüşlerin ne de birbirinin üstüne biner.
+
+Örnek çıktı: `ornek/olcu/ORNEK_01_050_000_01.dxf` (+ `.png` önizleme).
+`ornek/olcu/onizle3.py` bir DXF'i gerçek yazı boyutlarıyla PNG'ye çevirir:
+`python ornek/olcu/onizle3.py cizim.dxf onizleme.png`.
 
 ## Sınıflandırma
 
