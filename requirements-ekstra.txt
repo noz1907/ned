@@ -1,0 +1,7 @@
+# Yalnizca su iki program icin gerekli:
+#   pf2_fikstur.py   kaynak/montaj fiksturu uretici
+#   pfd_dxf2stp.py   DXF -> 3B STEP cevirici
+# Ana akis (BOM + detay resmi + montaj resmi) bunlarsiz calisir.
+-r requirements.txt
+cadquery>=2.4
+shapely>=2.0

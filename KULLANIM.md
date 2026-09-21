@@ -50,11 +50,31 @@ source .venv/bin/activate
 pip install -r requirements.txt
 ```
 
-Kurulan paketler: `cadquery` (STEP okuma/geometri), `ezdxf` (DXF yazma),
-`matplotlib` (önizleme), `shapely`.
+Kurulan paketler: `cadquery-ocp` (OpenCascade — STEP okuma/geometri),
+`ezdxf` (DXF yazma), `matplotlib` (önizleme). Yaklaşık **150 MB indirme,
+1,3 GB boş disk** ister (cadquery ile birlikte 1,8 GB idi).
+
+> `cadquery` paketi **gerekmez**. Kod doğrudan OCP kullanır; `cadquery`
+> beraberinde `casadi`, `numba`, `llvmlite`, `scipy`, `trame` gibi
+> ~350 MB'lık, bu programın kullanmadığı bağımlılık getiriyordu.
+>
+> `pf2_fikstur.py` ve `pfd_dxf2stp.py` kullanacaksanız onlar için
+> `pip install -r requirements-ekstra.txt` gerekir (cadquery + shapely).
 
 > `tkinter` ayrıca kurulmaz, Python ile birlikte gelir. (Yalnız Linux'ta
 > bazı dağıtımlarda ayrı paket olabilir: `sudo apt install python3-tk`.)
+
+### Kurulumda "No space left on device" / "Errno 28"
+
+Disk dolu demektir. Boş alan açmanın en hızlı yolu pip'in indirme
+önbelleğini temizlemek (genelde birkaç yüz MB):
+
+```
+pip cache purge
+```
+
+Yetmezse PiFikstur klasörünü boş alanı olan başka bir sürücüye taşıyıp
+`PiFikstur_baslat.bat`'ı oradan çalıştırın; `.venv` o sürücüde kurulur.
 
 Kurulumun tamam olduğunu görmek için:
 

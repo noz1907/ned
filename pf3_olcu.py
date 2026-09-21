@@ -28,7 +28,6 @@ from __future__ import annotations
 import argparse, csv, json, math, os, re, sys, time
 from collections import Counter, defaultdict
 
-import cadquery as cq
 import ezdxf
 
 from OCP.gp import gp_Pnt, gp_Dir, gp_Trsf, gp_Ax2, gp_Vec
@@ -36,11 +35,13 @@ from OCP.BRepBuilderAPI import BRepBuilderAPI_Transform
 from OCP.BRepGProp import BRepGProp
 from OCP.GProp import GProp_GProps
 from OCP.BRepAdaptor import BRepAdaptor_Surface, BRepAdaptor_Curve
-from OCP.GeomAbs import GeomAbs_Plane, GeomAbs_Cylinder, GeomAbs_Cone, GeomAbs_Sphere
+from OCP.GeomAbs import (GeomAbs_Plane, GeomAbs_Cylinder, GeomAbs_Cone,
+                         GeomAbs_Sphere, GeomAbs_Line)
 from OCP.TopAbs import TopAbs_FACE, TopAbs_EDGE, TopAbs_REVERSED
 from OCP.TopExp import TopExp, TopExp_Explorer
 from OCP.TopTools import TopTools_IndexedMapOfShape
-from OCP.TopoDS import TopoDS
+from OCP.TopoDS import TopoDS, TopoDS_Compound
+from OCP.BRep import BRep_Builder
 from OCP.Bnd import Bnd_Box
 from OCP.BRepBndLib import BRepBndLib
 from OCP.BRepPrimAPI import BRepPrimAPI_MakeBox
@@ -255,11 +256,14 @@ def hizalama(sh):
     en_uzun, yon = 0.0, None
     ex = TopExp_Explorer(f, TopAbs_EDGE)
     while ex.More():
-        e = cq.Edge(TopoDS.Edge_s(ex.Current()))
         try:
-            if e.geomType() == "LINE" and e.Length() > en_uzun:
-                p, q = e.startPoint(), e.endPoint()
-                en_uzun, yon = e.Length(), (q.x - p.x, q.y - p.y, q.z - p.z)
+            c = BRepAdaptor_Curve(TopoDS.Edge_s(ex.Current()))
+            if c.GetType() == GeomAbs_Line:
+                p, q = c.Value(c.FirstParameter()), c.Value(c.LastParameter())
+                u = p.Distance(q)
+                if u > en_uzun:
+                    en_uzun = u
+                    yon = (q.X() - p.X(), q.Y() - p.Y(), q.Z() - p.Z())
         except Exception:
             pass
         ex.Next()
@@ -267,6 +271,16 @@ def hizalama(sh):
         yon = (1.0, 0.0, 0.0) if abs(z[0]) < 0.9 else (0.0, 1.0, 0.0)
     x = _birim([yon[i] - sum(yon[j] * z[j] for j in range(3)) * z[i] for i in range(3)])
     return [list(x), list(_capraz(z, x)), list(z)]
+
+
+def bilesik(katilar):
+    """Katıları tek bir bileşik şekilde toplar (OCP; cadquery gerekmez)."""
+    c = TopoDS_Compound()
+    b = BRep_Builder()
+    b.MakeCompound(c)
+    for sh in katilar:
+        b.Add(c, sh)
+    return c
 
 
 def donustur(sh, R, t=(0.0, 0.0, 0.0)):
@@ -937,8 +951,7 @@ def dxf_montaj(katilar, yol, ad, P, bom=None):
     for sh in katilar:
         BRepBndLib.Add_s(sh, b)
     x0, y0, z0, x1, y1, z1 = b.Get()
-    comp = cq.Compound.makeCompound([cq.Shape.cast(sh) for sh in katilar])
-    s = donustur(comp.wrapped, [[1, 0, 0], [0, 1, 0], [0, 0, 1]], (-x0, -y0, -z0))
+    s = donustur(bilesik(katilar), [[1, 0, 0], [0, 1, 0], [0, 0, 1]], (-x0, -y0, -z0))
     L, W, H = x1 - x0, y1 - y0, z1 - z0
     doc = dxf_kur(); msp = doc.modelspace()
     h = min(40.0, max(3.0, max(L, W, H) / 45.0))
