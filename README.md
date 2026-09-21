@@ -227,17 +227,49 @@ program bunu gizlemez.
 
 ---
 
-# STEP -> DXF ve ölçü (`pf3_olcu.py`)
+# STEP -> BOM, detay resmi, montaj resmi (`pf3_olcu.py`)
 
-Herhangi bir STEP dosyasından montaj ve komponent bazında DXF görünüşleri ve
-ölçü tablosu üretir.
+Herhangi bir STEP dosyasından — parça, montaj, fikstür farketmeksizin — parça
+listesi (BOM), komponent detay resimleri ve montaj resmi üretir.
+
+## İşlem akışı
+
+| aşama | ne yapar | çıktı |
+|-------|----------|-------|
+| 1 | komponent parçaların detaylandırılması ve BOM çıkarılması | `BOM.csv`, `BOM.md`, `olculer.csv/json`, `rapor.md` |
+| 2 | detay parçaların çizilmesi ve ölçülendirilmesi | `P01_<kod>.dxf` … |
+| 3 | montaj resmi ve ölçülendirilmesi | `00_MONTAJ.dxf` (BOM tablosu içinde) |
 
 ```
-python pf3_olcu.py parca.stp --liste          # komponent listesi
-python pf3_olcu.py parca.stp -o cikti         # DXF + tablo üret
-python pf3_olcu.py parca.stp -o cikti --tek 01.050.000.01 --montaj-yok
-                                              # yalnız tek komponentin çizimi
+python pf3_olcu.py parca.stp --liste                  # komponent listesi
+python pf3_olcu.py parca.stp -o cikti                 # 1 + 2 + 3
+python pf3_olcu.py parca.stp -o cikti --asama 1       # yalnız BOM
+python pf3_olcu.py parca.stp -o cikti --asama 2       # yalnız detay resimleri
+python pf3_olcu.py parca.stp -o cikti --asama 3       # yalnız montaj resmi
+python pf3_olcu.py parca.stp -o cikti --tek 01.050.000.01 --asama 2
+                                                      # tek parçanın resmi
 ```
+
+## Malzeme — kütle neye göre hesaplanıyor
+
+Kütle `hacim x yoğunluk`tur; yoğunluk **malzemeye** bağlıdır ve program bunu
+tahmin etmez, **sorar**. Üç yol var:
+
+```
+--malzeme aluminyum          hepsine tek malzeme
+--malzeme-dosya malzeme.csv  parça bazlı (kod;malzeme)
+--malzeme-sor                terminalden sorar: hepsine tek ya da parça parça
+--malzeme-liste              tabloyu yazar
+```
+
+Hiçbiri verilmezse program çeliği varsayar, bunu **açıkça söyler** ve çıktı
+klasörüne doldurulmaya hazır bir `malzeme.csv` şablonu yazar. Tabloda çelik,
+paslanmaz, döküm, alüminyum, pirinç, bakır, bronz, titanyum, çinko, magnezyum,
+kurşun, PA6, POM, PE-HD, PP, PVC, ABS, PTFE, kauçuk, ahşap ve cam var
+(`--yogunluk` ile doğrudan kg/mm³ de verilebilir).
+
+Seçilen malzeme ve yoğunluğu, detay resminin başlık bloğuna ve BOM'a yazılır —
+kütlenin neye göre hesaplandığı resimden okunur.
 
 ## Çizim kuralları
 
@@ -262,6 +294,26 @@ bölünmüş olsa da eksen konumu aynı olduğu için tek delik sayılır.
 Çizimde her delik grubunun çapı `124x Ø6.8`, her radüs grubu `4x R3`
 biçiminde ölçülendirilir; delik merkezlerine merkez çizgisi konur.
 
+## Görünüşler
+
+Dört görünüş çizilir: **ÖN (referans), SAĞ, SOL, ÜST** — 1. açı (Avrupa/ISO-E)
+yerleşimiyle: sağdan bakılan görünüş ÖN'ün soluna, soldan bakılan sağına,
+üstten bakılan altına konur. Görünüş adı, görünüşün **sol üst köşesinde**,
+parçanın ve ölçülerinin dışında durur; hiçbir şekil veya ölçünün üstüne
+binmez.
+
+Başlık bloğunda yalnız parça kimliği ve genel ölçüler vardır:
+
+```
+POZ 5   01.050.000.01   01.050.000.01 U-Blech-Mechanismus
+adet: 1
+BOY x EN x KALINLIK : 483.04 x 76.5 x 32.0 mm
+hacim 163651.2 mm3   kutle 1.2847 kg   yuzey 114694.7 mm2
+malzeme: Celik (S235JR / St37)   yogunluk 7.85 g/cm3
+```
+
+Delik/radüs sayıları ve dış çaplar başlıkta değil, sağdaki tablolardadır.
+
 **Yerleşim.** Ölçü çizgisi her zaman deliğin/yuvarlamanın merkezinden geçer
 (`dimtofl = 1`); yazı, görünüşün üstünde her grup kendi satırına gelecek
 biçimde dizilir, yeri `location` ile doğrudan verilir. Başlık bloğunun yeri
@@ -278,9 +330,15 @@ Civata, somun, pul, pim, perçin, yay, rulman, segman, saplama ve DIN/ISO/EN
 numaralı parçalar **standart eleman** sayılır: çizim üretilmez, kod ve adet
 listelenir. Kaynak dikişleri ayrı tutulur, parça sayılmaz.
 
+## BOM
+
+Aşama 1'in çıktısı: her poz için kod, tanım, adet, malzeme, ölçü (BxExK),
+adet başına kütle ve toplam kütle. Civata, somun, pul gibi standart elemanlar
+BOM'a **kod + adet** olarak girer, çizimleri üretilmez. Kaynak dikişleri BOM'a
+girmez, ayrı sayılır. Aynı BOM tablosu montaj resminin içine de çizilir;
+detay resimlerinin başlığında poz numarası ile tanım yer alır.
+
 ## Sonraki adımlar (not alındı, henüz yapılmadı)
 
-1. **BOM**: montaj çiziminde BOM tablosu, komponent çizimlerinde BOM poz
-   numarası ve tanımı.
-2. **Kesit görünüş**: iki delik veya iki form görünüşte üst üste binip anlamsız
+1. **Kesit görünüş**: iki delik veya iki form görünüşte üst üste binip anlamsız
    hale geldiğinde o görünüş yerine kesit almak.

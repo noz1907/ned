@@ -51,6 +51,68 @@ import pf1_referans as E
 
 RHO = 7.85e-6          # kg/mm3 (çelik); --yogunluk ile değiştirilir
 
+# ---------------------------------------------------------------- malzeme
+# Kütle = hacim x yoğunluk. Yoğunluk MALZEMEYE bağlıdır; program malzemeyi
+# kendiliğinden bilemez, sorar (--malzeme / --malzeme-dosya / --malzeme-sor).
+# anahtar -> (tam ad, yoğunluk g/cm3)
+MALZEME = {
+    "celik":      ("Celik (S235JR / St37)",      7.85),
+    "celik-yuksek": ("Celik (S355 / St52)",      7.85),
+    "paslanmaz":  ("Paslanmaz celik (1.4301)",   7.90),
+    "dokum":      ("Dokme demir (GG25)",         7.20),
+    "aluminyum":  ("Aluminyum (AlMg3 / 6060)",   2.70),
+    "pirinc":     ("Pirinc (CuZn37)",            8.50),
+    "bakir":      ("Bakir (Cu-ETP)",             8.96),
+    "bronz":      ("Bronz (CuSn8)",              8.80),
+    "titanyum":   ("Titanyum (Ti6Al4V)",         4.43),
+    "cinko":      ("Cinko dokum (ZnAl4)",        6.70),
+    "magnezyum":  ("Magnezyum (AZ91)",           1.81),
+    "kursun":     ("Kursun",                    11.34),
+    "plastik":    ("Plastik (PA6 - poliamid)",   1.14),
+    "pom":        ("POM (asetal)",               1.41),
+    "pe":         ("PE-HD (polietilen)",         0.95),
+    "pp":         ("PP (polipropilen)",          0.91),
+    "pvc":        ("PVC",                        1.40),
+    "abs":        ("ABS",                        1.05),
+    "ptfe":       ("PTFE (teflon)",              2.20),
+    "kaucuk":     ("Kaucuk (NBR)",               1.30),
+    "ahsap":      ("Ahsap (kayin)",              0.72),
+    "cam":        ("Cam",                        2.50),
+}
+VARSAYILAN_MALZEME = "celik"
+_TR = str.maketrans("çğıİöşüÇĞIÖŞÜ", "cgiiosucgiosu")
+
+
+def _tr_sade(t):
+    return (t or "").strip().translate(_TR).lower()
+
+
+def malzeme_coz(ad):
+    """Kullanıcının yazdığı malzeme adını tablodaki anahtara çevirir."""
+    a = _tr_sade(ad)
+    if not a:
+        return None
+    if a in MALZEME:
+        return a
+    for k in MALZEME:
+        if a.startswith(k) or k.startswith(a):
+            return k
+    for k, (tam, _r) in MALZEME.items():
+        if a in _tr_sade(tam):
+            return k
+    return None
+
+
+def yogunluk_kg_mm3(anahtar):
+    return MALZEME[anahtar][1] * 1e-6
+
+
+def malzeme_listele():
+    print("Malzemeler (yogunluk g/cm3):")
+    for k, (tam, r) in MALZEME.items():
+        print(f"  {k:<14s} {tam:<28s} {r:>6.2f}")
+
+
 # ---------------------------------------------------------------- standart eleman
 # Bu desenlere uyan parçalar için çizim üretilmez, sadece kod + adet listelenir.
 STANDART = [
@@ -306,9 +368,35 @@ def komponent_olcu(sh, P):
 
 
 # ---------------------------------------------------------------- HLR görünüş
-GORUNUS = {"ON": ((0, -1, 0), (1, 0, 0)),      # göz -Y'de, bakış +Y
-           "UST": ((0, 0, 1), (1, 0, 0)),      # göz +Z'de, bakış -Z
-           "SAG": ((1, 0, 0), (0, 1, 0))}      # göz +X'te, bakış -X
+# Dört görünüş yeter: ÖN (referans), SAĞ, SOL, ÜST.
+# (göz yönü, izdüşüm düzleminin X ekseni)
+GORUNUS = {"ON":  ((0, -1, 0), (1, 0, 0)),     # göz -Y'de, bakış +Y  -> X yatay, Z düşey
+           "SAG": ((1, 0, 0), (0, 1, 0)),      # göz +X'te            -> Y yatay, Z düşey
+           "SOL": ((-1, 0, 0), (0, -1, 0)),    # göz -X'te            -> -Y yatay, Z düşey
+           "UST": ((0, 0, 1), (1, 0, 0))}      # göz +Z'de            -> X yatay, Y düşey
+GORUNUS_AD = {"ON": "ÖN", "SAG": "SAĞ", "SOL": "SOL", "UST": "ÜST"}
+
+
+# Bir eksene paralel deliğin DAİRE göründüğü görünüş(ler).
+# (görünüş, yatay eksen indeksi, düşey eksen indeksi, yatay aynalı mı)
+# SOL görünüşte yatay eksen -Y olduğu için ayna gerekir.
+DAIRE_GOR = {
+    "Y": [("ON", 0, 2, False)],
+    "Z": [("UST", 0, 1, False)],
+    "X": [("SAG", 1, 2, False), ("SOL", 1, 2, True)],
+}
+
+
+def gorunus_olcusu(gad, L, W, T):
+    """Görünüşün (genişlik, yükseklik) ölçüsü."""
+    return {"ON": (L, T), "SAG": (W, T), "SOL": (W, T), "UST": (L, W)}[gad]
+
+
+def gorunus_yerlesimi(L, W, T, g):
+    """1. açı (Avrupa/ISO-E) yerleşimi: sağdan bakılan görünüş SOLA,
+    soldan bakılan SAĞA, üstten bakılan ALTA çizilir. ÖN referanstır."""
+    return {"SAG": (-(W + g), 0.0), "ON": (0.0, 0.0),
+            "SOL": (L + g, 0.0), "UST": (0.0, -(W + g))}
 
 
 def hlr(sh, goz, xref, gizli=True):
@@ -443,7 +531,8 @@ def gorunus_ciz(msp, kenar, ox, oy, ad, h=4.0, olcu2=True):
                 msp.add_lwpolyline([(x + dx, y + dy) for x, y in par],
                                    dxfattribs={"layer": kat})
     G, Y = max(xs) - min(xs), max(ys) - min(ys)
-    _yaz(msp, ad, ox, oy + Y + 0.8 * h, 1.3 * h)      # etiket görünüşün üstünde
+    # Etiket görünüşün SOL ÜST köşesinde, parçanın ve ölçülerin dışında.
+    _yaz(msp, GORUNUS_AD.get(ad, ad), ox, oy + Y + 0.7 * h, 1.3 * h)
     if olcu2:
         d = 4.0 * h                              # ölçü çizgisi uzaklığı
         msp.add_linear_dim(base=(ox, oy - d), p1=(ox, oy), p2=(ox + G, oy),
@@ -459,35 +548,37 @@ def cap_olculeri(msp, o, yer, h, olcu, ust, en_cok_grup=6):
     Ölçü çizgisi deliğin merkezinden geçer (dimtofl=1). Yazı, görünüşün
     üstünde satır satır dizilir: her çap grubu kendi satırına konur, böylece
     yazılar ne birbirinin ne de görünüşlerin üstüne biner.
-    Aynı çaptaki delikler için tek ölçü yazılır, adet önüne konur ("2x O9").
+    Aynı çaptaki delikler için tek ölçü yazılır, adet önüne konur ("2x Ø9").
     Radüsler ayrıca R olarak verilir."""
-    eksen_gor = {"Y": ("ON", 0, 2), "Z": ("UST", 0, 1), "X": ("SAG", 1, 2)}
-    W3 = {"ON": (olcu[0], olcu[2]), "UST": (olcu[0], olcu[1]), "SAG": (olcu[1], olcu[2])}
+    L, W, T = olcu
     kova = defaultdict(list)                 # görünüş -> ölçülecek gruplar
     for tip, liste in (("cap", o.get("delikler") or []), ("radus", o.get("radusler") or [])):
         for d in liste:
-            bilgi = eksen_gor.get(d["eksen"])
-            if not bilgi or not d.get("merkezler"):
+            hedef = DAIRE_GOR.get(d["eksen"])
+            if not hedef or not d.get("merkezler"):
                 continue
-            gad, i1, i2 = bilgi
+            gad, i1, i2, ayna = hedef[0]     # ölçü tek görünüşe konur
+            if gad not in yer:
+                continue
             r = (d["cap_mm"] / 2.0) if tip == "cap" else d["yaricap_mm"]
             if r < 0.5 or len(kova[gad]) >= en_cok_grup:
                 continue
-            kova[gad].append((tip, d, i1, i2, r))
-    en_ust, en_sag = dict(ust), max(x for x, _ in yer.values())
+            kova[gad].append((tip, d, i1, i2, ayna, r))
+    en_ust = dict(ust)
+    en_sag = max(x + gorunus_olcusu(gd, L, W, T)[0] for gd, (x, _y) in yer.items())
     for gad, gruplar in kova.items():
         ox, oy = yer[gad]
-        gw, gy = W3[gad]
-        # Yazı satırları görünüşün üstünde; en büyük çap en üstte olsun ki
-        # kılavuz çizgileri birbirini az kessin.
-        gruplar.sort(key=lambda q: -q[4])
-        for k, (tip, d, i1, i2, r) in enumerate(gruplar):
+        gw, _gy = gorunus_olcusu(gad, L, W, T)
+        # Büyük çap üstte: kılavuz çizgileri birbirini az kessin.
+        gruplar.sort(key=lambda q: -q[5])
+        for k, (tip, d, i1, i2, ayna, r) in enumerate(gruplar):
             # Ölçü, o gruptaki deliklerden görünüşün ortasına en uzak olanına
             # konur; yazı dışarı taşsın, görünüşü kapatmasın.
-            mx = ox + gw / 2.0
-            c = max(d["merkezler"], key=lambda q: abs(ox + q[i1] - mx))
-            x, y = ox + c[i1], oy + c[i2]
-            satir_y = ust.get(gad, oy + gy) + (0.4 + 1.9 * k) * h
+            def _x(q):
+                return ox + (gw - q[i1] if ayna else q[i1])
+            c = max(d["merkezler"], key=lambda q: abs(_x(q) - (ox + gw / 2.0)))
+            x, y = _x(c), oy + c[i2]
+            satir_y = en_ust.get(gad, oy) + (0.4 + 1.9 * k) * h
             yazi_yeri = (x + 1.2 * h, satir_y)
             onek = f"{d['adet']}x " if d["adet"] > 1 else ""
             metin = (f"{onek}%%c{d['cap_mm']:g}" if tip == "cap"
@@ -496,43 +587,39 @@ def cap_olculeri(msp, o, yer, h, olcu, ust, en_cok_grup=6):
                    "dimatfit": 3, "dimgap": h * 0.3}
             try:
                 if tip == "cap":
-                    msp.add_diameter_dim(center=(x, y), radius=r,
-                                         location=yazi_yeri,
-                                         dimstyle=OLCU_STILI, override=ovr,
-                                         text=metin,
+                    msp.add_diameter_dim(center=(x, y), radius=r, location=yazi_yeri,
+                                         dimstyle=OLCU_STILI, override=ovr, text=metin,
                                          dxfattribs={"layer": "OLCU"}).render()
                 else:
-                    msp.add_radius_dim(center=(x, y), radius=r,
-                                       location=yazi_yeri,
-                                       dimstyle=OLCU_STILI, override=ovr,
-                                       text=metin,
+                    msp.add_radius_dim(center=(x, y), radius=r, location=yazi_yeri,
+                                       dimstyle=OLCU_STILI, override=ovr, text=metin,
                                        dxfattribs={"layer": "OLCU"}).render()
             except Exception:
                 continue
-            en_ust[gad] = max(en_ust.get(gad, oy + gy), satir_y + 1.4 * h)
-            en_sag = max(en_sag, yazi_yeri[0] + (len(metin) + 1) * 0.7 * h)
+            en_ust[gad] = max(en_ust.get(gad, oy), satir_y + 1.4 * h)
+            en_sag = max(en_sag, yazi_yeri[0] + (len(metin) + 1) * 0.72 * h)
     return en_ust, en_sag
 
 
-def merkez_cizgileri(msp, o, yer, L, W, T, en_cok=600):
-    """Delik merkezlerine, deliğin daire göründüğü görünüşte merkez çizgisi."""
-    eksen_gor = {"Y": ("ON", 0, 2), "Z": ("UST", 0, 1), "X": ("SAG", 1, 2)}
+def merkez_cizgileri(msp, o, yer, L, W, T, en_cok=1200):
+    """Deliğin daire göründüğü HER görünüşte merkez çizgisi."""
     sayac = 0
-    for d in o["delikler"]:
-        bilgi = eksen_gor.get(d["eksen"])
-        if not bilgi:
-            continue
-        gad, i1, i2 = bilgi
-        ox, oy = yer[gad]
-        r = d["cap_mm"] / 2.0
-        u = max(r + 1.5, 2.0)
-        for c in d["merkezler"]:
-            if sayac >= en_cok:
-                return sayac
-            x, y = ox + c[i1], oy + c[i2]
-            msp.add_line((x - u, y), (x + u, y), dxfattribs={"layer": "EKSEN"})
-            msp.add_line((x, y - u), (x, y + u), dxfattribs={"layer": "EKSEN"})
-            sayac += 1
+    for d in o.get("delikler") or []:
+        for gad, i1, i2, ayna in DAIRE_GOR.get(d["eksen"], []):
+            if gad not in yer:
+                continue
+            ox, oy = yer[gad]
+            gw, _gy = gorunus_olcusu(gad, L, W, T)
+            r = d["cap_mm"] / 2.0
+            u = max(r + 1.5, 2.0)
+            for c in d.get("merkezler") or []:
+                if sayac >= en_cok:
+                    return sayac
+                x = ox + (gw - c[i1] if ayna else c[i1])
+                y = oy + c[i2]
+                msp.add_line((x - u, y), (x + u, y), dxfattribs={"layer": "EKSEN"})
+                msp.add_line((x, y - u), (x, y + u), dxfattribs={"layer": "EKSEN"})
+                sayac += 1
     return sayac
 
 
@@ -544,17 +631,17 @@ def _tablo(msp, satirlar, x, y_ust, h, sat_h):
     return max((len(t) + 2) * 0.72 * th for t, th in satirlar)
 
 
-def dxf_komponent(s, o, ad, kod, adet, yol, P):
+def dxf_komponent(s, o, k, yol, P):
+    """Bir komponentin detay resmi: ÖN / SAĞ / SOL / ÜST + ölçüler + tablolar."""
     doc = dxf_kur(); msp = doc.modelspace()
-    k = kutu(s)
-    L, W, T = k[3] - k[0], k[4] - k[1], k[5] - k[2]
+    kb = kutu(s)
+    L, W, T = kb[3] - kb[0], kb[4] - kb[1], kb[5] - kb[2]
     # Yazı boyu parçaya göre: küçük parçada küçük, büyükte büyük ama okunur.
     h = min(25.0, max(2.5, max(L, W, T) / 45.0))
     olcu_stili(doc, h)
-    # Görünüş yerleşimi: ÖN sol üstte, SAĞ onun sağında, ÜST onun altında.
-    # Boşluk, araya giren ölçü çizgisi + yazı + kılavuz için yeterli olmalı.
+    # Görünüşler arası boşluk: araya giren ölçü çizgisi + yazı + kılavuz kadar.
     g = max(L, W, T) * 0.10 + 14 * h
-    yer = {"ON": (0.0, 0.0), "SAG": (L + g, 0.0), "UST": (0.0, -(W + g))}
+    yer = gorunus_yerlesimi(L, W, T, g)
     ust = {}
     for gad, (goz, xref) in GORUNUS.items():
         kenar = hlr(s, goz, xref, gizli=P["gizli"])
@@ -563,22 +650,22 @@ def dxf_komponent(s, o, ad, kod, adet, yol, P):
         ust[gad] = oy + Y + 2.2 * h          # görünüş etiketinin de üstü
     merkez_cizgileri(msp, o, yer, L, W, T)
     ust, sag = cap_olculeri(msp, o, yer, h, (L, W, T), ust)
-    # Başlık bloğu: çizilen her şeyin üstünde, ÖN görünüşle aynı hizada.
+    sol = min(x for x, _y in yer.values()) - 5.0 * h
+    # Başlık bloğu: çizilen her şeyin üstünde, en sol görünüşle aynı hizada.
+    # İçerik yalnız parça kimliği ve genel ölçüler; delik/radüs ayrıntısı
+    # tablolarda durur.
     sat_h = 2.2 * h
     y0 = max(ust.values()) + 2.5 * h
+    poz = f"POZ {k['poz']}   " if k.get("poz") else ""
     satir = [
-        (f"{kod}   {ad[:60]}", 1.5 * h),
-        (f"adet: {adet}", 1.1 * h),
+        (f"{poz}{k['kod']}   {k['ad'][:60]}", 1.5 * h),
+        (f"adet: {k['adet']}", 1.1 * h),
         (f"BOY x EN x KALINLIK : {o['boy_mm']} x {o['en_mm']} x {o['kalinlik_mm']} mm", 1.1 * h),
         (f"hacim {o['hacim_mm3']} mm3   kutle {o['kutle_kg']} kg   yuzey {o['yuzey_mm2']} mm2", 1.1 * h),
+        (f"malzeme: {k.get('malzeme_ad', '-')}   yogunluk {k.get('yogunluk_g_cm3', '-')} g/cm3", 1.1 * h),
     ]
-    if o["sac_kalinlik_mm"]:
-        satir.append((f"sac kalinligi: {o['sac_kalinlik_mm']} mm", 1.1 * h))
-    if o["dis_capler"]:
-        satir.append(("dis capler: " + ", ".join(f"%%c{d['cap_mm']}" for d in o["dis_capler"][:6]), 1.1 * h))
-    satir.append((f"toplam delik: {o['delik_adedi']}   toplam radus: {o.get('radus_adedi', 0)}", 1.1 * h))
     tepe = y0 + len(satir) * sat_h
-    _tablo(msp, satir, 0.0, tepe, h, sat_h)
+    _tablo(msp, satir, sol, tepe, h, sat_h)
     # Delik ve radüs tabloları: çizimin sağında, yan yana, üstleri aynı hizada.
     x = sag + 6.0 * h
     for baslik, liste, bicim in (
@@ -589,10 +676,10 @@ def dxf_komponent(s, o, ad, kod, adet, yol, P):
     ):
         if not liste:
             continue
-        ikinci = "uzunluk" if baslik.startswith("RADUS") else "derinlik"
-        ilk = "R" if baslik.startswith("RADUS") else "cap"
+        radus = baslik.startswith("RADUS")
         st = [(baslik, 1.3 * h),
-              (f"{ilk:>8s} {'adet':>5s} {'eksen':>6s} {ikinci:>9s}", 1.05 * h)]
+              (f"{'R' if radus else 'cap':>8s} {'adet':>5s} {'eksen':>6s} "
+               f"{'uzunluk' if radus else 'derinlik':>9s}", 1.05 * h)]
         st += [(bicim(d), 1.05 * h) for d in liste[:18]]
         if len(liste) > 18:
             st.append((f"... +{len(liste) - 18} satir daha", 1.05 * h))
@@ -600,30 +687,65 @@ def dxf_komponent(s, o, ad, kod, adet, yol, P):
     doc.saveas(yol)
 
 
-def dxf_montaj(katilar, yol, ad, P):
+def dxf_montaj(katilar, yol, ad, P, bom=None):
+    """Montaj resmi: ÖN / SAĞ / SOL / ÜST gabari görünüşleri + BOM tablosu."""
     b = Bnd_Box()
-    for s in katilar:
-        BRepBndLib.Add_s(s, b)
+    for sh in katilar:
+        BRepBndLib.Add_s(sh, b)
     x0, y0, z0, x1, y1, z1 = b.Get()
-    comp = cq.Compound.makeCompound([cq.Shape.cast(s) for s in katilar])
+    comp = cq.Compound.makeCompound([cq.Shape.cast(sh) for sh in katilar])
     s = donustur(comp.wrapped, [[1, 0, 0], [0, 1, 0], [0, 0, 1]], (-x0, -y0, -z0))
     L, W, H = x1 - x0, y1 - y0, z1 - z0
     doc = dxf_kur(); msp = doc.modelspace()
     h = min(40.0, max(3.0, max(L, W, H) / 45.0))
     olcu_stili(doc, h)
-    g = max(L, W, H) * 0.06 + 6 * h
-    yer = {"ON": (0.0, 0.0), "SAG": (L + g, 0.0), "UST": (0.0, -(W + g))}
+    g = max(L, W, H) * 0.08 + 10 * h
+    yer = gorunus_yerlesimi(L, W, H, g)
+    ust = {}
     for gad, (goz, xref) in GORUNUS.items():
         kenar = hlr(s, goz, xref, gizli=False)       # montajda gizli çizgi kapalı
         ox, oy = yer[gad]
-        gorunus_ciz(msp, kenar, ox, oy, gad, h=h, olcu2=True)
-    satir = [f"MONTAJ  {ad}",
-             f"gabari BOY x EN x YUKSEKLIK : {L:.2f} x {W:.2f} x {H:.2f} mm",
-             f"kati sayisi: {len(katilar)}"]
-    for i, t in enumerate(satir):
-        _yaz(msp, t, 0.0, H + 2.5 * h + (len(satir) - i) * 2.4 * h, 2.0 * h if i == 0 else 1.4 * h)
+        G, Y = gorunus_ciz(msp, kenar, ox, oy, gad, h=h, olcu2=True)
+        ust[gad] = oy + Y + 2.2 * h
+    sol = min(x for x, _y in yer.values()) - 5.0 * h
+    sag = max(x + gorunus_olcusu(gd, L, W, H)[0] for gd, (x, _y) in yer.items())
+    sat_h = 2.2 * h
+    satir = [(f"MONTAJ   {ad}", 1.5 * h),
+             (f"gabari BOY x EN x YUKSEKLIK : {L:.2f} x {W:.2f} x {H:.2f} mm", 1.1 * h),
+             (f"kati sayisi: {len(katilar)}", 1.1 * h)]
+    if bom:
+        agir = sum((r.get("toplam_kg") or 0.0) for r in bom)
+        satir.append((f"toplam kutle: {agir:.3f} kg   poz sayisi: {len(bom)}", 1.1 * h))
+    tepe = max(ust.values()) + 2.5 * h + len(satir) * sat_h
+    _tablo(msp, satir, sol, tepe, h, sat_h)
+    if bom:
+        _tablo(msp, bom_satirlari(bom, h), sag + 6.0 * h, tepe, h, sat_h)
     doc.saveas(yol)
     return {"boy_mm": round(L, 2), "en_mm": round(W, 2), "yukseklik_mm": round(H, 2)}
+
+
+# ---------------------------------------------------------------- BOM
+BOM_BASLIK = ("poz", "kod", "tanim", "adet", "malzeme", "olcu", "kg/adet", "toplam kg")
+
+
+def _bom_metin(r):
+    ka = f"{r['kg_adet']:.3f}" if r.get("kg_adet") else "-"
+    tk = f"{r['toplam_kg']:.3f}" if r.get("toplam_kg") else "-"
+    return (f"{str(r['poz']):>3s} {r['kod'][:22]:<22s} {r['ad'][:30]:<30s} "
+            f"{r['adet']:>4d} {(r.get('malzeme_ad') or '-')[:22]:<22s} "
+            f"{(r.get('olcu') or '-'):<22s} {ka:>9s} {tk:>9s}")
+
+
+def bom_satirlari(bom, h, en_cok=40):
+    """BOM tablosunu DXF yazı satırlarına çevirir."""
+    st = [("BOM - PARCA LISTESI", 1.3 * h),
+          (f"{'poz':>3} {'kod':<22s} {'tanim':<30s} {'adet':>4} {'malzeme':<22s} "
+           f"{'olcu (BxExK)':<22s} {'kg/adet':>9s} {'toplam kg':>9s}", 1.05 * h)]
+    for r in bom[:en_cok]:
+        st.append((_bom_metin(r), 1.05 * h))
+    if len(bom) > en_cok:
+        st.append((f"... +{len(bom) - en_cok} poz daha (BOM.csv)", 1.05 * h))
+    return st
 
 
 # ---------------------------------------------------------------- komponentleme
@@ -643,31 +765,115 @@ def komponentle(kayit, P):
     return out
 
 
+# ---------------------------------------------------------------- malzeme seçimi
+def malzeme_dosya_oku(yol):
+    """kod;malzeme biçiminde eşleme dosyası (CSV veya JSON)."""
+    esl = {}
+    if yol.lower().endswith(".json"):
+        for kod, mal in (json.load(open(yol, encoding="utf-8")) or {}).items():
+            esl[_tr_sade(kod)] = mal
+        return esl
+    with open(yol, encoding="utf-8-sig") as f:
+        ilk = f.readline()
+        ayr = ";" if ";" in ilk else ("," if "," in ilk else "\t")
+        f.seek(0)
+        for sat in csv.reader(f, delimiter=ayr):
+            if len(sat) < 2 or _tr_sade(sat[0]) in ("kod", "poz", ""):
+                continue
+            esl[_tr_sade(sat[0])] = sat[1].strip()
+    return esl
+
+
+def malzeme_sablonu(komp, yol):
+    """Kullanıcının doldurup --malzeme-dosya ile geri vereceği şablon."""
+    with open(yol, "w", newline="", encoding="utf-8-sig") as f:
+        w = csv.writer(f, delimiter=";")
+        w.writerow(["kod", "malzeme", "ad"])
+        for k in komp:
+            if k["sinif"] == "kaynak":
+                continue
+            w.writerow([k["kod"], VARSAYILAN_MALZEME, k["ad"][:70]])
+    return yol
+
+
+def malzeme_sor(komp):
+    """Terminalden malzeme sorar: hepsine tek malzeme ya da parça parça."""
+    malzeme_listele()
+    c = input(f"\nHepsine tek malzeme icin ad yazin (bos = {VARSAYILAN_MALZEME}), "
+              f"parca parca sormak icin 'tek': ").strip()
+    if _tr_sade(c) != "tek":
+        m = malzeme_coz(c) or VARSAYILAN_MALZEME
+        print(f"  -> hepsi: {MALZEME[m][0]} ({MALZEME[m][1]} g/cm3)")
+        return {}, m
+    esl, son = {}, VARSAYILAN_MALZEME
+    for k in komp:
+        if k["sinif"] == "kaynak":
+            continue
+        c = input(f"  {k['kod'][:26]:<26s} {k['ad'][:34]:<34s} [{son}]: ").strip()
+        m = malzeme_coz(c) or son
+        esl[_tr_sade(k["kod"])] = m
+        son = m
+    return esl, VARSAYILAN_MALZEME
+
+
+def malzeme_ata(k, esl, genel):
+    """Bir komponentin malzemesi: eşleme dosyası > genel seçim > varsayılan."""
+    m = None
+    if esl:
+        m = malzeme_coz(esl.get(_tr_sade(k["kod"]), "") or "")
+        if not m:
+            for kod, mal in esl.items():
+                if kod and (kod in _tr_sade(k["kod"]) or kod in _tr_sade(k["ad"])):
+                    m = malzeme_coz(mal)
+                    break
+    return m or genel
+
+
+# ---------------------------------------------------------------- CLI
 # ---------------------------------------------------------------- CLI
 def main():
-    ap = argparse.ArgumentParser(description="STEP'ten DXF görünüş ve ölçü çıkarma")
+    ap = argparse.ArgumentParser(
+        description="STEP'ten BOM, detay resmi ve montaj resmi",
+        formatter_class=argparse.RawDescriptionHelpFormatter,
+        epilog="""islem akisi:
+  1  komponent parcalarin detaylandirilmasi ve BOM cikarilmasi
+  2  detay parcalarin cizilmesi ve olculendirilmesi
+  3  montaj resmi ve olculendirilmesi
+--asama ile tek tek ya da birlikte calistirilir (varsayilan: 1,2,3)""")
     ap.add_argument("step")
     ap.add_argument("-o", "--out", help="çıktı klasörü (varsayılan: <step adı>_olcu)")
+    ap.add_argument("--asama", default="1,2,3",
+                    help="çalıştırılacak aşamalar: 1 / 2 / 3 / 1,2 / 1,2,3")
     ap.add_argument("--liste", action="store_true", help="yalnız komponent listesi")
+    ap.add_argument("--malzeme", help="hepsine tek malzeme (ör. --malzeme aluminyum)")
+    ap.add_argument("--malzeme-dosya", help="kod;malzeme eşleme dosyası (csv/json)")
+    ap.add_argument("--malzeme-sor", action="store_true",
+                    help="malzemeyi terminalden sor (hepsine tek ya da parça parça)")
+    ap.add_argument("--malzeme-liste", action="store_true", help="malzeme tablosunu yaz")
     ap.add_argument("--en-az-hacim", type=float, default=0.0,
                     help="bu hacmin altındaki katılar atlanır (mm3)")
-    ap.add_argument("--yogunluk", type=float, default=RHO, help="kg/mm3 (varsayılan çelik)")
+    ap.add_argument("--yogunluk", type=float, default=0.0,
+                    help="kg/mm3, malzeme seçimini ezer (uzman kullanımı)")
     ap.add_argument("--en-az-delik", type=float, default=1.0,
                     help="bu çapın altındaki silindirler delik sayılmaz (radüs/pah)")
     ap.add_argument("--gizli", action="store_true", default=True, help="komponentte gizli çizgi")
     ap.add_argument("--gizli-yok", dest="gizli", action="store_false")
-    ap.add_argument("--montaj-yok", action="store_true", help="montaj çizimini atla")
+    ap.add_argument("--montaj-yok", action="store_true", help="montaj çizimini atla (= aşama 3 yok)")
     ap.add_argument("--en-cok", type=int, default=0, help="en çok bu kadar komponent çiz")
     ap.add_argument("--tek", help="yalnız bu kodu/no'yu çiz (ör. --tek 01.050.000.01)")
     a = ap.parse_args()
-    P = {"yogunluk": a.yogunluk, "gizli": a.gizli, "en_az_delik": a.en_az_delik}
+    if a.malzeme_liste:
+        malzeme_listele(); return
+    asama = {int(t) for t in re.findall(r"[123]", a.asama)} or {1, 2, 3}
+    if a.montaj_yok:
+        asama.discard(3)
+    P = {"gizli": a.gizli, "en_az_delik": a.en_az_delik, "yogunluk": RHO}
 
     t0 = time.time()
     kayit = E.step_oku(a.step)
     print(f"{a.step}: {len(kayit)} katı okundu  [{time.time()-t0:.0f}s]")
     komp = komponentle(kayit, P)
     print(f"{len(komp)} komponent (kopyalar birleştirildi)")
-
     sayim = Counter(k["sinif"] for k in komp)
     print("  " + ", ".join(f"{k}: {v}" for k, v in sayim.items()))
     if a.liste:
@@ -680,119 +886,182 @@ def main():
     on = a.out or (os.path.splitext(os.path.basename(a.step))[0] + "_olcu")
     os.makedirs(on, exist_ok=True)
 
-    montaj = None
-    if not a.montaj_yok:
-        katilar = [sh for _, sh in kayit]
-        montaj = dxf_montaj(katilar, os.path.join(on, "00_MONTAJ.dxf"),
-                            os.path.basename(a.step), P)
-        print(f"  00_MONTAJ.dxf   gabari {montaj['boy_mm']} x {montaj['en_mm']} x "
-              f"{montaj['yukseklik_mm']} mm  [{time.time()-t0:.0f}s]")
+    # ---- malzeme: kütle bunun üzerinden hesaplanır, tahmin edilmez
+    esl, genel = {}, VARSAYILAN_MALZEME
+    if a.malzeme_dosya:
+        esl = malzeme_dosya_oku(a.malzeme_dosya)
+        print(f"malzeme dosyası: {a.malzeme_dosya} ({len(esl)} kayıt)")
+    if a.malzeme:
+        genel = malzeme_coz(a.malzeme)
+        if not genel:
+            print(f"! bilinmeyen malzeme '{a.malzeme}' -- --malzeme-liste ile bakın")
+            return
+        print(f"malzeme (hepsi): {MALZEME[genel][0]} ({MALZEME[genel][1]} g/cm3)")
+    elif a.malzeme_sor or (not esl and not a.yogunluk and sys.stdin.isatty()):
+        esl2, genel = malzeme_sor(komp)
+        esl.update(esl2)
+    elif not esl and not a.yogunluk:
+        sab = malzeme_sablonu(komp, os.path.join(on, "malzeme.csv"))
+        print(f"! malzeme belirtilmedi -> hepsi '{VARSAYILAN_MALZEME}' "
+              f"({MALZEME[VARSAYILAN_MALZEME][1]} g/cm3) varsayıldı.")
+        print(f"  --malzeme <ad> | --malzeme-dosya <csv> | --malzeme-sor ile değiştirin.")
+        print(f"  Şablon yazıldı: {sab}  (doldurup --malzeme-dosya ile verin)")
 
+    # ---- AŞAMA 1: komponent detaylandırma + BOM
     cizilecek = [k for k in komp if k["sinif"] == "parca"
                  and k["hacim_mm3"] >= a.en_az_hacim]
     if a.tek:
-        cizilecek = [k for k in cizilecek if a.tek.lower() in k["kod"].lower()
-                     or a.tek.lower() in k["ad"].lower()]
+        t = a.tek.lower()
+        cizilecek = [k for k in cizilecek if t in k["kod"].lower() or t in k["ad"].lower()]
     if a.en_cok:
         cizilecek = cizilecek[:a.en_cok]
-    satirlar, no = [], 0
+    ciz_id = {id(k) for k in cizilecek}
+
+    satirlar, poz = [], 0
     for k in komp:
+        poz += 1
+        sat = {"poz": poz, "kod": k["kod"], "ad": k["ad"], "adet": k["adet"],
+               "sinif": k["sinif"], "tip": k["tip"], "dxf": "",
+               "hacim_mm3": k["hacim_mm3"], "olcu": ""}
+        if k["sinif"] in ("standart", "kaynak"):
+            # Standart eleman ve kaynak dikişi için çizim yok; kod + adet yeter.
+            if k["sinif"] == "kaynak":
+                poz -= 1; sat["poz"] = ""
+            satirlar.append(sat)
+            continue
+        mal = malzeme_ata(k, esl, genel)
+        yog = a.yogunluk if a.yogunluk else yogunluk_kg_mm3(mal)
         ana = kayit[k["indeks"][0]][1]
-        ciz = k in cizilecek
-        if k["sinif"] == "standart":
-            satirlar.append({"no": "", "kod": k["kod"], "ad": k["ad"], "adet": k["adet"],
-                             "sinif": "standart", "tip": k["tip"],
-                             "hacim_mm3": k["hacim_mm3"], "dxf": ""})
-            continue
-        if k["sinif"] == "kaynak":
-            satirlar.append({"no": "", "kod": k["kod"], "ad": k["ad"], "adet": k["adet"],
-                             "sinif": "kaynak", "tip": "", "hacim_mm3": k["hacim_mm3"],
-                             "dxf": ""})
-            continue
-        s, o = komponent_olcu(ana, P)
-        sat = {"no": "", "kod": k["kod"], "ad": k["ad"], "adet": k["adet"],
-               "sinif": "parca", "tip": "", "dxf": ""}
+        s2, o = komponent_olcu(ana, dict(P, yogunluk=yog))
         sat.update({q: o[q] for q in ("boy_mm", "en_mm", "kalinlik_mm", "hacim_mm3",
                                       "kutle_kg", "yuzey_mm2", "sac_kalinlik_mm",
                                       "delik_adedi", "radus_adedi")})
-        sat["delikler"] = o["delikler"]; sat["radusler"] = o["radusler"]
+        sat["delikler"], sat["radusler"] = o["delikler"], o["radusler"]
         sat["dis_capler"] = o["dis_capler"]
-        if ciz:
-            no += 1
-            sat["no"] = f"K{no:02d}"
-            dosya = f"K{no:02d}_" + re.sub(r"[^\w\-]+", "_", k["kod"])[:34] + ".dxf"
+        sat["malzeme"] = mal
+        sat["malzeme_ad"] = MALZEME[mal][0]
+        sat["yogunluk_g_cm3"] = round(yog * 1e6, 3)
+        sat["olcu"] = f"{o['boy_mm']}x{o['en_mm']}x{o['kalinlik_mm']}"
+        sat["kg_adet"] = o["kutle_kg"]
+        sat["toplam_kg"] = round(o["kutle_kg"] * k["adet"], 4)
+        # ---- AŞAMA 2: detay resmi
+        if 2 in asama and id(k) in ciz_id:
+            dosya = f"P{poz:02d}_" + re.sub(r"[^\w\-]+", "_", k["kod"] or k["ad"])[:34] + ".dxf"
             try:
-                dxf_komponent(s, o, k["ad"], k["kod"], k["adet"],
-                              os.path.join(on, dosya), P)
+                dxf_komponent(s2, o, sat, os.path.join(on, dosya), P)
                 sat["dxf"] = dosya
                 print(f"  {dosya}  {o['boy_mm']}x{o['en_mm']}x{o['kalinlik_mm']} mm, "
-                      f"{o['delik_adedi']} delik  [{time.time()-t0:.0f}s]")
+                      f"{o['delik_adedi']} delik, {sat['malzeme_ad'].split(' (')[0]}, "
+                      f"{o['kutle_kg']} kg  [{time.time()-t0:.0f}s]")
             except Exception as ex:
                 sat["dxf"] = f"HATA: {ex}"[:80]
                 print(f"  {dosya}: HATA {ex}"[:110])
         satirlar.append(sat)
 
+    bom = [r for r in satirlar if r["sinif"] != "kaynak"]
+
+    # ---- AŞAMA 3: montaj resmi
+    montaj = None
+    if 3 in asama:
+        katilar = [sh for _, sh in kayit]
+        montaj = dxf_montaj(katilar, os.path.join(on, "00_MONTAJ.dxf"),
+                            os.path.basename(a.step), P, bom=bom)
+        print(f"  00_MONTAJ.dxf   gabari {montaj['boy_mm']} x {montaj['en_mm']} x "
+              f"{montaj['yukseklik_mm']} mm  [{time.time()-t0:.0f}s]")
+
     # ---- tablolar
-    alan = ["no", "kod", "ad", "adet", "sinif", "tip", "boy_mm", "en_mm", "kalinlik_mm",
-            "sac_kalinlik_mm", "hacim_mm3", "kutle_kg", "yuzey_mm2", "delik_adedi",
-            "radus_adedi", "dxf"]
+    if 1 in asama:
+        bom_yaz(on, bom, satirlar)
+    alan = ["poz", "kod", "ad", "adet", "sinif", "tip", "malzeme_ad", "yogunluk_g_cm3",
+            "boy_mm", "en_mm", "kalinlik_mm", "sac_kalinlik_mm", "hacim_mm3",
+            "kutle_kg", "toplam_kg", "yuzey_mm2", "delik_adedi", "radus_adedi", "dxf"]
     with open(os.path.join(on, "olculer.csv"), "w", newline="", encoding="utf-8-sig") as f:
         w = csv.DictWriter(f, fieldnames=alan, extrasaction="ignore", delimiter=";")
         w.writeheader()
-        for s2 in satirlar:
-            w.writerow(s2)
+        for s3 in satirlar:
+            w.writerow(s3)
     json.dump({"step": a.step, "montaj": montaj, "komponent": satirlar},
               open(os.path.join(on, "olculer.json"), "w", encoding="utf-8"),
               ensure_ascii=False, indent=1)
+    rapor_yaz(on, a.step, kayit, komp, satirlar, montaj)
+    print("  BOM.csv, BOM.md, olculer.csv, olculer.json, rapor.md")
+    print(f"bitti [{time.time()-t0:.0f}s]  ->  {on}/")
 
-    # ---- rapor
-    L = [f"# {os.path.basename(a.step)} – ölçü raporu\n",
+
+def bom_yaz(on, bom, satirlar):
+    """AŞAMA 1 çıktısı: parça listesi (BOM) — CSV + okunabilir tablo."""
+    alan = ["poz", "kod", "ad", "adet", "sinif", "tip", "malzeme_ad", "olcu",
+            "kg_adet", "toplam_kg", "dxf"]
+    with open(os.path.join(on, "BOM.csv"), "w", newline="", encoding="utf-8-sig") as f:
+        w = csv.DictWriter(f, fieldnames=alan, extrasaction="ignore", delimiter=";")
+        w.writeheader()
+        for r in bom:
+            w.writerow(r)
+    agir = sum((r.get("toplam_kg") or 0.0) for r in bom)
+    L = ["# BOM – parça listesi\n",
+         f"{len(bom)} poz, toplam kütle {agir:.3f} kg\n",
+         "| poz | kod | tanım | adet | malzeme | ölçü BxExK | kg/adet | toplam kg | dxf |",
+         "|-----|-----|-------|------|---------|------------|---------|-----------|-----|"]
+    for r in bom:
+        ka = f"{r['kg_adet']:.3f}" if r.get("kg_adet") else "-"
+        tk = f"{r['toplam_kg']:.3f}" if r.get("toplam_kg") else "-"
+        L.append(f"| {r['poz']} | {r['kod'][:28]} | {r['ad'][:40]} | {r['adet']} | "
+                 f"{r.get('malzeme_ad') or '-'} | {r.get('olcu') or '-'} | {ka} | {tk} | "
+                 f"{r['dxf'] or '-'} |")
+    kyn = [r for r in satirlar if r["sinif"] == "kaynak"]
+    if kyn:
+        L.append(f"\nKaynak dikişleri BOM'a girmez: {len(kyn)} çeşit, "
+                 f"toplam {sum(r['adet'] for r in kyn)} adet.")
+    open(os.path.join(on, "BOM.md"), "w", encoding="utf-8").write("\n".join(L) + "\n")
+
+
+def rapor_yaz(on, step, kayit, komp, satirlar, montaj):
+    L = [f"# {os.path.basename(step)} – ölçü raporu\n",
          f"{len(kayit)} katı, {len(komp)} komponent.\n"]
     if montaj:
         L.append(f"**Montaj gabarisi:** {montaj['boy_mm']} x {montaj['en_mm']} x "
                  f"{montaj['yukseklik_mm']} mm (boy x en x yükseklik)\n")
     L.append("## Çizilen parçalar\n")
-    L.append("| no | kod | adet | boy | en | kalınlık | sac | kg | delik | radüs | dxf |")
-    L.append("|----|-----|------|-----|----|----------|-----|----|-------|-------|-----|")
-    for s2 in satirlar:
-        if s2["sinif"] != "parca":
+    L.append("| poz | kod | adet | malzeme | boy | en | kalınlık | sac | kg | delik | radüs | dxf |")
+    L.append("|-----|-----|------|---------|-----|----|----------|-----|----|-------|-------|-----|")
+    for r in satirlar:
+        if r["sinif"] != "parca":
             continue
-        L.append(f"| {s2['no']} | {s2['kod'][:26]} | {s2['adet']} | {s2.get('boy_mm')} | "
-                 f"{s2.get('en_mm')} | {s2.get('kalinlik_mm')} | {s2.get('sac_kalinlik_mm') or '-'} | "
-                 f"{s2.get('kutle_kg')} | {s2.get('delik_adedi')} | {s2.get('radus_adedi')} | "
-                 f"{s2['dxf']} |")
-    std = [s2 for s2 in satirlar if s2["sinif"] == "standart"]
+        L.append(f"| {r['poz']} | {r['kod'][:26]} | {r['adet']} | "
+                 f"{(r.get('malzeme_ad') or '-').split(' (')[0]} | {r.get('boy_mm')} | "
+                 f"{r.get('en_mm')} | {r.get('kalinlik_mm')} | {r.get('sac_kalinlik_mm') or '-'} | "
+                 f"{r.get('kutle_kg')} | {r.get('delik_adedi')} | {r.get('radus_adedi')} | "
+                 f"{r['dxf'] or '-'} |")
+    std = [r for r in satirlar if r["sinif"] == "standart"]
     if std:
-        L.append("\n## Standart elemanlar (çizim üretilmedi)\n")
-        L.append("| kod | tip | adet | ad |")
-        L.append("|-----|-----|------|----|")
-        for s2 in std:
-            L.append(f"| {s2['kod'][:30]} | {s2['tip']} | {s2['adet']} | {s2['ad'][:52]} |")
-    kyn = [s2 for s2 in satirlar if s2["sinif"] == "kaynak"]
+        L.append("\n## Standart elemanlar (çizim üretilmedi, kod + adet yeter)\n")
+        L.append("| poz | kod | tip | adet | ad |")
+        L.append("|-----|-----|-----|------|----|")
+        for r in std:
+            L.append(f"| {r['poz']} | {r['kod'][:30]} | {r['tip']} | {r['adet']} | {r['ad'][:52]} |")
+    kyn = [r for r in satirlar if r["sinif"] == "kaynak"]
     if kyn:
         L.append(f"\n## Kaynak dikişleri\n\n{len(kyn)} çeşit, toplam "
-                 f"{sum(s2['adet'] for s2 in kyn)} adet (parça değildir, çizim üretilmez).\n")
+                 f"{sum(r['adet'] for r in kyn)} adet (parça değildir, çizim üretilmez).\n")
     L.append("\n## Delik ve radüs tabloları\n")
     L.append("Çap yalnız TAM ÇEMBER delikler için verilir. Kenar yuvarlamaları "
              "(fillet) delik değildir, ayrı tabloda yarıçap olarak listelenir.\n")
-    for s2 in satirlar:
-        if s2["sinif"] != "parca" or not (s2.get("delikler") or s2.get("radusler")):
+    for r in satirlar:
+        if r["sinif"] != "parca" or not (r.get("delikler") or r.get("radusler")):
             continue
-        L.append(f"\n**{s2['no'] or '-'} {s2['kod'][:30]}**\n")
-        if s2.get("delikler"):
+        L.append(f"\n**poz {r['poz']} {r['kod'][:30]}**\n")
+        if r.get("delikler"):
             L.append("| çap | adet | eksen | derinlik |")
             L.append("|-----|------|-------|----------|")
-            for d in s2["delikler"][:20]:
+            for d in r["delikler"][:20]:
                 L.append(f"| Ø{d['cap_mm']} | {d['adet']} | {d['eksen']} | {d['derinlik_mm']} |")
-        if s2.get("radusler"):
+        if r.get("radusler"):
             L.append("")
             L.append("| radüs | adet | eksen | uzunluk |")
             L.append("|-------|------|-------|---------|")
-            for d in s2["radusler"][:20]:
+            for d in r["radusler"][:20]:
                 L.append(f"| R{d['yaricap_mm']} | {d['adet']} | {d['eksen']} | {d['uzunluk_mm']} |")
     open(os.path.join(on, "rapor.md"), "w", encoding="utf-8").write("\n".join(L) + "\n")
-    print(f"  olculer.csv, olculer.json, rapor.md")
-    print(f"bitti [{time.time()-t0:.0f}s]  ->  {on}/")
 
 
 if __name__ == "__main__":
