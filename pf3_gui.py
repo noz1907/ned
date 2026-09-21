@@ -24,6 +24,29 @@ import tkinter as tk
 from tkinter import ttk, filedialog, messagebox
 
 BASLIK = "PiFikstür  –  STEP'ten BOM ve teknik resim"
+
+EKSIK_PAKET = """'{paket}' paketi bu Python kurulumunda yok.
+
+Kullanilan Python:
+{py}
+
+PiFikstur'u KENDI ortaminda calistirmak gerekiyor; boylece bilgisayardaki
+diger Python kurulumlarina (TensorFlow, pandas, scikit-learn vb.) dokunmaz.
+
+En kolayi: program klasorundeki
+
+    PiFikstur_baslat.bat
+
+dosyasina cift tiklayin. Ilk acilista .venv ortamini kurar (birkac dakika
+surebilir), sonra programi acar.
+
+Elle yapmak isterseniz, program klasorunde komut penceresi acip:
+
+    py -3 -m venv .venv
+    .venv\\Scripts\\activate
+    pip install -r requirements.txt
+    python pf3_gui.py
+"""
 ADIM = ["1  VERİ", "2  BOM ve MALZEME", "3  GÖRÜNÜŞ ve KESİT", "4  ÖRNEK ONAY", "5  TÜM ÇİZİMLER"]
 
 
@@ -415,6 +438,11 @@ class Uygulama(ttk.Frame):
         try:
             import pf3_olcu as M
             self.kuyruk.put(("motor", M))
+        except ModuleNotFoundError as ex:
+            # En sık sebep: program, paketlerin kurulu olmadığı bir Python ile
+            # açılmış. Kullanıcıya traceback yerine ne yapacağını söyle.
+            self.kuyruk.put(("hata", EKSIK_PAKET.format(
+                paket=getattr(ex, "name", "?"), py=sys.executable)))
         except Exception:
             self.kuyruk.put(("hata", "Hesap motoru yüklenemedi:\n\n"
                              + traceback.format_exc(limit=3)))
