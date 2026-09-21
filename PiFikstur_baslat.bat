@@ -41,6 +41,8 @@ if not exist ".venv\Scripts\python.exe" (
         for /f "tokens=3" %%A in ('dir /-c "%~d0\" ^| findstr /C:"bytes free"') do echo       %%A bayt
         echo       Yer acmak icin:  pip cache purge
         echo       Ya da bu klasoru bos alani olan baska bir surucuye tasiyin.
+        echo       Ya da kucuk kurulumu deneyin ^(~800 MB, Python 3.8-3.11^):
+        echo         .venv\Scripts\python.exe -m pip install --no-cache-dir -r requirements-kucuk.txt
         echo.
         echo    2) INTERNET baglantisi yok ya da kesildi.
         echo.

@@ -76,6 +76,19 @@ pip cache purge
 Yetmezse PiFikstur klasörünü boş alanı olan başka bir sürücüye taşıyıp
 `PiFikstur_baslat.bat`'ı oradan çalıştırın; `.venv` o sürücüde kurulur.
 
+Üçüncü yol — **küçük kurulum** (~800 MB):
+
+```
+.venv\Scripts\python.exe -m pip install --no-cache-dir -r requirements-kucuk.txt
+```
+
+`cadquery-ocp`'nin 7.7.2 sürümü `vtk`'sız gelir; bu program `vtk`
+kullanmadığı için sonuç birebir aynıdır (`parca.stp` üzerinde 41
+komponentin bütün ölçüleri, kütleleri, delik/radüs sayıları ve montaj
+gabarisi güncel sürümle aynı çıktı; 16 çizimin hepsinde kesit taraması
+oluştu). Hazır paketi Python 3.8–3.11 için vardır; 3.12 ve üstündeyseniz
+normal `requirements.txt` kullanın.
+
 Kurulumun tamam olduğunu görmek için:
 
 ```

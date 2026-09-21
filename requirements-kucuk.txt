@@ -1,0 +1,15 @@
+# DAR DISK ICIN kucuk kurulum (~800 MB yerine ~1,2 GB).
+#
+# cadquery-ocp 7.7.2, vtk'siz gelir (hic bagimliligi yoktur); bu program
+# vtk kullanmadigi icin sonuc birebir aynidir. Dogrulandi: parca.stp
+# uzerinde 41 komponentin butun olculeri, kutleleri, delik/radus sayilari
+# ve montaj gabarisi guncel surumle ayni cikti; 16 cizimin hepsinde kesit
+# taramasi olustu.
+#
+# Kullanimi:  pip install -r requirements-kucuk.txt
+#
+# Dikkat: 7.7.2 eski bir surum; hazir paketi (wheel) Python 3.8-3.11 icin
+# vardir. Python 3.12 ve ustundeyseniz normal requirements.txt kullanin.
+cadquery-ocp==7.7.2
+ezdxf>=1.1
+matplotlib>=3.7
