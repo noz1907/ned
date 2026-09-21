@@ -1,0 +1,149 @@
+{
+ "_aciklama": [
+  "PiFikstur onay paketi - XYZ referans noktalari.",
+  "Bu dosyayi inceleyin, gerekirse 'istasyon' altindaki X konumlarini duzenleyin,",
+  "'onay' degerini true yapin ve su sekilde tekrar calistirin:",
+  "    python pf2_fikstur.py <step> --sec \"...\" --onay <bu_dosya>",
+  "istasyon: her eleman turunun parca boyunca (fikstur X ekseni) konumlari, mm.",
+  "noktalar: her temas noktasinin hem fikstur hem de orijinal parca koordinati.",
+  "_onay.png dosyasinda ayni noktalar parca uzerinde numarali olarak isaretlidir."
+ ],
+ "dosya": "/home/user/ned/ornek/parca.stp",
+ "secim": "G02",
+ "yon": "-Y",
+ "onay": false,
+ "datum": {
+  "A": "Z ekseni - ana gövde alt yüzü, dayama üstü Z=40.0",
+  "B": "Y ekseni - -Y yan yüz (DAYAMA_B)",
+  "C": "X ekseni - "
+ },
+ "istasyon": {
+  "DAYAMA_A": [
+   237.5
+  ],
+  "DAYAMA_B": [
+   172.5,
+   302.5
+  ],
+  "KLEMP_DIKEY": [],
+  "KLEMP_YATAY": [
+   172.5,
+   302.5
+  ]
+ },
+ "noktalar": [
+  {
+   "no": 1,
+   "eleman": "DAYAMA_A_01",
+   "tip": "dayama_A",
+   "yon": "+Z",
+   "fikstur_xyz": [
+    237.5,
+    0.0,
+    40.0
+   ],
+   "parca_xyz": [
+    -5.68,
+    -57.32,
+    2795.5
+   ]
+  },
+  {
+   "no": 2,
+   "eleman": "DAYAMA_B_01",
+   "tip": "dayama_B",
+   "yon": "+Y",
+   "fikstur_xyz": [
+    172.5,
+    -50.0,
+    41.75
+   ],
+   "parca_xyz": [
+    -70.68,
+    -59.07,
+    2745.5
+   ]
+  },
+  {
+   "no": 3,
+   "eleman": "DAYAMA_B_02",
+   "tip": "dayama_B",
+   "yon": "+Y",
+   "fikstur_xyz": [
+    302.5,
+    -50.0,
+    41.75
+   ],
+   "parca_xyz": [
+    59.32,
+    -59.07,
+    2745.5
+   ]
+  },
+  {
+   "no": 4,
+   "eleman": "KLEMP_YATAY_01",
+   "tip": "klemp_yatay",
+   "yon": "-Y",
+   "fikstur_xyz": [
+    202.5,
+    50.0,
+    45.0
+   ],
+   "parca_xyz": [
+    -40.68,
+    -62.32,
+    2845.5
+   ]
+  },
+  {
+   "no": 5,
+   "eleman": "KLEMP_YATAY_02",
+   "tip": "klemp_yatay",
+   "yon": "-Y",
+   "fikstur_xyz": [
+    272.5,
+    50.0,
+    45.0
+   ],
+   "parca_xyz": [
+    29.32,
+    -62.32,
+    2845.5
+   ]
+  }
+ ],
+ "donusum": {
+  "rotasyon": [
+   [
+    1,
+    0,
+    0
+   ],
+   [
+    0,
+    0,
+    1
+   ],
+   [
+    0,
+    -1,
+    0
+   ]
+  ],
+  "oteleme": [
+   243.182,
+   -2795.5,
+   -17.318
+  ],
+  "aciklama": "fikstur_xyz = R * parca_xyz + oteleme"
+ },
+ "uyari": [],
+ "kontrol_ozeti": {
+  "cakisma_sayisi": 0,
+  "temas_hatali": [],
+  "kaynak_erisim_hatali": [],
+  "uyari": [],
+  "gecti": true
+ }
+}

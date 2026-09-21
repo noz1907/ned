@@ -1,0 +1,385 @@
+{
+ "dosya": "/home/user/ned/ornek/parca.stp",
+ "secim": "G02",
+ "yon": "-Y",
+ "parca_kg": 0.376,
+ "rotasyon": [
+  [
+   1,
+   0,
+   0
+  ],
+  [
+   0,
+   0,
+   1
+  ],
+  [
+   0,
+   -1,
+   0
+  ]
+ ],
+ "oteleme": [
+  243.18204126822,
+  -2795.5,
+  -17.317958731799926
+ ],
+ "bilgi": {
+  "datum_A": {
+   "alan_mm2": 7218.9,
+   "z": 40.0,
+   "y_araligi": [
+    -40.0,
+    40.0
+   ]
+  },
+  "uyari": [],
+  "taban": {
+   "x": [
+    0,
+    390
+   ],
+   "y": [
+    -250,
+    250
+   ],
+   "kalinlik": 15.0
+  },
+  "dayama_x": [
+   237.5
+  ],
+  "istasyon": {
+   "DAYAMA_A": [
+    237.5
+   ],
+   "DAYAMA_B": [
+    172.5,
+    302.5
+   ],
+   "KLEMP_DIKEY": [],
+   "KLEMP_YATAY": [
+    172.5,
+    302.5
+   ]
+  }
+ },
+ "elemanlar": [
+  {
+   "ad": "DAYAMA_A_01",
+   "tip": "dayama_A",
+   "malzeme": "C45 sertleştirilmiş",
+   "not": "temas alanı 0 mm² (0 %)",
+   "kg": 1.208,
+   "kutu": [
+    213.0,
+    -40.0,
+    0.0,
+    262.0,
+    40.0,
+    40.0
+   ],
+   "basma": [
+    [
+     237.5,
+     0.0,
+     40.0
+    ]
+   ]
+  },
+  {
+   "ad": "DAYAMA_B_01",
+   "tip": "dayama_B",
+   "malzeme": "C45 sertleştirilmiş",
+   "not": "temas yüzü Y=-50.00, Z 40.0..43.5",
+   "kg": 0.397,
+   "kutu": [
+    152.5,
+    -80.0,
+    0.0,
+    192.5,
+    -50.0,
+    43.5
+   ],
+   "basma": [
+    [
+     172.5,
+     -50.0,
+     41.75
+    ]
+   ]
+  },
+  {
+   "ad": "DAYAMA_B_02",
+   "tip": "dayama_B",
+   "malzeme": "C45 sertleştirilmiş",
+   "not": "temas yüzü Y=-50.00, Z 40.0..43.5",
+   "kg": 0.397,
+   "kutu": [
+    282.5,
+    -80.0,
+    0.0,
+    322.5,
+    -50.0,
+    43.5
+   ],
+   "basma": [
+    [
+     302.5,
+     -50.0,
+     41.75
+    ]
+   ]
+  },
+  {
+   "ad": "KLEMP_YATAY_01",
+   "tip": "klemp_yatay",
+   "malzeme": "GH-304-CM sınıfı (St)",
+   "not": "mil ekseni Z=45.0, itme yönü -Y, yükseltici 15 mm",
+   "kg": 1.444,
+   "kutu": [
+    177.5,
+    50.0,
+    0.0,
+    227.5,
+    185.0,
+    155.0
+   ],
+   "basma": [
+    [
+     202.5,
+     50.0,
+     45.0
+    ]
+   ]
+  },
+  {
+   "ad": "KLEMP_YATAY_02",
+   "tip": "klemp_yatay",
+   "malzeme": "GH-304-CM sınıfı (St)",
+   "not": "mil ekseni Z=45.0, itme yönü -Y, yükseltici 15 mm",
+   "kg": 1.444,
+   "kutu": [
+    247.5,
+    50.0,
+    0.0,
+    297.5,
+    185.0,
+    155.0
+   ],
+   "basma": [
+    [
+     272.5,
+     50.0,
+     45.0
+    ]
+   ]
+  },
+  {
+   "ad": "TABAN_PLAKA",
+   "tip": "taban",
+   "malzeme": "S355JR",
+   "not": "390 x 500 x 15 mm, 6 x Ø13 montaj deliği",
+   "kg": 22.867,
+   "kutu": [
+    0.0,
+    -250.0,
+    -15.0,
+    390.0,
+    250.0,
+    0.0
+   ],
+   "basma": []
+  },
+  {
+   "ad": "ISKELET_BOY_01",
+   "tip": "iskelet",
+   "malzeme": "S235JR kutu profil",
+   "not": "60x40x3 - L=350",
+   "kg": 1.55,
+   "kutu": [
+    20.0,
+    -220.0,
+    -55.0,
+    370.0,
+    -160.0,
+    -15.0
+   ],
+   "basma": []
+  },
+  {
+   "ad": "ISKELET_BOY_02",
+   "tip": "iskelet",
+   "malzeme": "S235JR kutu profil",
+   "not": "60x40x3 - L=350",
+   "kg": 1.55,
+   "kutu": [
+    20.0,
+    160.0,
+    -55.0,
+    370.0,
+    220.0,
+    -15.0
+   ],
+   "basma": []
+  },
+  {
+   "ad": "ISKELET_EN_01",
+   "tip": "iskelet",
+   "malzeme": "S235JR kutu profil",
+   "not": "60x40x3 - L=320",
+   "kg": 1.417,
+   "kutu": [
+    90.0,
+    -160.0,
+    -55.0,
+    150.0,
+    160.0,
+    -15.0
+   ],
+   "basma": []
+  },
+  {
+   "ad": "ISKELET_EN_02",
+   "tip": "iskelet",
+   "malzeme": "S235JR kutu profil",
+   "not": "60x40x3 - L=320",
+   "kg": 1.417,
+   "kutu": [
+    165.0,
+    -160.0,
+    -55.0,
+    225.0,
+    160.0,
+    -15.0
+   ],
+   "basma": []
+  },
+  {
+   "ad": "ISKELET_EN_03",
+   "tip": "iskelet",
+   "malzeme": "S235JR kutu profil",
+   "not": "60x40x3 - L=320",
+   "kg": 1.417,
+   "kutu": [
+    240.0,
+    -160.0,
+    -55.0,
+    300.0,
+    160.0,
+    -15.0
+   ],
+   "basma": []
+  }
+ ],
+ "kontrol": {
+  "cakisma": [],
+  "temas": [
+   {
+    "eleman": "DAYAMA_A_01",
+    "tip": "dayama_A",
+    "mesafe_mm": 0.0,
+    "ok": true
+   },
+   {
+    "eleman": "DAYAMA_B_01",
+    "tip": "dayama_B",
+    "mesafe_mm": 0.0,
+    "ok": true
+   },
+   {
+    "eleman": "DAYAMA_B_02",
+    "tip": "dayama_B",
+    "mesafe_mm": 0.0,
+    "ok": true
+   },
+   {
+    "eleman": "KLEMP_YATAY_01",
+    "tip": "klemp_yatay",
+    "mesafe_mm": 0.0,
+    "ok": true
+   },
+   {
+    "eleman": "KLEMP_YATAY_02",
+    "tip": "klemp_yatay",
+    "mesafe_mm": 0.0,
+    "ok": true
+   }
+  ],
+  "kaynak_erisim": [
+   {
+    "kaynak": "M8x16 Anahtar Basli Civata",
+    "merkez": [
+     163.3,
+     -5.0,
+     42.4
+    ],
+    "acik_yon_fikstur": 25,
+    "acik_yon_parca": 1,
+    "acik_yon_toplam": 1,
+    "toplam_yon": 25,
+    "ok": true
+   },
+   {
+    "kaynak": "M8x16 Anahtar Basli Civata",
+    "merkez": [
+     311.8,
+     -5.0,
+     42.4
+    ],
+    "acik_yon_fikstur": 25,
+    "acik_yon_parca": 1,
+    "acik_yon_toplam": 1,
+    "toplam_yon": 25,
+    "ok": true
+   }
+  ],
+  "ozet": {
+   "cakisma_sayisi": 0,
+   "temas_hatali": [],
+   "kaynak_erisim_hatali": [],
+   "uyari": [],
+   "gecti": true
+  }
+ },
+ "param": {
+  "taban_kalinlik": 15.0,
+  "taban_pay_x": 150.0,
+  "taban_pay_y": 60.0,
+  "taban_pay_x_son": 60.0,
+  "iskelet_profil": [
+   60.0,
+   40.0,
+   3.0
+  ],
+  "montaj_delik": 13.0,
+  "dayama_yuk": 40.0,
+  "dayama_boy": 60.0,
+  "dayama_pay": 6.0,
+  "dayama_adim_max": 500.0,
+  "dayama_temas_oran": 0.85,
+  "kaynak_pay": 40.0,
+  "yan_dayama_kal": 30.0,
+  "yan_dayama_boy": 40.0,
+  "yan_dayama_ust_pay": 1.5,
+  "yuva_et": 40.0,
+  "yuva_kulak": 20.0,
+  "yuva_ust_pay": 5.0,
+  "catal_bosluk": 1.5,
+  "kaynak_yan_pay": 20.0,
+  "torc_konisi": 60.0,
+  "kopru_ayak": [
+   24.0,
+   10.0
+  ],
+  "lastik": [
+   12.0,
+   6.0
+  ],
+  "klemp_dikey_std_h": 75.0,
+  "klemp_yatay_std_h": 30.0,
+  "montaj_pay": 40.0,
+  "mil_capi": 16.0,
+  "ayak_capi": 20.0
+ }
+}

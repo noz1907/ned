@@ -8,7 +8,7 @@ Parça zarfı (fikstürde): X 150.0..3069.5, Y -97.5..97.5, Z 40.0..91.5
 
 ## Konumlandırma (3-2-1)
 
-- **Datum A (Z, 3+ nokta):** ana gövde alt yüzü, alan 254151 mm², dayama üstü Z=40.00; dayama X konumları: [270.0, 692.0, 1114.0, 1476.0, 2038.0, 2500.0]
+- **Datum A (Z, 3+ nokta):** ana gövde alt yüzü, alan 254151 mm², dayama üstü Z=40.00; dayama X konumları: [268.0, 690.4, 1112.8, 1475.2, 2037.6, 2500.0]
 - **Datum B (Y, 2 nokta):** -Y yan yüz, yan dayamalar DAYAMA_B_01/02
 - **Datum C (X, 1 nokta):** DAYAMA_C_01 (ana gövde uç yüzü X=2630.00; 09.025.000.02 C-Profil T üstten açık çataldan geçer (boşluk 1.5 mm)); DAYAMA_C_PLAKA_01a (09.020.000.01 Dachplatte: iç yüz X=3061.50, Y -97.5..-73.0, raf Z=41.50, üst Z=69.3 (torç konisi)); DAYAMA_C_PLAKA_01b (09.020.000.01 Dachplatte: iç yüz X=3061.50, Y 73.0..97.5, raf Z=41.50, üst Z=69.3 (torç konisi)). Parçalar eksenel itme klempleriyle bu dayamalara bastırılır.
 
@@ -18,8 +18,8 @@ Parça zarfı (fikstürde): X 150.0..3069.5, Y -97.5..97.5, Z 40.0..91.5
 
 | # | ad | tip | boyut (X×Y×Z) | kg | malzeme | not |
 |---|----|-----|---------------|----|---------|-----|
-| 1 | DAYAMA_A_01 | dayama_A | 60×80×40 | 1.48 | C45 sertleştirilmiş | temas alanı 4601 mm² (96 %) |
-| 2 | DAYAMA_A_02 | dayama_A | 60×80×40 | 1.48 | C45 sertleştirilmiş | temas alanı 4616 mm² (96 %) |
+| 1 | DAYAMA_A_01 | dayama_A | 60×80×40 | 1.48 | C45 sertleştirilmiş | temas alanı 4541 mm² (95 %) |
+| 2 | DAYAMA_A_02 | dayama_A | 60×80×40 | 1.48 | C45 sertleştirilmiş | temas alanı 4551 mm² (95 %) |
 | 3 | DAYAMA_A_03 | dayama_A | 60×80×40 | 1.48 | C45 sertleştirilmiş | temas alanı 4800 mm² (100 %) |
 | 4 | DAYAMA_A_04 | dayama_A | 60×80×40 | 1.48 | C45 sertleştirilmiş | temas alanı 4800 mm² (100 %) |
 | 5 | DAYAMA_A_05 | dayama_A | 60×80×40 | 1.48 | C45 sertleştirilmiş | temas alanı 4800 mm² (100 %) |
@@ -49,26 +49,26 @@ Fikstür toplam: **282.1 kg**
 
 ## Temas / basma noktaları (fikstür → parça koordinatı)
 
-- DAYAMA_A_01: F(270.0, -0.0, 40.0) → P(-5.68, -23.82, 20.0)
-- DAYAMA_A_02: F(692.0, -0.0, 40.0) → P(-5.68, -23.82, 442.0)
-- DAYAMA_A_03: F(1114.0, -0.0, 40.0) → P(-5.68, -23.82, 864.0)
-- DAYAMA_A_04: F(1476.0, -0.0, 40.0) → P(-5.68, -23.82, 1226.0)
-- DAYAMA_A_05: F(2038.0, -0.0, 40.0) → P(-5.68, -23.82, 1788.0)
+- DAYAMA_A_01: F(268.0, -0.0, 40.0) → P(-5.68, -23.82, 18.0)
+- DAYAMA_A_02: F(690.4, -0.0, 40.0) → P(-5.68, -23.82, 440.4)
+- DAYAMA_A_03: F(1112.8, -0.0, 40.0) → P(-5.68, -23.82, 862.8)
+- DAYAMA_A_04: F(1475.2, -0.0, 40.0) → P(-5.68, -23.82, 1225.2)
+- DAYAMA_A_05: F(2037.6, -0.0, 40.0) → P(-5.68, -23.82, 1787.6)
 - DAYAMA_A_06: F(2500.0, -0.0, 40.0) → P(-5.68, -23.82, 2250.0)
-- DAYAMA_B_01: F(692.0, -60.0, 56.5) → P(54.32, -40.32, 442.0)
-- DAYAMA_B_02: F(2038.0, -60.0, 56.5) → P(54.32, -40.32, 1788.0)
+- DAYAMA_B_01: F(690.4, -60.0, 56.5) → P(54.32, -40.32, 440.4)
+- DAYAMA_B_02: F(2037.6, -60.0, 61.5) → P(54.32, -45.27, 1787.6)
 - DAYAMA_C_01: F(2630.0, 0.0, 42.0) → P(-5.68, -25.82, 2380.0)
 - DAYAMA_A_UC_01a: F(2855.1, -0.0, 44.0) → P(-5.68, -27.82, 2605.13)
 - DAYAMA_C_PLAKA_01a: F(3061.5, -85.3, 66.5) → P(79.57, -50.32, 2811.5)
 - DAYAMA_C_PLAKA_01b: F(3061.5, 85.3, 66.5) → P(-90.93, -50.32, 2811.5)
-- KLEMP_DIKEY_01: F(470.0, -41.0, 74.5) → P(35.32, -58.32, 220.0)
-- KLEMP_DIKEY_01: F(470.0, 41.0, 74.5) → P(-46.68, -58.32, 220.0)
-- KLEMP_DIKEY_02: F(1476.0, -41.0, 74.5) → P(35.32, -58.32, 1226.0)
-- KLEMP_DIKEY_02: F(1476.0, 41.0, 74.5) → P(-46.68, -58.32, 1226.0)
+- KLEMP_DIKEY_01: F(468.0, -41.0, 74.5) → P(35.32, -58.32, 218.0)
+- KLEMP_DIKEY_01: F(468.0, 41.0, 74.5) → P(-46.68, -58.32, 218.0)
+- KLEMP_DIKEY_02: F(1475.2, -41.0, 74.5) → P(35.32, -58.32, 1225.2)
+- KLEMP_DIKEY_02: F(1475.2, 41.0, 74.5) → P(-46.68, -58.32, 1225.2)
 - KLEMP_DIKEY_03: F(2500.0, -41.0, 74.5) → P(35.32, -58.32, 2250.0)
 - KLEMP_DIKEY_03: F(2500.0, 41.0, 74.5) → P(-46.68, -58.32, 2250.0)
-- KLEMP_YATAY_01: F(692.0, 60.0, 45.0) → P(-65.68, -28.82, 442.0)
-- KLEMP_YATAY_02: F(2038.0, 60.0, 45.0) → P(-65.68, -28.82, 1788.0)
+- KLEMP_YATAY_01: F(690.4, 60.0, 45.0) → P(-65.68, -28.82, 440.4)
+- KLEMP_YATAY_02: F(2037.6, 60.0, 45.0) → P(-65.68, -28.82, 1787.6)
 - KLEMP_ITME_06: F(150.0, 0.0, 57.3) → P(-5.68, -41.07, -100.0)
 - KLEMP_DIKEY_UC_07: F(2824.2, -22.8, 71.5) → P(17.07, -55.32, 2574.18)
 - KLEMP_DIKEY_UC_07: F(2824.2, 22.8, 71.5) → P(-28.43, -55.32, 2574.18)

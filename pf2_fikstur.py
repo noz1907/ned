@@ -76,6 +76,7 @@ PARAM = dict(
     lastik=(12.0, 6.0),         # köprü ayak lastik takozu (çap, yükseklik)
     klemp_dikey_std_h=75.0,     # dikey klempin standart kol alt yüksekliği (GH-201-B sınıfı)
     klemp_yatay_std_h=30.0,     # yatay klempin standart mil ekseni yüksekliği (GH-304-CM sınıfı)
+    montaj_pay=40.0,            # montaj modunda arayüz çevresinde bırakılacak el/takım payı
     mil_capi=16.0,
     ayak_capi=20.0,
 )
@@ -426,6 +427,90 @@ def _ust_z(cls, x, y, z_ust, z_alt, adim=0.4):
     return None
 
 
+def _yan_y(cls, x, z, y_bas, y_son, adim=0.4):
+    """(x,z) yatayında katının -Y yönündeki ilk yüzeyinin y'si (yoksa None)."""
+    t = y_bas
+    while t <= y_son:
+        if _ic_mi(cls, x, t, z):
+            lo, hi = t, max(t - adim, y_bas)      # lo içeride, hi dışarıda
+            for _ in range(7):
+                orta = (lo + hi) / 2
+                if _ic_mi(cls, x, orta, z):
+                    lo = orta
+                else:
+                    hi = orta
+            return hi
+        t += adim
+    return None
+
+
+def _yuzey_y(cls, x, z, hb, taraf, adim=0.4):
+    """(x,z) kesitinde katının -Y (taraf=-1) / +Y (taraf=+1) yüzeyinin y'si."""
+    derinlik = 0.6 * (hb.ymax - hb.ymin)
+    if taraf < 0:
+        return _yan_y(cls, x, z, hb.ymin - 0.5, hb.ymin + derinlik, adim)
+    t = hb.ymax + 0.5
+    while t >= hb.ymax - derinlik:
+        if _ic_mi(cls, x, t, z):
+            lo, hi = t, t + adim
+            for _ in range(7):
+                orta = (lo + hi) / 2
+                if _ic_mi(cls, x, orta, z):
+                    lo = orta
+                else:
+                    hi = orta
+            return hi
+        t -= adim
+    return None
+
+
+def yuzey_siniri(hedef, x0, x1, z0, z1, taraf, hb):
+    """Verilen X/Z penceresinde katının -Y (taraf=-1) / +Y (+1) en uç yüzeyi.
+
+    Boolean kesişimin sınır kutusundan okunur: nokta örneklemesinin kaçırdığı
+    eğri ve kademeli kenarlarda da kesin sonuç verir. Malzeme yoksa None."""
+    dilim = kutu_cq(x0, x1, hb.ymin - 5, hb.ymax + 5, z0, z1)
+    try:
+        c = BRepAlgoAPI_Common(hedef, dilim.val().wrapped); c.Build()
+        if not c.IsDone():
+            return None
+        k = kutu(c.Shape())
+        if k.xlen <= 0 or hacim(c.Shape()) < 1e-6 and k.ylen <= 0:
+            return None
+        return k.ymin if taraf < 0 else k.ymax
+    except Exception:
+        return None
+
+
+def yan_temas(cls, hb, x, z_aday, taraf=-1, genislik=40.0, yukseklik=20.0,
+              hedef_sekil=None, engel_sekil=None,
+              kaydir_x=(0, 30, -30, 60, -60, 100, -100, 150, -150, 200, -200)):
+    """Katının yan yüzeyine dayanacak bloğun konumu: (x, z, y) ya da None.
+
+    Önce x çevresinde ve birkaç kesit yüksekliğinde yüzey aranır; bulununca
+    bloğun ayak izinin tamamı taranır ve en DIŞARIDAKİ değer alınır, böylece
+    blok eğri/kademeli yüzeye gömülmez."""
+    for dx in kaydir_x:
+        xx = x + dx
+        if not (hb.xmin + 2 < xx < hb.xmax - 2):
+            continue
+        for z in z_aday:
+            if _yuzey_y(cls, xx, z, hb, taraf) is None:
+                continue
+            x0, x1 = xx - genislik / 2, xx + genislik / 2
+            z0, z1 = z - yukseklik / 2, z + yukseklik / 2
+            v = yuzey_siniri(hedef_sekil, x0, x1, z0, z1, taraf, hb)
+            if v is None:
+                continue
+            if engel_sekil is not None:
+                # o pencerede en dışta ana gövde olmalı; başka parça taşıyorsa kaydır
+                ve = yuzey_siniri(engel_sekil, x0, x1, z0, z1, taraf, hb)
+                if ve is not None and (ve < v - 0.3 if taraf < 0 else ve > v + 0.3):
+                    continue
+            return xx, z, v
+    return None
+
+
 def basma_yeri(hedef, x, ayak_y, kaynak_kutulari=(), r=6.0, derinlik=8.0,
                kaydir_x=(0, 25, -25, 50, -50, 75, -75, 110, -110, 150, -150,
                          200, -200, 260, -260, 330, -330, 400, -400),
@@ -473,9 +558,14 @@ def temas_alani(yuz_f, sekil):
 
 
 # ============================================================ tasarım
-def tasarla(pc: Parca, P):
+def tasarla(pc: Parca, P, onay=None):
+    """Fikstür elemanlarını üret.
+
+    onay: kullanıcı onayından gelen istasyon X konumları ({"istasyon": {...}}).
+    Verilirse dayama/klemp konumları hesaplanmaz, onaylanan değerler kullanılır."""
     el = []           # Eleman listesi
     bilgi = {}
+    ist = dict((onay or {}).get("istasyon", {}))
     T = P["taban_kalinlik"]
     z0 = 0.0          # taban üstü
     bb = pc.kutu
@@ -503,21 +593,30 @@ def tasarla(pc: Parca, P):
         return all(x + yarim <= a or x - yarim >= b for a, b in yasak)
 
     # ---- datum A dayamaları
-    D = P["dayama_boy"]
-    xa, xb = fb.xmin + 10 + D / 2, fb.xmax - D / 2
+    # dayama boyu parçaya göre: kısa parçada bloklar üst üste binmesin
+    D = min(P["dayama_boy"], max(15.0, (fb.xmax - fb.xmin) * 0.28))
+    xa, xb = fb.xmin + 8 + D / 2, fb.xmax - D / 2
+    if xb <= xa:                                   # çok kısa yüz: tek dayama
+        xa = xb = (fb.xmin + fb.xmax) / 2
     # yasak bölgelerin dışında kalan en uzun aralık
     for a, b in yasak:
         if a <= xb <= b or (a < xb and b > xb):
             xb = min(xb, a - D / 2)
         if a <= xa <= b:
             xa = max(xa, b + D / 2)
-    n = math.ceil((xb - xa) / P["dayama_adim_max"]) + 1
-    xs = [xa + (xb - xa) * i / (n - 1) for i in range(n)]
+    if ist.get("DAYAMA_A"):
+        xs = [float(v) for v in ist["DAYAMA_A"]]
+        kaydirmalar = (0,)                      # onaylanan konum aynen kullanılır
+    else:
+        n = max(1, math.ceil((xb - xa) / P["dayama_adim_max"]) + 1)
+        n = min(n, max(1, int((xb - xa) / (D + 5)) + 1))   # bloklar çakışmasın
+        xs = [(xa + xb) / 2] if n < 2 else [xa + (xb - xa) * i / (n - 1) for i in range(n)]
+        kaydirmalar = (0, 20, -20, 40, -40, 60, -60, 80, -80, 100, -100)
     dayamalar = []
     for i, x in enumerate(xs, 1):
         # web boşluklarına (delik/slot) denk gelirse kaydır
         secilen = None
-        for kay in (0, 20, -20, 40, -40, 60, -60, 80, -80, 100, -100):
+        for kay in kaydirmalar:
             xx = x + kay
             if not serbest(xx, D / 2) or xx - D / 2 < fb.xmin or xx + D / 2 > fb.xmax:
                 continue
@@ -540,19 +639,37 @@ def tasarla(pc: Parca, P):
 
     # ---- datum B yan dayamaları (-Y tarafı), 2 adet: 2. ve sondan 2. dayama hizasında
     ib = [1, len(dayamalar) - 2] if len(dayamalar) >= 4 else [0, len(dayamalar) - 1]
-    yb = bb.ymin
+    if ist.get("DAYAMA_B"):
+        xb_list = [float(v) for v in ist["DAYAMA_B"]]
+    elif len(dayamalar) >= 2:
+        xb_list = [dx_list[i] for i in sorted(set(ib))]
+    else:                                    # tek dayama: yan dayamaları yüzeye yay
+        xb_list = [fb.xmin + 0.3 * (fb.xmax - fb.xmin), fb.xmin + 0.7 * (fb.xmax - fb.xmin)]
+    L = P["yan_dayama_boy"]; K = P["yan_dayama_kal"]
+    if len(xb_list) > 1 and abs(xb_list[1] - xb_list[0]) < L + 5:
+        xb_list = [sum(xb_list) / len(xb_list)]      # sığmıyorsa tek yan dayama
     zt = bb.zmax - P["yan_dayama_ust_pay"]
-    yan = []
-    for j, i in enumerate(ib, 1):
-        x = dx_list[i]
-        L = P["yan_dayama_boy"]; K = P["yan_dayama_kal"]
-        blok = kutu_delikli(x - L / 2, x + L / 2, yb - K, yb, z0, zt,
-                            [(x, yb - K / 2)], 6.8)
+    cls_ana = BRepClass3d_SolidClassifier(pc.ana)
+    tum_parca = cq.Compound.makeCompound([cq.Shape.cast(s) for _, s in pc.hepsi]).wrapped
+    z_aday = [bb.zmin + f * (zt - bb.zmin) for f in (0.5, 0.65, 0.35, 0.8, 0.2)]
+    yan, xb_gercek = [], []
+    for j, x in enumerate(xb_list, 1):
+        bul = yan_temas(cls_ana, bb, x, z_aday, -1, genislik=L, yukseklik=zt - bb.zmin,
+                        hedef_sekil=pc.ana, engel_sekil=tum_parca)
+        if bul is None:
+            bilgi["uyari"].append(f"DAYAMA_B_{j:02d}: X={x:.0f} çevresinde -Y yüzeyi bulunamadı")
+            continue
+        xx, zz, yb = bul
+        zt_y = min(zt, zz + (zt - bb.zmin) / 2)
+        blok = kutu_delikli(xx - L / 2, xx + L / 2, yb - K, yb, z0, zt_y,
+                            [(xx, yb - K / 2)], 6.8)
         e = Eleman(f"DAYAMA_B_{j:02d}", "dayama_B", blok, "C45 sertleştirilmiş",
-                   f"temas yüzü Y={yb:.2f}, Z {bb.zmin:.1f}..{zt:.1f}", pc.ana, "+Y")
-        e.basma = [(x, yb, (bb.zmin + zt) / 2)]
-        yan.append(e)
+                   f"temas yüzü Y={yb:.2f}, Z {bb.zmin:.1f}..{zt_y:.1f}", pc.ana, "+Y")
+        e.basma = [(xx, yb, zz)]
+        yan.append(e); xb_gercek.append(xx)
     el += yan
+    if xb_gercek:
+        xb_list = xb_gercek
 
     # ---- iç içe parça (ana gövdenin içinden geçen): çatal uç dayaması + taşan uç desteği
     ic_el, catal = [], []
@@ -650,12 +767,15 @@ def tasarla(pc: Parca, P):
     idx_dikey = [i for i in range(len(dayamalar)) if i not in ib]
     if len(idx_dikey) > 3:
         idx_dikey = [idx_dikey[0], idx_dikey[len(idx_dikey) // 2], idx_dikey[-1]]
+    xd_list = ([float(v) for v in ist["KLEMP_DIKEY"]] if ist.get("KLEMP_DIKEY")
+               else [dx_list[i] for i in idx_dikey])
+    kes = {"kaydir_x": (0,), "kaydir_y": (0,)} if ist.get("KLEMP_DIKEY") else {}
     y_govde = bb.ymin - P["yan_dayama_kal"] - 45 - 10
     kk_kutu = pc.kaynak_bolgeleri()
-    for j, i in enumerate(idx_dikey, 1):
-        yer = basma_yeri(pc.ana, dx_list[i], ayak_y, kk_kutu)
+    for j, xs_d in enumerate(xd_list, 1):
+        yer = basma_yeri(pc.ana, xs_d, ayak_y, kk_kutu, **kes)
         if yer is None:
-            bilgi["uyari"].append(f"KLEMP_DIKEY_{j:02d}: X={dx_list[i]:.0f} çevresinde dolu "
+            bilgi["uyari"].append(f"KLEMP_DIKEY_{j:02d}: X={xs_d:.0f} çevresinde dolu "
                                   f"basma yeri bulunamadı, klemp konulmadı")
             continue
         xx, ys, zb = yer
@@ -663,10 +783,17 @@ def tasarla(pc: Parca, P):
                                     sum(ys) / len(ys), ys, P, pc.ana))
     # yatay klempler: yan dayama karşısı (+Y tarafı), alt köşeye yakın basar
     z_yan = bb.zmin + 5
-    for j, i in enumerate(ib, 1):
-        x = dx_list[i]
-        klempler.append(klemp_yatay(f"KLEMP_YATAY_{j:02d}", x, bb.ymax + 28 + 60, -1, z0, z_yan,
-                                    bb.ymax, P, pc.ana))
+    xy_list = [float(v) for v in ist["KLEMP_YATAY"]] if ist.get("KLEMP_YATAY") else list(xb_list)
+    for j, x in enumerate(xy_list, 1):
+        bul = yan_temas(cls_ana, bb, x, [z_yan] + z_aday, +1, hedef_sekil=pc.ana,
+                        engel_sekil=tum_parca,
+                        genislik=P["ayak_capi"], yukseklik=P["ayak_capi"])
+        if bul is None:
+            bilgi["uyari"].append(f"KLEMP_YATAY_{j:02d}: X={x:.0f} çevresinde +Y yüzeyi bulunamadı")
+            continue
+        xx, zz, yu = bul
+        klempler.append(klemp_yatay(f"KLEMP_YATAY_{j:02d}", xx, yu + 28 + 60, -1, z0, zz,
+                                    yu, P, pc.ana))
     # ana gövdeyi çatal dayamaya iten eksenel klemp (serbest uçtan)
     for e_c, yon, x_uc, ad, s, eb in catal:
         x_itme = bb.xmin if yon > 0 else bb.xmax
@@ -734,6 +861,12 @@ def tasarla(pc: Parca, P):
                          f"{g:.0f}x{h:.0f}x{et:.0f} - L={ymax-ymin-120-g:.0f}"))
     bilgi["taban"] = {"x": [xmin, xmax], "y": [ymin, ymax], "kalinlik": T}
     bilgi["dayama_x"] = [round(v, 1) for v in dx_list]
+    bilgi["istasyon"] = {
+        "DAYAMA_A": [round(v, 1) for v in dx_list],
+        "DAYAMA_B": [round(v, 1) for v in xb_list],
+        "KLEMP_DIKEY": [round(e.basma[0][0], 1) for e in klempler if e.tip == "klemp_dikey"],
+        "KLEMP_YATAY": [round(v, 1) for v in xy_list],
+    }
     return el, bilgi
 
 
@@ -844,9 +977,23 @@ def kontrol_et(pc: Parca, el, P, bilgi=None):
     # gölgesinden arta kalan erişimin en az yarısını korumalı (torç, +Z etrafında
     # 60° koni içinde girebilmeli). Parçanın kendi gölgesi fikstürün kusuru
     # değildir; rapora ayrıca yazılır.
+    hedefler = []
     for a, s in pc.kaynaklar:
         g = GProp_GProps(); BRepGProp.VolumeProperties_s(s, g); c = g.CentreOfMass()
-        p = (c.X(), c.Y(), c.Z())
+        hedefler.append((a, (c.X(), c.Y(), c.Z()))) 
+    if not hedefler:
+        # montaj fikstürü: dikiş yok, parçaların birbirine değdiği yerlerde
+        # (arayüz) el/takım erişimi kontrol edilir
+        katilar = [(a, s) for a, s in pc.hepsi]
+        for i in range(len(katilar)):
+            for j in range(i + 1, len(katilar)):
+                (a1, s1), (a2, s2) = katilar[i], katilar[j]
+                d = BRepExtrema_DistShapeShape(s1, s2)
+                if not d.IsDone() or d.Value() > 1.0:
+                    continue
+                q = d.PointOnShape1(1)
+                hedefler.append((f"arayüz {a1[:18]} / {a2[:18]}", (q.X(), q.Y(), q.Z())))
+    for a, p in hedefler:
         n_f = sum(1 for u in yonler if acik(p, u, cls))
         n_p = sum(1 for u in yonler if acik(p, u, cls_parca))
         n_t = sum(1 for u in yonler if acik(p, u, cls + cls_parca))
@@ -923,7 +1070,8 @@ def hlr_kenarlar(sekil, yon, x_ref, y_ref=None):
 def dxf_yaz(pc, el, yol, grup_ad, bilgi, rapor, hizli=False):
     import ezdxf
     doc = ezdxf.new("R2010")
-    for kat, renk in (("GORUNEN", 7), ("GIZLI", 8), ("TEGET", 9), ("YAZI", 3), ("SINIR", 1), ("OLCU", 4)):
+    for kat, renk in (("GORUNEN", 7), ("GIZLI", 8), ("TEGET", 9), ("YAZI", 3), ("SINIR", 1),
+                      ("OLCU", 4), ("REFERANS", 6)):
         doc.layers.add(kat, color=renk)
     if "GIZLI" in doc.linetypes or True:
         try:
@@ -967,6 +1115,13 @@ def dxf_yaz(pc, el, yol, grup_ad, bilgi, rapor, hizli=False):
             continue
         k = e.kutu()
         msp.add_text(e.ad, dxfattribs={"layer": "YAZI", "height": 8}).set_placement(((k.xmin + k.xmax) / 2, k.ymax + 4))
+    # referans / temas noktaları (üst görünüşte, onay JSON'u ile aynı numaralar)
+    no = 0
+    for e in el:
+        for p in getattr(e, "basma", []):
+            no += 1
+            msp.add_circle((p[0], p[1]), 4, dxfattribs={"layer": "REFERANS"})
+            msp.add_text(f"{no}", dxfattribs={"layer": "REFERANS", "height": 7}).set_placement((p[0] + 5, p[1] + 5))
     # liste
     x0, y0 = tb["x"][0], -(W + 200) - 400
     msp.add_text(f"{grup_ad} KAYNAK FIKSTURU  olcek 1:1  (+Z yukari, +X parca boyu)  "
@@ -1044,6 +1199,81 @@ def png_yaz(pc, el, yol, grup_ad, hizli=False):
     return True
 
 
+ONAY_ACIKLAMA = [
+    "PiFikstur onay paketi - XYZ referans noktalari.",
+    "Bu dosyayi inceleyin, gerekirse 'istasyon' altindaki X konumlarini duzenleyin,",
+    "'onay' degerini true yapin ve su sekilde tekrar calistirin:",
+    "    python pf2_fikstur.py <step> --sec \"...\" --onay <bu_dosya>",
+    "istasyon: her eleman turunun parca boyunca (fikstur X ekseni) konumlari, mm.",
+    "noktalar: her temas noktasinin hem fikstur hem de orijinal parca koordinati.",
+    "_onay.png dosyasinda ayni noktalar parca uzerinde numarali olarak isaretlidir.",
+]
+
+
+def onay_yaz(pc, el, bilgi, rapor, on, grup_ad, kaynak_dosya):
+    """Kullanıcı onayı için düzenlenebilir JSON + parça üzerinde işaretli PNG."""
+    noktalar = []
+    for i, e in enumerate(el, 1):
+        for p in getattr(e, "basma", []):
+            noktalar.append({"no": len(noktalar) + 1, "eleman": e.ad, "tip": e.tip,
+                             "yon": e.temas_yonu,
+                             "fikstur_xyz": [round(v, 2) for v in p],
+                             "parca_xyz": list(pc.parca_noktasi(p))})
+    js = {"_aciklama": ONAY_ACIKLAMA,
+          "dosya": kaynak_dosya, "secim": grup_ad, "yon": pc.yon,
+          "onay": False,
+          "datum": {
+              "A": f"Z ekseni - ana gövde alt yüzü, dayama üstü Z={bilgi['datum_A']['z']}",
+              "B": "Y ekseni - -Y yan yüz (DAYAMA_B)",
+              "C": "X ekseni - " + ", ".join(e.ad for e in el if e.tip in ("dayama_C", "yuva_C"))},
+          "istasyon": bilgi.get("istasyon", {}),
+          "noktalar": noktalar,
+          "donusum": {"rotasyon": pc.R, "oteleme": [round(pc.dx, 3), round(pc.dy, 3), round(pc.dz, 3)],
+                      "aciklama": "fikstur_xyz = R * parca_xyz + oteleme"},
+          "uyari": bilgi.get("uyari", []),
+          "kontrol_ozeti": rapor["ozet"]}
+    json.dump(js, open(on + "_onay.json", "w", encoding="utf-8"), ensure_ascii=False, indent=1)
+    return onay_png(pc, noktalar, on + "_onay.png", grup_ad)
+
+
+def onay_png(pc, noktalar, yol, grup_ad):
+    """Parçayı tek başına çizip önerilen referans/temas noktalarını numaralar."""
+    try:
+        import matplotlib
+        matplotlib.use("Agg")
+        import matplotlib.pyplot as plt
+        from matplotlib.collections import LineCollection
+    except Exception:
+        return False
+    prc = cq.Compound.makeCompound([cq.Shape.cast(s) for _, s in pc.hepsi]).wrapped
+    kenar = {ad: hlr_kenarlar(prc, *GORUNUSLER[ad]) for ad in ("UST", "ON")}
+    renk = {"GORUNEN": ("#1a1a1a", 0.7), "GIZLI": ("#b0b0b0", 0.35), "TEGET": ("#6a8fbf", 0.35)}
+    tip_renk = {"dayama_A": "#d62728", "dayama_B": "#ff7f0e", "dayama_C": "#8c564b",
+                "yuva_C": "#bcbd22", "klemp_dikey": "#1f77b4", "klemp_yatay": "#17becf",
+                "klemp_itme": "#2ca02c"}
+    fig, axs = plt.subplots(2, 1, figsize=(20, 10))
+    for ax, ad, (i1, i2) in ((axs[0], "UST", (0, 1)), (axs[1], "ON", (0, 2))):
+        for kat, poli in kenar[ad].items():
+            c, w = renk[kat]
+            ax.add_collection(LineCollection([[(x, y) for x, y in pl] for pl in poli if len(pl) > 1],
+                                             colors=c, linewidths=w))
+        for n in noktalar:
+            p = n["fikstur_xyz"]
+            x, y = p[i1], p[i2] * (1 if ad == "ON" else 1)
+            ax.plot(x, y, "o", ms=7, mfc=tip_renk.get(n["tip"], "#666"), mec="white", mew=0.8, zorder=5)
+            ax.annotate(str(n["no"]), (x, y), textcoords="offset points", xytext=(6, 6),
+                        fontsize=7, color=tip_renk.get(n["tip"], "#666"), zorder=6)
+        ax.set_aspect("equal"); ax.autoscale(); ax.grid(True, lw=0.3, alpha=0.5)
+        ax.set_title(f"{ad} - referans / temas noktalari", fontsize=9); ax.tick_params(labelsize=7)
+    etiket = sorted({(n["tip"], tip_renk.get(n["tip"], "#666")) for n in noktalar})
+    axs[0].legend(handles=[plt.Line2D([], [], marker="o", ls="", mfc=c, mec="white", label=t)
+                           for t, c in etiket], fontsize=7, ncol=len(etiket), loc="upper right")
+    fig.suptitle(f"{grup_ad} - ONAY: XYZ referans noktalari ({pc.yon} yukari). "
+                 f"Numaralar _onay.json icindeki 'noktalar' listesiyle ayni.", fontsize=11)
+    fig.tight_layout(); fig.savefig(yol, dpi=110); plt.close(fig)
+    return True
+
+
 def rapor_yaz(pc, el, bilgi, rapor, yol, grup_ad, args):
     L = []
     L.append(f"# {grup_ad} kaynak fikstürü – tasarım raporu\n")
@@ -1106,6 +1336,9 @@ def main():
     ap.add_argument("--referans", help="ADIM 1 çıktısı JSON (grup ve yön buradan alınır)")
     ap.add_argument("--grup"); ap.add_argument("--parca", type=int)
     ap.add_argument("--sec", help='çoklu seçim: "G03,0,/DESTEK_SACi/" (grup, katı no, ad regexi)')
+    ap.add_argument("--onay", help="onaylanmış <o>_onay.json; istasyon X konumları buradan alınır")
+    ap.add_argument("--mod", choices=["kaynak", "montaj"], default="kaynak",
+                    help="kaynak: dikişlere torç erişimi; montaj: arayüzlere takım erişimi")
     ap.add_argument("--yon", help="+X -X +Y -Y +Z -Z (yukarı)")
     ap.add_argument("-o", "--out", help="çıktı ön eki")
     ap.add_argument("--hizli", action="store_true", help="DXF'te parçayı kutu olarak çiz")
@@ -1116,17 +1349,23 @@ def main():
     if a.param:
         P.update(json.load(open(a.param, encoding="utf-8")))
     ref = json.load(open(a.referans, encoding="utf-8")) if a.referans else None
+    onay = json.load(open(a.onay, encoding="utf-8")) if a.onay else None
+    if a.mod == "montaj":
+        P["kaynak_pay"] = P.get("montaj_pay", 40.0)
 
     t0 = time.time()
     kayit, uyeler, grup_ad = grup_yukle(a.step, a.grup, a.parca, ref, a.sec)
-    yon = yon_sec(kayit, uyeler, a.yon, ref)
+    yon = yon_sec(kayit, uyeler, a.yon, onay or ref)
+    if onay:
+        print(f"onay dosyası: {a.onay}  (onay={onay.get('onay')}, "
+              f"{sum(len(v) for v in onay.get('istasyon', {}).values())} istasyon)")
     print(f"{a.step}: {len(kayit)} katı, seçim {grup_ad} ({len(uyeler)} katı), yön {yon}  [{time.time()-t0:.0f}s]")
     pc = Parca(kayit, uyeler, yon, P)
     print(f"ana gövde: {pc.ana_ad}; ekler: {[a_ for a_, _ in pc.ekler]}; kaynak: {len(pc.kaynaklar)}")
     k = pc.kutu_hepsi
     print(f"parça zarfı: X {k.xmin:.1f}..{k.xmax:.1f}  Y {k.ymin:.1f}..{k.ymax:.1f}  Z {k.zmin:.1f}..{k.zmax:.1f}")
 
-    el, bilgi = tasarla(pc, P)
+    el, bilgi = tasarla(pc, P, onay)
     print(f"{len(el)} eleman tasarlandı  [{time.time()-t0:.0f}s]")
     rapor = kontrol_et(pc, el, P, bilgi)
     oz = rapor["ozet"]
@@ -1143,6 +1382,8 @@ def main():
           "kontrol": rapor, "param": P}
     json.dump(js, open(on + ".json", "w", encoding="utf-8"), ensure_ascii=False, indent=1); print(f"  {on}.json")
     rapor_yaz(pc, el, bilgi, rapor, on + ".md", grup_ad, a); print(f"  {on}.md")
+    onay_yaz(pc, el, bilgi, rapor, on, grup_ad, a.step)
+    print(f"  {on}_onay.json  ve  {on}_onay.png   <- XYZ referans onayı için")
     dxf_yaz(pc, el, on + ".dxf", grup_ad, bilgi, rapor, a.hizli); print(f"  {on}.dxf")
     if a.png and png_yaz(pc, el, on + ".png", grup_ad, a.hizli):
         print(f"  {on}.png")

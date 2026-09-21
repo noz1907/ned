@@ -1,0 +1,463 @@
+{
+ "_aciklama": [
+  "PiFikstur onay paketi - XYZ referans noktalari.",
+  "Bu dosyayi inceleyin, gerekirse 'istasyon' altindaki X konumlarini duzenleyin,",
+  "'onay' degerini true yapin ve su sekilde tekrar calistirin:",
+  "    python pf2_fikstur.py <step> --sec \"...\" --onay <bu_dosya>",
+  "istasyon: her eleman turunun parca boyunca (fikstur X ekseni) konumlari, mm.",
+  "noktalar: her temas noktasinin hem fikstur hem de orijinal parca koordinati.",
+  "_onay.png dosyasinda ayni noktalar parca uzerinde numarali olarak isaretlidir."
+ ],
+ "dosya": "/home/user/ned/ornek/parca.stp",
+ "secim": "0+DESTEK_SACI+G03",
+ "yon": "-Y",
+ "onay": false,
+ "datum": {
+  "A": "Z ekseni - ana gövde alt yüzü, dayama üstü Z=40.0",
+  "B": "Y ekseni - -Y yan yüz (DAYAMA_B)",
+  "C": "X ekseni - DAYAMA_C_01, DAYAMA_C_PLAKA_01a, DAYAMA_C_PLAKA_01b"
+ },
+ "istasyon": {
+  "DAYAMA_A": [
+   268.0,
+   690.4,
+   1112.8,
+   1475.2,
+   2037.6,
+   2500.0
+  ],
+  "DAYAMA_B": [
+   690.4,
+   2037.6
+  ],
+  "KLEMP_DIKEY": [
+   468.0,
+   1475.2,
+   2500.0,
+   2824.2
+  ],
+  "KLEMP_YATAY": [
+   690.4,
+   2037.6
+  ]
+ },
+ "noktalar": [
+  {
+   "no": 1,
+   "eleman": "DAYAMA_A_01",
+   "tip": "dayama_A",
+   "yon": "+Z",
+   "fikstur_xyz": [
+    268.0,
+    -0.0,
+    40.0
+   ],
+   "parca_xyz": [
+    -5.68,
+    -23.82,
+    18.0
+   ]
+  },
+  {
+   "no": 2,
+   "eleman": "DAYAMA_A_02",
+   "tip": "dayama_A",
+   "yon": "+Z",
+   "fikstur_xyz": [
+    690.4,
+    -0.0,
+    40.0
+   ],
+   "parca_xyz": [
+    -5.68,
+    -23.82,
+    440.4
+   ]
+  },
+  {
+   "no": 3,
+   "eleman": "DAYAMA_A_03",
+   "tip": "dayama_A",
+   "yon": "+Z",
+   "fikstur_xyz": [
+    1112.8,
+    -0.0,
+    40.0
+   ],
+   "parca_xyz": [
+    -5.68,
+    -23.82,
+    862.8
+   ]
+  },
+  {
+   "no": 4,
+   "eleman": "DAYAMA_A_04",
+   "tip": "dayama_A",
+   "yon": "+Z",
+   "fikstur_xyz": [
+    1475.2,
+    -0.0,
+    40.0
+   ],
+   "parca_xyz": [
+    -5.68,
+    -23.82,
+    1225.2
+   ]
+  },
+  {
+   "no": 5,
+   "eleman": "DAYAMA_A_05",
+   "tip": "dayama_A",
+   "yon": "+Z",
+   "fikstur_xyz": [
+    2037.6,
+    -0.0,
+    40.0
+   ],
+   "parca_xyz": [
+    -5.68,
+    -23.82,
+    1787.6
+   ]
+  },
+  {
+   "no": 6,
+   "eleman": "DAYAMA_A_06",
+   "tip": "dayama_A",
+   "yon": "+Z",
+   "fikstur_xyz": [
+    2500.0,
+    -0.0,
+    40.0
+   ],
+   "parca_xyz": [
+    -5.68,
+    -23.82,
+    2250.0
+   ]
+  },
+  {
+   "no": 7,
+   "eleman": "DAYAMA_B_01",
+   "tip": "dayama_B",
+   "yon": "+Y",
+   "fikstur_xyz": [
+    690.4,
+    -60.0,
+    56.5
+   ],
+   "parca_xyz": [
+    54.32,
+    -40.32,
+    440.4
+   ]
+  },
+  {
+   "no": 8,
+   "eleman": "DAYAMA_B_02",
+   "tip": "dayama_B",
+   "yon": "+Y",
+   "fikstur_xyz": [
+    2037.6,
+    -60.0,
+    61.45
+   ],
+   "parca_xyz": [
+    54.32,
+    -45.27,
+    1787.6
+   ]
+  },
+  {
+   "no": 9,
+   "eleman": "DAYAMA_C_01",
+   "tip": "dayama_C",
+   "yon": "-X",
+   "fikstur_xyz": [
+    2630.0,
+    0.0,
+    42.0
+   ],
+   "parca_xyz": [
+    -5.68,
+    -25.82,
+    2380.0
+   ]
+  },
+  {
+   "no": 10,
+   "eleman": "DAYAMA_A_UC_01a",
+   "tip": "dayama_A",
+   "yon": "+Z",
+   "fikstur_xyz": [
+    2855.13,
+    -0.0,
+    44.0
+   ],
+   "parca_xyz": [
+    -5.68,
+    -27.82,
+    2605.13
+   ]
+  },
+  {
+   "no": 11,
+   "eleman": "DAYAMA_C_PLAKA_01a",
+   "tip": "yuva_C",
+   "yon": "+X",
+   "fikstur_xyz": [
+    3061.5,
+    -85.25,
+    66.5
+   ],
+   "parca_xyz": [
+    79.57,
+    -50.32,
+    2811.5
+   ]
+  },
+  {
+   "no": 12,
+   "eleman": "DAYAMA_C_PLAKA_01b",
+   "tip": "yuva_C",
+   "yon": "+X",
+   "fikstur_xyz": [
+    3061.5,
+    85.25,
+    66.5
+   ],
+   "parca_xyz": [
+    -90.93,
+    -50.32,
+    2811.5
+   ]
+  },
+  {
+   "no": 13,
+   "eleman": "KLEMP_DIKEY_01",
+   "tip": "klemp_dikey",
+   "yon": "-Z",
+   "fikstur_xyz": [
+    468.0,
+    -41.0,
+    74.5
+   ],
+   "parca_xyz": [
+    35.32,
+    -58.32,
+    218.0
+   ]
+  },
+  {
+   "no": 14,
+   "eleman": "KLEMP_DIKEY_01",
+   "tip": "klemp_dikey",
+   "yon": "-Z",
+   "fikstur_xyz": [
+    468.0,
+    41.0,
+    74.5
+   ],
+   "parca_xyz": [
+    -46.68,
+    -58.32,
+    218.0
+   ]
+  },
+  {
+   "no": 15,
+   "eleman": "KLEMP_DIKEY_02",
+   "tip": "klemp_dikey",
+   "yon": "-Z",
+   "fikstur_xyz": [
+    1475.2,
+    -41.0,
+    74.5
+   ],
+   "parca_xyz": [
+    35.32,
+    -58.32,
+    1225.2
+   ]
+  },
+  {
+   "no": 16,
+   "eleman": "KLEMP_DIKEY_02",
+   "tip": "klemp_dikey",
+   "yon": "-Z",
+   "fikstur_xyz": [
+    1475.2,
+    41.0,
+    74.5
+   ],
+   "parca_xyz": [
+    -46.68,
+    -58.32,
+    1225.2
+   ]
+  },
+  {
+   "no": 17,
+   "eleman": "KLEMP_DIKEY_03",
+   "tip": "klemp_dikey",
+   "yon": "-Z",
+   "fikstur_xyz": [
+    2500.0,
+    -41.0,
+    74.5
+   ],
+   "parca_xyz": [
+    35.32,
+    -58.32,
+    2250.0
+   ]
+  },
+  {
+   "no": 18,
+   "eleman": "KLEMP_DIKEY_03",
+   "tip": "klemp_dikey",
+   "yon": "-Z",
+   "fikstur_xyz": [
+    2500.0,
+    41.0,
+    74.5
+   ],
+   "parca_xyz": [
+    -46.68,
+    -58.32,
+    2250.0
+   ]
+  },
+  {
+   "no": 19,
+   "eleman": "KLEMP_YATAY_01",
+   "tip": "klemp_yatay",
+   "yon": "-Y",
+   "fikstur_xyz": [
+    690.4,
+    60.0,
+    45.0
+   ],
+   "parca_xyz": [
+    -65.68,
+    -28.82,
+    440.4
+   ]
+  },
+  {
+   "no": 20,
+   "eleman": "KLEMP_YATAY_02",
+   "tip": "klemp_yatay",
+   "yon": "-Y",
+   "fikstur_xyz": [
+    2037.6,
+    60.0,
+    45.0
+   ],
+   "parca_xyz": [
+    -65.68,
+    -28.82,
+    1787.6
+   ]
+  },
+  {
+   "no": 21,
+   "eleman": "KLEMP_ITME_06",
+   "tip": "klemp_itme",
+   "yon": "+X",
+   "fikstur_xyz": [
+    150.0,
+    0.0,
+    57.25
+   ],
+   "parca_xyz": [
+    -5.68,
+    -41.07,
+    -100.0
+   ]
+  },
+  {
+   "no": 22,
+   "eleman": "KLEMP_DIKEY_UC_07",
+   "tip": "klemp_dikey",
+   "yon": "-Z",
+   "fikstur_xyz": [
+    2824.18,
+    -22.75,
+    71.5
+   ],
+   "parca_xyz": [
+    17.07,
+    -55.32,
+    2574.18
+   ]
+  },
+  {
+   "no": 23,
+   "eleman": "KLEMP_DIKEY_UC_07",
+   "tip": "klemp_dikey",
+   "yon": "-Z",
+   "fikstur_xyz": [
+    2824.18,
+    22.75,
+    71.5
+   ],
+   "parca_xyz": [
+    -28.43,
+    -55.32,
+    2574.18
+   ]
+  },
+  {
+   "no": 24,
+   "eleman": "KLEMP_ITME_08",
+   "tip": "klemp_itme",
+   "yon": "-X",
+   "fikstur_xyz": [
+    3069.5,
+    -0.0,
+    66.5
+   ],
+   "parca_xyz": [
+    -5.68,
+    -50.32,
+    2819.5
+   ]
+  }
+ ],
+ "donusum": {
+  "rotasyon": [
+   [
+    0,
+    0,
+    1
+   ],
+   [
+    -1,
+    0,
+    0
+   ],
+   [
+    0,
+    -1,
+    0
+   ]
+  ],
+  "oteleme": [
+   250.0,
+   -5.682,
+   16.182
+  ],
+  "aciklama": "fikstur_xyz = R * parca_xyz + oteleme"
+ },
+ "uyari": [],
+ "kontrol_ozeti": {
+  "cakisma_sayisi": 0,
+  "temas_hatali": [],
+  "kaynak_erisim_hatali": [],
+  "uyari": [],
+  "gecti": true
+ }
+}
