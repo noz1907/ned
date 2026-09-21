@@ -192,3 +192,35 @@ döndü, ölçüleri 110x35x146, 50x15x700, 50x15x49 gibi.
 - İç kontur delik mi ada mı olduğu 2B'den kesin bilinemez; `--delik` ile seçilir.
 - Eğik (eksenlere paralel olmayan) yüzeyler yalnız o yönde prizmatikse doğru çıkar.
 - Sağ/sol görünüş ayna yönü çizim geleneğine bağlıdır; ölçü çatışması raporlanır.
+
+## Renk kipi: her renk bir parça
+
+Çizimde her parça ayrı renkle çiziliyorsa bu, hangi görünüşün hangi parçaya ait
+olduğunu söyleyen en güvenilir bilgidir. Program bunu kendiliğinden kullanır
+(`--renk auto`, üç veya daha çok renk varsa açılır):
+
+1. Her renk **ayrı ayrı** polygonize edilir, üst üste çizilmiş parçalar karışmaz.
+2. Bir rengin bölgeleri, çizimdeki görünüş yazısına (ÖN / SAĞ / ALT) göre gruplanır.
+   Kesit görünüşünde malzeme kopuk olsa da (C profilin yandan görünüşü iki şerittir)
+   aynı yazının altındakiler tek görünüş sayılır.
+3. Aynı renk bir görünüşte birkaç kez geçiyorsa (parçanın iki kopyası) en büyük
+   öbek alınır, kutu şişmez.
+4. Nesne = renk. Görünüş eşlemesi için geometrik tahmine hiç gerek kalmaz.
+
+Görünüş düzeni: **ÖN görünüş referanstır**, yanında SAĞ, altında ALT görünüş.
+
+### `ornek/dxf2stp/fikstur_2a.dxf` sonucu
+
+Kaynaklı üç parça + fikstür parçaları, on renk. Yedi nesne katıya döndü:
+
+| nesne | ölçü (mm) | not |
+|---|---|---|
+| yeşil gövde sacı | 120 x 34,5 x 2480 | STEP'teki gerçek ölçüyle birebir |
+| macenta teleskop | 195 x 50 x 1948 | doğru |
+| üçüncü kaynak parçası | 92 x 37,4 x 700 | ALT görünüşte 2,4 mm çatışma |
+| fikstür dayaması | 110 x 35 x 146 | |
+| fikstür dayaması | 50 x 35 x 146 | |
+| uzun dayama | 420 x 15 x 49 | çatışmasız |
+
+Ölçü çatışmaları raporlanır; görünüşler arasında paylaşılan ölçü tutmuyorsa
+program bunu gizlemez.

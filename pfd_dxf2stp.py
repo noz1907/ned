@@ -40,6 +40,7 @@ VARSAYILAN = dict(
     gizli_kat=r"GIZLI|GİZLİ|HIDDEN|DASHED|KESIK",   # gizli çizgi katmanları
     delik="ic",            # "ic": dışa değmeyen kapalı bölgeler delik sayılır, "yok": doldur
     min_segment=4,         # bir bölge en az bu kadar segment içermeli
+    etiket_grup=True,      # aynı renk + aynı görünüş yazısı = tek görünüş
     gorunus_bosluk=3.0,    # görünüş boşluğu, çizimin tipik görünüş aralığının bu katını aşamaz
 )
 
@@ -83,6 +84,21 @@ class Cizim:
         return [(c[0] + r * math.cos(math.radians(a)), c[1] + r * math.sin(math.radians(a)), c[2])
                 for a in [a0 + (a1 - a0) * i / n for i in range(n + 1)]]
 
+    def _renk(self, e):
+        """Varlığın renk anahtarı: gerçek renk varsa o, yoksa ACI (katmandan çözülür).
+
+        Çizimlerde her parça çoğu kez ayrı renkle çizilir; bu, hangi görünüşün
+        hangi parçaya ait olduğunu söyleyen en güvenilir bilgidir."""
+        tc = getattr(e.dxf, "true_color", None)
+        if tc is not None:
+            return ("T", int(tc))
+        c = e.dxf.color
+        if c in (256, None):                      # BYLAYER
+            c = self.kat_renk.get(e.dxf.layer, 7)
+        elif c == 0:                              # BYBLOCK
+            c = 7
+        return ("A", int(c))
+
     def _ekle_zincir(self, pts, kat):
         """Bir DXF varlığını segment zincirine çevirir ve tek ATOM olarak saklar.
 
@@ -96,13 +112,17 @@ class Cizim:
         if yeni:
             xs = [p[0] for a, b, _ in yeni for p in (a, b)]
             ys = [p[1] for a, b, _ in yeni for p in (a, b)]
-            self.atom.append({"seg": yeni, "kat": kat,
+            self.atom.append({"seg": yeni, "kat": kat, "renk": self._son_renk,
                               "kutu": (min(xs), min(ys), max(xs), max(ys))})
 
     def _varlik(self, e, dh=None):
         t = e.dxftype()
         kat = e.dxf.layer
         n = self.P["yay_bolme"]
+        try:
+            self._son_renk = self._renk(e)
+        except Exception:
+            self._son_renk = ("A", 7)
         try:
             if t == "LINE":
                 s, k = e.dxf.start, e.dxf.end
@@ -161,6 +181,8 @@ class Cizim:
     def _oku(self):
         d = ezdxf.readfile(self.yol)
         self.dxfversion = d.dxfversion
+        self.kat_renk = {l.dxf.name: l.dxf.color for l in d.layers}
+        self._son_renk = ("A", 7)
         msp = d.modelspace()
         for e in msp:
             self._varlik(e)
@@ -269,6 +291,39 @@ def kutu_kumele(atomlar, pay=0.0):
     return sorted(gr.values(), key=lambda v: -len(v))
 
 
+def yuzle_renk(ciz, P):
+    """Her rengi AYRI polygonize eder: renk = parça kimliği.
+
+    Böylece üst üste çizilmiş parçalar birbirine karışmaz ve bir görünüşün
+    hangi parçaya ait olduğu tahmin edilmek zorunda kalmaz."""
+    atom, cerceve = cerceve_ayikla(ciz.atom, P["uzun_oran"])
+    if not atom:
+        atom, cerceve = ciz.atom, []
+    gz = re.compile(P["gizli_kat"], re.I)
+    k = P["kaynastir"]
+    gruplar = defaultdict(list)
+    for a in atom:
+        if gz.search(a["kat"]):
+            continue
+        gruplar[a.get("renk", ("A", 7))].append(a)
+    cikti = {}
+    for renk, lst in gruplar.items():
+        cizgi = []
+        for a in lst:
+            for p, q, _ in a["seg"]:
+                p2 = (round(p[0] / k) * k, round(p[1] / k) * k)
+                q2 = (round(q[0] / k) * k, round(q[1] / k) * k)
+                if p2 != q2:
+                    cizgi.append(LineString([p2, q2]))
+        if not cizgi:
+            continue
+        yuz = [p for p in polygonize(unary_union(cizgi)) if p.area >= P["min_alan"]]
+        yuz = grup_cercevesi_at(yuz, P)
+        if yuz:
+            cikti[renk] = (yuz, lst)
+    return cikti, cerceve
+
+
 def yuzle(ciz, P):
     """Çizimin TAMAMINI bir kerede kapalı yüzlere çevirir.
 
@@ -371,8 +426,9 @@ def poligon_kumele(yuzler):
 class Bolge:
     """Çizimin bir nesnesi: tek bir görünüş ya da tek bir parça konturu."""
 
-    def __init__(self, no, poligonlar, metinler, atomlar=None):
+    def __init__(self, no, poligonlar, metinler, atomlar=None, renk=None):
         self.no = no
+        self.renk = renk
         self.poligon = list(poligonlar)
         self.atom = atomlar or []
         self.segment = [s for a in self.atom for s in a["seg"]]
@@ -430,12 +486,145 @@ class Bolge:
 
     def ozet(self, P=None):
         a = self.dolu_alan()
-        return {"no": self.no, "etiket": self.etiket, "segment": len(self.segment),
+        return {"no": self.no, "renk": list(self.renk) if self.renk else None,
+                "etiket": self.etiket, "segment": len(self.segment),
                 "x": [round(self.x0, 2), round(self.x1, 2)],
                 "y": [round(self.y0, 2), round(self.y1, 2)],
                 "genislik": round(self.g, 2), "yukseklik": round(self.y, 2),
                 "yuz": len(self.poligon), "alan": round(a.area, 1) if a else 0.0,
                 "katman": dict(self.katman)}
+
+
+def kapsanan_birlestir(bolgeler, pay=0.5):
+    """Kutusu bir başkasının içinde kalan bölgeleri ona katar.
+
+    Bir görünüşün içindeki delik çemberleri, iç konturlar ve kopuk ayrıntılar
+    ayrı bölge gibi görünür; oysa aynı görünüşün parçasıdır. Ayrı bir görünüş
+    başka bir görünüşün kutusunun içinde durmaz."""
+    if len(bolgeler) < 2:
+        return bolgeler
+    sira = sorted(bolgeler, key=lambda b: -(b.g * b.y))
+    kalan, yutulan = [], set()
+    for i, b in enumerate(sira):
+        if id(b) in yutulan:
+            continue
+        katilan = []
+        for c in sira[i + 1:]:
+            if id(c) in yutulan:
+                continue
+            if (c.x0 >= b.x0 - pay and c.x1 <= b.x1 + pay
+                    and c.y0 >= b.y0 - pay and c.y1 <= b.y1 + pay):
+                katilan.append(c); yutulan.add(id(c))
+        if katilan:
+            b.poligon = b.poligon + [p for c in katilan for p in c.poligon]
+            b.atom = b.atom + [a for c in katilan for a in c.atom]
+            b.segment = [s for a in b.atom for s in a["seg"]]
+            b._alan = None
+        kalan.append(b)
+    for i, b in enumerate(kalan, 1):
+        b.no = i
+    return kalan
+
+
+def _yakin_obek(lst):
+    """Aralarındaki boşluk kendi ölçülerinden küçük olan bölgeleri öbekler,
+    en büyük öbeği döndürür."""
+    if len(lst) < 2:
+        return lst
+    n = len(lst)
+    ebeveyn = list(range(n))
+
+    def kok(x):
+        while ebeveyn[x] != x:
+            ebeveyn[x] = ebeveyn[ebeveyn[x]]; x = ebeveyn[x]
+        return x
+
+    for i in range(n):
+        for j in range(i + 1, n):
+            a, b = lst[i], lst[j]
+            dx = max(b.x0 - a.x1, a.x0 - b.x1, 0.0)
+            dy = max(b.y0 - a.y1, a.y0 - b.y1, 0.0)
+            olcek = max(a.g, a.y, b.g, b.y)
+            if math.hypot(dx, dy) <= 0.5 * olcek:
+                ra, rb = kok(i), kok(j)
+                if ra != rb:
+                    ebeveyn[ra] = rb
+    gr = defaultdict(list)
+    for i in range(n):
+        gr[kok(i)].append(lst[i])
+    return max(gr.values(), key=lambda v: sum(b.g * b.y for b in v))
+
+
+def etikete_gore_birlestir(bolgeler, metinler):
+    """Aynı renkteki ve aynı GÖRÜNÜŞ YAZISININ altındaki bölgeleri birleştirir.
+
+    Kesit görünüşlerinde malzeme kopuk olabilir (C profilin yandan görünüşü iki
+    ayrı şerittir); bunlar ayrı görünüş değil, aynı görünüşün parçalarıdır.
+    Çizimdeki ON/ÜST/SAĞ yazıları hangi bölgenin hangi görünüşe ait olduğunu
+    söyler; en yakın yazıya göre gruplanır."""
+    etiketler = [(_tr(t[0]), t[1], t[2]) for t in metinler if _tr(t[0]) in GORUNUS_EKSEN]
+    if not etiketler:
+        return bolgeler
+    grup = defaultdict(list)
+    for b in bolgeler:
+        cx, cy = b.merkez
+        ad, _, _ = min(etiketler, key=lambda t: math.hypot(t[1] - cx, t[2] - cy))
+        grup[(b.renk, ad)].append(b)
+    yeni = []
+    for (renk, ad), lst in grup.items():
+        # Aynı renk bir görünüşte birkaç kez geçebilir (aynı parçanın iki
+        # kopyası). Yakın duranlar tek görünüşün parçasıdır, uzak duranlar
+        # ayrı kopyadır: en büyük öbek alınır.
+        lst = _yakin_obek(lst)
+        ana = max(lst, key=lambda b: b.g * b.y)
+        if len(lst) > 1:
+            ana.poligon = [p for b in lst for p in b.poligon]
+            ana.atom = [a for b in lst for a in b.atom]
+            ana.segment = [s for a in ana.atom for s in a["seg"]]
+            ana._alan = None
+            xs = [v for b in lst for v in (b.x0, b.x1)]
+            ys = [v for b in lst for v in (b.y0, b.y1)]
+            ana.x0, ana.x1, ana.y0, ana.y1 = min(xs), max(xs), min(ys), max(ys)
+            ana.g, ana.y = ana.x1 - ana.x0, ana.y1 - ana.y0
+            ana.merkez = ((ana.x0 + ana.x1) / 2, (ana.y0 + ana.y1) / 2)
+        ana.etiket = ad
+        yeni.append(ana)
+    for i, b in enumerate(sorted(yeni, key=lambda b: -(b.g * b.y)), 1):
+        b.no = i
+    return sorted(yeni, key=lambda b: -(b.g * b.y))
+
+
+def bolgele_renk(ciz, P):
+    """Renge göre bölgeleme: her renk kendi içinde görünüşlere ayrılır."""
+    renk_yuz, cerceve = yuzle_renk(ciz, P)
+    bolgeler = []
+    for renk, (yuzler, atomlar) in sorted(renk_yuz.items(),
+                                          key=lambda t: -sum(p.area for p in t[1][0])):
+        kume = poligon_kumele(yuzler)
+        kutular = []
+        for kk in kume:
+            xs = [v for i in kk for v in (yuzler[i].bounds[0], yuzler[i].bounds[2])]
+            ys = [v for i in kk for v in (yuzler[i].bounds[1], yuzler[i].bounds[3])]
+            kutular.append((min(xs), min(ys), max(xs), max(ys)))
+        atom_kume = defaultdict(list)
+        for a in atomlar:
+            kb0 = a["kutu"]
+            cx, cy = (kb0[0] + kb0[2]) / 2, (kb0[1] + kb0[3]) / 2
+            for gi, kb in enumerate(kutular):
+                if kb[0] - 1e-6 <= cx <= kb[2] + 1e-6 and kb[1] - 1e-6 <= cy <= kb[3] + 1e-6:
+                    atom_kume[gi].append(a); break
+        bu_renk = []
+        for gi, kk in enumerate(kume):
+            b = Bolge(len(bu_renk) + 1, [yuzler[i] for i in kk], ciz.metin,
+                      atom_kume.get(gi), renk)
+            if b.g > 1e-9 and b.y > 1e-9:
+                bu_renk.append(b)
+        bolgeler += kapsanan_birlestir(bu_renk)
+    if P.get("etiket_grup", True):
+        bolgeler = etikete_gore_birlestir(bolgeler, ciz.metin)
+    for i, b in enumerate(bolgeler, 1):
+        b.no = i
+    return bolgeler, cerceve, None
 
 
 def bolgele(ciz, P):
@@ -485,6 +674,24 @@ def _daire_mi(b, tol=0.06):
     return abs(a.area - daire_alan) <= tol * daire_alan
 
 
+def nesne_esle_renk(bolgeler, P):
+    """Renk kipi: aynı RENK = aynı parça. Görünüş rolleri yazılardan gelir.
+
+    Geometrik tahmine hiç gerek kalmaz; hangi görünüşün hangi parçaya ait
+    olduğunu çizimin kendisi (renk) söyler."""
+    grup = defaultdict(list)
+    for b in bolgeler:
+        grup[b.renk].append(b)
+    nesneler = []
+    for renk, lst in sorted(grup.items(), key=lambda t: -sum(b.g * b.y for b in t[1])):
+        n = Nesne(len(nesneler) + 1, lst, [])
+        for b in lst:
+            if b.etiket in GORUNUS_EKSEN:
+                n.rol[b.no] = b.etiket
+        nesneler.append(n)
+    return nesneler
+
+
 def nesne_esle(bolgeler, P):
     """Aynı cismin farklı görünüşlerini tek NESNE altında toplar.
 
@@ -507,6 +714,8 @@ def nesne_esle(bolgeler, P):
     for i in range(n):
         for j in range(i + 1, n):
             a, b = bolgeler[i], bolgeler[j]
+            if a.renk is not None and b.renk is not None and a.renk != b.renk:
+                continue                   # ayrı renk = ayrı parça
             # satır hizası: Y aralıkları örtüşür ve yükseklikler eşit
             satir = (_ortusme(a.y0, a.y1, b.y0, b.y1) > 0.9
                      and abs(a.y - b.y) <= tol * max(a.y, b.y))
@@ -612,6 +821,11 @@ class Nesne:
     def rolle(self):
         """Her görünüşe bir rol verir: etiket varsa ondan, yoksa hizadan."""
         g = self.gorunus
+        for b in g:
+            if b.no not in self.rol and b.etiket in GORUNUS_EKSEN:
+                self.rol[b.no] = b.etiket
+        if len(self.rol) == len(g):
+            return self.rol
         for b in g:
             if b.etiket in GORUNUS_EKSEN:
                 self.rol[b.no] = b.etiket
@@ -807,8 +1021,9 @@ def step_yaz(nesneler, yol, ad="DXF_DONUSUM"):
     for nes in nesneler:
         if nes.kati is None:
             continue
-        etk = "_".join(x for x in nes.etiketler if x) or "NESNE"
-        assy.add(nes.kati, name=re.sub(r"[^\w]", "_", f"N{nes.no:03d}_{etk}")[:60],
+        rk = nes.gorunus[0].renk if nes.gorunus and nes.gorunus[0].renk else None
+        etk = ("R%s%s" % rk if rk else "") + "_" + ("_".join(x for x in nes.etiketler if x) or "NESNE")
+        assy.add(nes.kati, name=re.sub(r"[^\w]", "_", f"N{nes.no:03d}{etk}")[:60],
                  color=cq.Color(0.6, 0.65, 0.7))
         n += 1
     if n == 0:
@@ -867,6 +1082,8 @@ def main():
     ap.add_argument("-o", "--out", help="çıktı ön eki (varsayılan: dxf adı)")
     ap.add_argument("--liste", action="store_true", help="yalnız bölge/nesne raporu")
     ap.add_argument("--kalinlik", type=float, help="tek görünüşlü nesneler için kalınlık")
+    ap.add_argument("--renk", choices=["auto", "evet", "hayir"], default="auto",
+                    help="renk = parça kimliği (her renk ayrı parça). auto: 3+ renk varsa aç")
     ap.add_argument("--delik", choices=["ic", "yok"], default="ic",
                     help="ic: içteki kapalı bölgeler delik; yok: doldur")
     ap.add_argument("--pencere", help="yalnız bu kutu: x0,y0,x1,y1")
@@ -893,7 +1110,14 @@ def main():
         ciz.segment = [s for q in ciz.atom for s in q["seg"]]
         print(f"  pencere sonrası: {len(ciz.atom)} nesne")
 
-    bolgeler, cerceve, _ = bolgele(ciz, P)
+    renkler = Counter(a.get("renk") for a in ciz.atom)
+    renk_kip = a.renk == "evet" or (a.renk == "auto" and len(renkler) >= 3)
+    if renk_kip:
+        print(f"  renk kipi: {len(renkler)} renk -> " +
+              ", ".join(f"{k[0]}{k[1]}:{v}" for k, v in renkler.most_common(8)))
+        bolgeler, cerceve, _ = bolgele_renk(ciz, P)
+    else:
+        bolgeler, cerceve, _ = bolgele(ciz, P)
     print(f"{len(bolgeler)} bölge, {len(cerceve)} çerçeve atomu  [{time.time()-t0:.1f}s]")
     if a.en_az_nesne > 0:
         bolgeler = [b for b in bolgeler if b.g * b.y >= a.en_az_nesne]
@@ -901,7 +1125,8 @@ def main():
             b.no = i
         print(f"  büyüklük süzgeci sonrası: {len(bolgeler)} bölge")
 
-    nesneler = nesne_esle(bolgeler, P)
+    nesneler = (nesne_esle_renk(bolgeler, P) if renk_kip and a.renk != "hayir"
+                else nesne_esle(bolgeler, P))
     print(f"{len(nesneler)} nesne  [{time.time()-t0:.1f}s]")
     if a.liste:
         for b in bolgeler[:60]:
