@@ -441,16 +441,31 @@
  "nesne": [
   {
    "no": 1,
-   "gorunus": 4,
+   "gorunus": 1,
+   "roller": {
+    "1": "ON"
+   },
+   "olcu": null,
+   "kutular": [
+    [
+     50.0,
+     700.0
+    ]
+   ],
+   "not": [
+    "eksik ölçü ['D']: --kalinlik verin"
+   ]
+  },
+  {
+   "no": 2,
+   "gorunus": 2,
    "roller": {
     "2": "ON",
-    "3": "UST",
-    "4": null,
-    "7": "SAG"
+    "4": "SAG"
    },
    "olcu": [
     114.5,
-    146.0,
+    110.02,
     146.0
    ],
    "kutular": [
@@ -459,11 +474,27 @@
      146.0
     ],
     [
-     110.4,
-     146.0
-    ],
-    [
      110.02,
+     146.0
+    ]
+   ],
+   "not": []
+  },
+  {
+   "no": 3,
+   "gorunus": 2,
+   "roller": {
+    "3": "ON",
+    "7": "SAG"
+   },
+   "olcu": [
+    110.4,
+    35.0,
+    146.0
+   ],
+   "kutular": [
+    [
+     110.4,
      146.0
     ],
     [
@@ -471,39 +502,10 @@
      146.0
     ]
    ],
-   "not": [
-    "görünüş 3: rol çakıştı, UST atandı",
-    "görünüş 4: rol belirsiz, kullanılmadı",
-    "ölçü çatışması W: 114.50 / 110.40 (UST)",
-    "ölçü çatışması D: 146.00 / 35.00 (SAG)"
-   ]
-  },
-  {
-   "no": 2,
-   "gorunus": 2,
-   "roller": {
-    "1": "ON",
-    "5": "SAG"
-   },
-   "olcu": [
-    50.0,
-    15.0,
-    700.0
-   ],
-   "kutular": [
-    [
-     50.0,
-     700.0
-    ],
-    [
-     15.0,
-     700.0
-    ]
-   ],
    "not": []
   },
   {
-   "no": 3,
+   "no": 4,
    "gorunus": 1,
    "roller": {
     "6": "ON"
@@ -520,17 +522,32 @@
    ]
   },
   {
-   "no": 4,
-   "gorunus": 4,
+   "no": 5,
+   "gorunus": 1,
+   "roller": {
+    "5": "ON"
+   },
+   "olcu": null,
+   "kutular": [
+    [
+     15.0,
+     700.0
+    ]
+   ],
+   "not": [
+    "eksik ölçü ['D']: --kalinlik verin"
+   ]
+  },
+  {
+   "no": 6,
+   "gorunus": 2,
    "roller": {
     "10": "ON",
-    "11": "UST",
-    "12": null,
-    "13": "SAG"
+    "12": "SAG"
    },
    "olcu": [
     50.0,
-    49.0,
+    50.0,
     49.0
    ],
    "kutular": [
@@ -541,24 +558,12 @@
     [
      50.0,
      49.0
-    ],
-    [
-     50.0,
-     49.0
-    ],
-    [
-     15.0,
-     49.0
     ]
    ],
-   "not": [
-    "görünüş 11: rol çakıştı, UST atandı",
-    "görünüş 12: rol belirsiz, kullanılmadı",
-    "ölçü çatışması D: 49.00 / 15.00 (SAG)"
-   ]
+   "not": []
   },
   {
-   "no": 5,
+   "no": 7,
    "gorunus": 1,
    "roller": {
     "9": "ON"
@@ -575,7 +580,7 @@
    ]
   },
   {
-   "no": 6,
+   "no": 8,
    "gorunus": 1,
    "roller": {
     "8": "ON"
@@ -592,103 +597,99 @@
    ]
   },
   {
-   "no": 7,
-   "gorunus": 2,
-   "roller": {
-    "14": "ON",
-    "15": "UST"
-   },
-   "olcu": [
-    10.0,
-    10.0,
-    10.0
-   ],
-   "kutular": [
-    [
-     10.0,
-     10.0
-    ],
-    [
-     10.0,
-     10.0
-    ]
-   ],
-   "not": []
-  },
-  {
-   "no": 8,
-   "gorunus": 2,
-   "roller": {
-    "16": "ON",
-    "17": "UST"
-   },
-   "olcu": [
-    10.0,
-    10.0,
-    10.0
-   ],
-   "kutular": [
-    [
-     10.0,
-     10.0
-    ],
-    [
-     10.0,
-     10.0
-    ]
-   ],
-   "not": []
-  },
-  {
    "no": 9,
    "gorunus": 2,
    "roller": {
-    "19": "ON",
-    "20": "SAG"
+    "11": "ON",
+    "13": "SAG"
    },
    "olcu": [
-    8.0,
-    8.0,
-    8.0
+    50.0,
+    15.0,
+    49.0
    ],
    "kutular": [
     [
-     8.0,
-     8.0
+     50.0,
+     49.0
     ],
     [
-     8.0,
-     8.0
+     15.0,
+     49.0
     ]
    ],
    "not": []
   },
   {
    "no": 10,
-   "gorunus": 2,
+   "gorunus": 1,
    "roller": {
-    "22": "ON",
-    "21": "UST"
+    "14": "ON"
    },
-   "olcu": [
-    7.2,
-    7.2,
-    7.2
-   ],
+   "olcu": null,
    "kutular": [
     [
-     7.2,
-     7.2
-    ],
-    [
-     7.2,
-     7.2
+     10.0,
+     10.0
     ]
    ],
-   "not": []
+   "not": [
+    "eksik ölçü ['D']: --kalinlik verin"
+   ]
   },
   {
    "no": 11,
+   "gorunus": 1,
+   "roller": {
+    "15": "ON"
+   },
+   "olcu": null,
+   "kutular": [
+    [
+     10.0,
+     10.0
+    ]
+   ],
+   "not": [
+    "eksik ölçü ['D']: --kalinlik verin"
+   ]
+  },
+  {
+   "no": 12,
+   "gorunus": 1,
+   "roller": {
+    "16": "ON"
+   },
+   "olcu": null,
+   "kutular": [
+    [
+     10.0,
+     10.0
+    ]
+   ],
+   "not": [
+    "eksik ölçü ['D']: --kalinlik verin"
+   ]
+  },
+  {
+   "no": 13,
+   "gorunus": 1,
+   "roller": {
+    "17": "ON"
+   },
+   "olcu": null,
+   "kutular": [
+    [
+     10.0,
+     10.0
+    ]
+   ],
+   "not": [
+    "eksik ölçü ['D']: --kalinlik verin"
+   ]
+  },
+  {
+   "no": 14,
    "gorunus": 1,
    "roller": {
     "18": "ON"
@@ -703,9 +704,77 @@
    "not": [
     "eksik ölçü ['D']: --kalinlik verin"
    ]
+  },
+  {
+   "no": 15,
+   "gorunus": 1,
+   "roller": {
+    "19": "ON"
+   },
+   "olcu": null,
+   "kutular": [
+    [
+     8.0,
+     8.0
+    ]
+   ],
+   "not": [
+    "eksik ölçü ['D']: --kalinlik verin"
+   ]
+  },
+  {
+   "no": 16,
+   "gorunus": 1,
+   "roller": {
+    "20": "ON"
+   },
+   "olcu": null,
+   "kutular": [
+    [
+     8.0,
+     8.0
+    ]
+   ],
+   "not": [
+    "eksik ölçü ['D']: --kalinlik verin"
+   ]
+  },
+  {
+   "no": 17,
+   "gorunus": 1,
+   "roller": {
+    "22": "ON"
+   },
+   "olcu": null,
+   "kutular": [
+    [
+     7.2,
+     7.2
+    ]
+   ],
+   "not": [
+    "eksik ölçü ['D']: --kalinlik verin"
+   ]
+  },
+  {
+   "no": 18,
+   "gorunus": 1,
+   "roller": {
+    "21": "ON"
+   },
+   "olcu": null,
+   "kutular": [
+    [
+     7.2,
+     7.2
+    ]
+   ],
+   "not": [
+    "eksik ölçü ['D']: --kalinlik verin"
+   ]
   }
  ],
- "kuruldu": 7,
+ "kuruldu": 4,
  "param": {
   "yay_bolme": 48,
   "kaynastir": 0.02,
@@ -716,6 +785,7 @@
   "sayfa_orani": 0.4,
   "gizli_kat": "GIZLI|GİZLİ|HIDDEN|DASHED|KESIK",
   "delik": "ic",
-  "min_segment": 4
+  "min_segment": 4,
+  "gorunus_bosluk": 3.0
  }
 }

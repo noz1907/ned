@@ -40,6 +40,7 @@ VARSAYILAN = dict(
     gizli_kat=r"GIZLI|GİZLİ|HIDDEN|DASHED|KESIK",   # gizli çizgi katmanları
     delik="ic",            # "ic": dışa değmeyen kapalı bölgeler delik sayılır, "yok": doldur
     min_segment=4,         # bir bölge en az bu kadar segment içermeli
+    gorunus_bosluk=3.0,    # görünüş boşluğu, çizimin tipik görünüş aralığının bu katını aşamaz
 )
 
 # görünüş adı -> (yatay eksen, dikey eksen) ; 3B eksenler X=0, Y=1, Z=2
@@ -472,6 +473,18 @@ def _ortusme(a0, a1, b0, b1):
     return o / k if k > 1e-9 else 0.0
 
 
+def _daire_mi(b, tol=0.06):
+    """Bölgenin dolu alanı tek bir daire mi? (bir görünüşün tamamı daireyse
+    o görünüş dönel bir yüzeyin karşıdan görünüşüdür)."""
+    if abs(b.g - b.y) > tol * max(b.g, b.y):
+        return False
+    a = b.dolu_alan()
+    if a is None or a.geom_type != "Polygon" or a.interiors:
+        return False
+    daire_alan = math.pi * 0.25 * b.g * b.y
+    return abs(a.area - daire_alan) <= tol * daire_alan
+
+
 def nesne_esle(bolgeler, P):
     """Aynı cismin farklı görünüşlerini tek NESNE altında toplar.
 
@@ -489,7 +502,8 @@ def nesne_esle(bolgeler, P):
             ebeveyn[x] = ebeveyn[ebeveyn[x]]; x = ebeveyn[x]
         return x
 
-    baglar = []
+    maks_bosluk = P.get("gorunus_bosluk", 1.5)
+    aday = []
     for i in range(n):
         for j in range(i + 1, n):
             a, b = bolgeler[i], bolgeler[j]
@@ -504,10 +518,71 @@ def nesne_esle(bolgeler, P):
             # aynı yerde üst üste duran iki bölge görünüş çifti değildir
             if _ortusme(a.x0, a.x1, b.x0, b.x1) > 0.5 and _ortusme(a.y0, a.y1, b.y0, b.y1) > 0.5:
                 continue
-            baglar.append((i, j, "satir" if satir else "sutun"))
-            ra, rb = kok(i), kok(j)
-            if ra != rb:
-                ebeveyn[ra] = rb
+            # İKİ GÖRÜNÜŞ DE DAİRE İSE bunlar aynı cismin iki görünüşü olamaz:
+            # dönel bir cisim yandan dikdörtgen görünür. Aynı yuvarlak öğenin
+            # iki kopyasıdır (cıvata başı, pim vb.).
+            if _daire_mi(a) and _daire_mi(b):
+                continue
+            # KOMŞULUK: görünüşler yan yana durur. Aradaki boşluk, küçük olanın
+            # ölçüsünün katından büyükse bunlar aynı cismin görünüşü değildir.
+            if satir:
+                bosluk = max(b.x0 - a.x1, a.x0 - b.x1)
+                olcek = min(a.g, b.g)
+            else:
+                bosluk = max(b.y0 - a.y1, a.y0 - b.y1)
+                olcek = min(a.y, b.y)
+            aday.append((max(bosluk, 0.0), i, j, "satir" if satir else "sutun", olcek))
+
+    # BOŞLUK EŞİĞİ çizimin kendi görünüş aralığından türetilir: her bölgenin
+    # en yakın hizalı komşusuna olan uzaklığının ortancası, bu çizimde bir
+    # cismin görünüşleri arasındaki tipik boşluktur.
+    if aday:
+        enyakin = {}
+        for bosluk, i, j, yon, olcek in aday:
+            enyakin[i] = min(enyakin.get(i, 1e18), bosluk)
+            enyakin[j] = min(enyakin.get(j, 1e18), bosluk)
+        dizi = sorted(enyakin.values())
+        tipik = dizi[len(dizi) // 2] if dizi else 0.0
+        esik = max(maks_bosluk * max(tipik, 1e-9), 1e-9)
+        aday = [t for t in aday if t[0] <= esik]
+    aday = [(t[0], t[1], t[2], t[3]) for t in aday]
+
+    # ARADA BAŞKASI VAR MI: iki görünüş arasında üçüncü bir bölge duruyorsa
+    # bunlar komşu değildir, bağ kurulmaz.
+    def arada_var(i, j, yon):
+        a, b = bolgeler[i], bolgeler[j]
+        if yon == "satir":
+            l, r = (a, b) if a.x1 <= b.x0 else (b, a)
+            for k in range(n):
+                if k in (i, j):
+                    continue
+                c = bolgeler[k]
+                if (c.x0 > l.x1 + 1e-9 and c.x1 < r.x0 - 1e-9
+                        and _ortusme(c.y0, c.y1, l.y0, l.y1) > 0.3):
+                    return True
+        else:
+            l, r = (a, b) if a.y1 <= b.y0 else (b, a)
+            for k in range(n):
+                if k in (i, j):
+                    continue
+                c = bolgeler[k]
+                if (c.y0 > l.y1 + 1e-9 and c.y1 < r.y0 - 1e-9
+                        and _ortusme(c.x0, c.x1, l.x0, l.x1) > 0.3):
+                    return True
+        return False
+
+    baglar = []
+    kullanilan = defaultdict(set)      # bölge -> bağlandığı yönler
+    for bosluk, i, j, yon in sorted(aday):
+        if yon in kullanilan[i] or yon in kullanilan[j]:
+            continue                   # bir cismin her yönde tek komşusu olur
+        if arada_var(i, j, yon):
+            continue
+        baglar.append((i, j, yon))
+        kullanilan[i].add(yon); kullanilan[j].add(yon)
+        ra, rb = kok(i), kok(j)
+        if ra != rb:
+            ebeveyn[ra] = rb
     gr = defaultdict(list)
     for i in range(n):
         gr[kok(i)].append(i)
