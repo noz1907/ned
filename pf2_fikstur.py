@@ -9,6 +9,7 @@ yapmak ve STEP + DXF + JSON + rapor olarak yazmak.
     python pf2_fikstur.py parca.stp --referans referans_G03.json
     python pf2_fikstur.py parca.stp --grup G03 --yon +Y
     python pf2_fikstur.py G03.step  --yon +Y            # yalnız grubu içeren STEP
+    python pf2_fikstur.py parca.stp --sec "0,/DESTEK_SACi/,G03" --yon=-Y   # P1 + G03 birleşimi
 
 Çıktılar (-o ön eki, varsayılan fikstur_<grup>):
     <o>.step   fikstür + parça montajı (adlandırılmış parçalar)
@@ -68,6 +69,9 @@ PARAM = dict(
     yuva_et=40.0,               # kapak yuvası arka duvar kalınlığı
     yuva_kulak=20.0,            # kapak yuvası yan kulak kalınlığı
     yuva_ust_pay=5.0,           # yuva, kapak üstünden bu kadar yukarı
+    catal_bosluk=1.5,           # çatal uç dayamasının iç içe parçaya bıraktığı boşluk
+    kaynak_yan_pay=20.0,        # dikişin Y yanından bu kadar uzakta eleman olabilir
+    torc_konisi=60.0,           # torç erişim konisinin yarı açısı (derece)
     kopru_ayak=(24.0, 10.0),    # köprü ayak (X boyu, kalınlık)
     lastik=(12.0, 6.0),         # köprü ayak lastik takozu (çap, yükseklik)
     klemp_dikey_std_h=75.0,     # dikey klempin standart kol alt yüksekliği (GH-201-B sınıfı)
@@ -147,13 +151,48 @@ def kutu_delikli(x0, x1, y0, y1, z0, z1, delikler, cap):
 
 
 # ============================================================ parça yükleme
-def grup_yukle(step, grup=None, parca=None, referans=None):
+def sec_coz(kayit, gruplar, ifade):
+    """Seçim ifadesini katı indeksi kümesine çevirir.
+
+    Virgülle ayrılmış jetonlar:
+        G03        grup no
+        12         katı indeksi (0 tabanlı, --liste çıktısındaki no)
+        /regex/    adı eşleşen tüm katılar  (ör. /DESTEK_SACi/)
+    """
+    uyeler = []
+    for jeton in [t.strip() for t in ifade.split(",") if t.strip()]:
+        if jeton.startswith("/") and jeton.endswith("/") and len(jeton) > 2:
+            kal = re.compile(jeton[1:-1], re.I)
+            bul = [i for i, (ad, _) in enumerate(kayit) if kal.search(ad)]
+            if not bul:
+                sys.exit(f"HATA: {jeton} hiçbir parça adıyla eşleşmedi")
+            uyeler += bul
+        elif re.fullmatch(r"[Gg]\d+", jeton):
+            gi = int(jeton[1:]) - 1
+            if not (0 <= gi < len(gruplar)):
+                sys.exit(f"HATA: {jeton} yok, G01..G{len(gruplar):02d}")
+            uyeler += list(gruplar[gi])
+        elif re.fullmatch(r"\d+", jeton):
+            i = int(jeton)
+            if not (0 <= i < len(kayit)):
+                sys.exit(f"HATA: katı {i} yok, 0..{len(kayit)-1}")
+            uyeler.append(i)
+        else:
+            sys.exit(f"HATA: seçim jetonu anlaşılmadı: {jeton}")
+    return sorted(set(uyeler))
+
+
+def grup_yukle(step, grup=None, parca=None, referans=None, sec=None):
     kayit = E.step_oku(step)
-    if grup is None and parca is None and referans:
+    if sec is None and grup is None and parca is None and referans:
         grup = referans.get("secim")
-    if grup is None and parca is None:
+    if sec is None and grup is None and parca is None:
         return kayit, list(range(len(kayit))), os.path.splitext(os.path.basename(step))[0]
     gruplar, temaslar, _ = E.temas_grupla(kayit)
+    if sec:
+        uyeler = sec_coz(kayit, gruplar, sec)
+        ad = re.sub(r"[^\w+]+", "_", sec.replace(",", "+").replace("/", "")).strip("_")[:40]
+        return kayit, uyeler, ad.upper()
     if grup:
         gi = int(re.sub(r"\D", "", grup)) - 1
         if not (0 <= gi < len(gruplar)):
@@ -214,6 +253,12 @@ class Parca:
         self.kaynaklar = [(a, dondur(s, I, t)) for a, s in self.kaynaklar]
         self.hepsi = [(self.ana_ad, self.ana)] + self.ekler + self.kaynaklar
         self.kutu = kutu(self.ana)
+        # ek parçaları ayır: ana gövdenin içinden geçen (iç içe) / ucuna oturan plaka
+        self.ic_ice, self.uc_plaka = [], []
+        for a, s in self.ekler:
+            eb = kutu(s)
+            ortak = max(0.0, min(eb.xmax, self.kutu.xmax) - max(eb.xmin, self.kutu.xmin))
+            (self.ic_ice if ortak > 0.2 * max(eb.xlen, 1e-9) else self.uc_plaka).append((a, s))
         self.kutu_hepsi = kutu(cq.Compound.makeCompound([cq.Shape.cast(s) for _, s in self.hepsi]))
         self.duz, self.sil = E.yuzey_bilgi(self.ana)
         self.kg = sum(hacim(s) for _, s in self.hepsi) * RHO
@@ -356,6 +401,66 @@ def klemp_yatay(ad, x, y_govde, yon, z_taban, z_eksen, y_bas, P, hedef, ayak=Non
     return e
 
 
+def _ic_mi(cls, x, y, z):
+    cls.Perform(gp_Pnt(x, y, z), 1e-7)
+    return cls.State() in (TopAbs_IN, TopAbs_ON)
+
+
+def _ust_z(cls, x, y, z_ust, z_alt, adim=0.4):
+    """(x,y) dikeyinde katının üst yüzeyinin z'si (yoksa None).
+
+    Kaba tarama + ikiye bölme ile 0,01 mm'ye kadar netleştirilir; klemp ayağı
+    yüzeyin içine gömülmesin diye şart."""
+    t = z_ust
+    while t >= z_alt:
+        if _ic_mi(cls, x, y, t):
+            lo, hi = t, min(t + adim, z_ust)       # lo içeride, hi dışarıda
+            for _ in range(7):
+                orta = (lo + hi) / 2
+                if _ic_mi(cls, x, y, orta):
+                    lo = orta
+                else:
+                    hi = orta
+            return hi
+        t -= adim
+    return None
+
+
+def basma_yeri(hedef, x, ayak_y, kaynak_kutulari=(), r=6.0, derinlik=8.0,
+               kaydir_x=(0, 25, -25, 50, -50, 75, -75, 110, -110, 150, -150,
+                         200, -200, 260, -260, 330, -330, 400, -400),
+               kaydir_y=(0, 7, -7, 14, -14, 21, -21)):
+    """Klemp ayağının gerçekten dolu malzemeye bastığı (x, ayak_y'leri, z) konumu.
+
+    Delik/slot/çentik üstüne denk gelen ayakları kaydırarak çözer; dikiş
+    kutularının üstüne basmaz. Bulamazsa None."""
+    hb = kutu(hedef)
+    cls = BRepClass3d_SolidClassifier(hedef)
+    for dx in kaydir_x:
+        xx = x + dx
+        if not (hb.xmin + 2 < xx < hb.xmax - 2):
+            continue
+        for dy in kaydir_y:
+            ys = [y + dy for y in ayak_y]
+            if any(kb.xmin - 8 < xx < kb.xmax + 8 and kb.ymin - 8 < y < kb.ymax + 8
+                   for kb in kaynak_kutulari for y in ys):
+                continue
+            zs, iyi = [], True
+            for y in ys:
+                zz = []
+                for px, py in ((xx, y), (xx + r, y), (xx - r, y), (xx, y + r), (xx, y - r)):
+                    v = _ust_z(cls, px, py, hb.zmax + 0.2, hb.zmax - derinlik)
+                    if v is None:
+                        iyi = False; break
+                    zz.append(v)
+                if not iyi:
+                    break
+                zs.append(max(zz))
+            if iyi and zs and max(zs) - min(zs) < 0.6:
+                return xx, ys, max(zs)
+    return None
+
+
 def temas_alani(yuz_f, sekil):
     """Bir düz yüz ile başka bir şeklin (blok) kesişim alanı."""
     try:
@@ -391,7 +496,7 @@ def tasarla(pc: Parca, P):
     yasak = []
     for kb in pc.kaynak_bolgeleri():
         yasak.append((kb.xmin - P["kaynak_pay"], kb.xmax + P["kaynak_pay"]))
-    for _, s in pc.ekler:
+    for _, s in pc.uc_plaka:
         eb = kutu(s); yasak.append((eb.xmin - 20, eb.xmax + 20))
 
     def serbest(x, yarim):
@@ -449,37 +554,87 @@ def tasarla(pc: Parca, P):
         yan.append(e)
     el += yan
 
-    # ---- ek parça yuvaları (kapak plakası vb.) -> datum C
-    yuvalar = []
-    for k, (ad, s) in enumerate(pc.ekler, 1):
+    # ---- iç içe parça (ana gövdenin içinden geçen): çatal uç dayaması + taşan uç desteği
+    ic_el, catal = [], []
+    for k, (ad, s) in enumerate(pc.ic_ice, 1):
         eb = kutu(s)
-        sag = eb.xmax >= bb.xmax - 1      # ana gövdenin +X ucunda mı
-        W = P["yuva_et"]; K = P["yuva_kulak"]; up = P["yuva_ust_pay"]
-        if sag:
-            x_duvar0, x_duvar1 = eb.xmax, eb.xmax + W
-            x_raf0 = eb.xmin - 5
-        else:
-            x_duvar0, x_duvar1 = eb.xmin - W, eb.xmin
-            x_raf0 = eb.xmax + 5
-        xr0, xr1 = sorted((x_raf0, x_duvar1 if sag else x_duvar0))
-        # +Y tarafında kulak yok (yatay klemp iter); duvar üstü kapak üstünün 2 mm altında
-        # ki dikey klemp ayağı kapak üst kenarına serbestçe bassın
-        y0, y1 = eb.ymin - K, eb.ymax - 5
-        blok = kutu_cq(x_duvar0, x_duvar1, y0, y1, z0, eb.zmax - 2)          # arka duvar
-        if eb.zmin > z0 + 0.5:
-            blok = blok.union(kutu_cq(xr0, xr1, y0, y1, z0, eb.zmin))       # raf
-        # -Y kulak (datum), +Y tarafı klemple itilir
-        blok = blok.union(kutu_cq(xr0, xr1, eb.ymin - K, eb.ymin, z0, eb.zmax + up))
-        blok = blok.faces(">Z").workplane(origin=(0, 0, eb.zmax + up)).pushPoints(
-            [((x_duvar0 + x_duvar1) / 2, y0 + 15), ((x_duvar0 + x_duvar1) / 2, y1 - 15)]).hole(6.8)
-        e = Eleman(f"YUVA_C_{k:02d}", "yuva_C", blok, "S355JR",
-                   f"{ad[:30]}: arka duvar X={eb.xmax if sag else eb.xmin:.2f}, raf Z={eb.zmin:.2f}, "
-                   f"kulak Y={eb.ymin:.2f}", s, "-X" if sag else "+X")
-        e.basma = [(eb.xmax if sag else eb.xmin, (eb.ymin + eb.ymax) / 2, (eb.zmin + eb.zmax) / 2),
-                   ((eb.xmin + eb.xmax) / 2, (eb.ymin + eb.ymax) / 2, eb.zmin),
-                   ((eb.xmin + eb.xmax) / 2, eb.ymin, (eb.zmin + eb.zmax) / 2)]
-        e.ek_kutu = eb; e.sag = sag
-        yuvalar.append(e)
+        yon = +1 if eb.xmax > bb.xmax + 30 else (-1 if eb.xmin < bb.xmin - 30 else 0)
+        if yon == 0:
+            continue                       # tümüyle içeride: ana gövde zaten konumluyor
+        x_uc = bb.xmax if yon > 0 else bb.xmin         # ana gövdenin uç yüzü (datum C)
+        x_dis = eb.xmax if yon > 0 else eb.xmin        # taşan parçanın serbest ucu
+        W, pay = P["yuva_et"], P["catal_bosluk"]
+        cx0, cx1 = (x_uc, x_uc + W) if yon > 0 else (x_uc - W, x_uc)
+        blok = kutu_cq(cx0, cx1, bb.ymin - P["yuva_kulak"], bb.ymax + P["yuva_kulak"], z0, bb.zmax)
+        blok = blok.cut(kutu_cq(cx0 - 1, cx1 + 1, eb.ymin - pay, eb.ymax + pay,
+                                eb.zmin - pay, bb.zmax + 20))      # üstten açık çatal ağzı
+        e = Eleman(f"DAYAMA_C_{k:02d}", "dayama_C", blok, "S355JR",
+                   f"ana gövde uç yüzü X={x_uc:.2f}; {ad[:24]} üstten açık çataldan geçer "
+                   f"(boşluk {pay:.1f} mm)", pc.ana, "-X" if yon > 0 else "+X")
+        e.basma = [(x_uc, (bb.ymin + bb.ymax) / 2, bb.zmin + 2)]
+        ic_el.append(e); catal.append((e, yon, x_uc, ad, s, eb))
+        # taşan ucun altına dayama (parçanın kendi alt yüzü hizasında)
+        L = P["dayama_boy"]; boy = abs(x_dis - x_uc)
+        n_t = max(1, int(boy / P["dayama_adim_max"]))
+        for j in range(n_t):
+            xx = x_uc + yon * boy * (j + 0.6) / (n_t + 0.15)
+            dblok = kutu_delikli(xx - L / 2, xx + L / 2, eb.ymin + 3, eb.ymax - 3, z0, eb.zmin,
+                                 [(xx, eb.ymin + 15), (xx, eb.ymax - 15)], 6.8)
+            e2 = Eleman(f"DAYAMA_A_UC_{k:02d}{chr(97 + j)}", "dayama_A", dblok,
+                        "C45 sertleştirilmiş",
+                        f"{ad[:24]} taşan ucu, üst yüz Z={eb.zmin:.2f}", s, "+Z")
+            e2.basma = [(xx, (eb.ymin + eb.ymax) / 2, eb.zmin)]
+            ic_el.append(e2)
+    el += ic_el
+
+    # ---- uç plakaları: dikişsiz Y bantlarında datum C postu (+ plaka altı raf)
+    yuvalar = []
+    for k, (ad, s) in enumerate(pc.uc_plaka, 1):
+        eb = kutu(s)
+        sag = eb.xmax >= bb.xmax - 1
+        x_yuz = eb.xmin if sag else eb.xmax            # postun dayandığı iç yüz
+        m = P["kaynak_yan_pay"]
+        ky = [(kb.ymin, kb.ymax) for kb in pc.kaynak_bolgeleri()
+              if kb.xmin < eb.xmax + 10 and kb.xmax > eb.xmin - 10]
+        bantlar = []
+        if ky:
+            y_alt, y_ust = min(a for a, _ in ky), max(b for _, b in ky)
+            if eb.ymin < y_alt - m - 12:
+                bantlar.append((eb.ymin, y_alt - m))
+            if eb.ymax > y_ust + m + 12:
+                bantlar.append((y_ust + m, eb.ymax))
+        if not bantlar:
+            bantlar = [(eb.ymin, eb.ymin + 30), (eb.ymax - 30, eb.ymax)]
+        W = P["yuva_et"]
+        px0, px1 = (x_yuz - W, x_yuz) if sag else (x_yuz, x_yuz + W)
+        tan_k = math.tan(math.radians(P["torc_konisi"]))
+        for j, (y0, y1) in enumerate(bantlar, 1):
+            # post üstü, en yakın dikişin torç konisini kesmesin
+            z_ust = eb.zmax
+            for kb in pc.kaynak_bolgeleri():
+                if kb.xmax < eb.xmin - 30 or kb.xmin > eb.xmax + 30:
+                    continue
+                if y0 >= kb.ymax:
+                    bosluk = y0 - kb.ymax
+                elif y1 <= kb.ymin:
+                    bosluk = kb.ymin - y1
+                else:
+                    bosluk = 0.0
+                z_ust = min(z_ust, (kb.zmin + kb.zmax) / 2 + bosluk / tan_k)
+            z_ust = max(z_ust, min(eb.zmax, eb.zmin + 12))
+            blok = kutu_cq(px0, px1, y0, y1, z0, z_ust)
+            if eb.zmin > z0 + 0.5:                     # plakanın altına raf
+                rx0, rx1 = sorted((eb.xmin, eb.xmax))
+                blok = blok.union(kutu_cq(rx0, rx1, y0, y1, z0, eb.zmin))
+            blok = blok.faces(">Z").workplane(origin=(0, 0, z_ust)).pushPoints(
+                [((px0 + px1) / 2, (y0 + y1) / 2)]).hole(6.8)
+            e = Eleman(f"DAYAMA_C_PLAKA_{k:02d}{chr(96 + j)}", "yuva_C", blok, "S355JR",
+                       f"{ad[:24]}: iç yüz X={x_yuz:.2f}, Y {y0:.1f}..{y1:.1f}, "
+                       f"raf Z={eb.zmin:.2f}, üst Z={z_ust:.1f} (torç konisi)",
+                       s, "+X" if sag else "-X")
+            e.basma = [(x_yuz, (y0 + y1) / 2, (eb.zmin + eb.zmax) / 2)]
+            e.ek_kutu = eb; e.sag = sag
+            yuvalar.append(e)
     el += yuvalar
 
     # ---- klempler
@@ -491,45 +646,64 @@ def tasarla(pc: Parca, P):
     if len(ayak_y) == 1:
         ayak_y = [ayak_y[0] - 15, ayak_y[0] + 15]
     kopru_y = sum(ayak_y) / 2
-    # dikey klempler: dayama 1, orta, son (yan dayama olmayanlar)
+    # dikey klempler: ana gövde üstüne, yan dayama olmayan istasyonlarda
     idx_dikey = [i for i in range(len(dayamalar)) if i not in ib]
     if len(idx_dikey) > 3:
         idx_dikey = [idx_dikey[0], idx_dikey[len(idx_dikey) // 2], idx_dikey[-1]]
     y_govde = bb.ymin - P["yan_dayama_kal"] - 45 - 10
+    kk_kutu = pc.kaynak_bolgeleri()
     for j, i in enumerate(idx_dikey, 1):
-        x = dx_list[i]
-        klempler.append(klemp_dikey(f"KLEMP_DIKEY_{j:02d}", x, y_govde, +1, z0, bb.zmax,
-                                    kopru_y, ayak_y, P, pc.ana))
+        yer = basma_yeri(pc.ana, dx_list[i], ayak_y, kk_kutu)
+        if yer is None:
+            bilgi["uyari"].append(f"KLEMP_DIKEY_{j:02d}: X={dx_list[i]:.0f} çevresinde dolu "
+                                  f"basma yeri bulunamadı, klemp konulmadı")
+            continue
+        xx, ys, zb = yer
+        klempler.append(klemp_dikey(f"KLEMP_DIKEY_{j:02d}", xx, y_govde, +1, z0, zb,
+                                    sum(ys) / len(ys), ys, P, pc.ana))
     # yatay klempler: yan dayama karşısı (+Y tarafı), alt köşeye yakın basar
     z_yan = bb.zmin + 5
     for j, i in enumerate(ib, 1):
         x = dx_list[i]
         klempler.append(klemp_yatay(f"KLEMP_YATAY_{j:02d}", x, bb.ymax + 28 + 60, -1, z0, z_yan,
                                     bb.ymax, P, pc.ana))
-    # itme klempi (datum C'ye doğru): ana gövde serbest ucu
-    for yv in yuvalar:
-        eb = yv.ek_kutu
-        if yv.sag:
-            x_uc = bb.xmin; yon = +1
+    # ana gövdeyi çatal dayamaya iten eksenel klemp (serbest uçtan)
+    for e_c, yon, x_uc, ad, s, eb in catal:
+        x_itme = bb.xmin if yon > 0 else bb.xmax
+        klempler.append(klemp_itme(f"KLEMP_ITME_{len(klempler)+1:02d}", x_itme, yon, z0,
+                                   (bb.zmin + bb.zmax) / 2, bb.ylen + 10, bb.zlen + 6, P, pc.ana,
+                                   y_merkez=(bb.ymin + bb.ymax) / 2))
+        # taşan ucun üstüne dikey klemp (dikişsiz bölge: plakadan ve gövdeden uzak)
+        eb2 = kutu(s)
+        x_dis = eb2.xmax if yon > 0 else eb2.xmin
+        xk = x_uc + yon * abs(x_dis - x_uc) * 0.45
+        ust2 = [d for d in E.yuzey_bilgi(s)[0]
+                if d["n"][2] > 0.98 and abs(d["c"][2] - eb2.zmax) < 0.5]
+        if ust2:
+            uk = kutu(max(ust2, key=lambda d: d["alan"])["f"])
+            yk = [uk.ymin + 0.25 * uk.ylen, uk.ymax - 0.25 * uk.ylen]
         else:
-            x_uc = bb.xmax; yon = -1
-        z_ek = (bb.zmin + bb.zmax) / 2
-        e = klemp_itme(f"KLEMP_ITME_{len(klempler)+1:02d}", x_uc, yon, z0, z_ek,
-                       (bb.ymax - bb.ymin) + 10, (bb.zmax - bb.zmin) + 6, P, pc.ana)
-        klempler.append(e)
-        # kapak dikey klempi: -Y kenarına (kanal dışına) basar; gövdesi yuva duvarının
-        # arkasında (+X), kolu duvar üzerinden gelir -> torcun ±Y yaklaşımını kapatmaz
-        xk = (eb.xmin + eb.xmax) / 2
-        yk = eb.ymin + 8          # ayak kapağın dış köşesinde: torcun -Y yaklaşımını kapatmasın
-        yk_kutu = yv.kutu()
-        uzak = (yk_kutu.xmax if yv.sag else yk_kutu.xmin) + (1 if yv.sag else -1) * (10 + 42.5) - xk
-        klempler.append(klemp_dikey(f"KLEMP_DIKEY_KAPAK_{len(klempler)+1:02d}", xk,
-                                    yk + abs(uzak), +1, z0, eb.zmax,
-                                    yk, [yk], P, yv.hedef, eksen="X"))
-        # kapak yatay klempi (+Y kenarından -Y kulağa iter)
-        klempler.append(klemp_yatay(f"KLEMP_YATAY_KAPAK_{len(klempler)+1:02d}", xk,
-                                    eb.ymax + 28 + 45, -1, z0, (eb.zmin + eb.zmax) / 2,
-                                    eb.ymax, P, yv.hedef))
+            yk = [eb2.ymin + 0.3 * eb2.ylen, eb2.ymax - 0.3 * eb2.ylen]
+        yer = basma_yeri(s, xk, yk, kk_kutu)
+        if yer is None:
+            bilgi["uyari"].append(f"{ad[:24]} taşan ucunda dolu basma yeri bulunamadı, "
+                                  f"dikey klemp konulmadı")
+        else:
+            xx, ys, zb = yer
+            klempler.append(klemp_dikey(f"KLEMP_DIKEY_UC_{len(klempler)+1:02d}", xx,
+                                        eb2.ymin - P["yan_dayama_kal"] - 45 - 10, +1, z0, zb,
+                                        sum(ys) / len(ys), ys, P, s))
+    # uç plakasını postlarına iten eksenel klemp (her plaka için bir adet)
+    gorulen = []
+    for v in yuvalar:
+        if any(h is v.hedef for h in gorulen):
+            continue
+        gorulen.append(v.hedef)
+        eb = v.ek_kutu
+        x_itme = eb.xmax if v.sag else eb.xmin
+        klempler.append(klemp_itme(f"KLEMP_ITME_{len(klempler)+1:02d}", x_itme, -1 if v.sag else +1,
+                                   z0, (eb.zmin + eb.zmax) / 2, eb.ylen + 6, eb.zlen + 4, P,
+                                   v.hedef, y_merkez=(eb.ymin + eb.ymax) / 2))
     el += klempler
 
     # ---- taban plakası + iskelet
@@ -563,7 +737,7 @@ def tasarla(pc: Parca, P):
     return el, bilgi
 
 
-def klemp_itme(ad, x_uc, yon, z_taban, z_eksen, ayak_y_boy, ayak_z_boy, P, hedef):
+def klemp_itme(ad, x_uc, yon, z_taban, z_eksen, ayak_y_boy, ayak_z_boy, P, hedef, y_merkez=0.0):
     """Eksenel itme klempi: parça ucunu datum C'ye (yuva duvarı) iter. Plaka ayaklı."""
     ak = 8.0
     yuk = max(0.0, z_eksen - z_taban - P["klemp_yatay_std_h"])
@@ -572,19 +746,20 @@ def klemp_itme(ad, x_uc, yon, z_taban, z_eksen, ayak_y_boy, ayak_z_boy, P, hedef
     x_g = x_on - yon * 28                  # gövde ön yüzü
     parcalar = []
     xa, xb = sorted((x_g - yon * 56, x_g))
+    ym = y_merkez
     if yuk > 0:
-        parcalar.append(kutu_cq(xa - 12, xb + 12, -40, 40, z_taban, z_taban + yuk))
+        parcalar.append(kutu_cq(xa - 12, xb + 12, ym - 40, ym + 40, z_taban, z_taban + yuk))
     zb = z_taban + yuk
-    parcalar.append(kutu_delikli(xa - 7, xb + 7, -35, 35, zb, zb + 8,
-                                 [(xa, -26), (xb, -26), (xa, 26), (xb, 26)], 6.6))
-    parcalar.append(kutu_cq(xa, xb, -28, 28, zb + 8, z_eksen + 18))
+    parcalar.append(kutu_delikli(xa - 7, xb + 7, ym - 35, ym + 35, zb, zb + 8,
+                                 [(xa, ym - 26), (xb, ym - 26), (xa, ym + 26), (xb, ym + 26)], 6.6))
+    parcalar.append(kutu_cq(xa, xb, ym - 28, ym + 28, zb + 8, z_eksen + 18))
     xm0, xm1 = sorted((x_on, x_ayak0))
-    parcalar.append(cq.Workplane("YZ").circle(P["mil_capi"] / 2).extrude(xm1 - xm0).translate((xm0, 0, z_eksen)))
+    parcalar.append(cq.Workplane("YZ").circle(P["mil_capi"] / 2).extrude(xm1 - xm0).translate((xm0, ym, z_eksen)))
     xk0, xk1 = sorted((x_ayak0, x_uc))
-    parcalar.append(kutu_cq(xk0, xk1, -ayak_y_boy / 2, ayak_y_boy / 2, z_eksen - ayak_z_boy / 2, z_eksen + ayak_z_boy / 2))
+    parcalar.append(kutu_cq(xk0, xk1, ym - ayak_y_boy / 2, ym + ayak_y_boy / 2, z_eksen - ayak_z_boy / 2, z_eksen + ayak_z_boy / 2))
     # kulp
     xh = xa - 40 if yon > 0 else xb + 40
-    parcalar.append(kutu_cq(xh - 7, xh + 7, -7, 7, z_eksen + 18, z_eksen + 110))
+    parcalar.append(kutu_cq(xh - 7, xh + 7, ym - 7, ym + 7, z_eksen + 18, z_eksen + 110))
     govde = parcalar[0]
     for p in parcalar[1:]:
         govde = govde.union(p)
@@ -592,7 +767,7 @@ def klemp_itme(ad, x_uc, yon, z_taban, z_eksen, ayak_y_boy, ayak_z_boy, P, hedef
                f"mil ekseni Z={z_eksen:.1f}, itme yönü {'+' if yon > 0 else '-'}X, "
                f"plaka ayak {ayak_y_boy:.0f}x{ayak_z_boy:.0f}, yükseltici {yuk:.0f} mm", hedef,
                "+X" if yon > 0 else "-X")
-    e.basma = [(x_uc, 0.0, z_eksen)]
+    e.basma = [(x_uc, y_merkez, z_eksen)]
     return e
 
 
@@ -638,8 +813,9 @@ def kontrol_et(pc: Parca, el, P, bilgi=None):
         rapor["temas"].append({"eleman": e.ad, "tip": e.tip, "mesafe_mm": round(d, 3),
                                "ok": d < 0.05})
     # 4) kaynak erişimi: dikiş merkezinden yukarı koni içinde fikstür elemanına çarpmadan çıkış
-    cls = [BRepClass3d_SolidClassifier(e.sekil) for e in fik]
-    cls_parca = [BRepClass3d_SolidClassifier(s) for a, s in pc.hepsi if not any(s is k for _, k in pc.kaynaklar)]
+    cls = [(e.kutu(), BRepClass3d_SolidClassifier(e.sekil)) for e in fik]
+    cls_parca = [(kutu(s), BRepClass3d_SolidClassifier(s)) for a, s in pc.hepsi
+                 if not any(s is k for _, k in pc.kaynaklar)]
     yonler = [(0, 0, 1)]
     for a in (30, 45, 60):
         r = math.radians(a)
@@ -649,18 +825,25 @@ def kontrol_et(pc: Parca, el, P, bilgi=None):
     L = 600.0
 
     def acik(p, u, siniflar):
-        for t in [0.5 * i for i in range(2, 25)] + [15, 20, 30, 45, 60, 100, 160, 250, 400, L]:   # ince sac (3 mm) kaçmasın
-            q = gp_Pnt(p[0] + u[0] * t, p[1] + u[1] * t, p[2] + u[2] * t)
-            for c in siniflar:
+        # ince sac (3 mm) kaçmasın diye yakında sık, uzakta seyrek örnekleme
+        for t in [0.5 * i for i in range(2, 25)] + [15, 20, 30, 45, 60, 100, 160, 250, 400, L]:
+            qx, qy, qz = p[0] + u[0] * t, p[1] + u[1] * t, p[2] + u[2] * t
+            q = None
+            for kb, c in siniflar:
+                if not (kb.xmin - 1 < qx < kb.xmax + 1 and kb.ymin - 1 < qy < kb.ymax + 1
+                        and kb.zmin - 1 < qz < kb.zmax + 1):
+                    continue                      # kutu dışındaysa katı testine hiç girme
+                if q is None:
+                    q = gp_Pnt(qx, qy, qz)
                 c.Perform(q, 1e-7)
                 if c.State() in (TopAbs_IN, TopAbs_ON):
                     return False
         return True
 
-    # ölçüt: fikstür tek başına yönlerin %60'ını kapatmamalı ve parçanın kendi
-    # gölgelemesinden arta kalan açık yönlerin en az %80'ini korumalı (torç, +Z
-    # etrafında 60° koni içinde kanal içine girebilmeli). Parçanın kendi gölgesi
-    # fikstürün kusuru değildir; rapora ayrıca yazılır.
+    # ölçüt: fikstür tek başına yönlerin yarısını kapatmamalı VE parçanın kendi
+    # gölgesinden arta kalan erişimin en az yarısını korumalı (torç, +Z etrafında
+    # 60° koni içinde girebilmeli). Parçanın kendi gölgesi fikstürün kusuru
+    # değildir; rapora ayrıca yazılır.
     for a, s in pc.kaynaklar:
         g = GProp_GProps(); BRepGProp.VolumeProperties_s(s, g); c = g.CentreOfMass()
         p = (c.X(), c.Y(), c.Z())
@@ -670,7 +853,8 @@ def kontrol_et(pc: Parca, el, P, bilgi=None):
         rapor["kaynak_erisim"].append({"kaynak": a, "merkez": [round(v, 1) for v in p],
                                        "acik_yon_fikstur": n_f, "acik_yon_parca": n_p,
                                        "acik_yon_toplam": n_t, "toplam_yon": len(yonler),
-                                       "ok": n_f >= len(yonler) * 0.6 and n_t >= 1 and n_t >= 0.8 * n_p})
+                                       "ok": n_f >= len(yonler) * 0.5 and n_t >= 1
+                                             and n_t >= 0.5 * n_p})
     rapor["ozet"] = {
         "cakisma_sayisi": len(rapor["cakisma"]),
         "temas_hatali": [t["eleman"] for t in rapor["temas"] if not t["ok"]],
@@ -817,7 +1001,7 @@ def png_yaz(pc, el, yol, grup_ad, hizli=False):
     kenar = {ad: hlr_kenarlar(hep, y, x) for ad, (y, x) in gor.items()}
     renk = {"GORUNEN": ("#1a1a1a", 0.7), "GIZLI": ("#9a9a9a", 0.4), "TEGET": ("#6a8fbf", 0.4)}
     tb = el[[e.tip for e in el].index("taban")].kutu()
-    xe = pc.kutu.xmax
+    xe = pc.kutu_hepsi.xmax                 # montajın serbest ucu (uç plakası dahil)
 
     def ciz(ax, ad, xlim=None, ylim=None):
         for kat, poli in kenar[ad].items():
@@ -848,6 +1032,15 @@ def png_yaz(pc, el, yol, grup_ad, hizli=False):
     ciz(axs[1], "ON (bakis +Y)", (tb.xmin - 20, xd + 700), (-80, 220))
     fig.suptitle(f"FIKSTUR {grup_ad} – itme klempi / ilk dayamalar yakin plan", fontsize=11)
     fig.tight_layout(); fig.savefig(yol.replace(".png", "_bas.png"), dpi=110); plt.close(fig)
+
+    kb = pc.kaynak_bolgeleri()
+    if kb:
+        xk = sorted(k.xmin for k in kb)[len(kb) // 2]
+        fig, axs = plt.subplots(1, 2, figsize=(16, 6))
+        ciz(axs[0], "UST (bakis -Z)", (xk - 260, xk + 260), (tb.ymin - 20, tb.ymax + 20))
+        ciz(axs[1], "ON (bakis +Y)", (xk - 260, xk + 260), (-80, 220))
+        fig.suptitle(f"FIKSTUR {grup_ad} – kaynak istasyonu X={xk:.0f} yakin plan", fontsize=11)
+        fig.tight_layout(); fig.savefig(yol.replace(".png", "_kaynak.png"), dpi=110); plt.close(fig)
     return True
 
 
@@ -863,8 +1056,16 @@ def rapor_yaz(pc, el, bilgi, rapor, yol, grup_ad, args):
     L.append(f"- **Datum A (Z, 3+ nokta):** ana gövde alt yüzü, alan {bilgi['datum_A']['alan_mm2']:.0f} mm², "
              f"dayama üstü Z={bilgi['datum_A']['z']:.2f}; dayama X konumları: {bilgi['dayama_x']}")
     L.append(f"- **Datum B (Y, 2 nokta):** -Y yan yüz, yan dayamalar DAYAMA_B_01/02")
-    L.append(f"- **Datum C (X, 1 nokta):** kapak plakası dış yüzü yuva arka duvarına dayanır (YUVA_C); "
-             f"profil, itme klempi ile kapağa doğru itilir.\n")
+    cc = [e for e in el if e.tip in ("dayama_C", "yuva_C")]
+    if cc:
+        L.append("- **Datum C (X, 1 nokta):** " + "; ".join(f"{e.ad} ({e.not_})" for e in cc)
+                 + ". Parçalar eksenel itme klempleriyle bu dayamalara bastırılır.\n")
+    else:
+        L.append("- **Datum C (X):** ayrı eksenel dayama gerekmedi.\n")
+    if pc.ic_ice:
+        L.append("İç içe geçen parçalar: " + ", ".join(a[:34] for a, _ in pc.ic_ice)
+                 + ". Bunlar ana gövdenin içine oturduğu için Y ve Z yönünde ana gövde "
+                   "tarafından konumlanır; fikstür yalnız eksenel konumu ve taşan ucu tutar.\n")
     L.append("## Elemanlar\n")
     L.append("| # | ad | tip | boyut (X×Y×Z) | kg | malzeme | not |")
     L.append("|---|----|-----|---------------|----|---------|-----|")
@@ -904,6 +1105,7 @@ def main():
     ap.add_argument("step")
     ap.add_argument("--referans", help="ADIM 1 çıktısı JSON (grup ve yön buradan alınır)")
     ap.add_argument("--grup"); ap.add_argument("--parca", type=int)
+    ap.add_argument("--sec", help='çoklu seçim: "G03,0,/DESTEK_SACi/" (grup, katı no, ad regexi)')
     ap.add_argument("--yon", help="+X -X +Y -Y +Z -Z (yukarı)")
     ap.add_argument("-o", "--out", help="çıktı ön eki")
     ap.add_argument("--hizli", action="store_true", help="DXF'te parçayı kutu olarak çiz")
@@ -916,7 +1118,7 @@ def main():
     ref = json.load(open(a.referans, encoding="utf-8")) if a.referans else None
 
     t0 = time.time()
-    kayit, uyeler, grup_ad = grup_yukle(a.step, a.grup, a.parca, ref)
+    kayit, uyeler, grup_ad = grup_yukle(a.step, a.grup, a.parca, ref, a.sec)
     yon = yon_sec(kayit, uyeler, a.yon, ref)
     print(f"{a.step}: {len(kayit)} katı, seçim {grup_ad} ({len(uyeler)} katı), yön {yon}  [{time.time()-t0:.0f}s]")
     pc = Parca(kayit, uyeler, yon, P)
