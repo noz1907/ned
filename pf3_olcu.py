@@ -1245,7 +1245,7 @@ def main():
   2  detay parcalarin cizilmesi ve olculendirilmesi
   3  montaj resmi ve olculendirilmesi
 --asama ile tek tek ya da birlikte calistirilir (varsayilan: 1,2,3)""")
-    ap.add_argument("step")
+    ap.add_argument("step", nargs="?", help="okunacak STEP dosyası")
     ap.add_argument("-o", "--out", help="çıktı klasörü (varsayılan: <step adı>_olcu)")
     ap.add_argument("--asama", default="1,2,3",
                     help="çalıştırılacak aşamalar: 1 / 2 / 3 / 1,2 / 1,2,3")
@@ -1273,7 +1273,11 @@ def main():
     ap.add_argument("--zip", action="store_true", help="çıktıları cizimler.zip'te topla")
     a = ap.parse_args()
     if a.malzeme_liste:
-        malzeme_listele(); return
+        malzeme_listele()
+        if not a.step:
+            return
+    if not a.step:
+        ap.error("STEP dosyası verilmedi")
     asama = {int(t) for t in re.findall(r"[123]", a.asama)} or {1, 2, 3}
     if a.montaj_yok:
         asama.discard(3)
