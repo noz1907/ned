@@ -16,9 +16,37 @@ aynı akış çalışır.
 Python 3.10 veya üstü gerekir. Kurulu değilse <https://www.python.org/downloads/>
 adresinden indirin; kurarken **“Add Python to PATH”** kutusunu işaretleyin.
 
-Sonra bu klasörde bir komut penceresi açıp:
+### En kolayı: `PiFikstur_baslat.bat` (Windows)
+
+Klasördeki **`PiFikstur_baslat.bat`** dosyasına çift tıklayın. İlk
+çalıştırmada bu klasörde `.venv` adında **ayrı bir Python ortamı** kurar,
+paketleri oraya yükler ve programı açar. Sonraki çalıştırmalarda doğrudan
+açar. Komut yazmanıza gerek yok.
+
+### Elle kurmak isterseniz
+
+> ⚠ **Paketleri ana Python'unuza kurmayın.** `cadquery`, `numpy 2`
+> istiyor; `tensorflow`, `pandas 2.1`, `scikit-learn 1.3` gibi paketler ise
+> `numpy 1` istiyor. İkisi aynı ortamda bir arada duramaz. Bu yüzden
+> PiFikstur'u **kendi sanal ortamında** çalıştırın — hem bu program çalışır,
+> hem mevcut kurulumunuz bozulmaz.
+
+Windows'ta, bu klasörde komut penceresi açıp:
 
 ```
+py -3 -m venv .venv
+.venv\Scripts\activate
+pip install -r requirements.txt
+```
+
+Bundan sonra her yeni komut penceresinde önce `.venv\Scripts\activate`
+yazın; satır başında `(.venv)` görürseniz doğru ortamdasınız.
+
+Linux / macOS:
+
+```
+python3 -m venv .venv
+source .venv/bin/activate
 pip install -r requirements.txt
 ```
 
@@ -36,9 +64,25 @@ python pf3_olcu.py --malzeme-liste
 
 Malzeme tablosu ekrana gelirse her şey hazır demektir.
 
+### Ana Python'a kurduysanız ve diğer paketleriniz bozulduysa
+
+`pip install -r requirements.txt` komutunu doğrudan ana Python'unuzda
+çalıştırdıysanız `numpy`, `scipy` ve `matplotlib` yükseltilmiş, bu da
+`tensorflow` / `pandas` / `scikit-learn` gibi paketleri kırmış olabilir.
+Eski hâle döndürmek için:
+
+```
+pip install "numpy==1.26.4" "scipy==1.12.0" "matplotlib==3.8.2"
+```
+
+Sonra PiFikstur'u yukarıdaki gibi kendi `.venv` ortamında çalıştırın; iki
+kurulum birbirine karışmaz.
+
 ---
 
 ## 2. Arayüzle kullanım (kolay yol)
+
+`PiFikstur_baslat.bat`'a çift tıklayın, ya da sanal ortamı etkinleştirip:
 
 ```
 python pf3_gui.py
@@ -292,6 +336,7 @@ anlamlı çıkmıyorsa o parçada kesit çizilmez, diğer görünüşler yine ç
 | `pf_gui.py` | `pf1_referans` için 3B önizlemeli arayüz |
 | `pf2_fikstur.py` | kaynak/montaj fikstürü üretici (3-2-1 prensibi) |
 | `pfd_dxf2stp.py` | DXF görünüşlerinden 3B STEP üretir (renk = parça kimliği) |
+| `PiFikstur_baslat.bat` | Windows'ta tek tıkla kurulum + başlatma |
 
 Ayrıntılar için `README.md`.
 
