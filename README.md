@@ -224,3 +224,48 @@ Kaynaklı üç parça + fikstür parçaları, on renk. Yedi nesne katıya dönd�
 
 Ölçü çatışmaları raporlanır; görünüşler arasında paylaşılan ölçü tutmuyorsa
 program bunu gizlemez.
+
+---
+
+# STEP -> DXF ve ölçü (`pf3_olcu.py`)
+
+Herhangi bir STEP dosyasından montaj ve komponent bazında DXF görünüşleri ve
+ölçü tablosu üretir.
+
+```
+python pf3_olcu.py parca.stp --liste          # komponent listesi
+python pf3_olcu.py parca.stp -o cikti         # DXF + tablo üret
+```
+
+## Çizim kuralları
+
+| katman | çizgi | kalınlık |
+|--------|-------|----------|
+| GORUNEN | düz | 0,50 mm |
+| GIZLI | kesik | 0,35 mm |
+| EKSEN | uzun-kısa | 0,20 mm |
+| OLCU / YAZI | düz | 0,25 mm |
+
+Ölçüler **milimetre**, birebir ölçek (`dimlfac = 1`). Yazı boyu parçaya göre
+ölçeklenir, `max(boy, en, kalınlık) / 45`, en az 2,5 mm en çok 25 mm.
+
+**Çap yalnız tam çember delikler için verilir.** Bir silindirik yüzeyin açısal
+açıklığı toplanır; 360°'ye yakınsa delik, değilse kenar yuvarlamasıdır ve ayrı
+radüs tablosunda yarıçap olarak listelenir. Bir delik CAD'de iki yarım silindire
+bölünmüş olsa da eksen konumu aynı olduğu için tek delik sayılır.
+
+Çizimde her delik grubunun çapı `124x Ø6.8` biçiminde ölçülendirilir, delik
+merkezlerine merkez çizgisi konur.
+
+## Sınıflandırma
+
+Civata, somun, pul, pim, perçin, yay, rulman, segman, saplama ve DIN/ISO/EN
+numaralı parçalar **standart eleman** sayılır: çizim üretilmez, kod ve adet
+listelenir. Kaynak dikişleri ayrı tutulur, parça sayılmaz.
+
+## Sonraki adımlar (not alındı, henüz yapılmadı)
+
+1. **BOM**: montaj çiziminde BOM tablosu, komponent çizimlerinde BOM poz
+   numarası ve tanımı.
+2. **Kesit görünüş**: iki delik veya iki form görünüşte üst üste binip anlamsız
+   hale geldiğinde o görünüş yerine kesit almak.
