@@ -1,0 +1,721 @@
+{
+ "dxf": "fikstur_2xls.dxf",
+ "bolge": [
+  {
+   "no": 1,
+   "etiket": "ON",
+   "segment": 114,
+   "x": [
+    -441189.52,
+    -441139.52
+   ],
+   "y": [
+    422965.8,
+    423665.8
+   ],
+   "genislik": 50.0,
+   "yukseklik": 700.0,
+   "yuz": 11,
+   "alan": 15278.8,
+   "katman": {
+    "0": 20
+   }
+  },
+  {
+   "no": 2,
+   "etiket": null,
+   "segment": 527,
+   "x": [
+    -440984.6,
+    -440870.1
+   ],
+   "y": [
+    423015.8,
+    423161.8
+   ],
+   "genislik": 114.5,
+   "yukseklik": 146.0,
+   "yuz": 26,
+   "alan": 11608.2,
+   "katman": {
+    "0": 57
+   }
+  },
+  {
+   "no": 3,
+   "etiket": null,
+   "segment": 19,
+   "x": [
+    -440416.28,
+    -440305.88
+   ],
+   "y": [
+    423016.96,
+    423162.96
+   ],
+   "genislik": 110.4,
+   "yukseklik": 146.0,
+   "yuz": 4,
+   "alan": 13260.0,
+   "katman": {
+    "0": 19
+   }
+  },
+  {
+   "no": 4,
+   "etiket": null,
+   "segment": 412,
+   "x": [
+    -440774.6,
+    -440664.58
+   ],
+   "y": [
+    423015.8,
+    423161.8
+   ],
+   "genislik": 110.02,
+   "yukseklik": 146.0,
+   "yuz": 10,
+   "alan": 10832.8,
+   "katman": {
+    "0": 36
+   }
+  },
+  {
+   "no": 5,
+   "etiket": null,
+   "segment": 5,
+   "x": [
+    -440217.9,
+    -440202.9
+   ],
+   "y": [
+    422965.8,
+    423665.8
+   ],
+   "genislik": 15.0,
+   "yukseklik": 700.0,
+   "yuz": 3,
+   "alan": 10500.0,
+   "katman": {
+    "0": 5
+   }
+  },
+  {
+   "no": 6,
+   "etiket": null,
+   "segment": 157,
+   "x": [
+    -440981.18,
+    -440891.14
+   ],
+   "y": [
+    421655.8,
+    421801.8
+   ],
+   "genislik": 90.04,
+   "yukseklik": 146.0,
+   "yuz": 10,
+   "alan": 7678.7,
+   "katman": {
+    "0": 16
+   }
+  },
+  {
+   "no": 7,
+   "etiket": null,
+   "segment": 106,
+   "x": [
+    -440475.94,
+    -440440.94
+   ],
+   "y": [
+    423016.96,
+    423162.96
+   ],
+   "genislik": 35.0,
+   "yukseklik": 146.0,
+   "yuz": 8,
+   "alan": 5028.8,
+   "katman": {
+    "0": 12
+   }
+  },
+  {
+   "no": 8,
+   "etiket": null,
+   "segment": 3,
+   "x": [
+    -441175.18,
+    -441160.16
+   ],
+   "y": [
+    421605.8,
+    421905.8
+   ],
+   "genislik": 15.02,
+   "yukseklik": 300.0,
+   "yuz": 2,
+   "alan": 4503.0,
+   "katman": {
+    "0": 3
+   }
+  },
+  {
+   "no": 9,
+   "etiket": null,
+   "segment": 9,
+   "x": [
+    -440785.24,
+    -440710.08
+   ],
+   "y": [
+    421655.8,
+    421719.3
+   ],
+   "genislik": 75.16,
+   "yukseklik": 63.5,
+   "yuz": 5,
+   "alan": 3497.0,
+   "katman": {
+    "0": 9
+   }
+  },
+  {
+   "no": 10,
+   "etiket": null,
+   "segment": 101,
+   "x": [
+    -440737.36,
+    -440687.36
+   ],
+   "y": [
+    423557.3,
+    423606.3
+   ],
+   "genislik": 50.0,
+   "yukseklik": 49.0,
+   "yuz": 3,
+   "alan": 2201.0,
+   "katman": {
+    "0": 7
+   }
+  },
+  {
+   "no": 11,
+   "etiket": null,
+   "segment": 102,
+   "x": [
+    -440443.42,
+    -440393.42
+   ],
+   "y": [
+    423558.46,
+    423607.46
+   ],
+   "genislik": 50.0,
+   "yukseklik": 49.0,
+   "yuz": 3,
+   "alan": 2200.9,
+   "katman": {
+    "0": 8
+   }
+  },
+  {
+   "no": 12,
+   "etiket": null,
+   "segment": 197,
+   "x": [
+    -440961.82,
+    -440911.82
+   ],
+   "y": [
+    423557.3,
+    423606.3
+   ],
+   "genislik": 50.0,
+   "yukseklik": 49.0,
+   "yuz": 3,
+   "alan": 2200.8,
+   "katman": {
+    "0": 9
+   }
+  },
+  {
+   "no": 13,
+   "etiket": null,
+   "segment": 8,
+   "x": [
+    -440475.14,
+    -440460.14
+   ],
+   "y": [
+    423558.46,
+    423607.46
+   ],
+   "genislik": 15.0,
+   "yukseklik": 49.0,
+   "yuz": 7,
+   "alan": 735.0,
+   "katman": {
+    "0": 8
+   }
+  },
+  {
+   "no": 14,
+   "etiket": null,
+   "segment": 0,
+   "x": [
+    -440684.58,
+    -440674.58
+   ],
+   "y": [
+    423080.8,
+    423090.8
+   ],
+   "genislik": 10.0,
+   "yukseklik": 10.0,
+   "yuz": 1,
+   "alan": 78.3,
+   "katman": {}
+  },
+  {
+   "no": 15,
+   "etiket": null,
+   "segment": 0,
+   "x": [
+    -440684.58,
+    -440674.58
+   ],
+   "y": [
+    423051.8,
+    423061.8
+   ],
+   "genislik": 10.0,
+   "yukseklik": 10.0,
+   "yuz": 1,
+   "alan": 78.3,
+   "katman": {}
+  },
+  {
+   "no": 16,
+   "etiket": null,
+   "segment": 48,
+   "x": [
+    -440073.0,
+    -440063.0
+   ],
+   "y": [
+    423591.3,
+    423601.3
+   ],
+   "genislik": 10.0,
+   "yukseklik": 10.0,
+   "yuz": 1,
+   "alan": 78.3,
+   "katman": {
+    "0": 1
+   }
+  },
+  {
+   "no": 17,
+   "etiket": null,
+   "segment": 48,
+   "x": [
+    -440073.0,
+    -440063.0
+   ],
+   "y": [
+    423562.3,
+    423572.3
+   ],
+   "genislik": 10.0,
+   "yukseklik": 10.0,
+   "yuz": 1,
+   "alan": 78.3,
+   "katman": {
+    "0": 1
+   }
+  },
+  {
+   "no": 18,
+   "etiket": null,
+   "segment": 96,
+   "x": [
+    -440764.74,
+    -440755.74
+   ],
+   "y": [
+    421777.3,
+    421786.3
+   ],
+   "genislik": 9.0,
+   "yukseklik": 9.0,
+   "yuz": 2,
+   "alan": 13.3,
+   "katman": {
+    "0": 2
+   }
+  },
+  {
+   "no": 19,
+   "etiket": null,
+   "segment": 48,
+   "x": [
+    -440059.76,
+    -440051.76
+   ],
+   "y": [
+    423118.8,
+    423126.8
+   ],
+   "genislik": 8.0,
+   "yukseklik": 8.0,
+   "yuz": 1,
+   "alan": 50.1,
+   "katman": {
+    "0": 1
+   }
+  },
+  {
+   "no": 20,
+   "etiket": null,
+   "segment": 48,
+   "x": [
+    -440094.76,
+    -440086.76
+   ],
+   "y": [
+    423118.8,
+    423126.8
+   ],
+   "genislik": 8.0,
+   "yukseklik": 8.0,
+   "yuz": 1,
+   "alan": 50.1,
+   "katman": {
+    "0": 1
+   }
+  },
+  {
+   "no": 21,
+   "etiket": null,
+   "segment": 48,
+   "x": [
+    -441194.74,
+    -441187.54
+   ],
+   "y": [
+    421672.2,
+    421679.4
+   ],
+   "genislik": 7.2,
+   "yukseklik": 7.2,
+   "yuz": 1,
+   "alan": 40.6,
+   "katman": {
+    "0": 1
+   }
+  },
+  {
+   "no": 22,
+   "etiket": null,
+   "segment": 48,
+   "x": [
+    -441194.76,
+    -441187.56
+   ],
+   "y": [
+    421712.2,
+    421719.4
+   ],
+   "genislik": 7.2,
+   "yukseklik": 7.2,
+   "yuz": 1,
+   "alan": 40.6,
+   "katman": {
+    "0": 1
+   }
+  }
+ ],
+ "nesne": [
+  {
+   "no": 1,
+   "gorunus": 4,
+   "roller": {
+    "2": "ON",
+    "3": "UST",
+    "4": null,
+    "7": "SAG"
+   },
+   "olcu": [
+    114.5,
+    146.0,
+    146.0
+   ],
+   "kutular": [
+    [
+     114.5,
+     146.0
+    ],
+    [
+     110.4,
+     146.0
+    ],
+    [
+     110.02,
+     146.0
+    ],
+    [
+     35.0,
+     146.0
+    ]
+   ],
+   "not": [
+    "görünüş 3: rol çakıştı, UST atandı",
+    "görünüş 4: rol belirsiz, kullanılmadı",
+    "ölçü çatışması W: 114.50 / 110.40 (UST)",
+    "ölçü çatışması D: 146.00 / 35.00 (SAG)"
+   ]
+  },
+  {
+   "no": 2,
+   "gorunus": 2,
+   "roller": {
+    "1": "ON",
+    "5": "SAG"
+   },
+   "olcu": [
+    50.0,
+    15.0,
+    700.0
+   ],
+   "kutular": [
+    [
+     50.0,
+     700.0
+    ],
+    [
+     15.0,
+     700.0
+    ]
+   ],
+   "not": []
+  },
+  {
+   "no": 3,
+   "gorunus": 1,
+   "roller": {
+    "6": "ON"
+   },
+   "olcu": null,
+   "kutular": [
+    [
+     90.04,
+     146.0
+    ]
+   ],
+   "not": [
+    "eksik ölçü ['D']: --kalinlik verin"
+   ]
+  },
+  {
+   "no": 4,
+   "gorunus": 4,
+   "roller": {
+    "10": "ON",
+    "11": "UST",
+    "12": null,
+    "13": "SAG"
+   },
+   "olcu": [
+    50.0,
+    49.0,
+    49.0
+   ],
+   "kutular": [
+    [
+     50.0,
+     49.0
+    ],
+    [
+     50.0,
+     49.0
+    ],
+    [
+     50.0,
+     49.0
+    ],
+    [
+     15.0,
+     49.0
+    ]
+   ],
+   "not": [
+    "görünüş 11: rol çakıştı, UST atandı",
+    "görünüş 12: rol belirsiz, kullanılmadı",
+    "ölçü çatışması D: 49.00 / 15.00 (SAG)"
+   ]
+  },
+  {
+   "no": 5,
+   "gorunus": 1,
+   "roller": {
+    "9": "ON"
+   },
+   "olcu": null,
+   "kutular": [
+    [
+     75.16,
+     63.5
+    ]
+   ],
+   "not": [
+    "eksik ölçü ['D']: --kalinlik verin"
+   ]
+  },
+  {
+   "no": 6,
+   "gorunus": 1,
+   "roller": {
+    "8": "ON"
+   },
+   "olcu": null,
+   "kutular": [
+    [
+     15.02,
+     300.0
+    ]
+   ],
+   "not": [
+    "eksik ölçü ['D']: --kalinlik verin"
+   ]
+  },
+  {
+   "no": 7,
+   "gorunus": 2,
+   "roller": {
+    "14": "ON",
+    "15": "UST"
+   },
+   "olcu": [
+    10.0,
+    10.0,
+    10.0
+   ],
+   "kutular": [
+    [
+     10.0,
+     10.0
+    ],
+    [
+     10.0,
+     10.0
+    ]
+   ],
+   "not": []
+  },
+  {
+   "no": 8,
+   "gorunus": 2,
+   "roller": {
+    "16": "ON",
+    "17": "UST"
+   },
+   "olcu": [
+    10.0,
+    10.0,
+    10.0
+   ],
+   "kutular": [
+    [
+     10.0,
+     10.0
+    ],
+    [
+     10.0,
+     10.0
+    ]
+   ],
+   "not": []
+  },
+  {
+   "no": 9,
+   "gorunus": 2,
+   "roller": {
+    "19": "ON",
+    "20": "SAG"
+   },
+   "olcu": [
+    8.0,
+    8.0,
+    8.0
+   ],
+   "kutular": [
+    [
+     8.0,
+     8.0
+    ],
+    [
+     8.0,
+     8.0
+    ]
+   ],
+   "not": []
+  },
+  {
+   "no": 10,
+   "gorunus": 2,
+   "roller": {
+    "22": "ON",
+    "21": "UST"
+   },
+   "olcu": [
+    7.2,
+    7.2,
+    7.2
+   ],
+   "kutular": [
+    [
+     7.2,
+     7.2
+    ],
+    [
+     7.2,
+     7.2
+    ]
+   ],
+   "not": []
+  },
+  {
+   "no": 11,
+   "gorunus": 1,
+   "roller": {
+    "18": "ON"
+   },
+   "olcu": null,
+   "kutular": [
+    [
+     9.0,
+     9.0
+    ]
+   ],
+   "not": [
+    "eksik ölçü ['D']: --kalinlik verin"
+   ]
+  }
+ ],
+ "kuruldu": 7,
+ "param": {
+  "yay_bolme": 48,
+  "kaynastir": 0.02,
+  "min_alan": 1.0,
+  "kume_hucre": null,
+  "hiza_tol": 0.02,
+  "uzun_oran": 0.9,
+  "sayfa_orani": 0.4,
+  "gizli_kat": "GIZLI|GİZLİ|HIDDEN|DASHED|KESIK",
+  "delik": "ic",
+  "min_segment": 4
+ }
+}

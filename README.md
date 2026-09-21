@@ -125,3 +125,70 @@ sırtta o istasyonlarda delik yoktur, tasarımcı kararıdır.
 
 `ornek/fikstur_3D_gercek_solid.step`: mevcut gerçek fikstürün kaba
 rekonstrüksiyonu (referans amaçlı, araç bunu kullanmaz).
+
+---
+
+# DXF -> 3D STEP dönüştürücü (`pfd_dxf2stp.py`)
+
+Parça ya da fikstür fark etmeksizin bir DXF'i 3B katıya çevirir ve STEP yazar.
+Kip, dosyaya bakılarak seçilir:
+
+| kip | ne zaman | sonuç |
+|-----|----------|-------|
+| DOGRUDAN | DXF zaten 3B taşıyor (3DFACE / MESH / POLYFACE / Z'si değişen polyline) | birebir |
+| EKSTRUZYON | tek 2B kontur + `--kalinlik` | birebir |
+| KESISIM | hizalı 2-3 ortografik görünüş (ÖN/ÜST/SAĞ) | prizmatik parçalarda birebir |
+
+```
+python pfd_dxf2stp.py cizim.dxf --liste                  # ne gördüğünü yaz
+python pfd_dxf2stp.py cizim.dxf                          # STEP üret
+python pfd_dxf2stp.py cizim.dxf --kalinlik 15            # tek görünüş + kalınlık
+python pfd_dxf2stp.py cizim.dxf --pencere x0,y0,x1,y1    # sayfanın bir bölgesi
+python pfd_dxf2stp.py cizim.dxf --delik yok              # iç konturları delik sayma
+```
+
+## Nasıl çalışıyor
+
+1. **Okuma.** ezdxf ile modelspace ve bloklar (iç içe INSERT'ler dahil) okunur;
+   yay, daire, elips ve spline doğru parçalarına bölünür. Her DXF varlığı bir
+   *atom* olarak saklanır.
+2. **Yüz çıkarma.** Çizimin tamamı bir kerede kapalı yüzlere çevrilir
+   (shapely `polygonize`). Gizli çizgi katmanları (`GIZLI`, `HIDDEN`, `DASHED`)
+   kontur oluşturmaz. Sayfa çerçevesi ve grup çerçeveleri ayıklanır.
+3. **Bölgeleme.** Birbirine değen yüzler tek bölgedir. Bu kural ölçekten
+   bağımsızdır: ayrı görünüşlerin yüzleri değmez, bir görünüşün parçaları değer.
+4. **Görünüş eşleme.** Aynı satırda duran ve yüksekliği tutan bölgeler ön-yan
+   çifti, aynı sütunda duran ve genişliği tutan bölgeler ön-üst çiftidir.
+   Görünüş adı yazısı (ON/ÜST/SAĞ/ALT/SOL/ARKA) varsa rol ondan alınır.
+5. **3B kurma.** Her görünüş kendi ekseninde prizmaya süpürülür, prizmalar
+   kesiştirilir. Dış sınıra değmeyen kapalı bölgeler delik sayılıp çıkarılır.
+6. **Çıktı.** Adlandırılmış montaj olarak STEP, `_kontrol.png` (programın ne
+   anladığı) ve `.json` (bölge, rol, ölçü, uyarı).
+
+## Doğrulama: gidiş-dönüş testi
+
+`ornek/dxf2stp/test_gidis_donus.py` bilinen bir katıdan üç görünüş üretir,
+çeviriciyle geri kurar ve hacmi karşılaştırır.
+
+| büyüklük | kaynak | kurulan |
+|---|---|---|
+| dış ölçü | 120 x 80 x 24 | 120 x 80 x 24 (birebir) |
+| hacim | 212 521 mm³ | 223 433 mm³ (+%5,1) |
+
+Fark, yöntemin bilinen sınırıdır: **her görünüşte arkasında malzeme kalan bir
+cep**, siluetten geri kazanılamaz. Test parçasındaki 40x30x10 cep tam olarak bu
+durumda. Delikler ve profil doğru çıkar, dış ölçüde hata yoktur.
+
+## Gerçek örnek
+
+`ornek/dxf2stp/fikstur_2xls.dxf` üç kuşak içerir: Kaynaklı Ürün, Kaynaklı
+Fikstür, Fikstür Parçaları ve Dayamalar. Üçüncü kuşak `--pencere` ile alınıp
+çevrildi (`parcalar_3d.step`): fikstür parçaları ve dayamalar tek tek katıya
+döndü, ölçüleri 110x35x146, 50x15x700, 50x15x49 gibi.
+
+## Sınırlar
+
+- Her görünüşte gizlenen cep ve ada geri kazanılamaz (görsel kabuk üst sınırdır).
+- İç kontur delik mi ada mı olduğu 2B'den kesin bilinemez; `--delik` ile seçilir.
+- Eğik (eksenlere paralel olmayan) yüzeyler yalnız o yönde prizmatikse doğru çıkar.
+- Sağ/sol görünüş ayna yönü çizim geleneğine bağlıdır; ölçü çatışması raporlanır.
