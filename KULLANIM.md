@@ -111,6 +111,29 @@ pip install "numpy==1.26.4" "scipy==1.12.0" "matplotlib==3.8.2"
 Sonra PiFikstur'u yukarıdaki gibi kendi `.venv` ortamında çalıştırın; iki
 kurulum birbirine karışmaz.
 
+### Çalıştırılabilir dosya (.exe) yapmak
+
+Python kurulu olmayan bilgisayarlarda da çalışsın istiyorsanız:
+
+```
+EXE_YAP.bat
+```
+
+Önce `PiFikstur_baslat.bat` ile `.venv` kurulmuş olmalı. Bu dosya
+PyInstaller'ı kurar ve `pifikstur.spec` tarifine göre derler.
+
+Çıktı: **`dist\PiFikstur\PiFikstur.exe`**
+
+> **Klasörün tamamını kopyalayın, tek başına `.exe` çalışmaz.** OpenCascade
+> kütüphanesi yanındaki DLL'lerle birlikte gelir; klasör ~1 GB olur.
+>
+> Tek dosyalık (`--onefile`) sürüm **önerilmez**: 1 GB'lık içerik her
+> açılışta geçici klasöre açılır, program 1-2 dakikada açılır ve disk iki
+> kat yer kaplar. `onedir` sürümü anında açılır.
+
+Derleme yalnız **çalıştırıldığı işletim sistemi için** üretir: Windows'ta
+derlerseniz Windows `.exe`'si çıkar, Linux'ta derlerseniz Linux çalıştırılabiliri.
+
 ---
 
 ## 2. Arayüzle kullanım (kolay yol)
@@ -370,6 +393,8 @@ anlamlı çıkmıyorsa o parçada kesit çizilmez, diğer görünüşler yine ç
 | `pf2_fikstur.py` | kaynak/montaj fikstürü üretici (3-2-1 prensibi) |
 | `pfd_dxf2stp.py` | DXF görünüşlerinden 3B STEP üretir (renk = parça kimliği) |
 | `PiFikstur_baslat.bat` | Windows'ta tek tıkla kurulum + başlatma |
+| `PiFikstur_baslat_KUCUK.bat` | dar disk için küçük kurulum (~800 MB) |
+| `EXE_YAP.bat` + `pifikstur.spec` | çalıştırılabilir dosya (.exe) üretir |
 
 Ayrıntılar için `README.md`.
 

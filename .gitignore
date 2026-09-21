@@ -6,3 +6,5 @@ __pycache__/
 /fikstur_*.md
 /fikstur_*.png
 /referans.json
+build/
+dist/
