@@ -320,9 +320,11 @@ biçimde dizilir, yeri `location` ile doğrudan verilir. Başlık bloğunun yeri
 çizilen her şeyin üst sınırından hesaplanır, tablolar da sağ sınırdan; böylece
 yazılar ne görünüşlerin ne de birbirinin üstüne biner.
 
-Örnek çıktı: `ornek/olcu/ORNEK_01_050_000_01.dxf` (+ `.png` önizleme).
+Örnek çıktılar `ornek/olcu/` altında: `ORNEK_P05_01_050_000_01.dxf` (+ png),
+`ORNEK_00_MONTAJ.png`, `BOM.csv`, `BOM.md`, `olculer.csv`, `rapor.md`.
 `ornek/olcu/onizle3.py` bir DXF'i gerçek yazı boyutlarıyla PNG'ye çevirir:
-`python ornek/olcu/onizle3.py cizim.dxf onizleme.png`.
+`python ornek/olcu/onizle3.py cizim.dxf onizleme.png` — çakışma varsa
+önizlemede de görünür.
 
 ## Sınıflandırma
 

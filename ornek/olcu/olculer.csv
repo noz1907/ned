@@ -1,42 +1,42 @@
-﻿no;kod;ad;adet;sinif;tip;boy_mm;en_mm;kalinlik_mm;sac_kalinlik_mm;hacim_mm3;kutle_kg;yuzey_mm2;delik_adedi;radus_adedi;dxf
-K01;01.051.000.01;01.051.000.01 C-Profil-Runge XL-H;1;parca;;2480.0;120.0;34.5;;1359536.4;10.6724;1116192.6;132;22;K01_01_051_000_01.dxf
-K02;09.025.000.02;09.025.000.02 C-Profil Teleskop;1;parca;;1940.0;100.0;27.5;;1141133.8;8.9579;780200.4;96;12;K02_09_025_000_02.dxf
-K03;TIRSAN_Ray 112,5;TIRSAN_Ray 112,5;1;parca;;200.0;112.52;125.48;;387289.9;3.0402;214226.0;0;38;K03_TIRSAN_Ray_112_5.dxf
-K04;510206504-00;510206504-00_KAYAR BABA YAN YAPI YUVASI GALVANiZLi;10;parca;;120.0;57.0;31.5;;34050.8;0.2673;35467.5;6;20;K04_510206504-00.dxf
-K05;01.050.000.01;01.050.000.01 U-Blech-Mechanismus;1;parca;;483.04;76.5;32.0;;163651.2;1.2847;114694.7;4;21;K05_01_050_000_01.dxf
-K06;01.050.000.14;01.050.000.14 Führungsschale-Fuß-links mechanisch bearbeitet;1;parca;;301.65;45.01;68.07;;154697.6;1.2144;31857.5;2;29;K06_01_050_000_14.dxf
-K07;01.050.000.15;01.050.000.15 Führungsschale-FuB-rechts mechanisch bearbeitet;1;parca;;301.65;45.01;68.07;;154697.6;1.2144;31857.5;2;30;K07_01_050_000_15.dxf
-K08;06.001.001.34;06.001.001.34-Keil-forging;1;parca;;175.42;70.65;31.95;;138332.9;1.0859;30452.1;1;22;K08_06_001_001_34.dxf
-;06.002.008.30;06.002.008.30 - Rungenlager, kurz TIRSAN;1;standart;rulman;;;;;89820.1;;;;;
-K09;09.020.000.01;09.020.000.01 Dachplatte 45x195mm;1;parca;;195.0;50.0;8.0;8.0;72236.2;0.5671;23561.4;2;8;K09_09_020_000_01.dxf
-K10;09.020.000.03;09.020.000.03 Rollenplatte;1;parca;;175.0;100.0;5.0;5.0;36094.4;0.2833;18773.0;6;2;K10_09_020_000_03.dxf
-K11;06.000.001.07;06.000.001.07 - Handhebel - roh;1;parca;;166.0;38.0;23.0;;30961.9;0.2431;23144.6;3;21;K11_06_000_001_07.dxf
-K12;07.007.070.04;07.007.070.04 - Kniehebel - KTL;1;parca;;211.01;48.01;21.01;;27046.6;0.2123;20417.6;0;50;K12_07_007_070_04.dxf
-;06.002.001.03;06.002.001.03-Handhebellagerung-600;1;standart;rulman;;;;;25602.6;;;;;
-;01.050.000.06;01.050.000.06 Bolzen 12x100;1;standart;pim;;;;;11274.1;;;;;
-;6,4x14_Percin_percinli;6,4x14_Percin_percinli;20;standart;perçin;;;;;501.6;;;;;
-K13;01.050.000.02;01.050.000.02 Federanschlag;1;parca;;77.0;70.0;5.0;5.0;9012.8;0.0708;5095.0;0;6;K13_01_050_000_02.dxf
-;06.000.001.08;06.000.001.08 - Sicherung - verzinkt;1;standart;segman;;;;;8117.6;;;;;
-;01.050.000.09;01.050.000.09 Bolzen 10x100;1;standart;pim;;;;;7824.7;;;;;
-;09.020.000.05;09.020.000.05 Rillenkugellager DIN 608 2RSR;4;standart;DIN;;;;;1576.4;;;;;
-;06.001.001.06;06.001.001.06-Bolzen 8x68;1;standart;pim;;;;;3311.5;;;;;
-;Kayar Baba Mekanizma Govde Percini_Q8x58;Kayar Baba Mekanizma Govde Percini_Q8x58;1;standart;perçin;;;;;3190.2;;;;;
-;M8x16 Anahtar Basli Civata;M8x16 Anahtar Basli Civata;2;standart;civata;;;;;1520.4;;;;;
-;06.001.001.05;06.001.001.05 Druckfeder-Rungenkeil-Einbaulänge89mm;1;standart;yay;;;;;2692.3;;;;;
-;WELDING_KAYAR_BABA_XL-S_DESTEK_SACi;WELDING_KAYAR_BABA_XL-S_DESTEK_SACi;10;kaynak;;;;;;230.8;;;;;
-;01.050.000.05;01.050.000.05 Bolzen 8x46;1;standart;pim;;;;;2289.2;;;;;
-;09.020.000.07;09.020.000.07 Bolzen 7,9x24;2;standart;pim;;;;;1098.6;;;;;
-;07.007.070.05;07.007.070.05 - Halbhohlniet Ø8x37 - KTL;1;standart;perçin;;;;;1843.6;;;;;
-;M8 Somun;M8 Somun;2;standart;somun;;;;;754.2;;;;;
-;09.020.000.06;09.020.000.06 Unterlegscheibe 8,4x16x1,6 DIN 125 - A;4;standart;DIN;;;;;233.0;;;;;
-;WELDING_KAYAR_BABA_Mekanizma-1;WELDING_KAYAR_BABA_Mekanizma-1;4;kaynak;;;;;;230.8;;;;;
-K14;Ausprägung 2-oa0;Ausprägung 2-oa0;1;parca;;12.3;12.35;9.89;;892.6;0.007;538.2;0;1;K14_Ausprägung_2-oa0.dxf
-K15;1;1;1;parca;;12.3;12.35;9.89;;833.8;0.0065;522.6;0;1;K15_1.dxf
-;WELDING_KAYAR_BABA_Mekanizma-2;WELDING_KAYAR_BABA_Mekanizma-2;2;kaynak;;;;;;375.0;;;;;
-;WELDING_KAYAR_BABA_Mekanizma-2;WELDING_KAYAR_BABA_Mekanizma-2;2;kaynak;;;;;;312.5;;;;;
-K16;510206504-00;510206504-00_KAYAR BABA YAN YAPI YUVASI GALVANiZLi;20;parca;;7.0;4.0;1.5;;30.2;0.0002;78.5;0;5;K16_510206504-00.dxf
-;06.000.001.10;06.000.001.10 - Blindniet ISO 15983 - 5 × 10 - AIA-St - L (vernietet);1;standart;ISO;;;;;308.9;;;;;
-;Kehlnaht 2-oa2;Kehlnaht 2-oa2;1;kaynak;;;;;;267.0;;;;;
-;Kehlnaht 1-oa1;Kehlnaht 1-oa1;2;kaynak;;;;;;128.8;;;;;
-;ISO 7090;ISO 7090 WASHER 8X16 STEEL GRADE A PLAIN CHAMFERED NORMAL SERIES;1;standart;ISO;;;;;226.3;;;;;
-;06.000.001.09;06.000.001.09 - Druckfeder 1 x 6,5 x L1 = 27,5 mm;1;standart;yay;;;;;210.1;;;;;
+﻿poz;kod;ad;adet;sinif;tip;malzeme_ad;yogunluk_g_cm3;boy_mm;en_mm;kalinlik_mm;sac_kalinlik_mm;hacim_mm3;kutle_kg;toplam_kg;yuzey_mm2;delik_adedi;radus_adedi;dxf
+1;01.051.000.01;01.051.000.01 C-Profil-Runge XL-H;1;parca;;Celik (S235JR / St37);7.85;2480.0;120.0;34.5;;1359536.4;10.6724;10.6724;1116192.6;132;22;P01_01_051_000_01.dxf
+2;09.025.000.02;09.025.000.02 C-Profil Teleskop;1;parca;;Celik (S235JR / St37);7.85;1940.0;100.0;27.5;;1141133.8;8.9579;8.9579;780200.4;96;12;P02_09_025_000_02.dxf
+3;TIRSAN_Ray 112,5;TIRSAN_Ray 112,5;1;parca;;Celik (S235JR / St37);7.85;200.0;112.52;125.48;;387289.9;3.0402;3.0402;214226.0;0;38;P03_TIRSAN_Ray_112_5.dxf
+4;510206504-00;510206504-00_KAYAR BABA YAN YAPI YUVASI GALVANiZLi;10;parca;;Celik (S235JR / St37);7.85;120.0;57.0;31.5;;34050.8;0.2673;2.673;35467.5;6;20;P04_510206504-00.dxf
+5;01.050.000.01;01.050.000.01 U-Blech-Mechanismus;1;parca;;Celik (S235JR / St37);7.85;483.04;76.5;32.0;;163651.2;1.2847;1.2847;114694.7;4;21;P05_01_050_000_01.dxf
+6;01.050.000.14;01.050.000.14 Führungsschale-Fuß-links mechanisch bearbeitet;1;parca;;Celik (S235JR / St37);7.85;301.65;45.01;68.07;;154697.6;1.2144;1.2144;31857.5;2;29;P06_01_050_000_14.dxf
+7;01.050.000.15;01.050.000.15 Führungsschale-FuB-rechts mechanisch bearbeitet;1;parca;;Celik (S235JR / St37);7.85;301.65;45.01;68.07;;154697.6;1.2144;1.2144;31857.5;2;30;P07_01_050_000_15.dxf
+8;06.001.001.34;06.001.001.34-Keil-forging;1;parca;;Celik (S235JR / St37);7.85;175.42;70.65;31.95;;138332.9;1.0859;1.0859;30452.1;1;22;P08_06_001_001_34.dxf
+9;06.002.008.30;06.002.008.30 - Rungenlager, kurz TIRSAN;1;standart;rulman;;;;;;;89820.1;;;;;;
+10;09.020.000.01;09.020.000.01 Dachplatte 45x195mm;1;parca;;Celik (S235JR / St37);7.85;195.0;50.0;8.0;8.0;72236.2;0.5671;0.5671;23561.4;2;8;P10_09_020_000_01.dxf
+11;09.020.000.03;09.020.000.03 Rollenplatte;1;parca;;Celik (S235JR / St37);7.85;175.0;100.0;5.0;5.0;36094.4;0.2833;0.2833;18773.0;6;2;P11_09_020_000_03.dxf
+12;06.000.001.07;06.000.001.07 - Handhebel - roh;1;parca;;Celik (S235JR / St37);7.85;166.0;38.0;23.0;;30961.9;0.2431;0.2431;23144.6;3;21;P12_06_000_001_07.dxf
+13;07.007.070.04;07.007.070.04 - Kniehebel - KTL;1;parca;;Celik (S235JR / St37);7.85;211.01;48.01;21.01;;27046.6;0.2123;0.2123;20417.6;0;50;P13_07_007_070_04.dxf
+14;06.002.001.03;06.002.001.03-Handhebellagerung-600;1;standart;rulman;;;;;;;25602.6;;;;;;
+15;01.050.000.06;01.050.000.06 Bolzen 12x100;1;standart;pim;;;;;;;11274.1;;;;;;
+16;6,4x14_Percin_percinli;6,4x14_Percin_percinli;20;standart;perçin;;;;;;;501.6;;;;;;
+17;01.050.000.02;01.050.000.02 Federanschlag;1;parca;;Celik (S235JR / St37);7.85;77.0;70.0;5.0;5.0;9012.8;0.0708;0.0708;5095.0;0;6;P17_01_050_000_02.dxf
+18;06.000.001.08;06.000.001.08 - Sicherung - verzinkt;1;standart;segman;;;;;;;8117.6;;;;;;
+19;01.050.000.09;01.050.000.09 Bolzen 10x100;1;standart;pim;;;;;;;7824.7;;;;;;
+20;09.020.000.05;09.020.000.05 Rillenkugellager DIN 608 2RSR;4;standart;DIN;;;;;;;1576.4;;;;;;
+21;06.001.001.06;06.001.001.06-Bolzen 8x68;1;standart;pim;;;;;;;3311.5;;;;;;
+22;Kayar Baba Mekanizma Govde Percini_Q8x58;Kayar Baba Mekanizma Govde Percini_Q8x58;1;standart;perçin;;;;;;;3190.2;;;;;;
+23;M8x16 Anahtar Basli Civata;M8x16 Anahtar Basli Civata;2;standart;civata;;;;;;;1520.4;;;;;;
+24;06.001.001.05;06.001.001.05 Druckfeder-Rungenkeil-Einbaulänge89mm;1;standart;yay;;;;;;;2692.3;;;;;;
+;WELDING_KAYAR_BABA_XL-S_DESTEK_SACi;WELDING_KAYAR_BABA_XL-S_DESTEK_SACi;10;kaynak;;;;;;;;230.8;;;;;;
+25;01.050.000.05;01.050.000.05 Bolzen 8x46;1;standart;pim;;;;;;;2289.2;;;;;;
+26;09.020.000.07;09.020.000.07 Bolzen 7,9x24;2;standart;pim;;;;;;;1098.6;;;;;;
+27;07.007.070.05;07.007.070.05 - Halbhohlniet Ø8x37 - KTL;1;standart;perçin;;;;;;;1843.6;;;;;;
+28;M8 Somun;M8 Somun;2;standart;somun;;;;;;;754.2;;;;;;
+29;09.020.000.06;09.020.000.06 Unterlegscheibe 8,4x16x1,6 DIN 125 - A;4;standart;DIN;;;;;;;233.0;;;;;;
+;WELDING_KAYAR_BABA_Mekanizma-1;WELDING_KAYAR_BABA_Mekanizma-1;4;kaynak;;;;;;;;230.8;;;;;;
+30;Ausprägung 2-oa0;Ausprägung 2-oa0;1;parca;;Celik (S235JR / St37);7.85;12.3;12.35;9.89;;892.6;0.007;0.007;538.2;0;1;P30_Ausprägung_2-oa0.dxf
+31;1;1;1;parca;;Celik (S235JR / St37);7.85;12.3;12.35;9.89;;833.8;0.0065;0.0065;522.6;0;1;P31_1.dxf
+;WELDING_KAYAR_BABA_Mekanizma-2;WELDING_KAYAR_BABA_Mekanizma-2;2;kaynak;;;;;;;;375.0;;;;;;
+;WELDING_KAYAR_BABA_Mekanizma-2;WELDING_KAYAR_BABA_Mekanizma-2;2;kaynak;;;;;;;;312.5;;;;;;
+32;510206504-00;510206504-00_KAYAR BABA YAN YAPI YUVASI GALVANiZLi;20;parca;;Celik (S235JR / St37);7.85;7.0;4.0;1.5;;30.2;0.0002;0.004;78.5;0;5;P32_510206504-00.dxf
+33;06.000.001.10;06.000.001.10 - Blindniet ISO 15983 - 5 × 10 - AIA-St - L (vernietet);1;standart;ISO;;;;;;;308.9;;;;;;
+;Kehlnaht 2-oa2;Kehlnaht 2-oa2;1;kaynak;;;;;;;;267.0;;;;;;
+;Kehlnaht 1-oa1;Kehlnaht 1-oa1;2;kaynak;;;;;;;;128.8;;;;;;
+34;ISO 7090;ISO 7090 WASHER 8X16 STEEL GRADE A PLAIN CHAMFERED NORMAL SERIES;1;standart;ISO;;;;;;;226.3;;;;;;
+35;06.000.001.09;06.000.001.09 - Druckfeder 1 x 6,5 x L1 = 27,5 mm;1;standart;yay;;;;;;;210.1;;;;;;
