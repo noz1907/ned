@@ -57,8 +57,27 @@ def _ad(lab):
     return None
 
 
-def step_oku(yol):
-    """XCAF ile okur: montaj ağacı + gerçek parça adları. Olmazsa düz okuyucu."""
+def _malzeme(mt, lab):
+    """XCAF'te tanımlıysa parçanın malzeme adını döndürür, yoksa None."""
+    if mt is None:
+        return None
+    try:
+        from OCP.TCollection import TCollection_HAsciiString
+        ad = TCollection_HAsciiString(); ac = TCollection_HAsciiString()
+        yog = [0.0]; ya = TCollection_HAsciiString(); yt = TCollection_HAsciiString()
+        if mt.GetMaterial_s(lab, ad, ac, yog, ya, yt):
+            t = (ad.ToCString() or "").strip()
+            return t or None
+    except Exception:
+        pass
+    return None
+
+
+def step_oku(yol, malzeme=False):
+    """XCAF ile okur: montaj ağacı + gerçek parça adları.
+
+    malzeme=True verilirse her katı (ad, katı, malzeme) üçlüsü olarak döner;
+    malzeme STEP'te tanımlı değilse None'dır. Olmazsa düz okuyucuya düşer."""
     try:
         app = XCAFApp_Application.GetApplication_s()
         doc = TDocStd_Document(TCollection_ExtendedString("d"))
@@ -69,6 +88,11 @@ def step_oku(yol):
             raise RuntimeError
         rd.Transfer(doc)
         st = XCAFDoc_DocumentTool.ShapeTool_s(doc.Main())
+        try:
+            from OCP.XCAFDoc import XCAFDoc_MaterialTool
+            mt = XCAFDoc_MaterialTool.Set_s(doc.Main()) if malzeme else None
+        except Exception:
+            mt = None
         out = []
 
         def gez(lab, loc):
@@ -89,9 +113,11 @@ def step_oku(yol):
                     return
                 if not loc.IsIdentity():
                     sh = BRepBuilderAPI_Transform(sh, loc.Transformation(), True).Shape()
+                mal = _malzeme(mt, lab) if malzeme else None
                 ex = TopExp_Explorer(sh, TopAbs_SOLID)
                 while ex.More():
-                    out.append((ad, TopoDS.Solid_s(ex.Current())))
+                    k = TopoDS.Solid_s(ex.Current())
+                    out.append((ad, k, mal) if malzeme else (ad, k))
                     ex.Next()
 
         free = TDF_LabelSequence(); st.GetFreeShapes(free)
@@ -109,7 +135,8 @@ def step_oku(yol):
     i = 0
     while ex.More():
         i += 1
-        out.append((f"SOLID_{i:03d}", TopoDS.Solid_s(ex.Current())))
+        k = TopoDS.Solid_s(ex.Current())
+        out.append((f"SOLID_{i:03d}", k, None) if malzeme else (f"SOLID_{i:03d}", k))
         ex.Next()
     return out
 

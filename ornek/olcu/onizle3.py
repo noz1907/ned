@@ -5,7 +5,7 @@ matplotlib.use("Agg")
 import matplotlib.pyplot as plt
 from matplotlib.collections import LineCollection
 
-def topla(e, segs, yazi, ovr=None):
+def topla(e, segs, yazi, tarama, ovr=None):
     k = ovr or (e.dxf.layer if e.dxf.layer in segs else "DIGER")
     t = e.dxftype()
     try:
@@ -25,6 +25,14 @@ def topla(e, segs, yazi, ovr=None):
             v = [e.dxf.vtx0, e.dxf.vtx1, e.dxf.vtx2]
             segs[k].append([(v[0].x, v[0].y), (v[1].x, v[1].y)])
             segs[k].append([(v[1].x, v[1].y), (v[2].x, v[2].y)])
+        elif t == "HATCH":
+            for yol in e.paths:
+                try:
+                    q = [(v[0], v[1]) for v in yol.vertices]
+                except Exception:
+                    q = []
+                if len(q) > 2:
+                    tarama.append(q)
         elif t == "TEXT":
             yazi.append((e.dxf.text, e.dxf.insert.x, e.dxf.insert.y, e.dxf.height))
         elif t == "MTEXT":
@@ -35,14 +43,14 @@ def topla(e, segs, yazi, ovr=None):
 def ciz(dosya, cikti, kirp=None, gen=22.0, boy=15.0):
     d = ezdxf.readfile(dosya); m = d.modelspace()
     segs = {"GORUNEN": [], "GIZLI": [], "OLCU": [], "EKSEN": [], "YAZI": [], "DIGER": []}
-    yazi = []
+    yazi, tarama = [], []
     for e in m:
         if e.dxftype() == "DIMENSION":
             try:
-                for e2 in d.blocks.get(e.dxf.geometry): topla(e2, segs, yazi, "OLCU")
+                for e2 in d.blocks.get(e.dxf.geometry): topla(e2, segs, yazi, tarama, "OLCU")
             except Exception: pass
         else:
-            topla(e, segs, yazi)
+            topla(e, segs, yazi, tarama)
     xs = [p[0] for v in segs.values() for s in v for p in s] + [t[1] for t in yazi]
     ys = [p[1] for v in segs.values() for s in v for p in s] + [t[2] for t in yazi]
     for t, x, y, h in yazi:
@@ -60,6 +68,10 @@ def ciz(dosya, cikti, kirp=None, gen=22.0, boy=15.0):
     fig, ax = plt.subplots(figsize=(gen, boy))
     renk = {"GORUNEN": ("#111", 1.1), "GIZLI": ("#b00", 0.55), "OLCU": ("#06c", 0.6),
             "EKSEN": ("#a0a", 0.45), "YAZI": ("#060", 0.5), "DIGER": ("#888", 0.4)}
+    from matplotlib.patches import Polygon
+    for q in tarama:
+        ax.add_patch(Polygon(q, closed=True, facecolor="none", edgecolor="#06c",
+                             hatch="////", linewidth=0.4))
     for k, v in segs.items():
         if v: ax.add_collection(LineCollection(v, colors=renk[k][0], linewidths=renk[k][1]))
     ax.set_xlim(x0, x1); ax.set_ylim(y0, y1); ax.set_aspect("equal")

@@ -43,6 +43,10 @@ from OCP.TopTools import TopTools_IndexedMapOfShape
 from OCP.TopoDS import TopoDS
 from OCP.Bnd import Bnd_Box
 from OCP.BRepBndLib import BRepBndLib
+from OCP.BRepPrimAPI import BRepPrimAPI_MakeBox
+from OCP.BRepAlgoAPI import BRepAlgoAPI_Cut
+from OCP.BRepTools import BRepTools
+from OCP.TopAbs import TopAbs_WIRE
 from OCP.HLRBRep import HLRBRep_Algo, HLRBRep_HLRToShape
 from OCP.HLRAlgo import HLRAlgo_Projector
 from OCP.GCPnts import GCPnts_TangentialDeflection
@@ -80,6 +84,38 @@ MALZEME = {
     "cam":        ("Cam",                        2.50),
 }
 VARSAYILAN_MALZEME = "celik"
+# Parça adında/STEP malzeme alanında geçen ifadelerden malzeme tanıma.
+# Data'da malzeme tanımlıysa kullanıcıya sorulmaz, okunan değer kullanılır.
+MALZEME_DESEN = [
+    (r"1\.4301|1\.4404|\bAISI\s*30[46]\b|paslanmaz|rostfrei|stainless|\binox\b", "paslanmaz"),
+    (r"\bS235|\bSt\s*37|\bS355|\bSt\s*52|\bDC0[1-6]\b|\bQSt", "celik"),
+    (r"\bAlMg|\bAlSi|\bAlCuMg|\b6060\b|\b6082\b|\b5754\b|aluminyum|alüminyum|aluminium|aluminum", "aluminyum"),
+    (r"\bGG\s*\d\d|\bGGG\b|\bEN-?GJ|dokum|döküm|cast\s*iron|gusseisen", "dokum"),
+    (r"\bCuZn|pirinc|pirinç|\bbrass\b|messing", "pirinc"),
+    (r"\bCuSn|bronz|\bbronze\b", "bronz"),
+    (r"\bCu-?ETP\b|\bbakir\b|bakır|\bcopper\b|kupfer", "bakir"),
+    (r"\bTi6Al|titanyum|titanium|\btitan\b", "titanyum"),
+    (r"\bPA\s*6\b|\bPA6\b|poliamid|polyamid|\bnylon\b", "plastik"),
+    (r"\bPOM\b|asetal|acetal|delrin", "pom"),
+    (r"\bPE-?HD\b|\bHDPE\b|polietilen|polyethylen", "pe"),
+    (r"\bPP\b|polipropilen|polypropylen", "pp"),
+    (r"\bPVC\b", "pvc"),
+    (r"\bABS\b", "abs"),
+    (r"\bPTFE\b|teflon", "ptfe"),
+    (r"kaucuk|kauçuk|\brubber\b|gummi|\bNBR\b|\bEPDM\b", "kaucuk"),
+    (r"\bahsap\b|ahşap|\bwood\b|\bholz\b", "ahsap"),
+    (r"\bcam\b|\bglass\b|\bglas\b", "cam"),
+    (r"\bsteel\b|\bstahl\b|\bcelik\b|çelik", "celik"),
+]
+
+
+def malzeme_tahmin(*metinler):
+    """Parça adı / STEP malzeme alanı içinden malzemeyi tanır, yoksa None."""
+    t = " ".join(str(m or "") for m in metinler)
+    for desen, anahtar in MALZEME_DESEN:
+        if re.search(desen, t, re.I):
+            return anahtar
+    return None
 _TR = str.maketrans("çğıİöşüÇĞIÖŞÜ", "cgiiosucgiosu")
 
 
@@ -368,35 +404,83 @@ def komponent_olcu(sh, P):
 
 
 # ---------------------------------------------------------------- HLR görünüş
-# Dört görünüş yeter: ÖN (referans), SAĞ, SOL, ÜST.
+# ---------------------------------------------------------------- görünüşler
+# Altı görünüş tanımlı; çizime hangilerinin gireceği seçilir (şimdilik en çok 4).
 # (göz yönü, izdüşüm düzleminin X ekseni)
-GORUNUS = {"ON":  ((0, -1, 0), (1, 0, 0)),     # göz -Y'de, bakış +Y  -> X yatay, Z düşey
-           "SAG": ((1, 0, 0), (0, 1, 0)),      # göz +X'te            -> Y yatay, Z düşey
-           "SOL": ((-1, 0, 0), (0, -1, 0)),    # göz -X'te            -> -Y yatay, Z düşey
-           "UST": ((0, 0, 1), (1, 0, 0))}      # göz +Z'de            -> X yatay, Y düşey
-GORUNUS_AD = {"ON": "ÖN", "SAG": "SAĞ", "SOL": "SOL", "UST": "ÜST"}
-
-
-# Bir eksene paralel deliğin DAİRE göründüğü görünüş(ler).
-# (görünüş, yatay eksen indeksi, düşey eksen indeksi, yatay aynalı mı)
-# SOL görünüşte yatay eksen -Y olduğu için ayna gerekir.
-DAIRE_GOR = {
-    "Y": [("ON", 0, 2, False)],
-    "Z": [("UST", 0, 1, False)],
-    "X": [("SAG", 1, 2, False), ("SOL", 1, 2, True)],
+GORUNUS = {
+    "ON":   ((0, -1, 0), (1, 0, 0)),     # göz -Y'de   -> X yatay,  Z düşey
+    "ARKA": ((0, 1, 0), (-1, 0, 0)),     # göz +Y'de   -> -X yatay, Z düşey
+    "SAG":  ((1, 0, 0), (0, 1, 0)),      # göz +X'te   -> Y yatay,  Z düşey
+    "SOL":  ((-1, 0, 0), (0, -1, 0)),    # göz -X'te   -> -Y yatay, Z düşey
+    "UST":  ((0, 0, 1), (1, 0, 0)),      # göz +Z'de   -> X yatay,  Y düşey
+    "ALT":  ((0, 0, -1), (1, 0, 0)),     # göz -Z'de   -> X yatay,  -Y düşey
 }
+GORUNUS_AD = {"ON": "ÖN", "ARKA": "ARKA", "SAG": "SAĞ", "SOL": "SOL",
+              "UST": "ÜST", "ALT": "ALT"}
+GORUNUS_SIRA = ("ON", "ARKA", "SAG", "SOL", "UST", "ALT")
+VARSAYILAN_GORUNUS = ("ON", "SAG", "SOL", "UST")
+EN_COK_GORUNUS = 4
+KESIT_AD = "A-A KESIT"
+
+# görünüş -> (yatay eksen indeksi, düşey eksen indeksi, yatay ters, düşey ters)
+GOR_EKSEN = {
+    "ON":   (0, 2, False, False),
+    "ARKA": (0, 2, True, False),
+    "SAG":  (1, 2, False, False),
+    "SOL":  (1, 2, True, False),
+    "UST":  (0, 1, False, False),
+    "ALT":  (0, 1, False, True),
+}
+# Bir eksene paralel deliğin DAİRE göründüğü görünüşler (öncelik sırasıyla).
+DELIK_GOR = {"Y": ("ON", "ARKA"), "X": ("SAG", "SOL"), "Z": ("UST", "ALT")}
+
+
+def gorunus_sec(istek):
+    """Kullanıcının seçtiği görünüşleri düzeltir: geçerli olanlar, sırayla,
+    en çok EN_COK_GORUNUS tane. Boşsa varsayılan dörtlü."""
+    out = [g for g in GORUNUS_SIRA if g in set(istek or ())]
+    return tuple(out[:EN_COK_GORUNUS]) or tuple(VARSAYILAN_GORUNUS)
+
+
+def izdusum(p, gad):
+    """3B noktanın o görünüşteki (ham) 2B karşılığı — HLR ile aynı eksenler."""
+    i1, i2, tx, ty = GOR_EKSEN[gad]
+    return (-p[i1] if tx else p[i1], -p[i2] if ty else p[i2])
 
 
 def gorunus_olcusu(gad, L, W, T):
     """Görünüşün (genişlik, yükseklik) ölçüsü."""
-    return {"ON": (L, T), "SAG": (W, T), "SOL": (W, T), "UST": (L, W)}[gad]
+    d = (L, W, T)
+    i1, i2, _tx, _ty = GOR_EKSEN[gad]
+    return d[i1], d[i2]
 
 
-def gorunus_yerlesimi(L, W, T, g):
-    """1. açı (Avrupa/ISO-E) yerleşimi: sağdan bakılan görünüş SOLA,
-    soldan bakılan SAĞA, üstten bakılan ALTA çizilir. ÖN referanstır."""
-    return {"SAG": (-(W + g), 0.0), "ON": (0.0, 0.0),
-            "SOL": (L + g, 0.0), "UST": (0.0, -(W + g))}
+def gorunus_yerlesimi(L, W, T, g, gorunusler=VARSAYILAN_GORUNUS):
+    """1. açı (Avrupa/ISO-E) yerleşimi. ÖN referans, (0,0) noktasında:
+    sağdan bakılan görünüş SOLA, soldan bakılan SAĞA, arka en sağa,
+    üstten bakılan ALTA, alttan bakılan ÜSTE çizilir."""
+    gorunusler = set(gorunusler)
+    yer = {"ON": (0.0, 0.0)}
+    if "SAG" in gorunusler:
+        yer["SAG"] = (-(gorunus_olcusu("SAG", L, W, T)[0] + g), 0.0)
+    x = L + g
+    if "SOL" in gorunusler:
+        yer["SOL"] = (x, 0.0)
+        x += gorunus_olcusu("SOL", L, W, T)[0] + g
+    if "ARKA" in gorunusler:
+        yer["ARKA"] = (x, 0.0)
+    if "UST" in gorunusler:
+        yer["UST"] = (0.0, -(gorunus_olcusu("UST", L, W, T)[1] + g))
+    if "ALT" in gorunusler:
+        yer["ALT"] = (0.0, T + g)
+    return {k: v for k, v in yer.items() if k in gorunusler}
+
+
+def kesit_yeri(yer, L, W, T, g, gorunusler):
+    """Kesit görünüşü, çizimin en sağındaki görünüşün sağına konur."""
+    sag = max((x + gorunus_olcusu(gd, L, W, T)[0] for gd, (x, _y) in yer.items()),
+              default=L)
+    return (sag + g, 0.0)
 
 
 def hlr(sh, goz, xref, gizli=True):
@@ -432,6 +516,7 @@ KATMAN = {
     "OLCU":    (4, CIZGI_KAL),      # ölçülendirme
     "YAZI":    (3, CIZGI_KAL),
     "CERCEVE": (5, CIZGI_KAL),
+    "TARAMA":  (5, CIZGI_KAL),   # kesit taraması
 }
 
 
@@ -493,11 +578,13 @@ def _yaz(msp, metin, x, y, h=4.0, kat="YAZI"):
     msp.add_text(str(metin), dxfattribs={"layer": kat, "height": h}).set_placement((x, y))
 
 
-def gorunus_ciz(msp, kenar, ox, oy, ad, h=4.0, olcu2=True):
+def gorunus_ciz(msp, kenar, ox, oy, ad, h=4.0, olcu2=True, etiket=None):
+    """Bir görünüşü çizer. (genişlik, yükseklik, dx, dy) döndürür; dx/dy,
+    ham izdüşüm koordinatını çizim koordinatına taşıyan kaydırmadır."""
     xs = [p[0] for v in kenar.values() for c in v for p in c]
     ys = [p[1] for v in kenar.values() for c in v for p in c]
     if not xs:
-        return 0.0, 0.0
+        return 0.0, 0.0, 0.0, 0.0
     dx, dy = ox - min(xs), oy - min(ys)
 
     def _anahtar(a, b):
@@ -532,17 +619,17 @@ def gorunus_ciz(msp, kenar, ox, oy, ad, h=4.0, olcu2=True):
                                    dxfattribs={"layer": kat})
     G, Y = max(xs) - min(xs), max(ys) - min(ys)
     # Etiket görünüşün SOL ÜST köşesinde, parçanın ve ölçülerin dışında.
-    _yaz(msp, GORUNUS_AD.get(ad, ad), ox, oy + Y + 0.7 * h, 1.3 * h)
+    _yaz(msp, etiket or GORUNUS_AD.get(ad, ad), ox, oy + Y + 0.7 * h, 1.3 * h)
     if olcu2:
         d = 4.0 * h                              # ölçü çizgisi uzaklığı
         msp.add_linear_dim(base=(ox, oy - d), p1=(ox, oy), p2=(ox + G, oy),
                            dimstyle=OLCU_STILI, dxfattribs={"layer": "OLCU"}).render()
         msp.add_linear_dim(base=(ox - d, oy), p1=(ox, oy), p2=(ox, oy + Y),
                            angle=90, dimstyle=OLCU_STILI, dxfattribs={"layer": "OLCU"}).render()
-    return G, Y
+    return G, Y, dx, dy
 
 
-def cap_olculeri(msp, o, yer, h, olcu, ust, en_cok_grup=6):
+def cap_olculeri(msp, o, yer, kaydir, h, ust, en_cok_grup=6):
     """Her görünüşte, o görünüşte daire görünen delikler için çap ölçüsü.
 
     Ölçü çizgisi deliğin merkezinden geçer (dimtofl=1). Yazı, görünüşün
@@ -550,35 +637,32 @@ def cap_olculeri(msp, o, yer, h, olcu, ust, en_cok_grup=6):
     yazılar ne birbirinin ne de görünüşlerin üstüne biner.
     Aynı çaptaki delikler için tek ölçü yazılır, adet önüne konur ("2x Ø9").
     Radüsler ayrıca R olarak verilir."""
-    L, W, T = olcu
     kova = defaultdict(list)                 # görünüş -> ölçülecek gruplar
     for tip, liste in (("cap", o.get("delikler") or []), ("radus", o.get("radusler") or [])):
         for d in liste:
-            hedef = DAIRE_GOR.get(d["eksen"])
-            if not hedef or not d.get("merkezler"):
-                continue
-            gad, i1, i2, ayna = hedef[0]     # ölçü tek görünüşe konur
-            if gad not in yer:
+            gad = next((g for g in DELIK_GOR.get(d["eksen"], ()) if g in yer), None)
+            if not gad or not d.get("merkezler"):
                 continue
             r = (d["cap_mm"] / 2.0) if tip == "cap" else d["yaricap_mm"]
             if r < 0.5 or len(kova[gad]) >= en_cok_grup:
                 continue
-            kova[gad].append((tip, d, i1, i2, ayna, r))
+            kova[gad].append((tip, d, gad, r))
     en_ust = dict(ust)
-    en_sag = max(x + gorunus_olcusu(gd, L, W, T)[0] for gd, (x, _y) in yer.items())
+    en_sag = max(x for x, _y in yer.values())
     for gad, gruplar in kova.items():
-        ox, oy = yer[gad]
-        gw, _gy = gorunus_olcusu(gad, L, W, T)
+        dx, dy = kaydir[gad]
         # Büyük çap üstte: kılavuz çizgileri birbirini az kessin.
-        gruplar.sort(key=lambda q: -q[5])
-        for k, (tip, d, i1, i2, ayna, r) in enumerate(gruplar):
+        gruplar.sort(key=lambda q: -q[3])
+        noktalar = [[(p[0] + dx, p[1] + dy)
+                     for p in (izdusum(c, gad) for c in d["merkezler"])]
+                    for _t, d, _g, _r in gruplar]
+        orta = sum(p[0] for pl in noktalar for p in pl) / max(
+            sum(len(pl) for pl in noktalar), 1)
+        for k, ((tip, d, _g, r), pl) in enumerate(zip(gruplar, noktalar)):
             # Ölçü, o gruptaki deliklerden görünüşün ortasına en uzak olanına
             # konur; yazı dışarı taşsın, görünüşü kapatmasın.
-            def _x(q):
-                return ox + (gw - q[i1] if ayna else q[i1])
-            c = max(d["merkezler"], key=lambda q: abs(_x(q) - (ox + gw / 2.0)))
-            x, y = _x(c), oy + c[i2]
-            satir_y = en_ust.get(gad, oy) + (0.4 + 1.9 * k) * h
+            x, y = max(pl, key=lambda q: abs(q[0] - orta))
+            satir_y = en_ust.get(gad, y) + (0.4 + 1.9 * k) * h
             yazi_yeri = (x + 1.2 * h, satir_y)
             onek = f"{d['adet']}x " if d["adet"] > 1 else ""
             metin = (f"{onek}%%c{d['cap_mm']:g}" if tip == "cap"
@@ -596,31 +680,177 @@ def cap_olculeri(msp, o, yer, h, olcu, ust, en_cok_grup=6):
                                        dxfattribs={"layer": "OLCU"}).render()
             except Exception:
                 continue
-            en_ust[gad] = max(en_ust.get(gad, oy), satir_y + 1.4 * h)
+            en_ust[gad] = max(en_ust.get(gad, y), satir_y + 1.4 * h)
             en_sag = max(en_sag, yazi_yeri[0] + (len(metin) + 1) * 0.72 * h)
     return en_ust, en_sag
 
 
-def merkez_cizgileri(msp, o, yer, L, W, T, en_cok=1200):
-    """Deliğin daire göründüğü HER görünüşte merkez çizgisi."""
+def merkez_cizgileri(msp, o, yer, kaydir, en_cok=1500):
+    """Deliğin daire göründüğü HER (seçili) görünüşte merkez çizgisi."""
     sayac = 0
     for d in o.get("delikler") or []:
-        for gad, i1, i2, ayna in DAIRE_GOR.get(d["eksen"], []):
+        for gad in DELIK_GOR.get(d["eksen"], ()):
             if gad not in yer:
                 continue
-            ox, oy = yer[gad]
-            gw, _gy = gorunus_olcusu(gad, L, W, T)
-            r = d["cap_mm"] / 2.0
-            u = max(r + 1.5, 2.0)
+            dx, dy = kaydir[gad]
+            u = max(d["cap_mm"] / 2.0 + 1.5, 2.0)
             for c in d.get("merkezler") or []:
                 if sayac >= en_cok:
                     return sayac
-                x = ox + (gw - c[i1] if ayna else c[i1])
-                y = oy + c[i2]
+                p = izdusum(c, gad)
+                x, y = p[0] + dx, p[1] + dy
                 msp.add_line((x - u, y), (x + u, y), dxfattribs={"layer": "EKSEN"})
                 msp.add_line((x, y - u), (x, y + u), dxfattribs={"layer": "EKSEN"})
                 sayac += 1
     return sayac
+
+
+# ---------------------------------------------------------------- kesit
+def kesit_kati(sh, eksen, konum, kb):
+    """Parçayı `eksen` yönünde `konum` düzleminden kesip yakın yarıyı atar.
+    Geriye kalan katı, aynı yönden bakıldığında tam kesit görünüşü verir."""
+    pay = max(kb[3] - kb[0], kb[4] - kb[1], kb[5] - kb[2]) * 0.1 + 10.0
+    al = [kb[0] - pay, kb[1] - pay, kb[2] - pay]
+    ust = [kb[3] + pay, kb[4] + pay, kb[5] + pay]
+    ust[eksen] = konum
+    kutu_sh = BRepPrimAPI_MakeBox(gp_Pnt(*al), gp_Pnt(*ust)).Shape()
+    # Build() şart: yapıcı tek başına bazı katılarda boş sonuç veriyor.
+    op = BRepAlgoAPI_Cut(sh, kutu_sh)
+    op.Build()
+    if not op.IsDone():
+        raise ValueError("kesit boole işlemi başarısız")
+    return op.Shape()
+
+
+def _tel_noktalari(w):
+    """Bir teli (wire) noktalara böler."""
+    p = []
+    ex = TopExp_Explorer(w, TopAbs_EDGE)
+    while ex.More():
+        c = BRepAdaptor_Curve(TopoDS.Edge_s(ex.Current()))
+        d = GCPnts_TangentialDeflection(c, 0.05, 0.1)
+        q = [c.Value(d.Parameter(i)) for i in range(1, d.NbPoints() + 1)]
+        if p and q and (p[-1].Distance(q[-1]) < p[-1].Distance(q[0])):
+            q.reverse()
+        p += q
+        ex.Next()
+    return p
+
+
+def kesit_tara(msp, kesik, eksen, konum, gad, dx, dy, tol=1e-4):
+    """Kesme düzleminde kalan yüzeyleri tarar (hatch). Kesilen malzeme
+    böylece resimde taralı görünür, geri planda kalan kenarlardan ayrılır."""
+    m = TopTools_IndexedMapOfShape()
+    TopExp.MapShapes_s(kesik, TopAbs_FACE, m)
+    n = 0
+    for i in range(1, m.Extent() + 1):
+        f = TopoDS.Face_s(m.FindKey(i))
+        ad = BRepAdaptor_Surface(f)
+        if ad.GetType() != GeomAbs_Plane:
+            continue
+        d = ad.Plane().Axis().Direction()
+        if abs((d.X(), d.Y(), d.Z())[eksen]) < 0.999:
+            continue
+        if abs(ad.Plane().Location().Coord(eksen + 1) - konum) > 1e-3:
+            continue
+        dis = BRepTools.OuterWire_s(f)
+        yollar = []
+        ex = TopExp_Explorer(f, TopAbs_WIRE)
+        while ex.More():
+            w = TopoDS.Wire_s(ex.Current())
+            p = _tel_noktalari(w)
+            if len(p) > 2:
+                yollar.append((w.IsSame(dis),
+                               [(izdusum((q.X(), q.Y(), q.Z()), gad)[0] + dx,
+                                 izdusum((q.X(), q.Y(), q.Z()), gad)[1] + dy) for q in p]))
+            ex.Next()
+        if not yollar:
+            continue
+        try:
+            ht = msp.add_hatch(color=5, dxfattribs={"layer": "TARAMA"})
+            ht.set_pattern_fill("ANSI31", scale=1.0)
+            for dismi, pts in yollar:
+                ht.paths.add_polyline_path(pts, is_closed=True,
+                                           flags=1 if dismi else 0)
+            n += 1
+        except Exception:
+            continue
+    return n
+
+
+def kesit_konumu(o, kb, eksen, kenar_payi=0.15):
+    """Kesme düzlemini anlamlı bir yere koyar: kesildiğinde en çok deliği
+    açan konum. Delik yoksa parçanın ortasından geçer.
+
+    Düzlem parçanın kenarına çok yakın olursa kesit anlamsızlaşır (parçanın
+    neredeyse tamamı atılır ya da hiç kesilmez), bu yüzden aday konumlar
+    ortadaki %70'lik bantla sınırlanır."""
+    a0, a1 = kb[eksen], kb[eksen + 3]
+    orta = (a0 + a1) / 2.0
+    alt, ust = a0 + (a1 - a0) * kenar_payi, a1 - (a1 - a0) * kenar_payi
+    eks_ad = "XYZ"[eksen]
+    sayim = Counter()
+    for d in (o or {}).get("delikler") or []:
+        if d["eksen"] == eks_ad:          # düzleme dik delik kesilmez, görünür
+            continue
+        for c in d.get("merkezler") or []:
+            v = round(c[eksen], 2)
+            if alt <= v <= ust:
+                sayim[v] += 1
+    if not sayim:
+        return orta
+    en = max(sayim.values())
+    # Eşitlikte ortaya en yakın olanı seç.
+    return min((k for k, v in sayim.items() if v == en), key=lambda k: abs(k - orta))
+
+
+def kesit_isareti(msp, o, yer, kaydir, eksen, konum, h, L, W, T):
+    """Kesme düzlemini, düzlemin çizgi olarak göründüğü bir görünüşte
+    A—A kesme çizgisi olarak işaretler."""
+    for gad in ("UST", "ALT", "SAG", "SOL", "ON", "ARKA"):
+        if gad not in yer:
+            continue
+        i1, i2, _tx, _ty = GOR_EKSEN[gad]
+        if eksen not in (i1, i2):
+            continue
+        dx, dy = kaydir[gad]
+        gw, gy = gorunus_olcusu(gad, L, W, T)
+        ox, oy = yer[gad]
+        p = [0.0, 0.0, 0.0]; p[eksen] = konum
+        u, v = izdusum(p, gad)
+        if eksen == i2:                      # düzlem yatay çizgi gibi görünür
+            y = v + dy
+            a, b = (ox - 2 * h, y), (ox + gw + 2 * h, y)
+        else:                                # düşey çizgi
+            x = u + dx
+            a, b = (x, oy - 2 * h), (x, oy + gy + 2 * h)
+        msp.add_line(a, b, dxfattribs={"layer": "EKSEN"})
+        for q in (a, b):
+            _yaz(msp, "A", q[0] - 0.3 * h, q[1] + 0.4 * h, 1.2 * h)
+        return gad
+    return None
+
+
+def kesit_ciz(msp, sh, kb, yer, h, gizli, gad="ON", eksen=1, o=None):
+    """Kesit görünüşünü çizer. Kesme düzlemi en çok deliği açan yerden geçer;
+    kesilen yüzeyler taranır. (genişlik, yükseklik, üst sınır) döndürür."""
+    konum = kesit_konumu(o, kb, eksen)
+    kesik = kesit_kati(sh, eksen, konum, kb)
+    # Kesit, parçanın makul bir kısmını bırakmalı: bırakmıyorsa düzlemi
+    # ortaya alıp bir daha dene, yine olmazsa kesit çizilmez.
+    tam = hacim(sh)
+    if hacim(kesik) < 0.15 * tam:
+        konum = (kb[eksen] + kb[eksen + 3]) / 2.0
+        kesik = kesit_kati(sh, eksen, konum, kb)
+        if hacim(kesik) < 0.05 * tam:
+            raise ValueError("kesme düzlemi parçadan anlamlı bir kesit bırakmıyor")
+    goz, xref = GORUNUS[gad]
+    kenar = hlr(kesik, goz, xref, gizli=gizli)
+    ox, oy = yer
+    G, Y, dx, dy = gorunus_ciz(msp, kenar, ox, oy, gad, h=h, olcu2=True,
+                               etiket=KESIT_AD)
+    kesit_tara(msp, kesik, eksen, konum, gad, dx, dy)
+    return G, Y, oy + Y + 2.2 * h, konum
 
 
 def _tablo(msp, satirlar, x, y_ust, h, sat_h):
@@ -632,24 +862,37 @@ def _tablo(msp, satirlar, x, y_ust, h, sat_h):
 
 
 def dxf_komponent(s, o, k, yol, P):
-    """Bir komponentin detay resmi: ÖN / SAĞ / SOL / ÜST + ölçüler + tablolar."""
+    """Bir komponentin detay resmi: seçili görünüşler + ölçüler + tablolar."""
     doc = dxf_kur(); msp = doc.modelspace()
     kb = kutu(s)
     L, W, T = kb[3] - kb[0], kb[4] - kb[1], kb[5] - kb[2]
     # Yazı boyu parçaya göre: küçük parçada küçük, büyükte büyük ama okunur.
     h = min(25.0, max(2.5, max(L, W, T) / 45.0))
     olcu_stili(doc, h)
+    gorunusler = gorunus_sec(P.get("gorunusler"))
     # Görünüşler arası boşluk: araya giren ölçü çizgisi + yazı + kılavuz kadar.
     g = max(L, W, T) * 0.10 + 14 * h
-    yer = gorunus_yerlesimi(L, W, T, g)
-    ust = {}
-    for gad, (goz, xref) in GORUNUS.items():
-        kenar = hlr(s, goz, xref, gizli=P["gizli"])
+    yer = gorunus_yerlesimi(L, W, T, g, gorunusler)
+    ust, kaydir = {}, {}
+    for gad in gorunusler:
+        goz, xref = GORUNUS[gad]
+        kenar = hlr(s, goz, xref, gizli=P.get("gizli", True))
         ox, oy = yer[gad]
-        G, Y = gorunus_ciz(msp, kenar, ox, oy, gad, h=h, olcu2=True)
+        G, Y, dx, dy = gorunus_ciz(msp, kenar, ox, oy, gad, h=h, olcu2=True)
         ust[gad] = oy + Y + 2.2 * h          # görünüş etiketinin de üstü
-    merkez_cizgileri(msp, o, yer, L, W, T)
-    ust, sag = cap_olculeri(msp, o, yer, h, (L, W, T), ust)
+        kaydir[gad] = (dx, dy)
+    merkez_cizgileri(msp, o, yer, kaydir)
+    ust, sag = cap_olculeri(msp, o, yer, kaydir, h, ust)
+    if P.get("kesit"):
+        try:
+            ky0 = kesit_yeri(yer, L, W, T, g, gorunusler)
+            kg, _ky, kust, konum = kesit_ciz(msp, s, kb, ky0, h,
+                                             P.get("gizli", True), o=o)
+            ust[KESIT_AD] = kust
+            sag = max(sag, ky0[0] + kg)
+            kesit_isareti(msp, o, yer, kaydir, 1, konum, h, L, W, T)
+        except Exception as ex:
+            print(f"    kesit çizilemedi: {ex}"[:100])
     sol = min(x for x, _y in yer.values()) - 5.0 * h
     # Başlık bloğu: çizilen her şeyin üstünde, en sol görünüşle aynı hizada.
     # İçerik yalnız parça kimliği ve genel ölçüler; delik/radüs ayrıntısı
@@ -662,7 +905,8 @@ def dxf_komponent(s, o, k, yol, P):
         (f"adet: {k['adet']}", 1.1 * h),
         (f"BOY x EN x KALINLIK : {o['boy_mm']} x {o['en_mm']} x {o['kalinlik_mm']} mm", 1.1 * h),
         (f"hacim {o['hacim_mm3']} mm3   kutle {o['kutle_kg']} kg   yuzey {o['yuzey_mm2']} mm2", 1.1 * h),
-        (f"malzeme: {k.get('malzeme_ad', '-')}   yogunluk {k.get('yogunluk_g_cm3', '-')} g/cm3", 1.1 * h),
+        (f"malzeme: {k.get('malzeme_ad', '-')}   yogunluk {k.get('yogunluk_g_cm3', '-')} g/cm3"
+         + (f"   [{k['malzeme_kaynak']}]" if k.get("malzeme_kaynak") else ""), 1.1 * h),
     ]
     tepe = y0 + len(satir) * sat_h
     _tablo(msp, satir, sol, tepe, h, sat_h)
@@ -688,7 +932,7 @@ def dxf_komponent(s, o, k, yol, P):
 
 
 def dxf_montaj(katilar, yol, ad, P, bom=None):
-    """Montaj resmi: ÖN / SAĞ / SOL / ÜST gabari görünüşleri + BOM tablosu."""
+    """Montaj resmi: seçili gabari görünüşleri + BOM tablosu."""
     b = Bnd_Box()
     for sh in katilar:
         BRepBndLib.Add_s(sh, b)
@@ -699,13 +943,15 @@ def dxf_montaj(katilar, yol, ad, P, bom=None):
     doc = dxf_kur(); msp = doc.modelspace()
     h = min(40.0, max(3.0, max(L, W, H) / 45.0))
     olcu_stili(doc, h)
+    gorunusler = gorunus_sec(P.get("gorunusler"))
     g = max(L, W, H) * 0.08 + 10 * h
-    yer = gorunus_yerlesimi(L, W, H, g)
+    yer = gorunus_yerlesimi(L, W, H, g, gorunusler)
     ust = {}
-    for gad, (goz, xref) in GORUNUS.items():
+    for gad in gorunusler:
+        goz, xref = GORUNUS[gad]
         kenar = hlr(s, goz, xref, gizli=False)       # montajda gizli çizgi kapalı
         ox, oy = yer[gad]
-        G, Y = gorunus_ciz(msp, kenar, ox, oy, gad, h=h, olcu2=True)
+        G, Y, _dx, _dy = gorunus_ciz(msp, kenar, ox, oy, gad, h=h, olcu2=True)
         ust[gad] = oy + Y + 2.2 * h
     sol = min(x for x, _y in yer.values()) - 5.0 * h
     sag = max(x + gorunus_olcusu(gd, L, W, H)[0] for gd, (x, _y) in yer.items())
@@ -751,17 +997,23 @@ def bom_satirlari(bom, h, en_cok=40):
 # ---------------------------------------------------------------- komponentleme
 def komponentle(kayit, P):
     """Aynı parçanın kopyalarını tek komponentte toplar (ad + hacim + gabari)."""
-    grup = defaultdict(list)
-    for i, (ad, sh) in enumerate(kayit):
+    grup, mal = defaultdict(list), {}
+    for i, r in enumerate(kayit):
+        ad, sh = r[0], r[1]
         v = hacim(sh)
         k = kutu(sh)
         olc = tuple(sorted(round(t, 1) for t in (k[3] - k[0], k[4] - k[1], k[5] - k[2])))
-        grup[(_ad_sade(ad), round(v, 1), olc)].append(i)
+        an = (_ad_sade(ad), round(v, 1), olc)
+        grup[an].append(i)
+        if len(r) > 2 and r[2] and an not in mal:
+            mal[an] = r[2]              # STEP'te tanımlı malzeme
     out = []
-    for (ad, v, olc), idx in sorted(grup.items(), key=lambda t: -t[0][1] * len(t[1])):
+    for an, idx in sorted(grup.items(), key=lambda t: -t[0][1] * len(t[1])):
+        ad, v, _olc = an
         sinif, tip = sinifla(ad)
         out.append({"ad": ad, "kod": kod_cikar(ad), "adet": len(idx), "indeks": idx,
-                    "hacim_mm3": v, "sinif": sinif, "tip": tip})
+                    "hacim_mm3": v, "sinif": sinif, "tip": tip,
+                    "malzeme_data": mal.get(an)})
     return out
 
 
@@ -816,9 +1068,12 @@ def malzeme_sor(komp):
     return esl, VARSAYILAN_MALZEME
 
 
-def malzeme_ata(k, esl, genel):
-    """Bir komponentin malzemesi: eşleme dosyası > genel seçim > varsayılan."""
-    m = None
+def malzeme_ata(k, esl, genel, data_oncelik=True):
+    """Bir komponentin malzemesi ve nereden geldiği.
+
+    Sıra: eşleme dosyası/kullanıcı seçimi > data'da tanımlı malzeme > genel.
+    Data'da (STEP malzeme alanı ya da parça adı) malzeme okunabiliyorsa
+    kullanıcıya sorulmasına gerek kalmaz."""
     if esl:
         m = malzeme_coz(esl.get(_tr_sade(k["kod"]), "") or "")
         if not m:
@@ -826,9 +1081,159 @@ def malzeme_ata(k, esl, genel):
                 if kod and (kod in _tr_sade(k["kod"]) or kod in _tr_sade(k["ad"])):
                     m = malzeme_coz(mal)
                     break
-    return m or genel
+        if m:
+            return m, "secim"
+    if data_oncelik:
+        m = malzeme_tahmin(k.get("malzeme_data"), k.get("ad"))
+        if m:
+            return m, "data"
+    return genel, "genel"
 
 
+# ---------------------------------------------------------------- iş akışı
+def step_komponentleri(step, P, log=print):
+    """STEP'i okur, kopyaları birleştirip komponent listesini döndürür."""
+    kayit = E.step_oku(step, malzeme=True)
+    log(f"{os.path.basename(step)}: {len(kayit)} katı okundu")
+    komp = komponentle(kayit, P)
+    sayim = Counter(k["sinif"] for k in komp)
+    log(f"{len(komp)} komponent  (" + ", ".join(f"{a}: {b}" for a, b in sayim.items()) + ")")
+    return kayit, komp
+
+
+def ornek_sec(komp, en_az_hacim=0.0):
+    """Örnek resim için en zengin parçayı seçer: en çok çeşit delik + radüs
+    olan, yani her özellikten birden fazla örnek taşıyan parça."""
+    aday = [k for k in komp if k["sinif"] == "parca" and k["hacim_mm3"] >= en_az_hacim]
+    return aday[0] if aday else None
+
+
+def zip_yap(on, ad="cizimler.zip", desen=(".dxf",)):
+    """Üretilen çizimleri tek dosyada toplar."""
+    import zipfile
+    yol = os.path.join(on, ad)
+    with zipfile.ZipFile(yol, "w", zipfile.ZIP_DEFLATED) as z:
+        for d in sorted(os.listdir(on)):
+            if d == ad:
+                continue
+            if d.lower().endswith(tuple(desen)) or d in (
+                    "BOM.csv", "BOM.md", "olculer.csv", "olculer.json", "rapor.md"):
+                z.write(os.path.join(on, d), d)
+        n = len(z.namelist())
+    return yol, n
+
+
+def calistir(step, on, kayit, komp, P, asama=(1, 2, 3), esl=None,
+             genel=VARSAYILAN_MALZEME, yogunluk=0.0, en_az_hacim=0.0,
+             tek=None, en_cok=0, poz_harita=None, tablo_yok=False,
+             log=print, ilerleme=None, iptal=None):
+    """Üç aşamalı iş akışını yürütür. GUI ve komut satırı aynı yolu kullanır.
+
+    asama    : 1 BOM, 2 detay resmi, 3 montaj resmi
+    esl      : kod -> malzeme eşlemesi (parça bazlı)
+    genel    : eşlemede olmayanlar için malzeme
+    ilerleme : ilerleme(yapilan, toplam) geri çağrısı
+    iptal    : True döndürürse iş bırakılır
+    """
+    # Eşleme anahtarları sadeleştirilir: "01.050.000.01" ile "01.050.000.01 "
+    # ya da büyük/küçük harf farkı eşleşmeyi bozmasın.
+    asama = set(asama)
+    esl = {_tr_sade(a): b for a, b in (esl or {}).items() if b}
+    os.makedirs(on, exist_ok=True)
+    dur = (lambda: bool(iptal and iptal()))
+
+    cizilecek = [k for k in komp if k["sinif"] == "parca"
+                 and k["hacim_mm3"] >= en_az_hacim]
+    if tek:
+        t = tek.lower()
+        cizilecek = [k for k in cizilecek if t in k["kod"].lower() or t in k["ad"].lower()]
+    if en_cok:
+        cizilecek = cizilecek[:en_cok]
+    ciz_id = {id(k) for k in cizilecek}
+    toplam = len(komp) + (1 if 3 in asama else 0)
+
+    satirlar, poz = [], 0
+    for sira, k in enumerate(komp, 1):
+        if dur():
+            log("! iptal edildi"); break
+        poz += 1
+        gercek_poz = (poz_harita or {}).get(k["kod"], poz)
+        sat = {"poz": gercek_poz, "kod": k["kod"], "ad": k["ad"], "adet": k["adet"],
+               "sinif": k["sinif"], "tip": k["tip"], "dxf": "",
+               "hacim_mm3": k["hacim_mm3"], "olcu": ""}
+        if k["sinif"] in ("standart", "kaynak"):
+            # Standart eleman ve kaynak dikişi için çizim yok; kod + adet yeter.
+            if k["sinif"] == "kaynak":
+                poz -= 1; sat["poz"] = ""
+            satirlar.append(sat)
+            if ilerleme:
+                ilerleme(sira, toplam)
+            continue
+        mal, kaynak = malzeme_ata(k, esl, genel)
+        yog = yogunluk if yogunluk else yogunluk_kg_mm3(mal)
+        ana = kayit[k["indeks"][0]][1]
+        s2, o = komponent_olcu(ana, dict(P, yogunluk=yog))
+        sat.update({q: o[q] for q in ("boy_mm", "en_mm", "kalinlik_mm", "hacim_mm3",
+                                      "kutle_kg", "yuzey_mm2", "sac_kalinlik_mm",
+                                      "delik_adedi", "radus_adedi")})
+        sat["delikler"], sat["radusler"] = o["delikler"], o["radusler"]
+        sat["dis_capler"] = o["dis_capler"]
+        sat["malzeme"] = mal
+        sat["malzeme_ad"] = MALZEME[mal][0]
+        sat["yogunluk_g_cm3"] = round(yog * 1e6, 3)
+        sat["malzeme_kaynak"] = {"data": "data'dan", "secim": "secim",
+                                 "genel": "varsayilan"}[kaynak]
+        sat["olcu"] = f"{o['boy_mm']}x{o['en_mm']}x{o['kalinlik_mm']}"
+        sat["kg_adet"] = o["kutle_kg"]
+        sat["toplam_kg"] = round(o["kutle_kg"] * k["adet"], 4)
+        if 2 in asama and id(k) in ciz_id:
+            dosya = (f"P{gercek_poz:02d}_"
+                     + re.sub(r"[^\w\-]+", "_", k["kod"] or k["ad"])[:34] + ".dxf")
+            try:
+                dxf_komponent(s2, o, sat, os.path.join(on, dosya), P)
+                sat["dxf"] = dosya
+                log(f"  {dosya}  {o['boy_mm']}x{o['en_mm']}x{o['kalinlik_mm']} mm, "
+                    f"{o['delik_adedi']} delik, {sat['malzeme_ad'].split(' (')[0]}, "
+                    f"{o['kutle_kg']} kg")
+            except Exception as ex:
+                sat["dxf"] = f"HATA: {ex}"[:80]
+                log(f"  {dosya}: HATA {ex}"[:110])
+        satirlar.append(sat)
+        if ilerleme:
+            ilerleme(sira, toplam)
+
+    bom = [r for r in satirlar if r["sinif"] != "kaynak"]
+    if tablo_yok:                      # örnek resim turu: tabloları bozma
+        return {"klasor": on, "satirlar": satirlar, "bom": bom, "montaj": None}
+    montaj = None
+    if 3 in asama and not dur():
+        log("  montaj resmi hesaplanıyor (büyük montajda sürebilir)...")
+        montaj = dxf_montaj([r[1] for r in kayit], os.path.join(on, "00_MONTAJ.dxf"),
+                            os.path.basename(step), P, bom=bom)
+        log(f"  00_MONTAJ.dxf   gabari {montaj['boy_mm']} x {montaj['en_mm']} x "
+            f"{montaj['yukseklik_mm']} mm")
+        if ilerleme:
+            ilerleme(toplam, toplam)
+
+    if 1 in asama:
+        bom_yaz(on, bom, satirlar)
+    alan = ["poz", "kod", "ad", "adet", "sinif", "tip", "malzeme_ad", "yogunluk_g_cm3",
+            "boy_mm", "en_mm", "kalinlik_mm", "sac_kalinlik_mm", "hacim_mm3",
+            "kutle_kg", "toplam_kg", "yuzey_mm2", "delik_adedi", "radus_adedi", "dxf"]
+    with open(os.path.join(on, "olculer.csv"), "w", newline="", encoding="utf-8-sig") as f:
+        w = csv.DictWriter(f, fieldnames=alan, extrasaction="ignore", delimiter=";")
+        w.writeheader()
+        for r in satirlar:
+            w.writerow(r)
+    json.dump({"step": step, "montaj": montaj, "komponent": satirlar},
+              open(os.path.join(on, "olculer.json"), "w", encoding="utf-8"),
+              ensure_ascii=False, indent=1)
+    rapor_yaz(on, step, kayit, komp, satirlar, montaj)
+    log("  BOM.csv, BOM.md, olculer.csv, olculer.json, rapor.md")
+    return {"klasor": on, "satirlar": satirlar, "bom": bom, "montaj": montaj}
+
+
+# ---------------------------------------------------------------- CLI
 # ---------------------------------------------------------------- CLI
 # ---------------------------------------------------------------- CLI
 def main():
@@ -861,21 +1266,26 @@ def main():
     ap.add_argument("--montaj-yok", action="store_true", help="montaj çizimini atla (= aşama 3 yok)")
     ap.add_argument("--en-cok", type=int, default=0, help="en çok bu kadar komponent çiz")
     ap.add_argument("--tek", help="yalnız bu kodu/no'yu çiz (ör. --tek 01.050.000.01)")
+    ap.add_argument("--gorunus", default=",".join(VARSAYILAN_GORUNUS),
+                    help="çizilecek görünüşler, en çok 4: ON,ARKA,SAG,SOL,UST,ALT")
+    ap.add_argument("--kesit", action="store_true",
+                    help="parçanın ortasından A-A tam kesit görünüşü ekle")
+    ap.add_argument("--zip", action="store_true", help="çıktıları cizimler.zip'te topla")
     a = ap.parse_args()
     if a.malzeme_liste:
         malzeme_listele(); return
     asama = {int(t) for t in re.findall(r"[123]", a.asama)} or {1, 2, 3}
     if a.montaj_yok:
         asama.discard(3)
-    P = {"gizli": a.gizli, "en_az_delik": a.en_az_delik, "yogunluk": RHO}
+    gor = gorunus_sec([t.strip().upper() for t in a.gorunus.replace(";", ",").split(",")])
+    P = {"gizli": a.gizli, "en_az_delik": a.en_az_delik, "yogunluk": RHO,
+         "gorunusler": gor, "kesit": bool(a.kesit)}
+    print("görünüşler: " + ", ".join(GORUNUS_AD[g] for g in gor)
+          + (" + " + KESIT_AD if a.kesit else ""))
 
     t0 = time.time()
-    kayit = E.step_oku(a.step)
-    print(f"{a.step}: {len(kayit)} katı okundu  [{time.time()-t0:.0f}s]")
-    komp = komponentle(kayit, P)
-    print(f"{len(komp)} komponent (kopyalar birleştirildi)")
-    sayim = Counter(k["sinif"] for k in komp)
-    print("  " + ", ".join(f"{k}: {v}" for k, v in sayim.items()))
+    kayit, komp = step_komponentleri(a.step, P,
+                                     log=lambda t: print(f"{t}  [{time.time()-t0:.0f}s]"))
     if a.liste:
         print(f"\n{'kod':<24s}{'adet':>5s}{'hacim mm3':>14s}  sınıf      ad")
         for k in komp:
@@ -904,87 +1314,15 @@ def main():
         sab = malzeme_sablonu(komp, os.path.join(on, "malzeme.csv"))
         print(f"! malzeme belirtilmedi -> hepsi '{VARSAYILAN_MALZEME}' "
               f"({MALZEME[VARSAYILAN_MALZEME][1]} g/cm3) varsayıldı.")
-        print(f"  --malzeme <ad> | --malzeme-dosya <csv> | --malzeme-sor ile değiştirin.")
+        print("  --malzeme <ad> | --malzeme-dosya <csv> | --malzeme-sor ile değiştirin.")
         print(f"  Şablon yazıldı: {sab}  (doldurup --malzeme-dosya ile verin)")
 
-    # ---- AŞAMA 1: komponent detaylandırma + BOM
-    cizilecek = [k for k in komp if k["sinif"] == "parca"
-                 and k["hacim_mm3"] >= a.en_az_hacim]
-    if a.tek:
-        t = a.tek.lower()
-        cizilecek = [k for k in cizilecek if t in k["kod"].lower() or t in k["ad"].lower()]
-    if a.en_cok:
-        cizilecek = cizilecek[:a.en_cok]
-    ciz_id = {id(k) for k in cizilecek}
-
-    satirlar, poz = [], 0
-    for k in komp:
-        poz += 1
-        sat = {"poz": poz, "kod": k["kod"], "ad": k["ad"], "adet": k["adet"],
-               "sinif": k["sinif"], "tip": k["tip"], "dxf": "",
-               "hacim_mm3": k["hacim_mm3"], "olcu": ""}
-        if k["sinif"] in ("standart", "kaynak"):
-            # Standart eleman ve kaynak dikişi için çizim yok; kod + adet yeter.
-            if k["sinif"] == "kaynak":
-                poz -= 1; sat["poz"] = ""
-            satirlar.append(sat)
-            continue
-        mal = malzeme_ata(k, esl, genel)
-        yog = a.yogunluk if a.yogunluk else yogunluk_kg_mm3(mal)
-        ana = kayit[k["indeks"][0]][1]
-        s2, o = komponent_olcu(ana, dict(P, yogunluk=yog))
-        sat.update({q: o[q] for q in ("boy_mm", "en_mm", "kalinlik_mm", "hacim_mm3",
-                                      "kutle_kg", "yuzey_mm2", "sac_kalinlik_mm",
-                                      "delik_adedi", "radus_adedi")})
-        sat["delikler"], sat["radusler"] = o["delikler"], o["radusler"]
-        sat["dis_capler"] = o["dis_capler"]
-        sat["malzeme"] = mal
-        sat["malzeme_ad"] = MALZEME[mal][0]
-        sat["yogunluk_g_cm3"] = round(yog * 1e6, 3)
-        sat["olcu"] = f"{o['boy_mm']}x{o['en_mm']}x{o['kalinlik_mm']}"
-        sat["kg_adet"] = o["kutle_kg"]
-        sat["toplam_kg"] = round(o["kutle_kg"] * k["adet"], 4)
-        # ---- AŞAMA 2: detay resmi
-        if 2 in asama and id(k) in ciz_id:
-            dosya = f"P{poz:02d}_" + re.sub(r"[^\w\-]+", "_", k["kod"] or k["ad"])[:34] + ".dxf"
-            try:
-                dxf_komponent(s2, o, sat, os.path.join(on, dosya), P)
-                sat["dxf"] = dosya
-                print(f"  {dosya}  {o['boy_mm']}x{o['en_mm']}x{o['kalinlik_mm']} mm, "
-                      f"{o['delik_adedi']} delik, {sat['malzeme_ad'].split(' (')[0]}, "
-                      f"{o['kutle_kg']} kg  [{time.time()-t0:.0f}s]")
-            except Exception as ex:
-                sat["dxf"] = f"HATA: {ex}"[:80]
-                print(f"  {dosya}: HATA {ex}"[:110])
-        satirlar.append(sat)
-
-    bom = [r for r in satirlar if r["sinif"] != "kaynak"]
-
-    # ---- AŞAMA 3: montaj resmi
-    montaj = None
-    if 3 in asama:
-        katilar = [sh for _, sh in kayit]
-        montaj = dxf_montaj(katilar, os.path.join(on, "00_MONTAJ.dxf"),
-                            os.path.basename(a.step), P, bom=bom)
-        print(f"  00_MONTAJ.dxf   gabari {montaj['boy_mm']} x {montaj['en_mm']} x "
-              f"{montaj['yukseklik_mm']} mm  [{time.time()-t0:.0f}s]")
-
-    # ---- tablolar
-    if 1 in asama:
-        bom_yaz(on, bom, satirlar)
-    alan = ["poz", "kod", "ad", "adet", "sinif", "tip", "malzeme_ad", "yogunluk_g_cm3",
-            "boy_mm", "en_mm", "kalinlik_mm", "sac_kalinlik_mm", "hacim_mm3",
-            "kutle_kg", "toplam_kg", "yuzey_mm2", "delik_adedi", "radus_adedi", "dxf"]
-    with open(os.path.join(on, "olculer.csv"), "w", newline="", encoding="utf-8-sig") as f:
-        w = csv.DictWriter(f, fieldnames=alan, extrasaction="ignore", delimiter=";")
-        w.writeheader()
-        for s3 in satirlar:
-            w.writerow(s3)
-    json.dump({"step": a.step, "montaj": montaj, "komponent": satirlar},
-              open(os.path.join(on, "olculer.json"), "w", encoding="utf-8"),
-              ensure_ascii=False, indent=1)
-    rapor_yaz(on, a.step, kayit, komp, satirlar, montaj)
-    print("  BOM.csv, BOM.md, olculer.csv, olculer.json, rapor.md")
+    calistir(a.step, on, kayit, komp, P, asama=asama, esl=esl, genel=genel,
+             yogunluk=a.yogunluk, en_az_hacim=a.en_az_hacim, tek=a.tek,
+             en_cok=a.en_cok, log=lambda t: print(f"{t}  [{time.time()-t0:.0f}s]"))
+    if a.zip:
+        z, n = zip_yap(on)
+        print(f"  {os.path.basename(z)}  ({n} dosya)")
     print(f"bitti [{time.time()-t0:.0f}s]  ->  {on}/")
 
 

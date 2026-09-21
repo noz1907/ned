@@ -240,6 +240,29 @@ listesi (BOM), komponent detay resimleri ve montaj resmi üretir.
 | 2 | detay parçaların çizilmesi ve ölçülendirilmesi | `P01_<kod>.dxf` … |
 | 3 | montaj resmi ve ölçülendirilmesi | `00_MONTAJ.dxf` (BOM tablosu içinde) |
 
+## Arayüz (komut satırı istemeyenler için)
+
+```
+python pf3_gui.py
+```
+
+Pencere adım adım ilerler, bir adım bitmeden sonraki sekme açılmaz:
+
+| adım | ne sorar / ne yapar |
+|------|---------------------|
+| **1 VERİ** | incelenecek STEP dosyası + kaydedilecek klasör → İNCELE |
+| **2 BOM ve MALZEME** | komponentleri listeler; malzemesi **data'da tanımlı** olanı oradan alır (KAYNAK sütunu `data'dan` yazar), kalanlara parça bazlı ya da hepsine birden malzeme seçtirir → BOM ÇIKART |
+| **3 GÖRÜNÜŞ ve KESİT** | ÖN / ARKA / SAĞ / SOL / ÜST / ALT arasından seçim (**en çok 4**; beşinciyi işaretleyince en eskisi kapanır), kesit **E/H**, gizli çizgi, montaj resmi, örnek parça → ÖRNEK DXF ÜRET |
+| **4 ÖRNEK ONAY** | üretilen örnek resim pencerede gösterilir; beğenmezseniz *AYARA DÖN*, beğenirseniz **ONAYLA** |
+| **5 TÜM ÇİZİMLER** | onay sonrası bütün DXF'ler üretilir, listelenir, **ZIP OLUŞTUR** ile tek pakette toplanır |
+
+Ağır işler arka planda çalışır: pencere kilitlenmez, günlük akar, ilerleme
+çubuğu dolar, **İptal** çalışan adım bitince işi bırakır. Listede/çizim
+listesinde bir satıra çift tıklayınca o resim önizlenir. Arayüz kendi
+hesabını yapmaz; `pf3_olcu.py` ile aynı yolu (`calistir`) çağırır.
+
+## Komut satırı
+
 ```
 python pf3_olcu.py parca.stp --liste                  # komponent listesi
 python pf3_olcu.py parca.stp -o cikti                 # 1 + 2 + 3
@@ -248,12 +271,18 @@ python pf3_olcu.py parca.stp -o cikti --asama 2       # yalnız detay resimleri
 python pf3_olcu.py parca.stp -o cikti --asama 3       # yalnız montaj resmi
 python pf3_olcu.py parca.stp -o cikti --tek 01.050.000.01 --asama 2
                                                       # tek parçanın resmi
+python pf3_olcu.py parca.stp -o cikti --gorunus ON,SAG,UST --kesit --zip
+                                                      # görünüş seçimi + kesit + zip
 ```
 
 ## Malzeme — kütle neye göre hesaplanıyor
 
-Kütle `hacim x yoğunluk`tur; yoğunluk **malzemeye** bağlıdır ve program bunu
-tahmin etmez, **sorar**. Üç yol var:
+Kütle `hacim x yoğunluk`tur; yoğunluk **malzemeye** bağlıdır.
+
+Program önce **data'ya bakar**: STEP'te XCAF malzeme alanı tanımlıysa ya da
+parça adı bir malzeme söylüyorsa (`1.4301`, `S235`, `AlMg3`, `POM`, `STEEL`…)
+onu kullanır ve sormaz. Resimde ve BOM'da malzemenin nereden geldiği yazar:
+`data'dan`, `secim`, `varsayilan`. Data'da yoksa sorar; üç yol var:
 
 ```
 --malzeme aluminyum          hepsine tek malzeme
@@ -294,11 +323,18 @@ bölünmüş olsa da eksen konumu aynı olduğu için tek delik sayılır.
 Çizimde her delik grubunun çapı `124x Ø6.8`, her radüs grubu `4x R3`
 biçiminde ölçülendirilir; delik merkezlerine merkez çizgisi konur.
 
-## Görünüşler
+## Görünüşler ve kesit
 
-Dört görünüş çizilir: **ÖN (referans), SAĞ, SOL, ÜST** — 1. açı (Avrupa/ISO-E)
-yerleşimiyle: sağdan bakılan görünüş ÖN'ün soluna, soldan bakılan sağına,
-üstten bakılan altına konur. Görünüş adı, görünüşün **sol üst köşesinde**,
+Altı görünüş tanımlı — **ÖN (referans), ARKA, SAĞ, SOL, ÜST, ALT** — çizime
+girecek olanlar seçilir, şimdilik **en çok 4 tane** (varsayılan ÖN + SAĞ + SOL
++ ÜST). Yerleşim **1. açı (Avrupa/ISO-E)**: sağdan bakılan görünüş ÖN'ün
+soluna, soldan bakılan sağına, arka en sağa, üstten bakılan altına, alttan
+bakılan üstüne konur.
+
+`--kesit` (ya da arayüzde *kesit E*) bir **A-A tam kesit** görünüşü ekler.
+Kesme düzlemi rastgele ortadan değil, **en çok deliği açan** yerden geçer;
+kesilen malzeme ANSI31 ile taranır ve kesme çizgisi, düzlemin çizgi olarak
+göründüğü görünüşe **A—A** olarak işaretlenir. Görünüş adı, görünüşün **sol üst köşesinde**,
 parçanın ve ölçülerinin dışında durur; hiçbir şekil veya ölçünün üstüne
 binmez.
 
@@ -342,5 +378,6 @@ detay resimlerinin başlığında poz numarası ile tanım yer alır.
 
 ## Sonraki adımlar (not alındı, henüz yapılmadı)
 
-1. **Kesit görünüş**: iki delik veya iki form görünüşte üst üste binip anlamsız
-   hale geldiğinde o görünüş yerine kesit almak.
+1. **Otomatik kesit kararı**: şu an kesit isteğe bağlı (E/H). İki delik veya
+   iki form görünüşte üst üste binip anlamsızlaştığında programın bunu kendi
+   fark edip o görünüş yerine kesit koyması.
