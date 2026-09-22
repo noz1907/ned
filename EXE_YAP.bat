@@ -11,14 +11,16 @@ REM ==========================================================================
 setlocal
 cd /d "%~dp0"
 
-if exist ".venv\Scripts\python.exe" goto DEVAM
-echo.
-echo  HATA: once PiFikstur_baslat.bat calistirilip .venv kurulmali.
-echo.
-pause
-exit /b 1
+if not exist ".venv\Scripts\python.exe" goto ORTAM_YOK
 
-:DEVAM
+REM Ortam gercekten calisiyor mu? .venv'i kuran Python kaldirilmis ya da
+REM tasinmis olabilir; o zaman python.exe "No Python at ..." deyip cikar.
+".venv\Scripts\python.exe" -c "import sys" >nul 2>&1
+if errorlevel 1 goto ORTAM_BOZUK
+
+".venv\Scripts\python.exe" -c "import OCP, ezdxf" >nul 2>&1
+if errorlevel 1 goto PAKET_EKSIK
+
 echo.
 echo  PyInstaller kuruluyor...
 ".venv\Scripts\python.exe" -m pip install --no-cache-dir pyinstaller
@@ -37,9 +39,40 @@ echo.
 pause
 exit /b 0
 
+:ORTAM_YOK
+echo.
+echo  HATA: .venv ortami yok.
+echo  Once PiFikstur_baslat.bat dosyasini calistirin.
+echo.
+pause
+exit /b 1
+
+:ORTAM_BOZUK
+echo.
+echo  HATA: .venv ortami var ama calismiyor.
+echo  "No Python at ..." mesaji goruyorsaniz sebebi sudur: bu ortami kuran
+echo  Python surumu kaldirilmis, guncellenmis ya da baska klasore tasinmis.
+echo  Sanal ortam eski yolu hatirladigi icin acilamiyor.
+echo.
+echo  Cozum: .venv klasorunu silip PiFikstur_baslat.bat dosyasini calistirin.
+echo  Yeni baslatici bunu kendisi fark edip ortami yeniler.
+echo.
+pause
+exit /b 1
+
+:PAKET_EKSIK
+echo.
+echo  HATA: .venv icinde gerekli paketler yok.
+echo  Once PiFikstur_baslat.bat dosyasini calistirip kurulumu tamamlayin.
+echo.
+pause
+exit /b 1
+
 :OLMADI
 echo.
 echo  HATA: derleme tamamlanamadi. Yukaridaki mesaja bakin.
+echo  Disk doluysa "No space left on device" ya da "Errno 28" yazar;
+echo  derleme icin yaklasik 2 GB bos alan gerekir.
 echo.
 pause
 exit /b 1

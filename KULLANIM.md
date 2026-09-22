@@ -98,6 +98,27 @@ python pf3_olcu.py --malzeme-liste
 
 Malzeme tablosu ekrana gelirse her şey hazır demektir.
 
+### "No Python at '...\Python311\python.exe'"
+
+`.venv` klasörü duruyor ama içindeki Python açılmıyor. Sanal ortam, kendisini
+kuran Python'un **yolunu hatırlar** (`\.venv\pyvenv.cfg` içindeki `home`
+satırı); o Python kaldırılmış, güncellenmiş ya da başka bir klasöre taşınmışsa
+ortam ölür.
+
+Çözüm: **`.venv` klasörünü silin**, `PiFikstur_baslat.bat`'ı çalıştırın.
+Güncel başlatıcı bu durumu kendisi fark edip ortamı yeniler — ölçüt olarak
+`.venv\Scripts\python.exe` dosyasının varlığına değil, gerçekten
+**çalışıp çalışmadığına** bakar.
+
+Python'un kurulu olduğunu doğrulamak için:
+
+```
+py -3 -V
+```
+
+Sürüm yazmıyorsa Python yok demektir; <https://www.python.org/downloads/>
+adresinden kurun, kurarken **"Add Python to PATH"** işaretli olsun.
+
 ### Ana Python'a kurduysanız ve diğer paketleriniz bozulduysa
 
 `pip install -r requirements.txt` komutunu doğrudan ana Python'unuzda

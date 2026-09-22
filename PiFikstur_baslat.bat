@@ -12,31 +12,47 @@ REM  Diskiniz darsa: PiFikstur_baslat_KUCUK.bat - yaklasik 800 MB.
 REM ==========================================================================
 setlocal
 cd /d "%~dp0"
+set ISTEK=requirements.txt
+set ETIKET=Yaklasik 150 MB indirilecek, 1,3 GB bos disk alani gerekiyor.
 
-REM Ortam var mi ve paketleri tam mi? Yarim kalmis kurulumda da tamamlar.
-if not exist ".venv\Scripts\python.exe" goto KUR
+REM --- 1) Ortam var mi?
+if not exist ".venv\Scripts\python.exe" goto YENI_ORTAM
+
+REM --- 2) Ortam CALISIYOR mu? Python kaldirilmis/tasinmis olabilir; o zaman
+REM        .venv icindeki python.exe "No Python at ..." deyip cikar.
+".venv\Scripts\python.exe" -c "import sys" >nul 2>&1
+if errorlevel 1 goto BOZUK_ORTAM
+
+REM --- 3) Paketler tam mi?
 ".venv\Scripts\python.exe" -c "import OCP, ezdxf" >nul 2>&1
-if errorlevel 1 goto KUR
+if errorlevel 1 goto PAKETLER
 goto CALISTIR
 
-:KUR
+:BOZUK_ORTAM
+echo.
+echo  Onceki .venv ortami calismiyor.
+echo  Sebebi genelde sudur: ortami kuran Python surumu kaldirilmis,
+echo  guncellenmis ya da baska bir klasore tasinmis. Ortam yenileniyor...
+echo.
+rmdir /s /q .venv
+
+:YENI_ORTAM
 echo.
 echo  Ayri Python ortami kuruluyor.
-echo  Yaklasik 150 MB indirilecek, 1,3 GB bos disk alani gerekiyor.
+echo  %ETIKET%
 echo  Birkac dakika surebilir...
 echo.
-
-if exist ".venv\Scripts\python.exe" goto PAKETLER
 py -3 -m venv .venv
 if not exist ".venv\Scripts\python.exe" python -m venv .venv
 if not exist ".venv\Scripts\python.exe" goto YOK_PYTHON
+".venv\Scripts\python.exe" -c "import sys" >nul 2>&1
+if errorlevel 1 goto YOK_PYTHON
 
 :PAKETLER
 REM --no-cache-dir: pip indirdigini bir de onbellekte tutmasin,
 REM ayni dosya iki kere yer kaplamasin.
-".venv\Scripts\python.exe" -m pip install --no-cache-dir -r requirements.txt
+".venv\Scripts\python.exe" -m pip install --no-cache-dir -r %ISTEK%
 if errorlevel 1 goto KURULMADI
-
 echo.
 echo  Kurulum tamam.
 echo.
@@ -44,9 +60,12 @@ goto CALISTIR
 
 :YOK_PYTHON
 echo.
-echo  HATA: Python bulunamadi.
+echo  HATA: calisan bir Python bulunamadi.
 echo  https://www.python.org/downloads/ adresinden Python 3.10+ kurun,
-echo  kurarken "Add Python to PATH" kutusunu isaretleyin.
+echo  kurarken "Add Python to PATH" kutusunu isaretleyin, sonra bu dosyayi
+echo  tekrar calistirin.
+echo.
+echo  Kurulu oldugunu dusunuyorsaniz su komutla dogrulayin:   py -3 -V
 echo.
 pause
 exit /b 1
