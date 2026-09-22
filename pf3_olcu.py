@@ -525,8 +525,11 @@ def hlr(sh, goz, xref, gizli=True):
 
 
 # Katman -> (renk, çizgi kalınlığı 1/100 mm)
-# Tüm katmanlar 0,10 mm çizgi kalınlığı (DXF birimi 1/100 mm).
-CIZGI_KAL = 10
+# DXF'te çizgi kalınlığı serbest bir sayı DEĞİL, sabit bir merdivendir:
+# 0.05, 0.09, 0.13, 0.15, 0.18, 0.20, 0.25, 0.30, 0.35, 0.40, 0.50 ...
+# "10" (0,10 mm) bu listede yok; yazılırsa en yakın değere, 0,13'e yuvarlanır.
+# İstenen 0,1 mm'ye en yakın geçerli değer 0,09 mm olduğu için 9 kullanılır.
+CIZGI_KAL = 9
 KATMAN = {
     "GORUNEN": (7, CIZGI_KAL),      # görünen kenar
     "GIZLI":   (8, CIZGI_KAL),      # görünmeyen kenar (kesik)
@@ -539,7 +542,14 @@ KATMAN = {
 
 
 def dxf_kur(doc=None):
-    doc = doc or ezdxf.new("R2010", setup=True)
+    # setup=False ÖNEMLİ: ezdxf'in hazır kurulumu metre/santimetre için
+    # tasarlanmış EZDXF, EZ_M_100_H25_CM gibi ölçü stilleri kurar ve
+    # bunlardan birini DOSYANIN AKTİF STİLİ yapar. O stillerde
+    # dimlfac = 100'dür; dosya AutoCAD'de açılıp YENİ bir ölçü çizildiğinde
+    # uzunluk 100 ile çarpılarak yazılır (45,80 mm -> "4580"). Bizim kendi
+    # ölçülerimiz ayrı stil kullandığı için doğruydu, ama kullanıcının
+    # sonradan çizdiği ölçüler bozuluyordu.
+    doc = doc or ezdxf.new("R2010", setup=False)
     doc.header["$LWDISPLAY"] = 1            # çizgi kalınlıkları ekranda görünsün
     doc.header["$MEASUREMENT"] = 1          # metrik
     # BIRIM: 1 çizim birimi = 1 mm. $INSUNITS yazılmazsa AutoCAD dosyayı
@@ -550,6 +560,11 @@ def dxf_kur(doc=None):
     doc.header["$INSUNITS"] = 4             # 4 = millimeters
     doc.header["$LUNITS"] = 2               # ondalık
     doc.header["$DIMLUNIT"] = 2
+    # Ölçü başlık değişkenleri birebir ölçek olsun: dosyada sonradan
+    # çizilen ölçüler de mm cinsinden doğru yazsın.
+    doc.header["$DIMLFAC"] = 1.0            # uzunluk çarpanı = 1
+    doc.header["$DIMSCALE"] = 1.0
+    doc.header["$DIMALTF"] = 1.0
     for kat, (renk, kal) in KATMAN.items():
         if kat not in doc.layers:
             doc.layers.add(kat, color=renk)
@@ -595,6 +610,17 @@ def olcu_stili(doc, h):
         st.dxf.dimclrt = 3
         st.dxf.dimclrd = 4
         st.dxf.dimclre = 4
+    except Exception:
+        pass
+    # Dosyanın AKTİF ölçü stili bu olsun: AutoCAD'de sonradan çizilen
+    # ölçüler de mm ve 1:1 çıksın.
+    try:
+        doc.header["$DIMSTYLE"] = OLCU_STILI
+        doc.header["$DIMTXT"] = h
+        doc.header["$DIMLFAC"] = 1.0
+        # Hazır "Standard" stili de birebir kalsın.
+        if "Standard" in doc.dimstyles:
+            doc.dimstyles.get("Standard").dxf.dimlfac = 1.0
     except Exception:
         pass
     return OLCU_STILI

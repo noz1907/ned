@@ -319,10 +319,30 @@ hangi CAD menüsünden STEP alınacağını söyler.
 
 ---
 
-## 2c. Ölçek ve birim — "30 yazıyor ama AutoCAD 3000 ölçüyor"
+## 2c. Ölçek ve birim
 
 Çizim **1:1**'dir ve **1 çizim birimi = 1 mm**'dir. Her detay resminin
 başlığında `olcek 1:1   birim: mm` satırı bunu söyler.
+
+### "Kendi çizdiğim ölçü ×100 yazıyor"
+
+Dosyadaki **aktif ölçü stili** bozuksa olur: o stilin `DIMLFAC` değeri 100
+ise AutoCAD ölçtüğü uzunluğu 100 ile çarpıp yazar — 45,80 mm'lik mesafeye
+`4580` yazar. Geometri doğrudur, yalnız yazı yanlıştır; başka dosyalarda
+görülmez çünkü onların aktif stili birebirdir.
+
+Eski sürümlerde bu vardı: DXF'i yazan kütüphane metre/santimetre için
+hazırlanmış `EZDXF`, `EZ_M_100_H25_CM` gibi stilleri kuruyor ve birini
+**dosyanın aktif stili** yapıyordu; o stillerde `dimlfac = 100`. Bizim
+ölçülerimiz ayrı stil kullandığı için doğru çıkıyordu, ama sizin sonradan
+çizdiğiniz ölçüler bozuluyordu. Artık o stiller hiç kurulmuyor; dosyada
+yalnız `Standard` ve `PF_MM` var, ikisinin de `dimlfac = 1`, aktif stil
+`PF_MM`, başlıkta `$DIMLFAC = 1`.
+
+Kontrol: AutoCAD'de `DIMSTYLE` komutu → aktif stil `PF_MM` olmalı;
+`DIMLFAC` yazıp Enter → **1** dönmeli.
+
+### "30 yazıyor ama AutoCAD 3000 ölçüyor"
 
 DXF dosyasına artık `$INSUNITS = 4` (millimeters) yazılıyor. Bu satır
 yokken AutoCAD dosyayı **birimsiz** sayar; başka bir çizime `INSERT` ya da

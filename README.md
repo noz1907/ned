@@ -312,10 +312,16 @@ kütlenin neye göre hesaplandığı resimden okunur.
 
 | katman | çizgi | kalınlık |
 |--------|-------|----------|
-| GORUNEN | düz | 0,10 mm |
-| GIZLI | kesik | 0,10 mm |
-| EKSEN | uzun-kısa | 0,10 mm |
-| OLCU / YAZI | düz | 0,10 mm |
+| GORUNEN | düz | 0,09 mm |
+| GIZLI | kesik | 0,09 mm |
+| EKSEN | uzun-kısa | 0,09 mm |
+| OLCU / YAZI | düz | 0,09 mm |
+
+> DXF'te çizgi kalınlığı serbest bir sayı değil, **sabit bir merdivendir**:
+> 0,05 · 0,09 · 0,13 · 0,15 · 0,18 · 0,20 · 0,25 · 0,30 · 0,35 · 0,50 …
+> **0,10 mm bu listede yoktur**; yazılırsa AutoCAD en yakın değere yuvarlar
+> (0,13). İstenen 0,1 mm'ye en yakın geçerli değer 0,09 mm olduğu için
+> katmanlar 0,09 mm'dir.
 
 Görünen kenarla tam üst üste düşen gizli kenar çizilmez (görünen kazanır),
 böylece görünüşler kesik çizgiyle dolmaz.
