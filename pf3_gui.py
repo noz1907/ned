@@ -23,6 +23,32 @@ import math, os, queue, sys, threading, time, traceback
 import tkinter as tk
 from tkinter import ttk, filedialog, messagebox
 
+# --------------------------------------------------------------- logolar
+# Logo dosyalari kaynaktan calisirken programin yanindaki logo/ klasorunde,
+# exe'den calisirken PyInstaller'in actigi gecici klasorde durur.
+LOGO_KLASOR = "logo"
+
+
+def kaynak(*ad):
+    """Program yanindaki bir dosyanin tam yolu (exe'den de calisir)."""
+    kok = getattr(sys, "_MEIPASS", None) or os.path.dirname(
+        os.path.abspath(__file__))
+    return os.path.join(kok, *ad)
+
+
+def logo_yukle(ad):
+    """logo/ klasorundeki PNG'yi tkinter goruntusune cevirir.
+
+    Dosya yoksa ya da Tk PNG okuyamiyorsa None doner: logo olmadan da
+    program calisir, sadece basliktaki resim gorunmez."""
+    try:
+        y = kaynak(LOGO_KLASOR, ad)
+        return tk.PhotoImage(file=y) if os.path.isfile(y) else None
+    except Exception:
+        return None
+
+
+
 BASLIK = "PiFikstür  –  3B modelden BOM ve teknik resim"
 
 EKSIK_PAKET = """'{paket}' paketi bu Python kurulumunda yok.
@@ -189,11 +215,13 @@ class Uygulama(ttk.Frame):
     def _kur(self):
         self.master.title(BASLIK)
         self.master.minsize(1100, 720)
+        self._pencere_ikonu()
         try:
             ttk.Style().configure("Bas.TButton", font=("Segoe UI", 10, "bold"))
             ttk.Style().configure("Baslik.TLabel", font=("Segoe UI", 12, "bold"))
         except Exception:
             pass
+        self._baslik_seridi()
         self.defter = ttk.Notebook(self)
         self.defter.pack(fill="both", expand=True)
         self.sayfa = []
@@ -216,6 +244,49 @@ class Uygulama(ttk.Frame):
         ttk.Label(self, textvariable=self.v_durum, relief="sunken",
                   anchor="w", padding=3).pack(fill="x", pady=(4, 0))
         self._adim_ac(0)
+
+    def _pencere_ikonu(self):
+        """Pencere ve gorev cubugu ikonu. Windows .ico ister, digerleri
+        PNG. Ikisi de olmazsa varsayilan ikonla devam edilir."""
+        try:
+            i = kaynak(LOGO_KLASOR, "pifikstur.ico")
+            if os.path.isfile(i):
+                self.master.iconbitmap(default=i)
+                return
+        except Exception:
+            pass
+        g = logo_yukle("pifikstur_64.png")
+        if g is not None:
+            self._ikon = g                     # referans tutulmazsa silinir
+            try:
+                self.master.iconphoto(True, g)
+            except Exception:
+                pass
+
+    def _baslik_seridi(self):
+        """Üstteki koyu şerit: solda PiVision logosu, sağda uygulama adı."""
+        ZEMIN, YAZI, SOLUK = "#0b2340", "#ffffff", "#8fb3d9"
+        s = tk.Frame(self, bg=ZEMIN, height=64)
+        s.pack(fill="x", side="top")
+        s.pack_propagate(False)
+        self._logo = logo_yukle("pivision_56.png")
+        if self._logo is not None:
+            tk.Label(s, image=self._logo, bg=ZEMIN, bd=0
+                     ).pack(side="left", padx=(14, 0), pady=4)
+        else:                                   # logo yoksa yazıyla
+            tk.Label(s, text="PiVision", bg=ZEMIN, fg=YAZI,
+                     font=("Segoe UI", 18, "bold")).pack(side="left", padx=14)
+        self._ikon_kucuk = logo_yukle("pifikstur_48.png")
+        if self._ikon_kucuk is not None:
+            tk.Label(s, image=self._ikon_kucuk, bg=ZEMIN, bd=0
+                     ).pack(side="right", padx=(0, 14), pady=8)
+        sag = tk.Frame(s, bg=ZEMIN)
+        sag.pack(side="right", padx=(0, 10))
+        tk.Label(sag, text="PiFikstür", bg=ZEMIN, fg=YAZI, bd=0,
+                 font=("Segoe UI", 15, "bold")).pack(anchor="e")
+        tk.Label(sag, text="3B modelden parça listesi ve teknik resim",
+                 bg=ZEMIN, fg=SOLUK, bd=0, font=("Segoe UI", 9)
+                 ).pack(anchor="e")
 
     def _adim_ac(self, i, gecis=True):
         self.defter.tab(i, state="normal")

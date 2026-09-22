@@ -33,7 +33,10 @@ a = Analysis(
     ["pf3_gui.py"],
     pathex=["."],
     binaries=ocp_bin + ezdxf_bin,
-    datas=ocp_data + ezdxf_data + collect_data_files("matplotlib"),
+    # logo/ klasoru pakete girsin: pencere ikonu ve baslik seridi oradan
+    # okunur. Exe'de sys._MEIPASS altinda ayni adla acilir.
+    datas=ocp_data + ezdxf_data + collect_data_files("matplotlib")
+          + [("logo/*", "logo")],
     hiddenimports=ocp_gizli + ezdxf_gizli + [
         "pf3_olcu", "pf1_referans",
         "matplotlib.backends.backend_agg",
@@ -58,6 +61,8 @@ exe = EXE(
     console=False,
     disable_windowed_traceback=False,
     argv_emulation=False,
+    # Gorev cubugunda ve dosya gezgininde gorunen ikon.
+    icon="logo/pifikstur.ico",
 )
 coll = COLLECT(
     exe, a.binaries, a.datas,

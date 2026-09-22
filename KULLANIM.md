@@ -187,6 +187,28 @@ katı yer ister.
 
 ---
 
+## 1b. Logolar ve ikon
+
+Program açıldığında üstte koyu bir şerit görürsünüz: solda **PiVision**
+logosu, sağda uygulama adı ve ikonu. Pencerenin ve `.exe`'nin ikonu da
+uygulama ikonudur.
+
+Bütün görseller `logo/` klasöründedir ve **her ölçü ayrı ayrı** hazırdır:
+
+* `pifikstur.ico` – 16/24/32/48/64/128/256 boyutları tek dosyada. Windows
+  görev çubuğunda 32'yi, masaüstünde 48'i, dosya gezgininde 256'yı ister;
+  hepsi içinde olduğu için ikon hiçbir yerde bulanık çıkmaz.
+* `pifikstur_16.png` … `pifikstur_1024.png` – Windows dışı ve belge için.
+* `pivision_56.png` / `_44` / `_32` – arayüz şeridi için hazır boyutlar.
+
+Logoyu değiştirmek isterseniz aynı adla, aynı ölçüde yenisini koyun;
+kodda değişiklik gerekmez. Ayrıntı: `logo/OKU.md`.
+
+Dosyalar silinse bile program çalışır: pencere varsayılan ikonla açılır,
+şeritte resim yerine yazı görünür.
+
+---
+
 ## 2. Arayüzle kullanım (kolay yol)
 
 `PiFikstur_baslat.bat`'a çift tıklayın, ya da sanal ortamı etkinleştirip:
