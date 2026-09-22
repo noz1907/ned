@@ -1,4 +1,4 @@
-# CATIA malzemesini kaybetmeden PiFikstür'e aktarmak
+# CATIA malzemesini kaybetmeden Pi3D'e aktarmak
 
 **Sorun:** CATIA'da malzeme tanımlı, ama `.CATProduct` → STEP çevirisinde
 malzeme bilgisi kayboluyor.
@@ -8,7 +8,7 @@ AP214/AP242'de malzeme taşıyan varlıklar (`material_designation`) tanımlıd�
 ama CATIA'nın STEP yazıcısı bunları varsayılan ayarlarla doldurmaz. Yani
 kayıp çeviricinin değil, dışa aktarım seçeneklerinin sonucudur.
 
-**Çözüm:** Geometriyi STEP'ten, malzemeyi ayrı bir listeden alın. PiFikstür
+**Çözüm:** Geometriyi STEP'ten, malzemeyi ayrı bir listeden alın. Pi3D
 ikisini kod üzerinden birleştirir. Malzemeyi çıkarmanın iki yolu var.
 
 ---
@@ -35,7 +35,7 @@ Part Number	Nomenclature	Material	Quantity
 06.001.001.34	Keil-forging	Stainless Steel	1
 ```
 
-5. PiFikstür'de **2. adım**ta → **malzeme.csv yükle…** → bu dosyayı seçin
+5. Pi3D'de **2. adım**ta → **malzeme.csv yükle…** → bu dosyayı seçin
 
 Program başlık satırındaki `Part Number` ve `Material` sütunlarını adlarından
 bulur; ayırıcının sekme mi, noktalı virgül mü, virgül mü olduğunu kendi
@@ -69,7 +69,7 @@ açık olan `.CATProduct`'ın ağacını gezip `malzeme.csv` yazar.
 
 ## Sonra ne oluyor
 
-PiFikstür malzemeyi şu sırayla belirler:
+Pi3D malzemeyi şu sırayla belirler:
 
 1. **Yüklediğiniz liste** (CATIA BOM ya da kendi `malzeme.csv`'niz) → `seçim`
 2. **Data'da yazan** (STEP malzeme alanı ya da parça adında geçen `1.4301`,
@@ -84,7 +84,7 @@ resminin başlığına da yazılır.
 
 ## Neden CATProduct doğrudan okunamıyor
 
-PiFikstür'ün geometri çekirdeği **OpenCascade**'dir. `.CATPart` /
+Pi3D'ün geometri çekirdeği **OpenCascade**'dir. `.CATPart` /
 `.CATProduct`, Dassault Systèmes'in kapalı biçimidir; açık kaynak bir çekirdek
 onu okuyamaz. Okuyabilmek için ticari çevirici lisansı gerekir
 (CAD Exchanger, Datakit CrossManager, ODA). Bu bir eksiklik değil, lisans

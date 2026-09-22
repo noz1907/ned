@@ -1,4 +1,4 @@
-# PiFikstur ana akis (pf3_gui.py / pf3_olcu.py / pf1_referans.py) icin yeterli.
+# Pi3D ana akis (pf3_gui.py / pf3_olcu.py / pf1_referans.py) icin yeterli.
 # Not: cadquery PAKETI GEREKMEZ. Kod dogrudan OCP kullanir; cadquery
 # beraberinde casadi, numba, llvmlite, scipy, trame gibi ~350 MB'lik
 # gereksiz bagimlilik getiriyordu.

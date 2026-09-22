@@ -1,5 +1,5 @@
 """
-PiFikstür – STEP'ten BOM ve teknik resim (ARAYÜZ)
+Pi3D – STEP'ten BOM ve teknik resim (ARAYÜZ)
 ==================================================
 Komut satırına gerek yok:
 
@@ -49,19 +49,19 @@ def logo_yukle(ad):
 
 
 
-BASLIK = "PiFikstür  –  3B modelden BOM ve teknik resim"
+BASLIK = "Pi3D  –  3B modelden BOM ve teknik resim"
 
 EKSIK_PAKET = """'{paket}' paketi bu Python kurulumunda yok.
 
 Kullanilan Python:
 {py}
 
-PiFikstur'u KENDI ortaminda calistirmak gerekiyor; boylece bilgisayardaki
+Pi3D'i KENDI ortaminda calistirmak gerekiyor; boylece bilgisayardaki
 diger Python kurulumlarina (TensorFlow, pandas, scikit-learn vb.) dokunmaz.
 
 En kolayi: program klasorundeki
 
-    PiFikstur_baslat.bat
+    Pi3D_baslat.bat
 
 dosyasina cift tiklayin. Ilk acilista .venv ortamini kurar (birkac dakika
 surebilir), sonra programi acar.
@@ -249,13 +249,13 @@ class Uygulama(ttk.Frame):
         """Pencere ve gorev cubugu ikonu. Windows .ico ister, digerleri
         PNG. Ikisi de olmazsa varsayilan ikonla devam edilir."""
         try:
-            i = kaynak(LOGO_KLASOR, "pifikstur.ico")
+            i = kaynak(LOGO_KLASOR, "pi3d.ico")
             if os.path.isfile(i):
                 self.master.iconbitmap(default=i)
                 return
         except Exception:
             pass
-        g = logo_yukle("pifikstur_64.png")
+        g = logo_yukle("pi3d_64.png")
         if g is not None:
             self._ikon = g                     # referans tutulmazsa silinir
             try:
@@ -266,24 +266,24 @@ class Uygulama(ttk.Frame):
     def _baslik_seridi(self):
         """Üstteki koyu şerit: solda PiVision logosu, sağda uygulama adı."""
         ZEMIN, YAZI, SOLUK = "#0b2340", "#ffffff", "#8fb3d9"
-        s = tk.Frame(self, bg=ZEMIN, height=64)
+        s = tk.Frame(self, bg=ZEMIN, height=84)
         s.pack(fill="x", side="top")
         s.pack_propagate(False)
-        self._logo = logo_yukle("pivision_56.png")
+        self._logo = logo_yukle("pivision_64.png") or logo_yukle("pivision_56.png")
         if self._logo is not None:
             tk.Label(s, image=self._logo, bg=ZEMIN, bd=0
                      ).pack(side="left", padx=(14, 0), pady=4)
         else:                                   # logo yoksa yazıyla
             tk.Label(s, text="PiVision", bg=ZEMIN, fg=YAZI,
                      font=("Segoe UI", 18, "bold")).pack(side="left", padx=14)
-        self._ikon_kucuk = logo_yukle("pifikstur_48.png")
+        self._ikon_kucuk = logo_yukle("pi3d_72.png") or logo_yukle("pi3d_64.png")
         if self._ikon_kucuk is not None:
             tk.Label(s, image=self._ikon_kucuk, bg=ZEMIN, bd=0
-                     ).pack(side="right", padx=(0, 14), pady=8)
+                     ).pack(side="right", padx=(0, 14), pady=6)
         sag = tk.Frame(s, bg=ZEMIN)
         sag.pack(side="right", padx=(0, 10))
-        tk.Label(sag, text="PiFikstür", bg=ZEMIN, fg=YAZI, bd=0,
-                 font=("Segoe UI", 15, "bold")).pack(anchor="e")
+        tk.Label(sag, text="Pi3D", bg=ZEMIN, fg=YAZI, bd=0,
+                 font=("Segoe UI", 17, "bold")).pack(anchor="e")
         tk.Label(sag, text="3B modelden parça listesi ve teknik resim",
                  bg=ZEMIN, fg=SOLUK, bd=0, font=("Segoe UI", 9)
                  ).pack(anchor="e")

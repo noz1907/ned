@@ -1,5 +1,5 @@
 """
-PiFikstur – DXF -> 3D STEP DÖNÜŞTÜRÜCÜ
+Pi3D – DXF -> 3D STEP DÖNÜŞTÜRÜCÜ
 ======================================
 Parça ya da fikstür fark etmeksizin, bir DXF'i 3B katıya çevirip STEP yazar.
 

@@ -17,9 +17,9 @@ dosya için aynı akış çalışır. Okunan biçimler: **STEP, IGES, BREP**
 Python 3.10 veya üstü gerekir. Kurulu değilse <https://www.python.org/downloads/>
 adresinden indirin; kurarken **“Add Python to PATH”** kutusunu işaretleyin.
 
-### En kolayı: `PiFikstur_baslat.bat` (Windows)
+### En kolayı: `Pi3D_baslat.bat` (Windows)
 
-Klasördeki **`PiFikstur_baslat.bat`** dosyasına çift tıklayın. İlk
+Klasördeki **`Pi3D_baslat.bat`** dosyasına çift tıklayın. İlk
 çalıştırmada bu klasörde `.venv` adında **ayrı bir Python ortamı** kurar,
 paketleri oraya yükler ve programı açar. Sonraki çalıştırmalarda doğrudan
 açar. Komut yazmanıza gerek yok.
@@ -29,7 +29,7 @@ açar. Komut yazmanıza gerek yok.
 > ⚠ **Paketleri ana Python'unuza kurmayın.** `cadquery`, `numpy 2`
 > istiyor; `tensorflow`, `pandas 2.1`, `scikit-learn 1.3` gibi paketler ise
 > `numpy 1` istiyor. İkisi aynı ortamda bir arada duramaz. Bu yüzden
-> PiFikstur'u **kendi sanal ortamında** çalıştırın — hem bu program çalışır,
+> Pi3D'u **kendi sanal ortamında** çalıştırın — hem bu program çalışır,
 > hem mevcut kurulumunuz bozulmaz.
 
 Windows'ta, bu klasörde komut penceresi açıp:
@@ -74,8 +74,8 @@ Disk dolu demektir. Boş alan açmanın en hızlı yolu pip'in indirme
 pip cache purge
 ```
 
-Yetmezse PiFikstur klasörünü boş alanı olan başka bir sürücüye taşıyıp
-`PiFikstur_baslat.bat`'ı oradan çalıştırın; `.venv` o sürücüde kurulur.
+Yetmezse Pi3D klasörünü boş alanı olan başka bir sürücüye taşıyıp
+`Pi3D_baslat.bat`'ı oradan çalıştırın; `.venv` o sürücüde kurulur.
 
 Üçüncü yol — **küçük kurulum** (~800 MB):
 
@@ -105,7 +105,7 @@ kuran Python'un **yolunu hatırlar** (`\.venv\pyvenv.cfg` içindeki `home`
 satırı); o Python kaldırılmış, güncellenmiş ya da başka bir klasöre taşınmışsa
 ortam ölür.
 
-Çözüm: **`.venv` klasörünü silin**, `PiFikstur_baslat.bat`'ı çalıştırın.
+Çözüm: **`.venv` klasörünü silin**, `Pi3D_baslat.bat`'ı çalıştırın.
 Güncel başlatıcı bu durumu kendisi fark edip ortamı yeniler — ölçüt olarak
 `.venv\Scripts\python.exe` dosyasının varlığına değil, gerçekten
 **çalışıp çalışmadığına** bakar.
@@ -130,7 +130,7 @@ Eski hâle döndürmek için:
 pip install "numpy==1.26.4" "scipy==1.12.0" "matplotlib==3.8.2"
 ```
 
-Sonra PiFikstur'u yukarıdaki gibi kendi `.venv` ortamında çalıştırın; iki
+Sonra Pi3D'u yukarıdaki gibi kendi `.venv` ortamında çalıştırın; iki
 kurulum birbirine karışmaz.
 
 ### Çalıştırılabilir dosya (.exe) yapmak
@@ -141,10 +141,10 @@ Python kurulu olmayan bilgisayarlarda da çalışsın istiyorsanız:
 EXE_YAP.bat
 ```
 
-Önce `PiFikstur_baslat.bat` ile `.venv` kurulmuş olmalı. Bu dosya
-PyInstaller'ı kurar ve `pifikstur.spec` tarifine göre derler.
+Önce `Pi3D_baslat.bat` ile `.venv` kurulmuş olmalı. Bu dosya
+PyInstaller'ı kurar ve `pi3d.spec` tarifine göre derler.
 
-Çıktı: **`dist\PiFikstur\PiFikstur.exe`**
+Çıktı: **`dist\Pi3D\Pi3D.exe`**
 
 > **Klasörün tamamını kopyalayın, tek başına `.exe` çalışmaz.** OpenCascade
 > kütüphanesi yanındaki DLL'lerle birlikte gelir; klasör ~1 GB olur.
@@ -171,12 +171,12 @@ içinde kendi adıyla bir isim vardır (`OCP.TopoDS` modülünün içinde
 Toplama kaldığı yerden devam eder: **OCP'nin 321 modülünün hepsi, `TopoDS`
 dahil, pakete girer.**
 
-`pifikstur.spec` bu satırı `on_error="ignore"` ile susturur; toplanan
+`pi3d.spec` bu satırı `on_error="ignore"` ile susturur; toplanan
 dosyalarda hiçbir değişiklik olmaz. Eski bir spec dosyanız varsa uyarıyı
 görmezden gelebilirsiniz.
 
 **Derlemenin gerçekten tuttuğunu nasıl anlarsınız:** derleme bittikten
-sonra `dist\PiFikstur\PiFikstur.exe` açılıyor ve bir STEP dosyasını
+sonra `dist\Pi3D\Pi3D.exe` açılıyor ve bir STEP dosyasını
 okuyup DXF üretiyorsa iş tamamdır. Paketlenmiş program ile Python'dan
 çalıştırılan program **aynı sayıları** vermelidir; burada denendi, aynı
 DXF çıktı (167 varlık, toplam çizgi boyu 1889,8418 mm).
@@ -195,11 +195,13 @@ uygulama ikonudur.
 
 Bütün görseller `logo/` klasöründedir ve **her ölçü ayrı ayrı** hazırdır:
 
-* `pifikstur.ico` – 16/24/32/48/64/128/256 boyutları tek dosyada. Windows
+* `pi3d.ico` – 16/24/32/48/64/128/256 boyutları tek dosyada. Windows
   görev çubuğunda 32'yi, masaüstünde 48'i, dosya gezgininde 256'yı ister;
   hepsi içinde olduğu için ikon hiçbir yerde bulanık çıkmaz.
-* `pifikstur_16.png` … `pifikstur_1024.png` – Windows dışı ve belge için.
-* `pivision_56.png` / `_44` / `_32` – arayüz şeridi için hazır boyutlar.
+* `pi3d_16.png` … `pi3d_1024.png` – Windows dışı ve belge için.
+  Üst şeritte 72 px'lik olanı kullanılıyor.
+* `pivision_64.png` / `_56` / `_44` / `_32` – arayüz şeridi için hazır
+  boyutlar; şeritte 64 px'lik kullanılıyor.
 
 Logoyu değiştirmek isterseniz aynı adla, aynı ölçüde yenisini koyun;
 kodda değişiklik gerekmez. Ayrıntı: `logo/OKU.md`.
@@ -211,7 +213,7 @@ Dosyalar silinse bile program çalışır: pencere varsayılan ikonla açılır,
 
 ## 2. Arayüzle kullanım (kolay yol)
 
-`PiFikstur_baslat.bat`'a çift tıklayın, ya da sanal ortamı etkinleştirip:
+`Pi3D_baslat.bat`'a çift tıklayın, ya da sanal ortamı etkinleştirip:
 
 ```
 python pf3_gui.py
@@ -350,8 +352,10 @@ K-faktörü nötr eksenin sac içinde nerede olduğunu söyler; tezgâha ve
 malzemeye göre değişir. Program K'yı **tahmin etmez**, size sorar:
 değiştirirseniz açınım boyu değişir. İlk kurulumda 0,40'tır; 0,10 – 0,60
 arası istediğiniz değeri girebilirsiniz. Verdiğiniz değer
-`%USERPROFILE%\.pifikstur.json` dosyasında saklanır, her seferinde
-tekrar girmenize gerek kalmaz.
+`%LOCALAPPDATA%\Pi3D\ayarlar.json` dosyasında saklanır, her seferinde
+tekrar girmenize gerek kalmaz. (Program eskiden PiFikstür adıyla
+çalışıyordu; o sürümde girdiğiniz K-faktörü kaybolmaz, ilk açılışta
+eski dosyadan okunur.)
 
 Örnek (2 bükümlü, 3 mm sac, aynı parça):
 
@@ -446,7 +450,7 @@ belgede anlattım: **`CATIA_MALZEME.md`**. Özeti:
 1. CATIA'da `.CATProduct` açıkken **Analyze ▸ Bill of Material**
 2. **Define formats** ile *Material* sütununu görünür listeye ekleyin
 3. **Save As…** ile `.txt` olarak kaydedin
-4. PiFikstür 2. adımda → **malzeme.csv yükle…** → o dosyayı seçin
+4. Pi3D 2. adımda → **malzeme.csv yükle…** → o dosyayı seçin
 
 Program `Part Number` ve `Material` sütunlarını başlıklarından bulur,
 ayırıcıyı (sekme / `;` / `,`) kendi anlar, `Steel` · `Aluminium` ·
@@ -697,9 +701,9 @@ anlamlı çıkmıyorsa o parçada kesit çizilmez, diğer görünüşler yine ç
 | `pf_gui.py` | `pf1_referans` için 3B önizlemeli arayüz |
 | `pf2_fikstur.py` | kaynak/montaj fikstürü üretici (3-2-1 prensibi) |
 | `pfd_dxf2stp.py` | DXF görünüşlerinden 3B STEP üretir (renk = parça kimliği) |
-| `PiFikstur_baslat.bat` | Windows'ta tek tıkla kurulum + başlatma |
-| `PiFikstur_baslat_KUCUK.bat` | dar disk için küçük kurulum (~800 MB) |
-| `EXE_YAP.bat` + `pifikstur.spec` | çalıştırılabilir dosya (.exe) üretir |
+| `Pi3D_baslat.bat` | Windows'ta tek tıkla kurulum + başlatma |
+| `Pi3D_baslat_KUCUK.bat` | dar disk için küçük kurulum (~800 MB) |
+| `EXE_YAP.bat` + `pi3d.spec` | çalıştırılabilir dosya (.exe) üretir |
 | `CATIA_MALZEME.md` | CATIA malzemesini kaybetmeden aktarma |
 | `catia_malzeme_cikar.CATScript` | CATIA makrosu: ağacı gezip `malzeme.csv` yazar |
 

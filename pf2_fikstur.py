@@ -1,5 +1,5 @@
 """
-PiFikstur Maker – ADIM 2 : FİKSTÜR TASARIMI (kaynak fikstürü)
+Pi3D Maker – ADIM 2 : FİKSTÜR TASARIMI (kaynak fikstürü)
 ==============================================================
 Amaç: ADIM 1'de seçilen grup için (referans JSON) 3-2-1 prensibine göre
 konumlandırma elemanları, klempler ve taban plakası olan bir kaynak
@@ -1200,7 +1200,7 @@ def png_yaz(pc, el, yol, grup_ad, hizli=False):
 
 
 ONAY_ACIKLAMA = [
-    "PiFikstur onay paketi - XYZ referans noktalari.",
+    "Pi3D onay paketi - XYZ referans noktalari.",
     "Bu dosyayi inceleyin, gerekirse 'istasyon' altindaki X konumlarini duzenleyin,",
     "'onay' degerini true yapin ve su sekilde tekrar calistirin:",
     "    python pf2_fikstur.py <step> --sec \"...\" --onay <bu_dosya>",

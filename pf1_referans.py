@@ -1,5 +1,5 @@
 """
-PiFikstur Maker – ADIM 1 : REFERANS BELİRLEME
+Pi3D Maker – ADIM 1 : REFERANS BELİRLEME
 =============================================
 Amaç: STEP dosyasından, montajlı parçanın iç parçalarına EN KOLAY ERİŞİM
 veren XYZ yönlendirmesini bulmak ve 3 konumlandırma noktası önermek.

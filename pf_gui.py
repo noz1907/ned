@@ -1,5 +1,5 @@
 """
-PiFikstur Maker – ARAYÜZ (ADIM 1: Referans belirleme)
+Pi3D Maker – ARAYÜZ (ADIM 1: Referans belirleme)
 ======================================================
     py pf_gui.py
 
@@ -183,7 +183,7 @@ class Gorunum(tk.Canvas):
 class Uygulama(tk.Tk):
     def __init__(self):
         super().__init__()
-        self.title("PiFikstur Maker – Adım 1: Referans Belirleme")
+        self.title("Pi3D Maker – Adım 1: Referans Belirleme")
         self.geometry("1380x820")
         self.kayit, self.gruplar, self.temaslar = [], [], []
         self.secim, self.puanlar, self.uc = None, [], []

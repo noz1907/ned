@@ -1,4 +1,4 @@
-# PiFikstur Maker
+# Pi3D Maker
 
 STEP montajından **kaynak veya montaj fikstürü** öneren araç seti. Parça sayısı
 sınırlı değildir (2, 3, N parça); seçim, yönlendirme ve XYZ referans noktaları

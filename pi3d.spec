@@ -1,11 +1,11 @@
 # -*- mode: python ; coding: utf-8 -*-
 """
-PyInstaller tarifi - PiFikstur'u tek klasorluk calistirilabilir hale getirir.
+PyInstaller tarifi - Pi3D'u tek klasorluk calistirilabilir hale getirir.
 
-    pyinstaller pifikstur.spec
+    pyinstaller pi3d.spec
 
-Cikti:  dist/PiFikstur/PiFikstur.exe   (Windows)
-        dist/PiFikstur/PiFikstur       (Linux/macOS)
+Cikti:  dist/Pi3D/Pi3D.exe   (Windows)
+        dist/Pi3D/Pi3D       (Linux/macOS)
 
 Neden onedir (tek klasor), onefile degil:
 OpenCascade kutuphanesi ~700 MB. Tek dosyaya sikistirilirsa program her
@@ -54,7 +54,7 @@ pyz = PYZ(a.pure)
 exe = EXE(
     pyz, a.scripts, [],
     exclude_binaries=True,
-    name="PiFikstur",
+    name="Pi3D",
     # Pencereli program: arkada siyah konsol acilmasin.
     # EXE hic acilmazsa burayi True yapip yeniden derleyin; baslangic
     # hatasi konsola yazilir ve sebebi gorunur.
@@ -62,10 +62,10 @@ exe = EXE(
     disable_windowed_traceback=False,
     argv_emulation=False,
     # Gorev cubugunda ve dosya gezgininde gorunen ikon.
-    icon="logo/pifikstur.ico",
+    icon="logo/pi3d.ico",
 )
 coll = COLLECT(
     exe, a.binaries, a.datas,
     strip=False, upx=False,
-    name="PiFikstur",
+    name="Pi3D",
 )

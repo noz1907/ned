@@ -1,5 +1,5 @@
 """
-PiFikstur – ADIM 0 : STEP'TEN ÇİZİM VE ÖLÇÜ ÇIKARMA
+Pi3D – ADIM 0 : STEP'TEN ÇİZİM VE ÖLÇÜ ÇIKARMA
 ====================================================
 Herhangi bir STEP dosyasından, montaj ve komponent bazında DXF görünüşleri ve
 ölçü tablosu üretir. Civata, somun, pul gibi standart elemanlar için çizim
@@ -907,23 +907,34 @@ def _ayar_yolu():
            or os.environ.get("XDG_CONFIG_HOME")
            or os.path.join(os.path.expanduser("~"), ".config"))
     try:
-        d = os.path.join(kok, "PiFikstur")
+        d = os.path.join(kok, "Pi3D")
         os.makedirs(d, exist_ok=True)
         return os.path.join(d, "ayarlar.json")
     except Exception:
-        return os.path.join(os.path.expanduser("~"), ".pifikstur.json")
+        return os.path.join(os.path.expanduser("~"), ".pi3d.json")
 
 
 AYAR_DOSYA = _ayar_yolu()
 
 
+# Program eskiden "PiFikstur" adıyla çalışıyordu. Ad değişti diye
+# kullanıcının girdiği K-faktörü kaybolmasın: yeni dosya yoksa eskisi
+# okunur, ilk yazışta yenisine geçilir.
+ESKI_AYAR = [os.path.join(os.path.dirname(os.path.dirname(AYAR_DOSYA)),
+                          "PiFikstur", "ayarlar.json"),
+             os.path.join(os.path.expanduser("~"), ".pifikstur.json")]
+
+
 def ayar_oku():
-    try:
-        with open(AYAR_DOSYA, encoding="utf-8") as f:
-            a = json.load(f)
-        return a if isinstance(a, dict) else {}
-    except Exception:
-        return {}
+    for y in [AYAR_DOSYA] + ESKI_AYAR:
+        try:
+            with open(y, encoding="utf-8") as f:
+                a = json.load(f)
+            if isinstance(a, dict):
+                return a
+        except Exception:
+            continue
+    return {}
 
 
 def ayar_yaz(**yeni):

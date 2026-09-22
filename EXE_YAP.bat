@@ -1,9 +1,9 @@
 @echo off
 REM ==========================================================================
-REM  PiFikstur'u calistirilabilir dosyaya (.exe) cevirir.
+REM  Pi3D'u calistirilabilir dosyaya (.exe) cevirir.
 REM
-REM  Once PiFikstur_baslat.bat ile .venv kurulmus olmali.
-REM  Cikti:  dist\PiFikstur\PiFikstur.exe
+REM  Once Pi3D_baslat.bat ile .venv kurulmus olmali.
+REM  Cikti:  dist\Pi3D\Pi3D.exe
 REM
 REM  Olusan klasor Python kurulu OLMAYAN bilgisayarlarda da calisir;
 REM  klasorun tamamini kopyalayin, tek basina .exe yetmez.
@@ -32,11 +32,11 @@ echo.
 echo  NOT: Akan yazilarda WARNING satirlari gorebilirsiniz. Uyari hata
 echo  degildir, derleme devam eder. Sonunda "Tamam" yaziyorsa is bitmistir.
 echo.
-".venv\Scripts\python.exe" -m PyInstaller --noconfirm --clean pifikstur.spec
+".venv\Scripts\python.exe" -m PyInstaller --noconfirm --clean pi3d.spec
 if errorlevel 1 goto OLMADI
 
 echo.
-echo  Tamam:  dist\PiFikstur\PiFikstur.exe
+echo  Tamam:  dist\Pi3D\Pi3D.exe
 echo  Bu klasorun TAMAMINI kopyalayin, tek basina exe calismaz.
 echo.
 echo  Yukarida WARNING satirlari varsa onemli degil; derleme tamamlandi.
@@ -48,7 +48,7 @@ exit /b 0
 :ORTAM_YOK
 echo.
 echo  HATA: .venv ortami yok.
-echo  Once PiFikstur_baslat.bat dosyasini calistirin.
+echo  Once Pi3D_baslat.bat dosyasini calistirin.
 echo.
 pause
 exit /b 1
@@ -60,7 +60,7 @@ echo  "No Python at ..." mesaji goruyorsaniz sebebi sudur: bu ortami kuran
 echo  Python surumu kaldirilmis, guncellenmis ya da baska klasore tasinmis.
 echo  Sanal ortam eski yolu hatirladigi icin acilamiyor.
 echo.
-echo  Cozum: .venv klasorunu silip PiFikstur_baslat.bat dosyasini calistirin.
+echo  Cozum: .venv klasorunu silip Pi3D_baslat.bat dosyasini calistirin.
 echo  Yeni baslatici bunu kendisi fark edip ortami yeniler.
 echo.
 pause
@@ -69,7 +69,7 @@ exit /b 1
 :PAKET_EKSIK
 echo.
 echo  HATA: .venv icinde gerekli paketler yok.
-echo  Once PiFikstur_baslat.bat dosyasini calistirip kurulumu tamamlayin.
+echo  Once Pi3D_baslat.bat dosyasini calistirip kurulumu tamamlayin.
 echo.
 pause
 exit /b 1

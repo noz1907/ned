@@ -1,20 +1,19 @@
 @echo off
 REM ==========================================================================
-REM  PiFikstur - KUCUK KURULUM, dar disk icin
+REM  Pi3D - tek tikla baslatma (Windows)
 REM
 REM  Ilk calistirmada bu klasorde .venv adinda ayri bir Python ortami kurar
 REM  ve gerekli paketleri oraya yukler. Boylece bilgisayardaki diger Python
 REM  kurulumlarina - tensorflow, pandas, scikit-learn - dokunmaz.
 REM  Sonraki calistirmalarda dogrudan programi acar.
 REM
-REM  Normal kurulum yaklasik 1,2 GB yer kaplar. Bu dosya cadquery-ocp'nin
-REM  vtk'siz gelen 7.7.2 surumunu kurar: yaklasik 800 MB. Sonuc birebir
-REM  aynidir. Python 3.8 - 3.11 gerekir.
+REM  Gereken bos disk alani: yaklasik 1,3 GB.
+REM  Diskiniz darsa: Pi3D_baslat_KUCUK.bat - yaklasik 800 MB.
 REM ==========================================================================
 setlocal
 cd /d "%~dp0"
-set ISTEK=requirements-kucuk.txt
-set ETIKET=Kucuk kurulum: yaklasik 800 MB.
+set ISTEK=requirements.txt
+set ETIKET=Yaklasik 150 MB indirilecek, 1,3 GB bos disk alani gerekiyor.
 
 REM --- 1) Ortam var mi?
 if not exist ".venv\Scripts\python.exe" goto YENI_ORTAM
@@ -62,7 +61,7 @@ goto CALISTIR
 :YOK_PYTHON
 echo.
 echo  HATA: calisan bir Python bulunamadi.
-echo  https://www.python.org/downloads/ adresinden Python 3.10 ya da 3.11 kurun,
+echo  https://www.python.org/downloads/ adresinden Python 3.10+ kurun,
 echo  kurarken "Add Python to PATH" kutusunu isaretleyin, sonra bu dosyayi
 echo  tekrar calistirin.
 echo.
@@ -75,10 +74,13 @@ exit /b 1
 echo.
 echo  HATA: paketler kurulamadi. Sik gorulen iki sebep:
 echo.
-echo   1 - Disk hala darsa once su komutu calistirin:  pip cache purge
-echo   2 - Python 3.12 ve ustundeyseniz bu dosya calismaz,
-echo       PiFikstur_baslat.bat kullanin.
-echo   3 - Internet baglantisini kontrol edin.
+echo   1 - DISK DOLU.  Hata satirinda "No space left on device"
+echo       ya da "Errno 28" yaziyorsa budur. Cozum sirasiyla:
+echo         pip cache purge
+echo         Pi3D_baslat_KUCUK.bat ile kucuk kurulum, yaklasik 800 MB
+echo         ya da bu klasoru bos alani olan baska bir surucuye tasiyin
+echo.
+echo   2 - INTERNET baglantisi yok ya da kesildi.
 echo.
 echo  Sorunu giderip bu dosyayi tekrar calistirin, kaldigi yerden devam eder.
 echo.
