@@ -1329,7 +1329,8 @@ def agac_bom(agac, komp, satirlar):
         sat = {"poz": poz, "seviye": seviye, "kod": "", "ad": d["ad"],
                "adet": adet, "toplam_adet": toplam,
                "tur": "montaj" if montaj else "parca",
-               "malzeme_ad": "", "olcu": "", "kg_adet": "", "toplam_kg": ""}
+               "malzeme_ad": "", "malzeme_kaynak": "", "olcu": "",
+               "kg_adet": "", "toplam_kg": ""}
         # Yaprak düğüm: hangi komponente denk geldiğini katı indeksinden bul.
         if not montaj and d.get("katilar"):
             ki = kati_komp.get(d["katilar"][0])
@@ -1339,7 +1340,8 @@ def agac_bom(agac, komp, satirlar):
                 sat["tur"] = k["sinif"]
                 r = poz_komp.get(k["kod"])
                 if r:
-                    for alan in ("malzeme_ad", "olcu", "kg_adet"):
+                    for alan in ("malzeme_ad", "olcu", "kg_adet",
+                                 "malzeme_kaynak"):
                         sat[alan] = r.get(alan) or ""
                     if r.get("kg_adet"):
                         sat["toplam_kg"] = round(r["kg_adet"] * toplam, 4)
@@ -1354,7 +1356,7 @@ def agac_bom(agac, komp, satirlar):
 def agac_bom_yaz(on, agac_satir):
     """Hiyerarşik BOM'u CSV ve okunabilir tablo olarak yazar."""
     alan = ["poz", "seviye", "tur", "kod", "ad", "adet", "toplam_adet",
-            "malzeme_ad", "olcu", "kg_adet", "toplam_kg"]
+            "malzeme_ad", "malzeme_kaynak", "olcu", "kg_adet", "toplam_kg"]
     with open(os.path.join(on, "BOM_AGAC.csv"), "w", newline="",
               encoding="utf-8-sig") as f:
         w = csv.DictWriter(f, fieldnames=alan, extrasaction="ignore", delimiter=";")

@@ -614,6 +614,16 @@ class Uygulama(ttk.Frame):
     def _hiyerarsik_doldur(self):
         """Montaj ağacını kademeli göster: ana ürün > alt montaj > parça."""
         satir = self.M.agac_bom(self.agac, self.komp, self.satirlar or [])
+        # BOM henüz çıkarılmadıysa malzeme sütunu boş kalmasın: hangi
+        # malzemenin gideceğini şimdiden göster (düz listede de böyle).
+        kod_komp = {k["kod"]: k for k in self.komp or []}
+        for r in satir:
+            if not r["malzeme_ad"] and r["tur"] == "parca":
+                k = kod_komp.get(r["kod"])
+                if k:
+                    m, kay = self._malzeme_onizle(k)
+                    r["malzeme_ad"] = self.M.MALZEME[m][0]
+                    r["kaynak"] = kay
         for r in satir:
             ust = r["poz"].rsplit(".", 1)[0] if "." in r["poz"] else ""
             t = ("montaj",) if r["tur"] == "montaj" else \
@@ -629,7 +639,8 @@ class Uygulama(ttk.Frame):
                                tags=t,
                                values=(r["poz"], r["kod"][:40], ad, adet,
                                        r["tur"], (r["malzeme_ad"] or "-")[:28],
-                                       "-", r["olcu"] or "-", r["kg_adet"] or "-"))
+                                       r.get("kaynak") or r.get("malzeme_kaynak") or "-",
+                                       r["olcu"] or "-", r["kg_adet"] or "-"))
             except Exception:
                 pass
 
