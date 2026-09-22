@@ -1,8 +1,9 @@
 # KULLANIM
 
-STEP dosyasından **parça listesi (BOM)**, **detay resimleri** ve **montaj
-resmi** üretme programı. Parça farketmez, montaj farketmez — her STEP için
-aynı akış çalışır.
+3B model dosyasından **parça listesi (BOM)**, **detay resimleri** ve
+**montaj resmi** üretme programı. Parça farketmez, montaj farketmez — her
+dosya için aynı akış çalışır. Okunan biçimler: **STEP, IGES, BREP**
+(ayrıntı: "Hangi dosya biçimleri okunur").
 
 İki kullanım yolu var, ikisi de aynı hesap motorunu çağırır:
 
@@ -148,7 +149,8 @@ Pencere adım adım ilerler; bir adım bitmeden sonraki sekme açılmaz.
 
 ### Adım 1 — VERİ
 
-* **STEP dosyası:** *Gözat…* ile incelenecek `.stp` / `.step` dosyasını seçin.
+* **Model dosyası:** *Gözat…* ile `.stp` / `.step`, `.igs` / `.iges` ya da
+  `.brep` dosyasını seçin (bkz. aşağıdaki biçim tablosu).
 * **Kaydedilecek klasör:** boş bırakırsanız STEP'in yanına `<dosyaadı>_cikti`
   klasörü açılır. İsterseniz başka yer seçin.
 * **İNCELE ▸**
@@ -216,6 +218,39 @@ listelenir. Listede bir DXF'e çift tıklarsanız önizlemesi açılır.
 
 Ağır işler arka planda çalışır: pencere kilitlenmez, ilerleme çubuğu dolar,
 **İptal** çalışan adım bitince işi bırakır.
+
+---
+
+## 2b. Hangi dosya biçimleri okunur
+
+| biçim | okunur mu | notu |
+|-------|-----------|------|
+| **STEP** `.stp` `.step` | ✔ **önerilen** | parça adları, montaj ağacı, malzeme alanı — hepsi gelir |
+| **IGES** `.igs` `.iges` | ✔ | ölçüler doğru çıkar, **ama parça adı ve montaj ağacı yoktur**: BOM'da kod/tanım olmaz, civata-somun ayrımı yapılamaz. Yalnız yüzey taşıyan IGES'te program yüzeyleri dikip katı yapmayı dener |
+| **BREP** `.brep` | ✔ | OpenCascade'in kendi biçimi, ad taşımaz |
+| CATIA `.CATPart` `.CATProduct` | ✘ | üreticiye ait kapalı biçim |
+| SolidWorks `.sldprt` `.sldasm` | ✘ | " |
+| NX / Creo `.prt` `.asm` | ✘ | " |
+| Inventor `.ipt` `.iam` | ✘ | " |
+| Parasolid `.x_t` `.x_b`, ACIS `.sat` | ✘ | " |
+| STL, OBJ, glTF, VRML, 3MF | ✘ | yalnız üçgen ağ; içinde delik/radüs/düzlem bilgisi yok |
+
+Programın çekirdeği **OpenCascade**'dir; açık kaynak olduğu için üreticilerin
+kapalı biçimlerini açamaz — bu bir eksiklik değil, lisans meselesidir.
+
+### CATProduct / CATPart için ne yapmalı
+
+CATIA'dan **STEP olarak kaydedin**, program onu okur:
+
+```
+CATIA V5:  File > Save As > "STEP (*.stp)"
+```
+
+Montajın tamamı tek STEP dosyası olur; **parça ağacı ve parça adları
+korunur**, yani BOM eksiksiz çıkar. AP214 ya da AP242 fark etmez.
+
+Program tanımadığı bir dosya seçtiğinizde susmaz: biçimin ne olduğunu ve
+hangi CAD menüsünden STEP alınacağını söyler.
 
 ---
 

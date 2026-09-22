@@ -229,8 +229,16 @@ program bunu gizlemez.
 
 # STEP -> BOM, detay resmi, montaj resmi (`pf3_olcu.py`)
 
-Herhangi bir STEP dosyasından — parça, montaj, fikstür farketmeksizin — parça
-listesi (BOM), komponent detay resimleri ve montaj resmi üretir.
+Herhangi bir 3B model dosyasından — parça, montaj, fikstür farketmeksizin —
+parça listesi (BOM), komponent detay resimleri ve montaj resmi üretir.
+
+**Okunan biçimler:** STEP (`.stp`, `.step`) — önerilen, parça adları ve
+montaj ağacı gelir; IGES (`.igs`) — ölçüler doğru ama ad/ağaç yok; BREP.
+CATIA (`.CATProduct`, `.CATPart`), SolidWorks, NX, Creo, Inventor, Parasolid
+ve ACIS biçimleri üreticiye ait kapalı biçimlerdir, OpenCascade onları
+açamaz — CAD'den **STEP olarak kaydedip** verin (CATIA: *File > Save As >
+STEP*; montaj ağacı ve adlar korunur). Program tanımadığı dosyada susmaz,
+hangi menüden STEP alınacağını söyler.
 
 ## İşlem akışı
 

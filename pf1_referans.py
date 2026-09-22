@@ -14,10 +14,11 @@ veren XYZ yönlendirmesini bulmak ve 3 konumlandırma noktası önermek.
 Bu modül KARAR VERMEZ, ÖNERİR. Onay kullanıcıdadır.
 """
 from __future__ import annotations
-import argparse, json, math, re, sys
+import argparse, json, math, os, re, sys
 from collections import defaultdict, Counter
 
 from OCP.STEPControl import STEPControl_Reader
+from OCP.IGESControl import IGESControl_Reader
 from OCP.STEPCAFControl import STEPCAFControl_Reader
 from OCP.IFSelect import IFSelect_RetDone
 from OCP.TDocStd import TDocStd_Document
@@ -71,6 +72,146 @@ def _malzeme(mt, lab):
     except Exception:
         pass
     return None
+
+
+# ---------------------------------------------------------- biçim tanıma
+# Doğrudan okunabilen biçimler (katı/B-Rep taşırlar).
+BICIM = {".stp": "STEP", ".step": "STEP", ".stpz": "STEP",
+         ".igs": "IGES", ".iges": "IGES",
+         ".brep": "BREP", ".brp": "BREP"}
+
+# Okunamayan, CAD'den dışa aktarım isteyen kapalı biçimler.
+# OpenCascade bunları açamaz; ticari çevirici ya da CAD'in kendi
+# "Save As / Export -> STEP" komutu gerekir.
+CEVIR_GEREK = {
+    ".catpart": ("CATIA V5 parça", "CATIA: File > Save As > STEP (.stp)"),
+    ".catproduct": ("CATIA V5 montaj",
+                    "CATIA: File > Save As > STEP (.stp). Montajın tamamı "
+                    "tek STEP olur, parça ağacı ve adlar korunur."),
+    ".cgr": ("CATIA görsel gösterim", "CATIA: özgün CATPart'tan STEP alın"),
+    ".sldprt": ("SolidWorks parça", "SolidWorks: Dosya > Farklı Kaydet > STEP"),
+    ".sldasm": ("SolidWorks montaj", "SolidWorks: Dosya > Farklı Kaydet > STEP"),
+    ".prt": ("NX / Creo parça", "NX: File > Export > STEP214"),
+    ".asm": ("Creo montaj", "Creo: File > Save As > STEP"),
+    ".ipt": ("Inventor parça", "Inventor: Farklı Kaydet > STEP"),
+    ".iam": ("Inventor montaj", "Inventor: Farklı Kaydet > STEP"),
+    ".x_t": ("Parasolid metin", "CAD'den STEP olarak aktarın"),
+    ".x_b": ("Parasolid ikili", "CAD'den STEP olarak aktarın"),
+    ".sat": ("ACIS", "CAD'den STEP olarak aktarın"),
+    ".3dm": ("Rhino", "Rhino: Dosya > Farklı Kaydet > STEP"),
+    ".dwg": ("AutoCAD çizimi", "3B katı için STEP olarak aktarın"),
+}
+
+# Okunabilir ama YALNIZ üçgen ağ (mesh) taşıyan biçimler: delik, radüs,
+# düzlem gibi bilgiler yoktur, bu program bunları ölçemez.
+AG_BICIM = {".stl": "STL", ".obj": "OBJ", ".ply": "PLY",
+            ".gltf": "glTF", ".glb": "glTF", ".wrl": "VRML", ".3mf": "3MF"}
+
+
+class OkunamazBicim(Exception):
+    """Dosya biçimi bu programla okunamıyor; mesaj kullanıcıya gösterilir."""
+
+
+def bicim_tani(yol):
+    """Dosya uzantısına göre biçim adı. Okunamayan biçimde açıklamalı hata."""
+    u = os.path.splitext(yol)[1].lower()
+    if u in BICIM:
+        return BICIM[u]
+    if u in CEVIR_GEREK:
+        ad, nasil = CEVIR_GEREK[u]
+        raise OkunamazBicim(
+            f"{u} dosyasi ({ad}) dogrudan okunamiyor.\n\n"
+            f"Bu bicim uretici firmaya ait kapali bir bicimdir; acik kaynak\n"
+            f"OpenCascade cekirdegi onu acamaz.\n\n"
+            f"Cozum: parcayi kendi CAD programinizdan STEP olarak kaydedin.\n"
+            f"  {nasil}\n\n"
+            f"STEP (.stp / .step) disinda IGES (.igs) ve BREP de okunur.")
+    if u in AG_BICIM:
+        raise OkunamazBicim(
+            f"{u} dosyasi ({AG_BICIM[u]}) yalnizca ucgen ag (mesh) tasir.\n\n"
+            f"Icinde duzlem, silindir, delik, radus bilgisi yoktur; bu program\n"
+            f"olcu ve delik tablosu cikaramaz.\n\n"
+            f"Cozum: parcayi CAD'den STEP (.stp) olarak kaydedin.")
+    raise OkunamazBicim(
+        f"'{u}' uzantisi taninmiyor.\n\n"
+        f"Okunabilen bicimler: STEP (.stp, .step), IGES (.igs, .iges), "
+        f"BREP (.brep).")
+
+
+def _katilari_topla(sh, ad, malzeme, out, mal=None):
+    """Bir şekilden katıları toplar; katı yoksa yüzeyleri dikip katı yapar."""
+    ex = TopExp_Explorer(sh, TopAbs_SOLID)
+    n = 0
+    while ex.More():
+        k = TopoDS.Solid_s(ex.Current())
+        out.append((ad, k, mal) if malzeme else (ad, k))
+        n += 1
+        ex.Next()
+    if n:
+        return n
+    # IGES çoğu zaman yalnız yüzey taşır: yüzeyleri dikip kapalı kabuktan
+    # katı elde etmeye çalış.
+    try:
+        from OCP.BRepBuilderAPI import BRepBuilderAPI_Sewing, BRepBuilderAPI_MakeSolid
+        from OCP.TopAbs import TopAbs_SHELL
+        dik = BRepBuilderAPI_Sewing(1e-3)
+        dik.Add(sh)
+        dik.Perform()
+        dikili = dik.SewedShape()
+        ex = TopExp_Explorer(dikili, TopAbs_SHELL)
+        while ex.More():
+            mk = BRepBuilderAPI_MakeSolid(TopoDS.Shell_s(ex.Current()))
+            if mk.IsDone():
+                out.append((ad, mk.Solid(), mal) if malzeme else (ad, mk.Solid()))
+                n += 1
+            ex.Next()
+    except Exception:
+        pass
+    return n
+
+
+def iges_oku(yol, malzeme=False):
+    """IGES okur. Katı yoksa yüzeyleri dikip katıya çevirmeyi dener."""
+    rd = IGESControl_Reader()
+    if rd.ReadFile(yol) != IFSelect_RetDone:
+        raise OkunamazBicim(f"IGES dosyasi okunamadi: {yol}")
+    rd.TransferRoots()
+    out = []
+    ad = os.path.splitext(os.path.basename(yol))[0]
+    if not _katilari_topla(rd.OneShape(), ad, malzeme, out):
+        raise OkunamazBicim(
+            "IGES dosyasinda kati (solid) bulunamadi; yuzeyler de kapali bir\n"
+            "hacim olusturmuyor. Bu dosyadan olcu cikarilamaz.\n\n"
+            "Cozum: CAD'den STEP (.stp) olarak kaydedin - STEP kati tasir.")
+    return out
+
+
+def brep_oku(yol, malzeme=False):
+    """OpenCascade'in kendi BREP biçimi."""
+    from OCP.BRep import BRep_Builder
+    from OCP.TopoDS import TopoDS_Shape
+    from OCP.BRepTools import BRepTools
+    sh = TopoDS_Shape()
+    if not BRepTools.Read_s(sh, yol, BRep_Builder()):
+        raise OkunamazBicim(f"BREP dosyasi okunamadi: {yol}")
+    out = []
+    ad = os.path.splitext(os.path.basename(yol))[0]
+    if not _katilari_topla(sh, ad, malzeme, out):
+        raise OkunamazBicim("BREP dosyasinda kati bulunamadi.")
+    return out
+
+
+def oku(yol, malzeme=False):
+    """Dosyayı biçimine göre okur: STEP, IGES ya da BREP.
+
+    Geri dönüş: (ad, katı) ikilileri; malzeme=True ise (ad, katı, malzeme).
+    Okunamayan biçimde, ne yapılacağını anlatan OkunamazBicim yükseltir."""
+    b = bicim_tani(yol)
+    if b == "IGES":
+        return iges_oku(yol, malzeme)
+    if b == "BREP":
+        return brep_oku(yol, malzeme)
+    return step_oku(yol, malzeme)
 
 
 def step_oku(yol, malzeme=False):

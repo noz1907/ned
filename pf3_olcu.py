@@ -1106,8 +1106,15 @@ def malzeme_ata(k, esl, genel, data_oncelik=True):
 # ---------------------------------------------------------------- iş akışı
 def step_komponentleri(step, P, log=print):
     """STEP'i okur, kopyaları birleştirip komponent listesini döndürür."""
-    kayit = E.step_oku(step, malzeme=True)
-    log(f"{os.path.basename(step)}: {len(kayit)} katı okundu")
+    b = E.bicim_tani(step)
+    kayit = E.oku(step, malzeme=True)
+    log(f"{os.path.basename(step)}: {b}, {len(kayit)} katı okundu")
+    if b != "STEP":
+        # IGES ve BREP montaj ağacı ve parça adı taşımaz: ölçüler doğru
+        # çıkar ama BOM'da kod/tanım olmaz, standart eleman ayrımı yapılamaz.
+        log(f"! {b} parça adı ve montaj ağacı taşımaz: ölçüler doğru çıkar, "
+            f"ama BOM'da kod ve tanım olmaz, civata/somun ayrımı yapılamaz. "
+            f"Tam BOM için CAD'den STEP olarak kaydedin.")
     komp = komponentle(kayit, P)
     sayim = Counter(k["sinif"] for k in komp)
     log(f"{len(komp)} komponent  (" + ", ".join(f"{a}: {b}" for a, b in sayim.items()) + ")")
@@ -1258,7 +1265,8 @@ def main():
   2  detay parcalarin cizilmesi ve olculendirilmesi
   3  montaj resmi ve olculendirilmesi
 --asama ile tek tek ya da birlikte calistirilir (varsayilan: 1,2,3)""")
-    ap.add_argument("step", nargs="?", help="okunacak STEP dosyası")
+    ap.add_argument("step", nargs="?",
+                    help="okunacak dosya: STEP (.stp/.step), IGES (.igs) ya da BREP")
     ap.add_argument("-o", "--out", help="çıktı klasörü (varsayılan: <step adı>_olcu)")
     ap.add_argument("--asama", default="1,2,3",
                     help="çalıştırılacak aşamalar: 1 / 2 / 3 / 1,2 / 1,2,3")
@@ -1301,6 +1309,11 @@ def main():
           + (" + " + KESIT_AD if a.kesit else ""))
 
     t0 = time.time()
+    try:
+        E.bicim_tani(a.step)
+    except E.OkunamazBicim as ex:
+        print("\n" + str(ex) + "\n")
+        return
     kayit, komp = step_komponentleri(a.step, P,
                                      log=lambda t: print(f"{t}  [{time.time()-t0:.0f}s]"))
     if a.liste:

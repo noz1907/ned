@@ -23,7 +23,7 @@ import math, os, queue, sys, threading, traceback
 import tkinter as tk
 from tkinter import ttk, filedialog, messagebox
 
-BASLIK = "PiFikstür  –  STEP'ten BOM ve teknik resim"
+BASLIK = "PiFikstür  –  3B modelden BOM ve teknik resim"
 
 EKSIK_PAKET = """'{paket}' paketi bu Python kurulumunda yok.
 
@@ -235,8 +235,11 @@ class Uygulama(ttk.Frame):
                                    command=self.incele, state="disabled")
         self.b_incele.grid(row=3, column=1, sticky="e", pady=14, ipadx=14, ipady=5)
         ttk.Label(f, foreground="#555", justify="left", text=(
-            "STEP okunur, kopyalar birleştirilir, parça / standart eleman / kaynak dikişi\n"
-            "ayrımı yapılır. Büyük montajlarda bu adım bir-iki dakika sürebilir.")
+            "Okunan biçimler: STEP (.stp, .step), IGES (.igs), BREP.\n"
+            "CATIA (.CATProduct/.CATPart), SolidWorks, NX, Inventor gibi kapali\n"
+            "bicimler dogrudan acilamaz; CAD'den STEP olarak kaydedip verin.\n\n"
+            "Dosya okunur, kopyalar birleştirilir, parça / standart eleman /\n"
+            "kaynak dikişi ayrımı yapılır. Büyük montajlarda bir-iki dakika sürebilir.")
         ).grid(row=4, column=0, columnspan=3, sticky="w")
         f.columnconfigure(1, weight=1)
 
@@ -498,8 +501,13 @@ class Uygulama(ttk.Frame):
     # ------------------------------------------------------------ 1 VERİ
     def step_sec(self):
         y = filedialog.askopenfilename(
-            title="İncelenecek STEP dosyası",
-            filetypes=[("STEP", "*.stp *.step *.STP *.STEP"), ("Tümü", "*.*")])
+            title="İncelenecek 3B model dosyası",
+            filetypes=[("3B model", "*.stp *.step *.igs *.iges *.brep "
+                                     "*.STP *.STEP *.IGS *.IGES"),
+                       ("STEP", "*.stp *.step *.STP *.STEP"),
+                       ("IGES", "*.igs *.iges *.IGS *.IGES"),
+                       ("BREP", "*.brep *.brp"),
+                       ("Tümü", "*.*")])
         if y:
             self.v_step.set(y)
             if not self.v_out.get():
@@ -522,7 +530,12 @@ class Uygulama(ttk.Frame):
     def incele(self):
         yol = self.v_step.get().strip()
         if not os.path.isfile(yol):
-            messagebox.showwarning("STEP", "Geçerli bir STEP dosyası seçin."); return
+            messagebox.showwarning("Dosya", "Geçerli bir dosya seçin."); return
+        try:
+            self.v_durum.set(f"biçim: {self.M.E.bicim_tani(yol)}")
+        except self.M.E.OkunamazBicim as ex:
+            messagebox.showwarning("Bu biçim okunamıyor", str(ex))
+            self.v_durum.set("okunamayan biçim"); return
         if not self.v_out.get():
             self.v_out.set(os.path.splitext(yol)[0] + "_cikti")
         self._basla("STEP okunuyor…")
