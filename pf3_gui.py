@@ -420,7 +420,8 @@ class Uygulama(ttk.Frame):
 
         alt = ttk.Frame(f); alt.pack(fill="x", pady=(8, 0))
         ttk.Label(alt, text="K-faktörü:").pack(side="left")
-        self.v_kfaktor = tk.StringVar(value=str(self.M.K_FAKTOR if self.M else 0.44))
+        self.v_kfaktor = tk.StringVar(
+            value=str(self.M.k_faktor_ayari() if self.M else 0.40))
         ttk.Entry(alt, textvariable=self.v_kfaktor, width=7).pack(side="left", padx=(4, 6))
         ttk.Label(alt, foreground="#555", text=(
             "büküm payı = açı × (iç yarıçap + K × kalınlık). Tezgâha ve "
@@ -460,14 +461,17 @@ class Uygulama(ttk.Frame):
             if not 0.1 <= kf <= 0.6:
                 raise ValueError
         except ValueError:
-            messagebox.showwarning("K-faktörü",
-                                   "K-faktörü 0,10 ile 0,60 arasında bir sayı olmalı.")
+            messagebox.showwarning(
+                "K-faktörü",
+                "K-faktörü 0,10 ile 0,60 arasında bir sayı olmalı.\n"
+                "Ondalık ayracı virgül de olabilir: 0,32 / 0.32")
             return
         on = self.v_out.get().strip()
         if not on:
             messagebox.showwarning("Klasör", "Önce çıktı klasörünü seçin.")
             return
         os.makedirs(on, exist_ok=True)
+        self.M.ayar_yaz(k_faktor=kf)       # bir daha girmeye gerek kalmasın
         kodlar = {self.komp[self.ac_satir[s]].get("kod")
                   or self.komp[self.ac_satir[s]].get("ad") for s in sec}
         for s in sec:
@@ -603,6 +607,7 @@ class Uygulama(ttk.Frame):
         adlar = [f"{k} – {t} ({r} g/cm³)" for k, (t, r) in M.MALZEME.items()]
         self.cb_mal.configure(values=adlar)
         self.v_mal.set(next(a for a in adlar if a.startswith(M.VARSAYILAN_MALZEME + " ")))
+        self._kfaktoru_tazele()
         self.v_durum.set("hazır – STEP dosyasını seçin")
         self._yaz(f"motor hazır, {len(M.MALZEME)} malzeme tanımlı")
         if self.v_step.get():

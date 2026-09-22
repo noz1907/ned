@@ -883,9 +883,48 @@ def merkez_cizgileri(msp, o, yer, kaydir, en_cok=1500):
 # Büküm payı (bend allowance):   BA = teta * (r_ic + K * t)
 #   teta  büküm açısı (radyan), r_ic iç yarıçap, t sac kalınlığı,
 #   K     nötr eksenin sac içindeki yeri (K-faktörü). Yumuşak çelikte
-#         genellikle 0,40 - 0,50; varsayılan 0,44.
-# K-faktörü tezgâha ve malzemeye göre değişir, bu yüzden dışarıdan verilir.
-K_FAKTOR = 0.44
+#         genellikle 0,40 - 0,50.
+# K-faktörü tezgâha ve malzemeye göre değişir, bu yüzden dışarıdan verilir;
+# arayüzdeki kutudan ya da --k-faktor ile değiştirilir.
+K_FAKTOR = 0.40
+
+
+# ---------------------------------------------------------------- ayarlar
+# Kullanıcının verdiği K-faktörü gibi ayarlar, program kapansa da kalsın.
+# Dosya kullanıcının kendi klasöründe durur: program Program Files gibi
+# yazma izni olmayan bir yere kurulmuş olabilir.
+AYAR_DOSYA = os.path.join(os.path.expanduser("~"), ".pifikstur.json")
+
+
+def ayar_oku():
+    try:
+        with open(AYAR_DOSYA, encoding="utf-8") as f:
+            a = json.load(f)
+        return a if isinstance(a, dict) else {}
+    except Exception:
+        return {}
+
+
+def ayar_yaz(**yeni):
+    """Verilen ayarları saklar. Yazamazsa sessizce geçer: ayar
+    saklanamaması işi durdurmaz."""
+    a = ayar_oku()
+    a.update({k: v for k, v in yeni.items() if v is not None})
+    try:
+        with open(AYAR_DOSYA, "w", encoding="utf-8") as f:
+            json.dump(a, f, ensure_ascii=False, indent=1)
+    except Exception:
+        pass
+    return a
+
+
+def k_faktor_ayari():
+    """Saklanmış K-faktörü; yoksa varsayılan."""
+    try:
+        k = float(ayar_oku().get("k_faktor", K_FAKTOR))
+        return k if 0.1 <= k <= 0.6 else K_FAKTOR
+    except (TypeError, ValueError):
+        return K_FAKTOR
 
 
 class AcilimYok(Exception):
@@ -2206,8 +2245,9 @@ def main():
     ap.add_argument("--acinim", default="",
                     help="bükümlü sacların açınımı: kod listesi (virgülle) "
                          "ya da HEPSI")
-    ap.add_argument("--k-faktor", type=float, default=K_FAKTOR,
-                    help=f"büküm payı K-faktörü (varsayılan {K_FAKTOR})")
+    ap.add_argument("--k-faktor", type=float, default=None,
+                    help=f"büküm payı K-faktörü, 0.10 - 0.60 arası "
+                         f"(saklanan değer; ilk kurulumda {K_FAKTOR})")
     ap.add_argument("--zip", action="store_true", help="çıktıları cizimler.zip'te topla")
     a = ap.parse_args()
     if a.malzeme_liste:
@@ -2271,8 +2311,14 @@ def main():
     if a.acinim:
         kodlar = None if a.acinim.strip().upper() in ("HEPSI", "HEPSİ", "*") \
             else {t.strip() for t in a.acinim.replace(";", ",").split(",") if t.strip()}
-        print("açınım:")
-        acilim_yaz(kayit, komp, P, on, kodlar=kodlar, k_faktor=a.k_faktor)
+        kf = a.k_faktor if a.k_faktor is not None else k_faktor_ayari()
+        if not 0.1 <= kf <= 0.6:
+            print(f"hata: K-faktörü 0.10 - 0.60 arasında olmalı ({kf} verildi)")
+            return
+        if a.k_faktor is not None:
+            ayar_yaz(k_faktor=kf)          # bir daha yazmaya gerek kalmasın
+        print(f"açınım (K-faktörü {kf}):")
+        acilim_yaz(kayit, komp, P, on, kodlar=kodlar, k_faktor=kf)
     calistir(a.step, on, kayit, komp, P, asama=asama, esl=esl, agac=agac, genel=genel,
              yogunluk=a.yogunluk, en_az_hacim=a.en_az_hacim, tek=a.tek,
              en_cok=a.en_cok, log=lambda t: print(f"{t}  [{time.time()-t0:.0f}s]"))

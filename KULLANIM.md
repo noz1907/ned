@@ -278,7 +278,10 @@ okunmaz bu sayfa açılır.
 1. Listeden **açınımını istediğiniz parçaları seçin** – Ctrl ile tek tek,
    Shift ile aralık, ya da **Tümünü seç**. Parçanın kaç bükümü olduğu
    fark etmez.
-2. Gerekirse **K-faktörünü** değiştirin (varsayılan 0,44).
+2. Gerekirse **K-faktörünü** değiştirin (ilk kurulumda 0,40).
+   0,10 – 0,60 arası her değeri girebilirsiniz – 0,32 de olur;
+   ondalık ayracı virgül ya da nokta olabilir. **Verdiğiniz
+   değer saklanır**, bir daha girmeniz gerekmez.
 3. **SEÇİLENLERİN AÇINIMINI ÜRET** deyin.
 
 Her parça için `A<poz>_<kod>_acinim.dxf` ve hepsi için `ACINIM.csv`
@@ -293,8 +296,18 @@ büküm payı (BA) = büküm açısı (radyan) × (iç yarıçap + K × sac kal�
 ```
 
 K-faktörü nötr eksenin sac içinde nerede olduğunu söyler; tezgâha ve
-malzemeye göre değişir (yumuşak çelikte genelde 0,40 – 0,50). Program
-K'yı **tahmin etmez**, size sorar: değiştirirseniz açınım boyu değişir.
+malzemeye göre değişir. Program K'yı **tahmin etmez**, size sorar:
+değiştirirseniz açınım boyu değişir. İlk kurulumda 0,40'tır; 0,10 – 0,60
+arası istediğiniz değeri girebilirsiniz. Verdiğiniz değer
+`%USERPROFILE%\.pifikstur.json` dosyasında saklanır, her seferinde
+tekrar girmenize gerek kalmaz.
+
+Örnek (2 bükümlü, 3 mm sac, aynı parça):
+
+| K | açınım genişliği |
+|---|------------------|
+| 0,40 | 129,69 mm |
+| 0,32 | 128,94 mm |
 
 Program kesiti parçadan kendisi alır, kesitin orta çizgisini kurar ve
 sonucu **kesit alanı ÷ sac kalınlığı** ile çapraz denetler. İkisi
@@ -461,7 +474,7 @@ python pf3_olcu.py parca.stp -o cikti --tek 01.050.000.01 --asama 2
                                                   # yalnız tek parçanın resmi
 python pf3_olcu.py parca.stp -o cikti --asama 1 --acinim 01.051.000.01
                                                   # yalnız açınım
-python pf3_olcu.py parca.stp -o cikti --acinim HEPSI --k-faktor 0.42
+python pf3_olcu.py parca.stp -o cikti --acinim HEPSI --k-faktor 0.32
 ```
 
 ### Bütün seçenekler
@@ -486,7 +499,7 @@ python pf3_olcu.py parca.stp -o cikti --acinim HEPSI --k-faktor 0.42
 | `--gizli` / `--gizli-yok` | gizli (kesik) çizgiler |
 | `--montaj-yok` | montaj çizimini atla |
 | `--acinim <kod,kod>` / `--acinim HEPSI` | bükümlü sacların açınımı |
-| `--k-faktor <0.44>` | büküm payı K-faktörü |
+| `--k-faktor <0.40>` | büküm payı K-faktörü; verilen değer saklanır |
 
 ---
 
