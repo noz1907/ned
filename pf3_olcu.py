@@ -32,7 +32,9 @@ import ezdxf
 
 from OCP.gp import gp_Pnt, gp_Dir, gp_Trsf, gp_Ax2, gp_Ax3, gp_Vec
 from OCP.BRepBuilderAPI import (BRepBuilderAPI_Transform,
-                                BRepBuilderAPI_MakeFace)
+                                BRepBuilderAPI_MakeFace,
+                                BRepBuilderAPI_MakePolygon)
+from OCP.ShapeUpgrade import ShapeUpgrade_UnifySameDomain
 from OCP.BRepGProp import BRepGProp
 from OCP.GProp import GProp_GProps
 from OCP.BRepAdaptor import BRepAdaptor_Surface, BRepAdaptor_Curve
@@ -41,14 +43,14 @@ from OCP.GeomAbs import (GeomAbs_Plane, GeomAbs_Cylinder, GeomAbs_Cone,
                          GeomAbs_Ellipse)
 from OCP.TopAbs import TopAbs_FACE, TopAbs_EDGE, TopAbs_VERTEX, TopAbs_REVERSED
 from OCP.TopExp import TopExp, TopExp_Explorer
-from OCP.TopTools import TopTools_IndexedMapOfShape
+from OCP.TopTools import TopTools_IndexedMapOfShape, TopTools_ListOfShape
 from OCP.TopoDS import TopoDS, TopoDS_Compound
 from OCP.BRep import BRep_Builder, BRep_Tool
 from OCP.Bnd import Bnd_Box
 from OCP.BRepBndLib import BRepBndLib
 from OCP.BRepPrimAPI import BRepPrimAPI_MakeBox
-from OCP.BRepAlgoAPI import BRepAlgoAPI_Cut
-from OCP.BRepTools import BRepTools
+from OCP.BRepAlgoAPI import BRepAlgoAPI_Cut, BRepAlgoAPI_Fuse
+from OCP.BRepTools import BRepTools, BRepTools_WireExplorer
 from OCP.TopAbs import TopAbs_WIRE
 from OCP.HLRBRep import HLRBRep_Algo, HLRBRep_HLRToShape
 from OCP.HLRAlgo import HLRAlgo_Projector
@@ -1237,7 +1239,7 @@ def _orta_ogeler(yuz, t, tol=None):
         # yarısı kadar kaydır.
         orta_u = fark_u / 2.0
         kok = (a[0][0] + orta_u * -uy, a[0][1] + orta_u * ux)
-        ogeler.append({"tip": "duz", "uz": s1 - s0,
+        ogeler.append({"tip": "duz", "uz": s1 - s0, "yon": (ux, uy),
                        "p": (kok[0] + s0 * ux, kok[1] + s0 * uy),
                        "q": (kok[0] + s1 * ux, kok[1] + s1 * uy)})
 
@@ -1318,7 +1320,8 @@ def _zincir(ogeler, birles=0.2):
     return zincir
 
 
-def sac_acilim(sh, o=None, k_faktor=K_FAKTOR, istasyon=11):
+def sac_acilim(sh, o=None, k_faktor=K_FAKTOR, istasyon=11,
+               kontur=True):
     """Tek yönde bükülmüş sac parçanın açınımını hesaplar.
 
     Yöntem: büküm ekseni Z'ye döndürülür, parçadan DELİKSİZ bir kesit
@@ -1386,33 +1389,805 @@ def sac_acilim(sh, o=None, k_faktor=K_FAKTOR, istasyon=11):
                           "acinimda_son_mm": round(gen + ba, 2)})
             yer.append((gen, gen + ba))
             gen += ba
-    return {"kalinlik_mm": round(t, 2),
-            "acinim_genislik_mm": round(gen, 2),
-            "acinim_boy_mm": round(boy, 2),
+    sonuc = {"kalinlik_mm": round(t, 2),
+             "acinim_genislik_mm": round(gen, 2),
+             "acinim_boy_mm": round(boy, 2),
+             "bukum_sayisi": len(bkm),
+             "duvar_sayisi": len(duzler),
+             "k_faktor": k_faktor,
+             "kesit_konumu_mm": round(konum - kb[2], 1),
+             "kesit_alani_mm2": round(alan, 1),
+             "orta_cizgi_mm": round(orta, 2),
+             "bukum_yerleri": yer,
+             "bukumler": bilgi}
+
+    # Kesim konturu: lazer/pres için gereken gerçek dış kontur ve delikler.
+    # Kesitten değil, YÜZEYLERDEN açılır; kesiti boy boyunca değişen
+    # parçalar da böyle doğru çıkar.
+    if kontur:
+        try:
+            ac = acilim_kesim(sh, t, k_faktor, hacim=o.get("hacim_mm3")
+                              if isinstance(o, dict) else None)
+            sonuc.update(ac)
+            # İki bağımsız yöntem aynı genişliği vermeli: kesitten çıkan
+            # orta çizgi hesabı ile yüzeyden açılan konturun genişliği.
+            if abs(ac["acinim_genislik_mm"] - gen) > max(0.5, 0.01 * gen):
+                sonuc["kontur_notu"] = (
+                    f"Not: kesitten çıkan açınım genişliği {gen:.1f} mm, "
+                    f"yüzeyden açılan kontur {ac['acinim_genislik_mm']:.1f} mm. "
+                    f"Fark, parçanın kesitinin boy boyunca değişmesinden "
+                    f"gelir; kontur ölçüsü geçerlidir.")
+        except AcilimYok as e:
+            sonuc["kontur_notu"] = (f"Kesim konturu çıkarılamadı: {e} "
+                                    f"Resimde yalnız blank ölçüsü var.")
+        except Exception as e:
+            sonuc["kontur_notu"] = (
+                f"Kesim konturu çıkarılamadı ({type(e).__name__}). "
+                f"Resimde yalnız blank ölçüsü var.")
+    return sonuc
+
+
+def acilim_kesim(sh, t, k_faktor, hacim=None, en_cok_sapma=0.03):
+    """Sacı yüzeylerinden açar ve KESİM KONTURUNU döndürür.
+
+    Sonuç, bağımsız bir ölçüyle denetlenir: düzlemdeki alan x kalınlık,
+    parçanın gerçek hacmine eşit olmak zorundadır (büküm payının
+    K-faktöründen gelen küçük farkı hesaba katılarak). Tutmazsa sonuç
+    verilmez: lazerde hurda çıkarmaktansa hiç vermemek gerekir."""
+    parca, delik, harita, b_harita, duvarlar, bukumler = sac_ac(sh, t, k_faktor)
+    taban = _birlestir([f for f in (_cokgen_yuzu(w) for w in parca) if f])
+    if taban is None:
+        raise AcilimYok("Açınım parçaları düzlemde birleştirilemedi.")
+    delik_yuz = [f for f in (_cokgen_yuzu(w) for w in delik) if f]
+    if delik_yuz:
+        op = BRepAlgoAPI_Cut(taban, _birlestir(delik_yuz, sadelestir=False))
+        op.SetFuzzyValue(0.01)
+        op.Build()
+        if op.IsDone():
+            taban = op.Shape()
+    g = GProp_GProps(); BRepGProp.SurfaceProperties_s(taban, g)
+    alan = g.Mass()
+    if hacim:
+        # K != 0,5 olduğunda büküm bölgesi, orta yüzey alanından biraz
+        # farklı hacim tutar; farkı tam olarak hesaplayıp düş.
+        duzelt = sum(b["aci"] * t * t
+                     * (bukumler[bi]["z"][1] - bukumler[bi]["z"][0])
+                     * (0.5 - k_faktor) for bi, b in b_harita.items())
+        sapma = (alan * t + duzelt - hacim) / hacim
+        if abs(sapma) > en_cok_sapma:
+            raise AcilimYok(
+                f"Açınım denetimi tutmadı: düzlemdeki alan x kalınlık "
+                f"{alan * t + duzelt:.0f} mm3, parçanın hacmi {hacim:.0f} "
+                f"mm3 (%{100 * sapma:+.1f}). Açma haritası bu parçada "
+                f"doğru kurulamamış; kontur verilmiyor.")
+    # Telleri çıkar, düzlemin sol alt köşesini başlangıç yap
+    dis, ic = [], []
+    m = TopTools_IndexedMapOfShape()
+    TopExp.MapShapes_s(taban, TopAbs_FACE, m)
+    for i in range(1, m.Extent() + 1):
+        f = TopoDS.Face_s(m.FindKey(i))
+        d0, i0 = _yuz_telleri(f, sapma=0.02)
+        dis.append([(p.X(), p.Y()) for p in d0])
+        ic += [[(p.X(), p.Y()) for p in w] for w in i0]
+    # Açınım TEK PARÇA olmak zorundadır. Parçalı çıkıyorsa duvarlar
+    # düzlemde uç uca oturmamış demektir; o zaman aradaki dikişler
+    # kesim çizgisi gibi görünür ve lazerde parça ikiye ayrılır.
+    if len(dis) != 1:
+        raise AcilimYok(
+            f"Açınım düzlemde {len(dis)} ayrı parça çıktı; duvarlar uç uca "
+            f"oturmadı. Bükümlerin eksenleri birbirine tam paralel "
+            f"olmadığında oluyor. Kesim konturu verilmiyor.")
+    xs = [p[0] for w in dis for p in w]; ys = [p[1] for w in dis for p in w]
+    dx, dy = -min(xs), -min(ys)
+    kay = lambda w: [(x + dx, y + dy) for x, y in w]
+    # Büküm çizgileri: ağaçtaki her bükümün düzlemdeki başı ve sonu
+    bkm = []
+    for bi, b in sorted(b_harita.items(), key=lambda kv: min(kv[1]["s"],
+                                                             kv[1]["s_son"])):
+        a1, a2 = sorted((b["s"] + dy, b["s_son"] + dy))
+        bkm.append({"r_ic": round(bukumler[bi]["r_ic"], 2),
+                    "r_dis": round(bukumler[bi]["r_ic"] + t, 2),
+                    "aci_derece": round(math.degrees(b["aci"]), 1),
+                    "pay_mm": round(b["pay"], 2),
+                    "acinimda_bas_mm": round(a1, 2),
+                    "acinimda_son_mm": round(a2, 2)})
+    return {"kontur_dis": [kay(w) for w in dis],
+            "kontur_delik": [kay(w) for w in ic],
+            "delik_adedi": len(ic),
+            "acinim_boy_mm": round(max(xs) - min(xs), 2),
+            "acinim_genislik_mm": round(max(ys) - min(ys), 2),
+            "acinim_alan_mm2": round(alan, 1),
+            "duvar_sayisi": len(harita),
             "bukum_sayisi": len(bkm),
-            "duvar_sayisi": len(duzler),
-            "k_faktor": k_faktor,
-            "kesit_konumu_mm": round(konum - kb[2], 1),
-            "kesit_alani_mm2": round(alan, 1),
-            "orta_cizgi_mm": round(orta, 2),
-            "bukum_yerleri": yer,
-            "bukumler": bilgi}
+            "bukumler": bkm,
+            "bukum_yerleri": [(b["acinimda_bas_mm"], b["acinimda_son_mm"])
+                              for b in bkm]}
+
+
+# ------------------------------------------------------- açınım konturu
+# Açınım resmi kesim içindir: lazer, pres, delme. O yüzden BLANK
+# dikdörtgeni değil, parçanın GERÇEK kesim konturu ve delikleri çıkar.
+#
+# Yöntem, sacın fiziksel olarak açılmasının aynısıdır:
+#   * Her düz duvar, kendi düzlemindeki sac yüzüdür. Yüzün sınırı
+#     (dış kontur + delikler) düzleme OLDUĞU GİBİ taşınır; duvar zaten
+#     düzdür, şekli bozulmaz.
+#   * Her büküm, silindir yüzeyinin NÖTR EKSENDE açılmasıdır. Silindirin
+#     sınırı, açı farkı x nötr yarıçap ile düzleme yayılır. Büküm
+#     boşaltmaları (relief) da böylece kendiliğinden gelir.
+#   * Parçalar düzlemde birleştirilir, aradaki teğet çizgileri silinir.
+#
+# Düzlem koordinatları:  X = büküm ekseni boyunca (z),  Y = açınım
+# boyunca (s). Böylece büküm çizgileri yatay olur.
+SAPMA = 0.05                      # eğri -> çokgen çevirme sapması, mm
+
+
+def _tel_dizisi(tel, sapma=SAPMA):
+    """Bir teli SIRALI nokta dizisine çevirir."""
+    p = []
+    ex = BRepTools_WireExplorer(tel)
+    while ex.More():
+        e = ex.Current()
+        ters = e.Orientation() == TopAbs_REVERSED
+        c = BRepAdaptor_Curve(e)
+        d = GCPnts_TangentialDeflection(c, sapma, 0.2)
+        q = [c.Value(d.Parameter(i)) for i in range(1, d.NbPoints() + 1)]
+        if ters:
+            q.reverse()
+        if p and q and math.dist((p[-1].X(), p[-1].Y(), p[-1].Z()),
+                                 (q[0].X(), q[0].Y(), q[0].Z())) > 1e-6:
+            q.reverse()
+        p += q[1:] if p else q
+        ex.Next()
+    return p
+
+
+def _yuz_telleri(yuz, sapma=SAPMA):
+    """(dış tel noktaları, [delik teli noktaları, ...])"""
+    dis_tel = BRepTools.OuterWire_s(yuz)
+    dis, ic = _tel_dizisi(dis_tel, sapma), []
+    ex = TopExp_Explorer(yuz, TopAbs_WIRE)
+    while ex.More():
+        w = TopoDS.Wire_s(ex.Current())
+        if not w.IsSame(dis_tel):
+            ic.append(_tel_dizisi(w, sapma))
+        ex.Next()
+    return dis, ic
+
+
+def _duvar_yuzleri(sh, oge, t, tol=None):
+    """Bir düz duvarın sac yüzleri. Sacın İKİ yüzü de aday; toplam alanı
+    büyük olan taraf seçilir. Havşa/cep varsa o taraftaki delik büyük
+    görünür; büyük alanlı taraf, gerçek geçme deliğini veren taraftır."""
+    tol = tol or max(0.1, 0.1 * t)
+    ux, uy = _duz_yon(oge)
+    nx, ny = -uy, ux                       # duvara dik yön
+    d_orta = oge["p"][0] * nx + oge["p"][1] * ny
+    s_bas = oge["p"][0] * ux + oge["p"][1] * uy
+    s_son = s_bas + oge["uz"]
+    m = TopTools_IndexedMapOfShape()
+    TopExp.MapShapes_s(sh, TopAbs_FACE, m)
+    taraf = {1: [], -1: []}
+    for i in range(1, m.Extent() + 1):
+        f = TopoDS.Face_s(m.FindKey(i))
+        ad = BRepAdaptor_Surface(f)
+        if ad.GetType() != GeomAbs_Plane:
+            continue
+        dn = ad.Plane().Axis().Direction()
+        if abs(dn.Z()) > 0.02:
+            continue                        # eksene dik değil: uç yüzey
+        if abs(abs(dn.X() * nx + dn.Y() * ny) - 1.0) > 0.02:
+            continue                        # bu duvara paralel değil
+        q = ad.Plane().Location()
+        d = q.X() * nx + q.Y() * ny
+        for yon in (1, -1):
+            if abs(d - (d_orta + yon * t / 2.0)) <= tol:
+                fk = kutu(f)
+                # yüzün duvar üzerindeki aralığı, öğeyle örtüşüyor mu?
+                ks = [(fk[0], fk[1]), (fk[0], fk[4]), (fk[3], fk[1]), (fk[3], fk[4])]
+                pr = [a * ux + b * uy for a, b in ks]
+                if min(max(pr), s_son) - max(min(pr), s_bas) > 0.1:
+                    g = GProp_GProps(); BRepGProp.SurfaceProperties_s(f, g)
+                    taraf[yon].append((g.Mass(), f))
+    a1 = sum(x for x, _ in taraf[1]); a2 = sum(x for x, _ in taraf[-1])
+    sec = taraf[1] if a1 >= a2 else taraf[-1]
+    return [f for _, f in sec]
+
+
+def _bukum_yuzleri_kati(sh, oge, tol=0.2):
+    """Bir bükümün silindir yüzeyleri (iç ve dış)."""
+    m = TopTools_IndexedMapOfShape()
+    TopExp.MapShapes_s(sh, TopAbs_FACE, m)
+    out = []
+    for i in range(1, m.Extent() + 1):
+        f = TopoDS.Face_s(m.FindKey(i))
+        ad = BRepAdaptor_Surface(f)
+        if ad.GetType() != GeomAbs_Cylinder:
+            continue
+        c = ad.Cylinder()
+        d = c.Position().Direction()
+        if abs(abs(d.Z()) - 1.0) > 0.02:
+            continue
+        ek = c.Position().Location()
+        if math.dist((ek.X(), ek.Y()), oge["m"]) > tol:
+            continue
+        if min(abs(c.Radius() - oge["r_ic"]),
+               abs(c.Radius() - (oge["r_ic"] + 2 * (oge["r_orta"] - oge["r_ic"])))) > tol:
+            continue
+        out.append(f)
+    return out
+
+
+def _aci_farki(a, b):
+    """b - a, (-pi, pi] aralığına indirgenmiş."""
+    return (b - a + math.pi) % (2 * math.pi) - math.pi
+
+
+def _duz_yon(oge):
+    """Düz öğenin zincirdeki gidiş yönü (p'den q'ya)."""
+    dx, dy = oge["q"][0] - oge["p"][0], oge["q"][1] - oge["p"][1]
+    n = math.hypot(dx, dy)
+    return (dx / n, dy / n) if n > 1e-9 else oge.get("yon", (1.0, 0.0))
+
+
+def acilim_telleri(sh, zincir, t, k_faktor):
+    """Açınımın düzlemdeki tellerini üretir.
+
+    Geri dönüş: (parça dış telleri, delik telleri). Noktalar düzlem
+    koordinatındadır: (z, s)."""
+    parca, delik = [], []
+    s0 = 0.0
+    for oge in zincir:
+        if oge["tip"] == "duz":
+            ux, uy = _duz_yon(oge)
+            s_bas = oge["p"][0] * ux + oge["p"][1] * uy
+            taban = s0
+
+            def harita(p, ux=ux, uy=uy, s_bas=s_bas, taban=taban):
+                return (p.Z(), taban + (p.X() * ux + p.Y() * uy) - s_bas)
+
+            yuzler = _duvar_yuzleri(sh, oge, t)
+            ilerle = oge["uz"]
+        else:
+            mx, my = oge["m"]
+            r_n = oge["r_ic"] + k_faktor * t
+            f_bas = math.atan2(oge["p"][1] - my, oge["p"][0] - mx)
+            f_son = math.atan2(oge["q"][1] - my, oge["q"][0] - mx)
+            yon = 1.0 if _aci_farki(f_bas, f_son) >= 0 else -1.0
+            taban = s0
+
+            def harita(p, mx=mx, my=my, f_bas=f_bas, yon=yon, r_n=r_n, taban=taban):
+                f = math.atan2(p.Y() - my, p.X() - mx)
+                return (p.Z(), taban + yon * _aci_farki(f_bas, f) * r_n)
+
+            yuzler = _bukum_yuzleri_kati(sh, oge)
+            ilerle = oge["aci"] * r_n
+        for f in yuzler:
+            try:
+                dis, ic = _yuz_telleri(f)
+            except Exception:
+                continue
+            if len(dis) > 2:
+                parca.append([harita(p) for p in dis])
+            delik += [[harita(p) for p in w] for w in ic if len(w) > 2]
+        s0 += ilerle
+    if not parca:
+        raise AcilimYok("Açınım konturu kurulamadı: duvarların sac yüzeyleri "
+                        "bulunamadı.")
+    return parca, delik
+
+
+# ------------------------------------------------- yüzeyden açma (genel)
+# Tek kesitten kurulan zincir, kesiti boy boyunca DEĞİŞEN parçalarda
+# yanılır: bir bölümünde fazladan flanşı olan sac, kesiti nereden alırsan
+# al ya o flanşı görmez ya da yalnız onu görür. Bu yüzden açınım
+# doğrudan YÜZEYLERDEN kurulur:
+#
+#   duvar  = birbirine sac kalınlığı kadar uzak, eksene paralel iki düzlem
+#   büküm  = ekseni sac eksenine paralel, iç/dış yarıçap farkı kalınlık
+#            kadar olan silindir çifti
+#   komşuluk = bükümün nötr silindiri duvarın ORTA DÜZLEMİNE teğettir
+#
+# Duvarlar ve bükümler bir AĞAÇ oluşturur. Ağaç kökten gezilir, her
+# duvara düzlemdeki yeri (s = A + B*p) verilir, bükümler nötr eksende
+# açılır. Böylece parçanın hangi bölümünde hangi flanşın olduğu fark
+# etmez; her yüzey kendi yerine oturur.
+
+
+def _kanonik_yon3(n):
+    """Düzlem normalini tek biçime indirir (3B).
+
+    Karşılaştırmalar SIFIRA TOLERANSLIDIR: tam eksenel bir yüzeyde
+    bileşenin 1e-17'lik işareti, aynı düzlemi iki ayrı düzlem gibi
+    gösterip eşleşmeyi bozuyordu."""
+    x, y, z = n
+    b = math.sqrt(x * x + y * y + z * z)
+    if b < 1e-9:
+        return None
+    x, y, z = x / b, y / b, z / b
+    if y < -1e-12 or (abs(y) <= 1e-12 and x < -1e-12) or \
+       (abs(y) <= 1e-12 and abs(x) <= 1e-12 and z < 0.0):
+        x, y, z = -x, -y, -z
+    if abs(x) <= 1e-12:
+        x = 0.0
+    if abs(y) <= 1e-12:
+        y = 0.0
+    if abs(z) <= 1e-12:
+        z = 0.0
+    return (x, y, z)
+
+
+def _kenar_anahtari(e, yuvarla=1e-4):
+    """Bir kenarı uçlarından tek biçimde adlandırır. İki yüz aynı kenarı
+    paylaşıyorsa aynı anahtarı verir."""
+    uc = []
+    ex = TopExp_Explorer(e, TopAbs_VERTEX)
+    gor = []
+    while ex.More():
+        p = BRep_Tool.Pnt_s(TopoDS.Vertex_s(ex.Current()))
+        t = (round(p.X() / yuvarla), round(p.Y() / yuvarla), round(p.Z() / yuvarla))
+        if t not in gor:
+            gor.append(t)
+        ex.Next()
+    uc = sorted(gor)
+    return tuple(uc)
+
+
+def _bitisik_gruplar(yuzler):
+    """Aynı düzlemdeki yüzleri KENAR KOMŞULUĞUNA göre ayrı parçalara böler.
+
+    Bir duvar, aynı düzlemde olsa bile başka bir duvarla kesilmiş olabilir:
+    sacın ortasına basılmış bir kaburga, alt yüzeyi iki ayrı şeride böler.
+    Bu iki şerit açınımda AYRI yerlere düşer; tek duvar sayılırlarsa
+    büküm ağacı yanlış kurulur."""
+    anahtar = []
+    for f in yuzler:
+        k = set()
+        ex = TopExp_Explorer(f, TopAbs_EDGE)
+        while ex.More():
+            k.add(_kenar_anahtari(TopoDS.Edge_s(ex.Current())))
+            ex.Next()
+        anahtar.append(k)
+    ana = list(range(len(yuzler)))
+
+    def kok(i):
+        while ana[i] != i:
+            ana[i] = ana[ana[i]]; i = ana[i]
+        return i
+
+    for i in range(len(yuzler)):
+        for j in range(i + 1, len(yuzler)):
+            if anahtar[i] & anahtar[j]:
+                ana[kok(i)] = kok(j)
+    grup = defaultdict(list)
+    for i, f in enumerate(yuzler):
+        grup[kok(i)].append(f)
+    return list(grup.values())
+
+
+def _duzlem_duvarlar(sh, t, tol=None):
+    """Sac duvarları: eksene paralel, kalınlık kadar aralıklı düzlem çifti.
+
+    Duvar "eksene tam paralel" olmayabilir. Büküm eksenleri tasarımda
+    birbirine tam oturmadığı için parçayı döndürünce duvarlar yarım
+    derece eğik kalır. Bu yüzden düzlem 3B olarak tutulur; uzaklıklar
+    düzlemin kendi normali boyunca ölçülür."""
+    tol = tol or max(0.08, 0.08 * t)
+    m = TopTools_IndexedMapOfShape()
+    TopExp.MapShapes_s(sh, TopAbs_FACE, m)
+    kume = {}
+    for i in range(1, m.Extent() + 1):
+        f = TopoDS.Face_s(m.FindKey(i))
+        ad = BRepAdaptor_Surface(f)
+        if ad.GetType() != GeomAbs_Plane:
+            continue
+        d3 = ad.Plane().Axis().Direction()
+        if abs(d3.Z()) > 0.05:
+            continue                       # eksene dik: uç kapağı
+        n = _kanonik_yon3((d3.X(), d3.Y(), d3.Z()))
+        if not n:
+            continue
+        q = ad.Plane().Location()
+        d0 = q.X() * n[0] + q.Y() * n[1] + q.Z() * n[2]
+        g = GProp_GProps(); BRepGProp.SurfaceProperties_s(f, g)
+        fk = kutu(f)
+        # Aynı düzlemdeki yüzeyler aynı (n, d0) verir; kova sınırına
+        # denk gelenler için komşu kovaya da bak.
+        anahtar = None
+        for kk in kume:
+            if abs(kk[0] - n[0]) < 1e-4 and abs(kk[1] - n[1]) < 1e-4 \
+               and abs(kk[2] - n[2]) < 1e-4 and abs(kume[kk]["d0"] - d0) < tol / 2:
+                anahtar = kk
+                break
+        if anahtar is None:
+            anahtar = (round(n[0], 6), round(n[1], 6), round(n[2], 6),
+                       round(d0, 4))
+            kume[anahtar] = {"n": n, "d0": d0, "uye": [], "alan": 0.0,
+                             "z": [fk[2], fk[5]]}
+        g0 = kume[anahtar]
+        g0["uye"].append(f); g0["alan"] += g.Mass()
+        g0["z"] = [min(g0["z"][0], fk[2]), max(g0["z"][1], fk[5])]
+    # Aynı düzlemdeki ayrı şeritleri böl: her biri kendi duvarıdır.
+    duzlemler = []
+    for v in kume.values():
+        if v["alan"] <= 1.0:
+            continue
+        for parcalar in _bitisik_gruplar(v["uye"]):
+            a = 0.0; zr = []
+            for f in parcalar:
+                g = GProp_GProps(); BRepGProp.SurfaceProperties_s(f, g)
+                a += g.Mass(); fk = kutu(f); zr += [fk[2], fk[5]]
+            u0 = _kanonik_yon((-v["n"][1], v["n"][0]))
+            pr = []
+            for f in parcalar:
+                ex = TopExp_Explorer(f, TopAbs_VERTEX)
+                while ex.More():
+                    p = BRep_Tool.Pnt_s(TopoDS.Vertex_s(ex.Current()))
+                    pr.append(p.X() * u0[0] + p.Y() * u0[1])
+                    ex.Next()
+            duzlemler.append({"n": v["n"], "d0": v["d0"], "uye": parcalar,
+                              "alan": a, "z": [min(zr), max(zr)],
+                              "p": (min(pr), max(pr))})
+    # Düzlemleri kalınlık kadar uzaklıkta eşleştir: bir duvar, sacın iki
+    # yüzeyidir. Paralel düzlemlerde bu uzaklık z'den bağımsızdır.
+    duvar, kullanildi = [], set()
+    for i, a in enumerate(duzlemler):
+        if i in kullanildi:
+            continue
+        en_iyi = None
+        for j in range(len(duzlemler)):
+            if j == i or j in kullanildi:
+                continue
+            b = duzlemler[j]
+            if sum(a["n"][k] * b["n"][k] for k in range(3)) < 0.9998:
+                continue
+            if abs(abs(a["d0"] - b["d0"]) - t) > tol:
+                continue
+            if min(a["z"][1], b["z"][1]) - max(a["z"][0], b["z"][0]) < 0.5:
+                continue
+            ortusme = (min(a["p"][1], b["p"][1]) - max(a["p"][0], b["p"][0]))
+            if ortusme < 0.5 * min(a["p"][1] - a["p"][0], b["p"][1] - b["p"][0]):
+                continue                   # sacın karşı yüzü değil
+            puan = min(a["alan"], b["alan"]) / max(a["alan"], b["alan"])
+            if not en_iyi or puan > en_iyi[0]:
+                en_iyi = (puan, j)
+        if not en_iyi:
+            continue
+        j = en_iyi[1]; b = duzlemler[j]
+        kullanildi.add(i); kullanildi.add(j)
+        # Delikler için TEK taraf kullanılır: alanı büyük olan taraf.
+        # Havşa/cep açılmış tarafta delik büyük görünür; alanı büyük olan
+        # taraf gerçek geçme deliğini verir.
+        sec = a if a["alan"] >= b["alan"] else b
+        u = _kanonik_yon((-a["n"][1], a["n"][0]))
+        if not u:
+            continue
+        pr, zr = [], []
+        for f in sec["uye"]:
+            ex = TopExp_Explorer(f, TopAbs_VERTEX)
+            while ex.More():
+                p = BRep_Tool.Pnt_s(TopoDS.Vertex_s(ex.Current()))
+                pr.append(p.X() * u[0] + p.Y() * u[1]); zr.append(p.Z())
+                ex.Next()
+        if not pr:
+            continue
+        duvar.append({"n": a["n"], "u": u, "d0": (a["d0"] + b["d0"]) / 2.0,
+                      "yuzler": sec["uye"], "alan": sec["alan"],
+                      "p": (min(pr), max(pr)), "z": (min(zr), max(zr))})
+    return duvar
+
+
+def _kanonik_yon(n2):
+    """İki boyutlu yön için tek biçim."""
+    nx, ny = n2
+    b = math.hypot(nx, ny)
+    if b < 1e-9:
+        return None
+    nx, ny = nx / b, ny / b
+    if ny < -1e-12 or (abs(ny) <= 1e-12 and nx < 0.0):
+        nx, ny = -nx, -ny
+    if abs(ny) <= 1e-12:
+        return (1.0, 0.0)
+    if abs(nx) <= 1e-12:
+        return (0.0, 1.0)
+    return (nx, ny)
+
+
+def _silindir_bukumler(sh, t, tol=None):
+    """Bükümler: ekseni Z'ye paralel, yarıçap farkı kalınlık kadar olan
+    silindir çiftleri."""
+    tol = tol or max(0.08, 0.08 * t)
+    m = TopTools_IndexedMapOfShape()
+    TopExp.MapShapes_s(sh, TopAbs_FACE, m)
+    grup = defaultdict(list)
+    for i in range(1, m.Extent() + 1):
+        f = TopoDS.Face_s(m.FindKey(i))
+        ad = BRepAdaptor_Surface(f)
+        if ad.GetType() != GeomAbs_Cylinder:
+            continue
+        c = ad.Cylinder()
+        d3 = c.Position().Direction()
+        if abs(abs(d3.Z()) - 1.0) > 0.02:
+            continue
+        ek = c.Position().Location()
+        grup[(round(ek.X() / 0.05), round(ek.Y() / 0.05))].append((f, c, ek))
+    out = []
+    for lst in grup.values():
+        r = [x[1].Radius() for x in lst]
+        r_ic, r_dis = min(r), max(r)
+        if abs((r_dis - r_ic) - t) > tol:
+            continue
+        zr = []
+        for f, _c, _e in lst:
+            fk = kutu(f); zr += [fk[2], fk[5]]
+        # Bükümün İÇ ve DIŞ silindiri düzlemde neredeyse üst üste düşer.
+        # İkisini birden haritalamak, boole işlemine iki çakışık yüz verip
+        # kıymık yüzeyler doğurur. Alanı büyük olan taraf (dış) yeter.
+        taraf = defaultdict(list)
+        for f, c, _e in lst:
+            g = GProp_GProps(); BRepGProp.SurfaceProperties_s(f, g)
+            taraf[round(c.Radius(), 3)].append((f, g.Mass()))
+        en_iyi = max(taraf.values(), key=lambda v: sum(x[1] for x in v))
+        zr = []
+        for f, _a in en_iyi:
+            fk = kutu(f); zr += [fk[2], fk[5]]
+        out.append({"m": (lst[0][2].X(), lst[0][2].Y()), "r_ic": r_ic,
+                    "yuzler": [f for f, _a in en_iyi], "z": (min(zr), max(zr))})
+    return out
+
+
+def _agac_kur(duvarlar, bukumler, t, tol=None):
+    """Büküm hangi iki duvara değiyor? Nötr silindir duvarın orta
+    düzlemine TEĞETTİR: eksenin düzleme uzaklığı = r_ic + t/2."""
+    tol = tol or max(0.15, 0.1 * t)
+    r_yari = t / 2.0
+    for b in bukumler:
+        b["duvar"] = []
+        hedef = b["r_ic"] + r_yari
+        for i, w in enumerate(duvarlar):
+            ort = (max(w["z"][0], b["z"][0]), min(w["z"][1], b["z"][1]))
+            if ort[1] - ort[0] < 0.5:
+                continue                   # z'de hiç örtüşmüyorlar
+            # Duvar eksene tam paralel olmayabilir; uzaklığı ikisinin
+            # ORTAK BOYUNUN ortasında ölç.
+            zo = (ort[0] + ort[1]) / 2.0
+            sd = (b["m"][0] * w["n"][0] + b["m"][1] * w["n"][1]
+                  + zo * w["n"][2] - w["d0"])
+            if abs(abs(sd) - hedef) > tol + abs(w["n"][2]) * (ort[1] - ort[0]):
+                continue
+            # teğet nokta duvarın uzanımı içinde mi, z'de örtüşüyor mu?
+            q = (b["m"][0] - sd * w["n"][0], b["m"][1] - sd * w["n"][1])
+            p = q[0] * w["u"][0] + q[1] * w["u"][1]
+            if not (w["p"][0] - tol <= p <= w["p"][1] + tol):
+                continue
+            b["duvar"].append({"i": i, "p": p, "sd": sd,
+                               "aci": math.atan2(-sd * w["n"][1],
+                                                 -sd * w["n"][0])})
+        if len(b["duvar"]) > 2:            # en yakın iki duvarı tut
+            b["duvar"].sort(key=lambda d: abs(abs(d["sd"]) - hedef))
+            b["duvar"] = b["duvar"][:2]
+    return [b for b in bukumler if len(b["duvar"]) == 2]
+
+
+def _acma_haritasi(duvarlar, bukumler, t, k_faktor):
+    """Ağacı gezerek her duvara ve her büküme düzlemdeki yerini verir.
+
+    Duvar için  s = A + B * p   (p: duvar üzerindeki uzaklık)
+    Büküm için  s = s_teget + e * dfi * r_n"""
+    komsu = defaultdict(list)
+    for bi, b in enumerate(bukumler):
+        a, c = b["duvar"]
+        komsu[a["i"]].append((bi, a, c))
+        komsu[c["i"]].append((bi, c, a))
+    if not komsu:
+        raise AcilimYok("Hiçbir büküm iki duvara birden değmiyor; parçanın "
+                        "duvar-büküm zinciri kurulamadı.")
+    kok = min(komsu)
+    harita = {kok: (0.0, 1.0)}
+    b_harita, gidilen, sira = {}, {kok}, [kok]
+    while sira:
+        wi = sira.pop()
+        A, B = harita[wi]
+        w = duvarlar[wi]
+        orta = (w["p"][0] + w["p"][1]) / 2.0
+        for bi, bu, obur in komsu[wi]:
+            if bi in b_harita:
+                continue
+            b = bukumler[bi]
+            r_n = b["r_ic"] + k_faktor * t
+            aci = abs(_aci_farki(bu["aci"], obur["aci"]))
+            if aci < 1e-3:
+                continue
+            s_teget = A + B * bu["p"]
+            e = B * (1.0 if bu["p"] >= orta else -1.0)
+            yon = 1.0 if _aci_farki(bu["aci"], obur["aci"]) >= 0 else -1.0
+            b_harita[bi] = {"s": s_teget, "e": e, "yon": yon, "r_n": r_n,
+                            "aci_bas": bu["aci"], "aci": aci,
+                            "pay": aci * r_n,
+                            "s_son": s_teget + e * aci * r_n}
+            oi = obur["i"]
+            if oi in gidilen:
+                continue
+            w2 = duvarlar[oi]
+            orta2 = (w2["p"][0] + w2["p"][1]) / 2.0
+            B2 = e * (1.0 if obur["p"] <= orta2 else -1.0)
+            harita[oi] = (b_harita[bi]["s_son"] - B2 * obur["p"], B2)
+            gidilen.add(oi); sira.append(oi)
+    # Ağaca girmeyen duvar kalabilir: kenar pahı, küçük bir çıkıntı.
+    # Küçükse sorun değil, ama gerçek bir duvar dışarıda kalıyorsa
+    # açınım eksik demektir.
+    disarda = [i for i in range(len(duvarlar)) if i not in harita]
+    toplam = sum(w["alan"] for w in duvarlar) or 1.0
+    alan = sum(duvarlar[i]["alan"] for i in disarda)
+    if alan > 0.03 * toplam:
+        raise AcilimYok(
+            f"Duvarların {len(disarda)} tanesi büküm ağacına bağlanamadı "
+            f"(sac yüzeyinin %{100 * alan / toplam:.0f}'i). Parça tek bir "
+            f"sac şeridi değil; kaynaklı ya da çok yönlü bükülmüş olabilir.")
+    if len(b_harita) > len(harita) - 1:
+        raise AcilimYok(
+            f"Büküm ağacında çevrim var ({len(harita)} duvar, "
+            f"{len(b_harita)} büküm). Kapalı kesit - kutu profil, kıvrılıp "
+            f"kendine değen sac - düzleme açılamaz.")
+    return harita, b_harita
+
+
+def sac_ac(sh, t, k_faktor, en_az_alan=1.0):
+    """Sacı yüzeylerinden açar. (düzlem telleri, delik telleri, büküm
+    bilgisi, kullanılan duvar sayısı) döndürür."""
+    duvarlar = _duzlem_duvarlar(sh, t)
+    if not duvarlar:
+        raise AcilimYok("Sac duvarı bulunamadı: birbirine kalınlık kadar "
+                        "uzak, eksene paralel düzlem çifti yok.")
+    bukumler = _agac_kur(duvarlar, _silindir_bukumler(sh, t), t)
+    if not bukumler:
+        raise AcilimYok("Bükümler duvarlara oturmadı; açınım ağacı kurulamadı.")
+    harita, b_harita = _acma_haritasi(duvarlar, bukumler, t, k_faktor)
+    parca, delik = [], []
+    for wi, (A, B) in harita.items():
+        w = duvarlar[wi]
+        ux, uy = w["u"]
+
+        def hw(p, A=A, B=B, ux=ux, uy=uy):
+            return (p.Z(), A + B * (p.X() * ux + p.Y() * uy))
+
+        for f in w["yuzler"]:
+            dis, ic = _yuz_telleri(f)
+            if len(dis) > 2:
+                parca.append([hw(p) for p in dis])
+            delik += [[hw(p) for p in q] for q in ic if len(q) > 2]
+    for bi, bh in b_harita.items():
+        b = bukumler[bi]
+        mx, my = b["m"]
+
+        def hb(p, mx=mx, my=my, bh=bh):
+            f = math.atan2(p.Y() - my, p.X() - mx)
+            return (p.Z(), bh["s"] + bh["e"] * bh["yon"]
+                    * _aci_farki(bh["aci_bas"], f) * bh["r_n"])
+
+        for f in b["yuzler"]:
+            dis, ic = _yuz_telleri(f)
+            if len(dis) > 2:
+                parca.append([hb(p) for p in dis])
+            delik += [[hb(p) for p in q] for q in ic if len(q) > 2]
+    return parca, delik, harita, b_harita, duvarlar, bukumler
+
+
+def _cokgen_alani(noktalar):
+    """Çokgenin İŞARETLİ alanı. Artı: saat yönünün tersi."""
+    a = 0.0
+    for i in range(len(noktalar)):
+        x1, y1 = noktalar[i]
+        x2, y2 = noktalar[(i + 1) % len(noktalar)]
+        a += x1 * y2 - x2 * y1
+    return a / 2.0
+
+
+def _cokgen_yuzu(noktalar, en_az_alan=0.02):
+    """Düzlemdeki nokta dizisinden kapalı yüz. Çok küçükse None.
+
+    Çokgen HER ZAMAN saat yönünün tersine çevrilir. Yönü ters olan yüzün
+    normali de ters bakar; OpenCascade ters normalli iki yüzü, uç uca
+    dursalar bile birleştirmez. Açma haritası duvarları kâh düz kâh ters
+    yönde taşıdığı için bu şart."""
+    if len(noktalar) < 3:
+        return None
+    if _cokgen_alani(noktalar) < 0:
+        noktalar = noktalar[::-1]
+    p = BRepBuilderAPI_MakePolygon()
+    onceki = None
+    for x, y in noktalar:
+        if onceki and abs(x - onceki[0]) < 1e-7 and abs(y - onceki[1]) < 1e-7:
+            continue
+        p.Add(gp_Pnt(x, y, 0.0)); onceki = (x, y)
+    p.Close()
+    if not p.IsDone():
+        return None
+    yap = BRepBuilderAPI_MakeFace(p.Wire())
+    if not yap.IsDone():
+        return None
+    f = yap.Face()
+    g = GProp_GProps(); BRepGProp.SurfaceProperties_s(f, g)
+    return f if g.Mass() > en_az_alan else None
+
+
+def _birlestir(yuzler, sadelestir=True):
+    """Düzlemdeki yüzleri tek parçaya kaynatır, aradaki teğet çizgilerini
+    siler.
+
+    Tek tek birleştirmek yerine HEPSİ BİR SEFERDE verilir: n parça için
+    n-1 boole işlemi yerine tek işlem olur. Yüz sayısı yüzlere çıkan
+    parçalarda aradaki fark dakikalarladır."""
+    if not yuzler:
+        return None
+    if len(yuzler) == 1:
+        sonuc = yuzler[0]
+    else:
+        op = BRepAlgoAPI_Fuse()
+        a, b = TopTools_ListOfShape(), TopTools_ListOfShape()
+        a.Append(yuzler[0])
+        for f in yuzler[1:]:
+            b.Append(f)
+        op.SetArguments(a); op.SetTools(b)
+        op.SetFuzzyValue(0.01)
+        op.Build()
+        if not op.IsDone():
+            raise AcilimYok("Açınım parçaları düzlemde birleştirilemedi.")
+        sonuc = op.Shape()
+    if not sadelestir:
+        return sonuc
+    bir = ShapeUpgrade_UnifySameDomain(sonuc, True, True, True)
+    bir.Build()
+    return bir.Shape()
+
+
+def acilim_konturu(sh, zincir, t, k_faktor):
+    """Açınımın kesim konturu: (dış konturlar, delikler) nokta dizileri."""
+    parca, delik = acilim_telleri(sh, zincir, t, k_faktor)
+    taban = _birlestir([f for f in (_cokgen_yuzu(w) for w in parca) if f])
+    if taban is None:
+        raise AcilimYok("Açınım konturu birleştirilemedi.")
+    delik_yuz = [f for f in (_cokgen_yuzu(w) for w in delik) if f]
+    if delik_yuz:
+        d = _birlestir(delik_yuz, sadelestir=False)
+        op = BRepAlgoAPI_Cut(taban, d)
+        op.SetFuzzyValue(0.01)
+        op.Build()
+        if op.IsDone():
+            taban = op.Shape()
+    dis, ic = [], []
+    m = TopTools_IndexedMapOfShape()
+    TopExp.MapShapes_s(taban, TopAbs_FACE, m)
+    for i in range(1, m.Extent() + 1):
+        f = TopoDS.Face_s(m.FindKey(i))
+        d0, i0 = _yuz_telleri(f, sapma=0.02)
+        dis.append([(p.X(), p.Y()) for p in d0])
+        ic += [[(p.X(), p.Y()) for p in w] for w in i0]
+    return dis, ic
 
 
 def dxf_acilim(r, k, yol, P=None):
-    """Açınım resmi: sacın düz haldeki blank ölçüsü ve büküm çizgileri.
+    """Açınım resmi: kesim konturu, delikler ve büküm çizgileri.
 
-    DİKKAT - bu çizim BLANK ÖLÇÜSÜDÜR: dış kontur kesikleri ve delikler
-    bu resimde yoktur. Büküm tezgâhı için gereken açınım genişliği,
-    büküm yerleri ve büküm payları buradadır."""
+    Kontur çıkarılabildiyse resim KESİME HAZIRDIR: dış kontur ve bütün
+    delikler gerçek yerlerindedir, lazer/pres için doğrudan kullanılır.
+    Çıkarılamadıysa yalnız blank dikdörtgeni çizilir ve sebebi resmin
+    üstüne yazılır."""
     gen, boy, t = r["acinim_genislik_mm"], r["acinim_boy_mm"], r["kalinlik_mm"]
+    kesim = bool(r.get("kontur_dis"))
     doc = dxf_kur(); msp = doc.modelspace()
     # Yazı boyu KISA kenara göre: uzun bir profilde boya göre seçilirse
-    # yazılar açınım genişliğinden büyük çıkar, büküm etiketleri üst üste biner.
+    # yazılar açınım genişliğinden büyük çıkar, etiketler üst üste biner.
     h = min(12.0, max(2.0, min(gen, boy) / 30.0))
     olcu_stili(doc, h)
-    msp.add_lwpolyline([(0, 0), (boy, 0), (boy, gen), (0, gen), (0, 0)],
-                       dxfattribs={"layer": "GORUNEN"})
+    if kesim:
+        for w in r["kontur_dis"]:
+            msp.add_lwpolyline(w, close=True, dxfattribs={"layer": "GORUNEN"})
+        for w in r["kontur_delik"]:
+            msp.add_lwpolyline(w, close=True, dxfattribs={"layer": "GORUNEN"})
+    else:
+        msp.add_lwpolyline([(0, 0), (boy, 0), (boy, gen), (0, gen), (0, 0)],
+                           dxfattribs={"layer": "GORUNEN"})
     for i, b in enumerate(r["bukumler"], 1):
         for y in (b["acinimda_bas_mm"], b["acinimda_son_mm"]):
             msp.add_line((0, y), (boy, y), dxfattribs={"layer": "EKSEN"})
@@ -1446,10 +2221,17 @@ def dxf_acilim(r, k, yol, P=None):
     sat = [(f"{poz}{k.get('kod','')}   {(k.get('ad') or '')[:60]}   AÇINIM", 1.5 * h),
            (f"adet: {k.get('adet','-')}", 1.1 * h),
            (f"ACINIM : {gen} x {boy} mm   sac kalinlik {t} mm", 1.1 * h),
-           (f"{r['bukum_sayisi']} bukum   K-faktoru {r['k_faktor']}", 1.1 * h),
-           ("olcek 1:1   birim: mm", 1.1 * h),
-           ("BLANK OLCUSUDUR: dis kontur kesikleri ve delikler "
-            "bu resimde yoktur.", 1.1 * h)]
+           (f"{r['bukum_sayisi']} bukum   K-faktoru {r['k_faktor']}"
+            + (f"   {r.get('delik_adedi', 0)} delik" if kesim else ""), 1.1 * h),
+           ("olcek 1:1   birim: mm", 1.1 * h)]
+    if kesim:
+        sat.append(("KESIM KONTURUDUR: dis kontur ve delikler gercek "
+                    "yerlerinde.", 1.1 * h))
+    else:
+        sat.append(("BLANK OLCUSUDUR: dis kontur kesikleri ve delikler "
+                    "bu resimde YOKTUR.", 1.1 * h))
+        if r.get("kontur_notu"):
+            sat.append((r["kontur_notu"][:110], 1.0 * h))
     y = gen + 4.0 * h + len(sat) * 2.2 * h
     for metin, yaz_h in sat:
         _yaz(msp, metin, 0.0, y, yaz_h)

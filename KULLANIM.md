@@ -350,13 +350,43 @@ tutmazsa sonuç verilmez, sebebi yazılır. Yani yanlış bir açınım ölçüs
 | Parçada büküm bulunamadı | İç ve dış yüzü aynı eksende, yarıçap farkı sac kalınlığı kadar olan bir silindir çifti yok. Parça düz sac ya da sac parça değil (cıvata, somun, pul…). |
 | Bükümlerin eksenleri birbirine paralel değil | Parça birden çok yönde bükülmüş (kutu/köşe). Bu sürüm tek yönde bükülmüş profilleri açar: L, U, C, Z, köşebent. |
 | Kesit tek bir şerit oluşturmuyor / orta çizgi kurulamadı | Kesit sabit kalınlıkta bir sac şeridi gibi çözülemedi. Kaynaklı, ekli ya da kalınlığı değişen parça. |
-| Kapalı profil | Boru, kutu profil: açılamaz. |
+| Kapalı profil / büküm ağacında çevrim | Boru, kutu profil, kıvrılıp kendine değen sac: düzleme açılamaz. |
+| Duvarların şu kadarı büküm ağacına bağlanamadı | Gerçek bir duvar zincirin dışında kaldı; parça tek bir sac şeridi değil. |
 | Açınım denetimi tutmadı | Orta çizgi uzunluğu ile kesit alanından çıkan uzunluk tutmuyor. Sonuç güvenilir değil, bu yüzden verilmiyor. |
 
-**Üretilen resim blank ölçüsüdür:** açınım genişliği, boy ve büküm
-çizgilerinin alt kenardan uzaklıkları vardır. **Dış kontur kesikleri ve
-delikler o resimde yoktur** – lazer kesim konturu için değil, büküm
-tezgâhı için hazırlanmıştır.
+**Resim iki türlü çıkar. Resmin üstünde hangisi olduğu yazar.**
+
+**1. KESİM KONTURU** – lazer/pres için doğrudan kullanılır. Dış kontur,
+bütün kesikler ve **bütün delikler gerçek yerlerinde**dir; üstüne büküm
+çizgileri ve büküm çizelgesi konur.
+
+Bu durumda açınım kesitten değil, **yüzeylerin kendisinden** açılır:
+her düz duvar kendi düzlemindeki sac yüzeyidir ve düzleme olduğu gibi
+taşınır; her büküm, silindir yüzeyinin nötr eksende açılmasıdır. Duvarlar
+ve bükümler bir ağaç oluşturur, ağaç gezilerek hepsi yerine oturtulur.
+Parçanın kesiti boy boyunca değişiyorsa – bir bölümünde fazladan flanş
+varsa – bu yöntem onu da doğru açar.
+
+**2. BLANK ÖLÇÜSÜ** – yalnız açınım genişliği, boy ve büküm çizgilerinin
+yerleri. Kesim konturu çıkarılamadığında verilir ve **sebebi resmin
+üstüne yazılır**. Büküm tezgâhı için yeter, lazer için yetmez.
+
+**Kesim konturu şu üç denetimden geçmeden verilmez:**
+
+1. **Hacim denetimi.** Düzlemdeki alan × sac kalınlığı, parçanın gerçek
+   hacmine eşit olmalı (büküm payının K-faktöründen gelen küçük farkı
+   hesaba katılarak). Sapma %3'ü geçerse kontur verilmez: bir duvar
+   eksik kalmış ya da bir parça iki kere binmiş demektir.
+2. **Tek parça denetimi.** Açınım düzlemde tek parça çıkmalı. Parçalı
+   çıkarsa aradaki dikişler kesim çizgisi gibi görünür ve lazerde parça
+   ikiye ayrılır; o yüzden verilmez.
+3. **İki yöntem karşılaştırması.** Kesitten çıkan açınım genişliği ile
+   yüzeyden açılan konturun genişliği tutmalı. Tutmuyorsa resme not
+   düşülür.
+
+Kısacası: **yanlış bir kesim konturu çıkmaz.** Ya doğrusu çıkar, ya blank
+ölçüsü çıkar ve nedeni yazar. Lazerde hurda çıkarmaktansa hiç vermemek
+daha iyidir.
 
 ---
 
