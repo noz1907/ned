@@ -269,6 +269,53 @@ listelenir. Listede bir DXF'e çift tıklarsanız önizlemesi açılır.
 Ağır işler arka planda çalışır: pencere kilitlenmez, ilerleme çubuğu dolar,
 **İptal** çalışan adım bitince işi bırakır.
 
+### Adım 6 — AÇINIM (bükümlü sac parçalar)
+
+Bükümlü bir sac parçanın **düz haldeki blank ölçüsünü** ve büküm
+çizgilerinin yerlerini çıkarır. BOM'u beklemez: komponentler okunur
+okunmaz bu sayfa açılır.
+
+1. Listeden **açınımını istediğiniz parçaları seçin** – Ctrl ile tek tek,
+   Shift ile aralık, ya da **Tümünü seç**. Parçanın kaç bükümü olduğu
+   fark etmez.
+2. Gerekirse **K-faktörünü** değiştirin (varsayılan 0,44).
+3. **SEÇİLENLERİN AÇINIMINI ÜRET** deyin.
+
+Her parça için `A<poz>_<kod>_acinim.dxf` ve hepsi için `ACINIM.csv`
+yazılır. Açınımı çıkarılamayan parçaların **nedeni** hem listede hem
+`ACINIM_yapilamayanlar.txt` dosyasında yazar.
+
+**Hesap.** Açınım genişliği, düz duvarların uzunlukları ile her bükümün
+*büküm payının* toplamıdır:
+
+```
+büküm payı (BA) = büküm açısı (radyan) × (iç yarıçap + K × sac kalınlığı)
+```
+
+K-faktörü nötr eksenin sac içinde nerede olduğunu söyler; tezgâha ve
+malzemeye göre değişir (yumuşak çelikte genelde 0,40 – 0,50). Program
+K'yı **tahmin etmez**, size sorar: değiştirirseniz açınım boyu değişir.
+
+Program kesiti parçadan kendisi alır, kesitin orta çizgisini kurar ve
+sonucu **kesit alanı ÷ sac kalınlığı** ile çapraz denetler. İkisi
+tutmazsa sonuç verilmez, sebebi yazılır. Yani yanlış bir açınım ölçüsü
+çıkmaz; ya doğrusu çıkar ya da hiç çıkmaz.
+
+**Sınırlar – şu durumlarda açınım verilmez, nedeni yazılır:**
+
+| ne yazar | ne demek |
+|----------|----------|
+| Parçada büküm bulunamadı | İç ve dış yüzü aynı eksende, yarıçap farkı sac kalınlığı kadar olan bir silindir çifti yok. Parça düz sac ya da sac parça değil (cıvata, somun, pul…). |
+| Bükümlerin eksenleri birbirine paralel değil | Parça birden çok yönde bükülmüş (kutu/köşe). Bu sürüm tek yönde bükülmüş profilleri açar: L, U, C, Z, köşebent. |
+| Kesit tek bir şerit oluşturmuyor / orta çizgi kurulamadı | Kesit sabit kalınlıkta bir sac şeridi gibi çözülemedi. Kaynaklı, ekli ya da kalınlığı değişen parça. |
+| Kapalı profil | Boru, kutu profil: açılamaz. |
+| Açınım denetimi tutmadı | Orta çizgi uzunluğu ile kesit alanından çıkan uzunluk tutmuyor. Sonuç güvenilir değil, bu yüzden verilmiyor. |
+
+**Üretilen resim blank ölçüsüdür:** açınım genişliği, boy ve büküm
+çizgilerinin alt kenardan uzaklıkları vardır. **Dış kontur kesikleri ve
+delikler o resimde yoktur** – lazer kesim konturu için değil, büküm
+tezgâhı için hazırlanmıştır.
+
 ---
 
 ## 2b. Hangi dosya biçimleri okunur
@@ -412,6 +459,9 @@ söyler** ve çıktı klasörüne doldurmaya hazır bir `malzeme.csv` şablonu y
 python pf3_olcu.py parca.stp -o cikti --gorunus ON,SAG,UST --kesit --zip
 python pf3_olcu.py parca.stp -o cikti --tek 01.050.000.01 --asama 2
                                                   # yalnız tek parçanın resmi
+python pf3_olcu.py parca.stp -o cikti --asama 1 --acinim 01.051.000.01
+                                                  # yalnız açınım
+python pf3_olcu.py parca.stp -o cikti --acinim HEPSI --k-faktor 0.42
 ```
 
 ### Bütün seçenekler
@@ -435,6 +485,8 @@ python pf3_olcu.py parca.stp -o cikti --tek 01.050.000.01 --asama 2
 | `--en-az-delik <mm>` | bu çapın altındaki silindirler delik sayılmaz |
 | `--gizli` / `--gizli-yok` | gizli (kesik) çizgiler |
 | `--montaj-yok` | montaj çizimini atla |
+| `--acinim <kod,kod>` / `--acinim HEPSI` | bükümlü sacların açınımı |
+| `--k-faktor <0.44>` | büküm payı K-faktörü |
 
 ---
 
@@ -473,7 +525,17 @@ deliğin merkezinden geçer; yazılar görünüşün üstünde satır satır diz
 ne birbirine ne görünüşe biner.
 
 Katmanlar: `GORUNEN`, `GIZLI` (kesik), `EKSEN` (uzun-kısa), `OLCU`, `YAZI`,
-`TARAMA` — hepsi 0,10 mm çizgi kalınlığında.
+`TARAMA` — hepsi 0,09 mm çizgi kalınlığında. (DXF'te çizgi kalınlığı
+serbest bir sayı değil, sabit bir merdivendir: 0,05 – 0,09 – 0,13 – 0,15…
+"0,10" o listede yok; yazılırsa 0,13'e yuvarlanır. İstenen 0,10'a en
+yakın geçerli değer 0,09'dur.)
+
+**Görünen çizginin üstüne gizli çizgi çizilmez.** Teknik resim kuralı
+budur: bir kenar hem görünüyor hem arkada da varsa, görünen kazanır.
+Program gizli parçanın görünenle çakışan bölümünü **keser**, kalanını
+çizer. Ölçüler her zaman karşılaştırılan iki parçanın kendi arasında
+alınır; parça montajda orijinden metrelerce uzakta olsa bile sonuç
+değişmez.
 
 ### `00_MONTAJ.dxf` — montaj resmi
 

@@ -47,7 +47,8 @@ Elle yapmak isterseniz, program klasorunde komut penceresi acip:
     pip install -r requirements.txt
     python pf3_gui.py
 """
-ADIM = ["1  VERİ", "2  BOM ve MALZEME", "3  GÖRÜNÜŞ ve KESİT", "4  ÖRNEK ONAY", "5  TÜM ÇİZİMLER"]
+ADIM = ["1  VERİ", "2  BOM ve MALZEME", "3  GÖRÜNÜŞ ve KESİT",
+        "4  ÖRNEK ONAY", "5  TÜM ÇİZİMLER", "6  AÇINIM"]
 
 
 # =============================================================== yardımcılar
@@ -200,7 +201,8 @@ class Uygulama(ttk.Frame):
             f = ttk.Frame(self.defter, padding=10)
             self.defter.add(f, text=ad, state="disabled")
             self.sayfa.append(f)
-        self._sayfa1(); self._sayfa2(); self._sayfa3(); self._sayfa4(); self._sayfa5()
+        self._sayfa1(); self._sayfa2(); self._sayfa3()
+        self._sayfa4(); self._sayfa5(); self._sayfa6()
         self.ilerleme = ttk.Progressbar(self, mode="determinate")
         self.ilerleme.pack(fill="x", pady=(6, 2))
         gf = ttk.LabelFrame(self, text=" Günlük ", padding=4)
@@ -387,6 +389,140 @@ class Uygulama(ttk.Frame):
         self.b_iptal = ttk.Button(af, text="İptal", command=self.iptal, state="disabled")
         self.b_iptal.pack(side="right")
 
+    # ------------------------------------------------------------ 6 AÇINIM
+    def _sayfa6(self):
+        f = self.sayfa[5]
+        ttk.Label(f, text="Bükümlü sac parçaların açınımı",
+                  style="Baslik.TLabel").pack(anchor="w", pady=(0, 4))
+        ttk.Label(f, foreground="#555", justify="left", wraplength=1000, text=(
+            "Açınımı istediğiniz parçaları listeden seçin (Ctrl ve Shift ile "
+            "çoklu seçim). Kaç bükümü olduğu fark etmez. Üretilen resim BLANK "
+            "ÖLÇÜSÜDÜR: açınım genişliği, boy ve büküm çizgilerinin yerleri; "
+            "dış kontur kesikleri ve delikler o resimde yoktur.")
+                  ).pack(anchor="w", pady=(0, 8))
+
+        orta = ttk.Frame(f); orta.pack(fill="both", expand=True)
+        sut = ("poz", "kod", "ad", "kalinlik", "acinim", "durum")
+        basl = {"poz": ("POZ", 50), "kod": ("KOD", 150), "ad": ("AD", 300),
+                "kalinlik": ("SAC KALINLIK", 100), "acinim": ("AÇINIM  G x B", 160),
+                "durum": ("DURUM", 420)}
+        self.ac_agac = ttk.Treeview(orta, columns=sut, show="headings",
+                                    selectmode="extended", height=14)
+        for c in sut:
+            self.ac_agac.heading(c, text=basl[c][0])
+            self.ac_agac.column(c, width=basl[c][1],
+                                anchor="w" if c in ("kod", "ad", "durum") else "center")
+        kd = ttk.Scrollbar(orta, orient="vertical", command=self.ac_agac.yview)
+        self.ac_agac.configure(yscrollcommand=kd.set)
+        self.ac_agac.pack(side="left", fill="both", expand=True)
+        kd.pack(side="right", fill="y")
+        self.ac_agac.bind("<Double-1>", self.acilim_onizle)
+
+        alt = ttk.Frame(f); alt.pack(fill="x", pady=(8, 0))
+        ttk.Label(alt, text="K-faktörü:").pack(side="left")
+        self.v_kfaktor = tk.StringVar(value=str(self.M.K_FAKTOR if self.M else 0.44))
+        ttk.Entry(alt, textvariable=self.v_kfaktor, width=7).pack(side="left", padx=(4, 6))
+        ttk.Label(alt, foreground="#555", text=(
+            "büküm payı = açı × (iç yarıçap + K × kalınlık). Tezgâha ve "
+            "malzemeye göre değişir; yumuşak çelikte 0,40 – 0,50.")
+                  ).pack(side="left")
+        ttk.Button(alt, text="Tümünü seç",
+                   command=lambda: self.ac_agac.selection_set(
+                       self.ac_agac.get_children())).pack(side="right", padx=4)
+        self.b_acilim = ttk.Button(
+            alt, text="SEÇİLENLERİN AÇINIMINI ÜRET  ▸", style="Bas.TButton",
+            command=self.acilim_uret, state="disabled")
+        self.b_acilim.pack(side="right", padx=4, ipadx=10, ipady=3)
+
+    def _acilim_doldur(self):
+        """Parça listesini açınım sayfasına yazar."""
+        if not hasattr(self, "ac_agac"):
+            return
+        self.ac_agac.delete(*self.ac_agac.get_children())
+        self.ac_satir = {}
+        pozlar = self.M.poz_numaralari(self.komp)
+        for i, k in enumerate(self.komp):
+            if k.get("sinif") != "parca":
+                continue        # standart eleman ve kaynak dikişi sac değil
+            s = self.ac_agac.insert("", "end", values=(
+                pozlar[i], k.get("kod", ""), (k.get("ad") or "")[:60],
+                "", "", "seçilirse denenecek"))
+            self.ac_satir[s] = i
+        self.b_acilim.configure(state="normal" if self.ac_satir else "disabled")
+
+    def acilim_uret(self):
+        sec = self.ac_agac.selection()
+        if not sec:
+            messagebox.showinfo("Açınım", "Önce listeden parça seçin.")
+            return
+        try:
+            kf = float(self.v_kfaktor.get().replace(",", "."))
+            if not 0.1 <= kf <= 0.6:
+                raise ValueError
+        except ValueError:
+            messagebox.showwarning("K-faktörü",
+                                   "K-faktörü 0,10 ile 0,60 arasında bir sayı olmalı.")
+            return
+        on = self.v_out.get().strip()
+        if not on:
+            messagebox.showwarning("Klasör", "Önce çıktı klasörünü seçin.")
+            return
+        os.makedirs(on, exist_ok=True)
+        kodlar = {self.komp[self.ac_satir[s]].get("kod")
+                  or self.komp[self.ac_satir[s]].get("ad") for s in sec}
+        for s in sec:
+            self.ac_agac.set(s, "durum", "hesaplanıyor…")
+        self._basla("açınım hesaplanıyor…")
+        threading.Thread(target=self._acilim_is, args=(on, kodlar, kf,
+                                                       self._P()),
+                         daemon=True).start()
+
+    def _acilim_is(self, on, kodlar, kf, P):
+        try:
+            sonuc, hata = self.M.acilim_yaz(
+                self.kayit, self.komp, P, on, kodlar=kodlar, k_faktor=kf,
+                log=self._yaz,
+                ilerleme=lambda y, t, ad: self.kuyruk.put(("ilerleme", (y, t))),
+                iptal=lambda: self.iptal_istendi)
+            self.kuyruk.put(("acilim", (sonuc, hata, on)))
+        except Exception:
+            self.kuyruk.put(("hata", "Açınım sırasında hata:\\n\\n"
+                             + traceback.format_exc()))
+
+    def _acilim_geldi(self, sonuc, hata, on):
+        self._bitir()
+        olan = {r["kod"]: r for r in sonuc}
+        neden = dict(hata)
+        for s, i in getattr(self, "ac_satir", {}).items():
+            ad = self.komp[i].get("kod") or self.komp[i].get("ad")
+            if ad in olan:
+                r = olan[ad]
+                self.ac_agac.set(s, "kalinlik", f"{r['kalinlik_mm']} mm")
+                self.ac_agac.set(s, "acinim",
+                                 f"{r['acinim_genislik_mm']} x {r['acinim_boy_mm']}")
+                self.ac_agac.set(s, "durum",
+                                 f"{r['bukum_sayisi']} büküm  –  {r['dxf']}")
+            elif ad in neden:
+                self.ac_agac.set(s, "durum",
+                                 "açınım yok: " + neden[ad].splitlines()[0])
+        self.v_durum.set(f"açınım: {len(sonuc)} parça üretildi, "
+                         f"{len(hata)} parça yapılamadı")
+        if hata and not sonuc:
+            messagebox.showinfo(
+                "Açınım yapılamadı",
+                "Seçilen parçaların hiçbirinin açınımı çıkarılamadı.\\n\\n"
+                + "\\n\\n".join(f"{a}:\\n{m}" for a, m in hata[:3]))
+
+    def acilim_onizle(self, _e=None):
+        s = self.ac_agac.focus()
+        if not s:
+            return
+        d = self.ac_agac.set(s, "durum")
+        if d.endswith(".dxf"):
+            yol = os.path.join(self.v_out.get().strip(), d.split("–")[-1].strip())
+            if os.path.isfile(yol):
+                klasor_ac(yol)
+
     # ------------------------------------------------------------ kuyruk
     def _yaz(self, metin):
         self.kuyruk.put(("log", metin))
@@ -415,6 +551,8 @@ class Uygulama(ttk.Frame):
                     self._ornek_geldi(veri)
                 elif tip == "tumu":
                     self._tumu_geldi(veri)
+                elif tip == "acilim":
+                    self._acilim_geldi(*veri)
                 elif tip == "onizleme":
                     self.onizleme_png = veri
                     self._onizleme_ciz()
@@ -574,7 +712,9 @@ class Uygulama(ttk.Frame):
         self.v_bom_ozet.set(f"{len(komp)} komponent, {n} parça – "
                             f"{d} parçanın malzemesi data'dan okundu, "
                             f"{n - d} parçaya malzeme vermeniz gerekiyor")
+        self._acilim_doldur()
         self._adim_ac(1)
+        self._adim_ac(5, gecis=False)     # açınım BOM'u beklemez
         self.v_durum.set("komponentler hazır – malzemeyi verip BOM ÇIKART deyin")
 
     # ------------------------------------------------------------ 2 BOM

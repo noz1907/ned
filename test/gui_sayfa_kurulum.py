@@ -1,0 +1,95 @@
+# -*- coding: utf-8 -*-
+"""tkinter olmayan makinede arayuzu SAHTE tk ile kurup, sayfa kurulum
+kodunda ad/yazim hatasi kalmadigini dogrular."""
+import os, sys, types
+from unittest.mock import MagicMock
+
+class SahteVar:
+    def __init__(self, value=None, **k): self._v = value
+    def get(self): return self._v
+    def set(self, v): self._v = v
+    def trace_add(self, *a, **k): pass
+
+tk = types.ModuleType("tkinter")
+class SahteWidget:
+    """Her cagriyi yutan, her niteligi yine kendisi olan sahte pencere ogesi."""
+    def __init__(self, *a, **k): pass
+    def __call__(self, *a, **k): return SahteWidget()
+    def __getattr__(self, ad): return SahteWidget()
+    def __setitem__(self, k, v): pass
+    def __getitem__(self, k): return SahteWidget()
+
+for ad in ("Tk", "Frame", "Canvas", "Text", "Listbox", "Menu", "Toplevel",
+           "PhotoImage", "Label", "Button", "Entry"):
+    setattr(tk, ad, SahteWidget)
+tk.StringVar = tk.BooleanVar = tk.IntVar = tk.DoubleVar = SahteVar
+tk.TclError = Exception
+tk.END = "end"
+ttk = types.ModuleType("tkinter.ttk")
+for ad in ("Frame", "Label", "Button", "Entry", "Combobox", "Notebook",
+           "Treeview", "Scrollbar", "Progressbar", "Checkbutton",
+           "Radiobutton", "LabelFrame", "Style", "Separator", "PanedWindow"):
+    setattr(ttk, ad, SahteWidget)
+fd = types.ModuleType("tkinter.filedialog"); fd.askopenfilename = fd.askdirectory = SahteWidget()
+mb = types.ModuleType("tkinter.messagebox")
+mb.showinfo = mb.showwarning = mb.showerror = mb.askyesno = SahteWidget()
+tk.ttk, tk.filedialog, tk.messagebox = ttk, fd, mb
+sys.modules.update({"tkinter": tk, "tkinter.ttk": ttk,
+                    "tkinter.filedialog": fd, "tkinter.messagebox": mb})
+
+sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+import pf3_gui as G
+
+u = G.Uygulama.__new__(G.Uygulama)          # __init__'i atla, alanlari elle kur
+u.master = SahteWidget(); u.M = None
+u.sayfa = [SahteWidget() for _ in G.ADIM]
+u.gorunus_sirasi = []; u.malzemeler = {}; u.komp = []; u.kayit = []
+u.ac_satir = {}
+import queue as _q
+u.kuyruk = _q.Queue()
+for ad in ("pack", "grid", "configure"):
+    pass
+hata = []
+for i, fn in enumerate(("_sayfa1", "_sayfa2", "_sayfa3", "_sayfa4",
+                        "_sayfa5", "_sayfa6"), 1):
+    try:
+        getattr(u, fn)()
+        print(f"  {fn}  kuruldu")
+    except Exception as e:
+        hata.append((fn, e))
+        print(f"  {fn}  HATA: {type(e).__name__}: {e}")
+# Acinim sayfasinin kendi mantigi: poz_numaralari ve doldurma
+import pf3_olcu as M
+u.M = M
+u.komp = [{"kod": "01.050.000.01", "ad": "U-Blech", "sinif": "parca", "adet": 2},
+          {"kod": "M8", "ad": "M8 Somun", "sinif": "standart", "adet": 4},
+          {"kod": "", "ad": "Kehlnaht", "sinif": "kaynak", "adet": 1},
+          {"kod": "01.051.000.01", "ad": "C-Profil", "sinif": "parca", "adet": 1}]
+print("\npoz numaralari:", M.poz_numaralari(u.komp))
+class SahteAgac:
+    def __init__(self): self.satir = {}; self.n = 0
+    def delete(self, *a): self.satir.clear()
+    def get_children(self): return list(self.satir)
+    def insert(self, p, k, values=()):
+        self.n += 1; s = f"I{self.n}"; self.satir[s] = list(values); return s
+    def set(self, s, c, v=None):
+        i = ["poz","kod","ad","kalinlik","acinim","durum"].index(c)
+        if v is None: return self.satir[s][i]
+        self.satir[s][i] = v
+    def selection(self): return list(self.satir)
+    def focus(self): return ""
+u.ac_agac = SahteAgac(); u.b_acilim = SahteWidget()
+u._acilim_doldur()
+print("acinim listesi:")
+for s, v in u.ac_agac.satir.items(): print("   ", v)
+u._bitir = lambda: None
+u.v_durum = SahteVar(""); u.v_out = SahteVar("/tmp")
+u._acilim_geldi([{"kod": "01.051.000.01", "kalinlik_mm": 2.5,
+                  "acinim_genislik_mm": 233.9, "acinim_boy_mm": 2480.0,
+                  "bukum_sayisi": 4, "dxf": "A1_x_acinim.dxf"}],
+                [("01.050.000.01", "Bükümlerin eksenleri paralel değil.\nikinci satır")],
+                "/tmp")
+print("sonuc yazildiktan sonra:")
+for s, v in u.ac_agac.satir.items(): print("   ", v)
+print("\nSONUC:", "HATA VAR" if hata else "tum sayfalar kuruldu")
+sys.exit(1 if hata else 0)

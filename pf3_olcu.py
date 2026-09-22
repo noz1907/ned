@@ -30,13 +30,15 @@ from collections import Counter, defaultdict
 
 import ezdxf
 
-from OCP.gp import gp_Pnt, gp_Dir, gp_Trsf, gp_Ax2, gp_Vec
-from OCP.BRepBuilderAPI import BRepBuilderAPI_Transform
+from OCP.gp import gp_Pnt, gp_Dir, gp_Trsf, gp_Ax2, gp_Ax3, gp_Vec
+from OCP.BRepBuilderAPI import (BRepBuilderAPI_Transform,
+                                BRepBuilderAPI_MakeFace)
 from OCP.BRepGProp import BRepGProp
 from OCP.GProp import GProp_GProps
 from OCP.BRepAdaptor import BRepAdaptor_Surface, BRepAdaptor_Curve
 from OCP.GeomAbs import (GeomAbs_Plane, GeomAbs_Cylinder, GeomAbs_Cone,
-                         GeomAbs_Sphere, GeomAbs_Line)
+                         GeomAbs_Sphere, GeomAbs_Line, GeomAbs_Circle,
+                         GeomAbs_Ellipse)
 from OCP.TopAbs import TopAbs_FACE, TopAbs_EDGE, TopAbs_VERTEX, TopAbs_REVERSED
 from OCP.TopExp import TopExp, TopExp_Explorer
 from OCP.TopTools import TopTools_IndexedMapOfShape
@@ -641,69 +643,110 @@ def gorunus_ciz(msp, kenar, ox, oy, ad, h=4.0, olcu2=True, etiket=None):
 
     # Teknik resim kuralı: görünen çizgiyle aynı yere düşen gizli çizgi
     # ÇİZİLMEZ (görünen kazanır). HLR görünen ve gizli kenarları ayrı ayrı
-    # noktalara böldüğü için uç noktaları karşılaştırmak yetmez: aynı doğru
-    # parçası iki tarafta farklı noktalanmış olabilir. Bu yüzden her parça
-    # "hangi doğru üzerinde" ve "o doğrunun neresinde" diye saklanır, gizli
-    # parça o aralıkla ÖRTÜŞÜYORSA atılır.
-    AC_TOL, UZ_TOL = 0.02, 0.12          # radyan, mm
+    # noktalara böldüğü için uç noktaları karşılaştırmak yetmez: aynı kenar
+    # iki tarafta farklı noktalanmış olabilir. Bu yüzden her gizli parça,
+    # yakınındaki görünen parçalarla tek tek karşılaştırılır; çakışan
+    # BÖLÜMÜ kesilir, kalanı çizilir.
+    #
+    # Ölçüler HER ZAMAN karşılaştırılan iki parçanın kendi arasında alınır.
+    # Doğrunun orijine dik uzaklığı gibi bir ölçü kullanılamaz: parça
+    # montajda orijinden binlerce mm uzakta durabilir, o uzaklıkta yarım
+    # derecelik bir örnekleme farkı dik uzaklığı on milimetrelerce kaydırır
+    # ve aynı kenar iki ayrı kenar gibi görünür.
+    AC_TOL, UZ_TOL = 0.02, 0.12          # paralellik (sinüs), mm
+    EN_KISA = 0.05                       # bundan kısa kalıntı çizilmez, mm
+    enb = max(max(xs) - min(xs), max(ys) - min(ys), 1.0)
+    HUCRE = max(0.5, enb / 400.0)        # kaba arama ızgarasının göz boyu
+    gx0, gy0 = min(xs), min(ys)
 
-    def _dogru(a, b):
-        ux, uy = b[0] - a[0], b[1] - a[1]
-        n = math.hypot(ux, uy)
-        if n < 1e-9:
-            return None
-        ux, uy = ux / n, uy / n
-        if (ux, uy) < (0.0, 0.0):        # yön ters olsa da aynı doğru
-            ux, uy = -ux, -uy
-        aci = math.atan2(uy, ux) % math.pi
-        uzak = ux * a[1] - uy * a[0]     # doğrunun orijine dik uzaklığı
-        t0, t1 = (a[0] * ux + a[1] * uy), (b[0] * ux + b[1] * uy)
-        return aci, uzak, min(t0, t1), max(t0, t1)
+    def _hucreler(a, b):
+        """Parçanın geçtiği ızgara gözleri."""
+        n = int(math.dist(a, b) / HUCRE) + 1
+        return {(int((a[0] + (b[0] - a[0]) * i / n - gx0) // HUCRE),
+                 int((a[1] + (b[1] - a[1]) * i / n - gy0) // HUCRE))
+                for i in range(n + 1)}
 
-    gorunen = defaultdict(list)          # (açı kovası, uzaklık kovası) -> aralıklar
+    izgara, gor_par = defaultdict(list), []
     for c in kenar.get("GORUNEN", []):
         for a, b in zip(c, c[1:]):
-            d = _dogru(a, b)
-            if not d:
+            if math.dist(a, b) < 1e-9:
                 continue
-            aci, uzak, t0, t1 = d
-            gorunen[(round(aci / AC_TOL), round(uzak / UZ_TOL))].append((t0, t1))
+            k = len(gor_par)
+            gor_par.append((a, b))
+            # Gözleri bir kademe genişlet: göz sınırına denk gelen parça
+            # kaçmasın (aradığımız kayma 0,12 mm, göz ondan çok büyük).
+            for cx, cy in {(h[0] + i, h[1] + j) for h in _hucreler(a, b)
+                           for i in (-1, 0, 1) for j in (-1, 0, 1)}:
+                izgara[(cx, cy)].append(k)
 
-    def _ortusuyor(a, b):
-        d = _dogru(a, b)
-        if not d:
-            return False
-        aci, uzak, t0, t1 = d
-        ka, ku = round(aci / AC_TOL), round(uzak / UZ_TOL)
-        # Komşu kovalara da bak: yuvarlama sınırına denk gelen parçalar kaçmasın.
-        for i in (ka - 1, ka, ka + 1):
-            for j in (ku - 1, ku, ku + 1):
-                for g0, g1 in gorunen.get((i, j), ()):
-                    if min(t1, g1) - max(t0, g0) > 0.3 * (t1 - t0):
-                        return True
-        return False
+    def _kalan(a, b):
+        """Gizli parçanın görünenle ÇAKIŞMAYAN bölümleri; nokta çiftleri."""
+        L = math.dist(a, b)
+        if L < 1e-9:
+            return []
+        ux, uy = (b[0] - a[0]) / L, (b[1] - a[1]) / L
+        aday = set()
+        for h in _hucreler(a, b):
+            aday.update(izgara.get(h, ()))
+        kapali = []
+        for i in aday:
+            c, d = gor_par[i]
+            vx, vy = d[0] - c[0], d[1] - c[1]
+            m = math.hypot(vx, vy)
+            if abs(ux * vy - uy * vx) > AC_TOL * m:
+                continue                             # paralel değil
+            # c ve d, gizli parçanın doğrusuna ne kadar uzakta?
+            if abs(ux * (c[1] - a[1]) - uy * (c[0] - a[0])) > UZ_TOL:
+                continue
+            if abs(ux * (d[1] - a[1]) - uy * (d[0] - a[0])) > UZ_TOL:
+                continue
+            g0 = (c[0] - a[0]) * ux + (c[1] - a[1]) * uy
+            g1 = (d[0] - a[0]) * ux + (d[1] - a[1]) * uy
+            p, q = max(0.0, min(g0, g1)), min(L, max(g0, g1))
+            if q > p:
+                kapali.append((p, q))
+        if not kapali:
+            return [(a, b)]
+        kapali.sort()
+        birlesik = [list(kapali[0])]
+        for p, q in kapali[1:]:
+            if p <= birlesik[-1][1] + 1e-9:
+                birlesik[-1][1] = max(birlesik[-1][1], q)
+            else:
+                birlesik.append([p, q])
+        aralik, onceki = [], 0.0
+        for p, q in birlesik:
+            if p - onceki > EN_KISA:
+                aralik.append((onceki, p))
+            onceki = max(onceki, q)
+        if L - onceki > EN_KISA:
+            aralik.append((onceki, L))
+        return [((a[0] + p * ux, a[1] + p * uy),
+                 (a[0] + q * ux, a[1] + q * uy)) for p, q in aralik]
+
+    def _ciz(par):
+        if len(par) > 1:
+            msp.add_lwpolyline([(x + dx, y + dy) for x, y in par],
+                               dxfattribs={"layer": "GIZLI"})
+
     for kat, poli in kenar.items():
         for c in poli:
             if kat != "GIZLI":
                 msp.add_lwpolyline([(x + dx, y + dy) for x, y in c],
                                    dxfattribs={"layer": kat})
                 continue
-            # Görünen kenarla üst üste düşen gizli parçaları at, kalan
+            # Görünen kenarla üst üste düşen gizli bölümleri kes, kalan
             # kesintisiz parçaları ayrı çizgi olarak çiz.
             par = []
             for a, b in zip(c, c[1:]):
-                if _ortusuyor(a, b):
-                    if len(par) > 1:
-                        msp.add_lwpolyline([(x + dx, y + dy) for x, y in par],
-                                           dxfattribs={"layer": kat})
-                    par = []
-                else:
-                    if not par:
-                        par = [a]
-                    par.append(b)
-            if len(par) > 1:
-                msp.add_lwpolyline([(x + dx, y + dy) for x, y in par],
-                                   dxfattribs={"layer": kat})
+                for p, q in _kalan(a, b):
+                    if par and abs(par[-1][0] - p[0]) < 1e-7 \
+                           and abs(par[-1][1] - p[1]) < 1e-7:
+                        par.append(q)
+                    else:
+                        _ciz(par)
+                        par = [p, q]
+            _ciz(par)
     G, Y = max(xs) - min(xs), max(ys) - min(ys)
     # Etiket görünüşün SOL ÜST köşesinde, parçanın ve ölçülerin dışında.
     _yaz(msp, etiket or GORUNUS_AD.get(ad, ad), ox, oy + Y + 0.7 * h, 1.3 * h)
@@ -849,12 +892,15 @@ class AcilimYok(Exception):
     """Bu parçanın açınımı çıkarılamıyor; mesaj kullanıcıya gösterilir."""
 
 
-def bukum_yuzeyleri(sh, en_az_oran=0.30, en_cok_yaricap=60.0):
-    """Gerçek büküm silindirlerini bulur.
+def bukum_yuzeyleri(sh, en_az_oran=0.05, en_cok_yaricap=60.0):
+    """Büküm olabilecek silindir yüzeyleri toplar.
 
-    Delik ve köşe pahları da silindirdir; onlardan ayırmak için silindirin
-    EKSEN BOYUNCA UZUNLUĞU parçanın en büyük ölçüsünün belli bir oranından
-    büyük olmalı: büküm sacın boyunca gider, delik gitmez."""
+    Delik de silindirdir. İki kaba eleme burada yapılır:
+      * yarıçap büyük olamaz (yuvarlatılmış bir sac bükümü değildir),
+      * silindir TAM tur atmamalıdır - delik 360 derece döner, büküm dönmez.
+    Asıl ayıklama bukum_ciftleri'nde yapılır: gerçek büküm, iç ve dış
+    yüzü aynı eksen üzerinde duran ve yarıçap farkı sac kalınlığına eşit
+    olan bir ÇİFTTİR; delikte böyle bir eş yoktur."""
     kb = kutu(sh)
     enb = max(kb[3] - kb[0], kb[4] - kb[1], kb[5] - kb[2])
     m = TopTools_IndexedMapOfShape()
@@ -873,14 +919,25 @@ def bukum_yuzeyleri(sh, en_az_oran=0.30, en_cok_yaricap=60.0):
         uz = max(fk[3] - fk[0], fk[4] - fk[1], fk[5] - fk[2])
         if uz < en_az_oran * enb:
             continue
-        d = cyl.Position().Direction()
         try:
             aci = abs(ad.LastUParameter() - ad.FirstUParameter())
         except Exception:
             aci = math.pi / 2
+        if aci > 0.95 * 2 * math.pi:
+            continue                      # tam tur: delik ya da pim
+        d = cyl.Position().Direction()
         ek = cyl.Position().Location()
-        out.append({"yuz": f, "r": r, "aci": aci,
-                    "eksen": (d.X(), d.Y(), d.Z()),
+        e3 = (d.X(), d.Y(), d.Z())
+        # Silindirin KENDİ EKSENİ boyunca uzunluğu. Büküm sacın boyunca
+        # gider, uzundur; köşe yuvarlatması sac kalınlığı kadar kısadır.
+        pr = []
+        ex = TopExp_Explorer(f, TopAbs_VERTEX)
+        while ex.More():
+            p = BRep_Tool.Pnt_s(TopoDS.Vertex_s(ex.Current()))
+            pr.append(p.X() * e3[0] + p.Y() * e3[1] + p.Z() * e3[2])
+            ex.Next()
+        out.append({"yuz": f, "r": r, "aci": aci, "eksen": e3,
+                    "eksen_uz": (max(pr) - min(pr)) if pr else 0.0,
                     "merkez": (ek.X(), ek.Y(), ek.Z()),
                     "ic": f.Orientation() == TopAbs_REVERSED})
     return out
@@ -890,19 +947,75 @@ def _paralel(a, b, tol=0.02):
     return abs(abs(a[0] * b[0] + a[1] * b[1] + a[2] * b[2]) - 1.0) < tol
 
 
-def bukum_ekseni(bukumler):
-    """Bütün büküm eksenleri paralel mi? Değilse açınım çıkarılamaz."""
-    if not bukumler:
-        raise AcilimYok("Parçada büküm bulunamadı; zaten düz sac olabilir "
-                        "ya da bu bir sac parça değil.")
-    e0 = bukumler[0]["eksen"]
-    for b in bukumler[1:]:
+def _eksen_adi(b, yuvarla=0.05):
+    """Silindirin EKSEN DOĞRUSUNU tek biçimde adlandırır: yön (işaretsiz)
+    ve doğrunun orijine en yakın noktası. Aynı eksen üzerindeki iç ve dış
+    yüzey aynı adı alır."""
+    d = _birim(b["eksen"])
+    if (d[0], d[1], d[2]) < (0.0, 0.0, 0.0):
+        d = (-d[0], -d[1], -d[2])
+    p = b["merkez"]
+    s = p[0] * d[0] + p[1] * d[1] + p[2] * d[2]
+    q = (p[0] - s * d[0], p[1] - s * d[1], p[2] - s * d[2])
+    return (round(d[0], 3), round(d[1], 3), round(d[2], 3),
+            round(q[0] / yuvarla), round(q[1] / yuvarla), round(q[2] / yuvarla))
+
+
+def bukum_ciftleri(bukumler, en_az_kalinlik=0.2, en_cok_kalinlik=25.0):
+    """Aynı eksen üzerindeki iç ve dış silindiri tek bükümde birleştirir.
+
+    Deliğin karşılık gelen ikinci bir silindiri yoktur, bu yüzden elenir.
+    Kalan çiftlerden sac kalınlığı ORTANCA ile bulunur; kalınlığı tutmayan
+    çiftler (havşa, pah, cep) atılır."""
+    grup = defaultdict(list)
+    for b in bukumler:
+        grup[_eksen_adi(b)].append(b)
+    ham = []
+    for lst in grup.values():
+        r_ic, r_dis = min(x["r"] for x in lst), max(x["r"] for x in lst)
+        t = r_dis - r_ic
+        if t < en_az_kalinlik or t > en_cok_kalinlik:
+            continue
+        # Köşe yuvarlatmasını ayıkla: onun ekseni sac yüzüne DİK durur,
+        # bu yüzden eksen boyu sac kalınlığı kadardır. Büküm ise sacın
+        # boyunca gider.
+        uz = max(x["eksen_uz"] for x in lst)
+        if uz < 2.0 * t:
+            continue
+        ham.append({"r_ic": r_ic, "r_dis": r_dis, "t": t, "eksen_uz": uz,
+                    "aci": max(x["aci"] for x in lst),
+                    "eksen": lst[0]["eksen"], "merkez": lst[0]["merkez"]})
+    if not ham:
+        return []
+    s = sorted(x["t"] for x in ham)
+    ortanca = s[len(s) // 2]
+    pay = max(0.05, 0.05 * ortanca)
+    return [x for x in ham if abs(x["t"] - ortanca) <= pay]
+
+
+def bukum_ekseni(ciftler):
+    """Bütün büküm eksenleri paralel mi? Değilse açınım çıkarılamaz.
+    Geriye eksenlerin ORTALAMASI döner: eksenler tasarımda tam tam
+    üstüne oturmaz, ortalama alınırsa kesit hiçbir bükümde eğik kalmaz."""
+    if not ciftler:
+        raise AcilimYok(
+            "Parçada büküm bulunamadı.\n"
+            "Sacın iç ve dış yüzü aynı eksen üzerinde, yarıçap farkı sac "
+            "kalınlığı kadar olan bir silindir çifti aranır; bu parçada "
+            "öyle bir çift yok. Parça düz sac ya da sac parça değil.")
+    e0 = ciftler[0]["eksen"]
+    for b in ciftler[1:]:
         if not _paralel(e0, b["eksen"]):
             raise AcilimYok(
                 "Bükümlerin eksenleri birbirine paralel değil.\n"
                 "Bu sürüm yalnız tek yönde bükülmüş parçaların - C, U, L, Z\n"
                 "profilleri, köşebentler - açınımını çıkarabilir.")
-    return _birim(e0)
+    top = [0.0, 0.0, 0.0]
+    for b in ciftler:
+        yon = 1.0 if sum(e0[i] * b["eksen"][i] for i in range(3)) >= 0 else -1.0
+        for i in range(3):
+            top[i] += yon * b["eksen"][i]
+    return _birim(tuple(top))
 
 
 def _dik_birim(e):
@@ -911,183 +1024,460 @@ def _dik_birim(e):
     return _birim(_capraz(e, y))
 
 
-def sac_duvarlari(sh, eksen, t, tol=0.05):
-    """Profilin düz duvarları: eksene DİK normalli düzlem yüzeyler.
+def _eksene_dondur(sh, eksen):
+    """Katıyı, büküm ekseni Z ile çakışacak biçimde döndürür. Böylece
+    kesit her zaman XY düzleminde alınır; parçanın montajdaki duruşu
+    hesabı etkilemez."""
+    tr = gp_Trsf()
+    tr.SetTransformation(gp_Ax3(gp_Pnt(0, 0, 0), gp_Dir(*eksen)))
+    return BRepBuilderAPI_Transform(sh, tr, True).Shape()
 
-    Her duvar sacın iki yüzünden oluşur (iç ve dış). İkisi orta yüzeyde
-    birleştirilir; açınımda uzunluğunu koruyan şey bu orta çizgidir."""
-    u = _dik_birim(eksen)
-    v = _birim(_capraz(eksen, u))
 
-    def p2(p):
-        return (p[0] * u[0] + p[1] * u[1] + p[2] * u[2],
-                p[0] * v[0] + p[1] * v[1] + p[2] * v[2])
-
+def _kesit_yuzu(sh, konum, kb):
+    """z = konum düzlemindeki kesit yüzü. Kesit TEK parça ve deliksiz
+    değilse None döner: açınım genişliği ancak sağlam bir kesitten
+    ölçülebilir."""
+    try:
+        kesik = kesit_kati(sh, 2, konum, kb)
+    except Exception:
+        return None
     m = TopTools_IndexedMapOfShape()
-    TopExp.MapShapes_s(sh, TopAbs_FACE, m)
-    ham = []
+    TopExp.MapShapes_s(kesik, TopAbs_FACE, m)
+    bul = []
     for i in range(1, m.Extent() + 1):
         f = TopoDS.Face_s(m.FindKey(i))
         ad = BRepAdaptor_Surface(f)
         if ad.GetType() != GeomAbs_Plane:
             continue
         d = ad.Plane().Axis().Direction()
-        n = (d.X(), d.Y(), d.Z())
-        if abs(n[0] * eksen[0] + n[1] * eksen[1] + n[2] * eksen[2]) > tol:
-            continue                      # eksene dik değil: uç kapak yüzeyi
-        q = ad.Plane().Location()
-        n2 = _birim(p2(n))
-        # düzlemin 2B'de doğrultusu ve orijine dik uzaklığı
-        mes = p2((q.X(), q.Y(), q.Z()))
-        d0 = n2[0] * mes[0] + n2[1] * mes[1]
-        g = GProp_GProps(); BRepGProp.SurfaceProperties_s(f, g)
-        ham.append({"yuz": f, "n2": n2, "d": d0, "alan": g.Mass()})
-    # İç ve dış yüzü eşleştir: aynı doğrultu, uzaklık farkı = kalınlık
-    duvar, kullanildi = [], set()
-    for i, a1 in enumerate(ham):
-        if i in kullanildi:
+        if abs(d.Z()) < 0.999:
             continue
-        for j in range(i + 1, len(ham)):
-            if j in kullanildi:
+        if abs(ad.Plane().Location().Z() - konum) > 1e-3:
+            continue
+        bul.append(f)
+    if len(bul) != 1:
+        return None                       # kesit parçalı: sac şeridi değil
+    # Yalnız DIŞ teli al. Sacın ortasındaki delikler kesitin dış sınırını
+    # değiştirmez; onları atınca delikli parçalarda da sağlam bir kesit
+    # elde edilir.
+    try:
+        dis = BRepTools.OuterWire_s(bul[0])
+        yap = BRepBuilderAPI_MakeFace(dis)
+        if yap.IsDone():
+            return yap.Face()
+    except Exception:
+        pass
+    return bul[0]
+
+
+def _kenar_2b(yuz):
+    """Kesit yüzünün kenarlarını 2B doğru ve yay olarak çıkarır."""
+    duz, yay = [], []
+    ex = TopExp_Explorer(yuz, TopAbs_EDGE)
+    while ex.More():
+        e = TopoDS.Edge_s(ex.Current())
+        ex.Next()
+        c = BRepAdaptor_Curve(e)
+        p0, p1 = c.Value(c.FirstParameter()), c.Value(c.LastParameter())
+        a, b = (p0.X(), p0.Y()), (p1.X(), p1.Y())
+        if c.GetType() == GeomAbs_Line:
+            if math.dist(a, b) > 1e-6:
+                duz.append([a, b])
+        elif c.GetType() == GeomAbs_Circle:
+            ci = c.Circle()
+            mk = (ci.Location().X(), ci.Location().Y())
+            span = abs(c.LastParameter() - c.FirstParameter())
+            if span > 1e-6:
+                yay.append({"m": mk, "r": ci.Radius(), "aci": span,
+                            "p": a, "q": b})
+        elif c.GetType() == GeomAbs_Ellipse:
+            # Büküm eksenleri tasarımda birbirine tam paralel olmayabilir;
+            # birkaç yüzde derecelik eğiklik silindiri ELİPS olarak keser.
+            # Neredeyse dairesel olanı daire sayarız, yarıçapı küçük eksendir.
+            el = c.Ellipse()
+            kucuk, buyuk = el.MinorRadius(), el.MajorRadius()
+            span = abs(c.LastParameter() - c.FirstParameter())
+            if kucuk > 1e-9 and buyuk / kucuk < 1.02 and span > 1e-6:
+                yay.append({"m": (el.Location().X(), el.Location().Y()),
+                            "r": kucuk, "aci": span, "p": a, "q": b})
+    return duz, yay
+
+
+def _duzleri_birlestir(duz, tol=1e-6):
+    """Aynı doğru üzerinde uç uca eklenmiş parçaları tek doğru yapar."""
+    kalan, cikti = list(duz), []
+    while kalan:
+        a = kalan.pop()
+        degisti = True
+        while degisti:
+            degisti = False
+            for i, b in enumerate(kalan):
+                ux, uy = a[1][0] - a[0][0], a[1][1] - a[0][1]
+                n = math.hypot(ux, uy)
+                ux, uy = ux / n, uy / n
+                vx, vy = b[1][0] - b[0][0], b[1][1] - b[0][1]
+                if abs(ux * vy - uy * vx) > 1e-6 * math.hypot(vx, vy):
+                    continue              # paralel değil
+                if abs((b[0][0] - a[0][0]) * uy - (b[0][1] - a[0][1]) * ux) > 1e-4:
+                    continue              # aynı doğru üzerinde değil
+                uc = [a[0], a[1], b[0], b[1]]
+                t = [(p[0] - a[0][0]) * ux + (p[1] - a[0][1]) * uy for p in uc]
+                if min(t[2], t[3]) - max(t[0], t[1]) > 1e-4 or \
+                   min(t[0], t[1]) - max(t[2], t[3]) > 1e-4:
+                    continue              # değmiyorlar
+                s = sorted(zip(t, uc))
+                a = [s[0][1], s[-1][1]]
+                kalan.pop(i); degisti = True
+                break
+        cikti.append(a)
+    return cikti
+
+
+def _orta_ogeler(yuz, t, tol=None):
+    """Kesitin orta çizgi ÖĞELERİNİ çıkarır (henüz sırasız).
+
+    Sac kesiti, kalınlığı t olan bir şerittir: her düz duvar karşılıklı
+    iki paralel doğru, her büküm ise eş merkezli iki yaydır. Önce bu
+    çiftler eşleştirilir, sonra uçlarından zincire dizilir. Açınımda
+    uzunluğunu koruyan çizgi bu orta çizgidir."""
+    tol = tol or max(0.05, 0.08 * t)
+    duz, yay = _kenar_2b(yuz)
+    duz = _duzleri_birlestir(duz)
+    ogeler = []
+
+    # --- düz duvarlar: paralel, aralarındaki dik uzaklık t
+    kul = set()
+    for i, a in enumerate(duz):
+        if i in kul:
+            continue
+        ux, uy = a[1][0] - a[0][0], a[1][1] - a[0][1]
+        n = math.hypot(ux, uy); ux, uy = ux / n, uy / n
+        en_iyi = None
+        for j in range(len(duz)):
+            if j == i or j in kul:
                 continue
-            a2 = ham[j]
-            if abs(abs(a1["n2"][0] * a2["n2"][0] + a1["n2"][1] * a2["n2"][1]) - 1) > 0.02:
+            b = duz[j]
+            vx, vy = b[1][0] - b[0][0], b[1][1] - b[0][1]
+            if abs(ux * vy - uy * vx) > 0.02 * math.hypot(vx, vy):
                 continue
-            fark = abs(abs(a1["d"]) - abs(a2["d"])) if \
-                (a1["n2"][0] * a2["n2"][0] + a1["n2"][1] * a2["n2"][1]) < 0 \
-                else abs(a1["d"] - a2["d"])
-            if abs(fark - t) > max(0.05, 0.05 * t):
+            u1 = (b[0][0] - a[0][0]) * -uy + (b[0][1] - a[0][1]) * ux
+            u2 = (b[1][0] - a[0][0]) * -uy + (b[1][1] - a[0][1]) * ux
+            if abs(abs(u1) - t) > tol or abs(u1 - u2) > tol:
                 continue
-            duvar.append({"n2": a1["n2"], "d_orta": (a1["d"] + a2["d"]) / 2.0
-                          if (a1["n2"][0] * a2["n2"][0] + a1["n2"][1] * a2["n2"][1]) > 0
-                          else (a1["d"] - a2["d"]) / 2.0,
-                          "yuzler": (a1["yuz"], a2["yuz"]),
-                          "alan": a1["alan"] + a2["alan"]})
-            kullanildi.add(i); kullanildi.add(j)
+            ta = sorted([(p[0] - a[0][0]) * ux + (p[1] - a[0][1]) * uy for p in a])
+            tb = sorted([(p[0] - a[0][0]) * ux + (p[1] - a[0][1]) * uy for p in b])
+            ort = min(ta[1], tb[1]) - max(ta[0], tb[0])
+            if ort <= tol:
+                continue
+            if not en_iyi or ort > en_iyi[0]:
+                en_iyi = (ort, j, (u1 + u2) / 2.0, max(ta[0], tb[0]), min(ta[1], tb[1]))
+        if not en_iyi:
+            continue                      # eş bulunamadı: uç kapağı ya da pah
+        _, j, fark_u, s0, s1 = en_iyi
+        kul.add(i); kul.add(j)
+        # Orta çizgi iki yüzün TAM ORTASINDAN geçer: karşı yüzün uzaklığının
+        # yarısı kadar kaydır.
+        orta_u = fark_u / 2.0
+        kok = (a[0][0] + orta_u * -uy, a[0][1] + orta_u * ux)
+        ogeler.append({"tip": "duz", "uz": s1 - s0,
+                       "p": (kok[0] + s0 * ux, kok[1] + s0 * uy),
+                       "q": (kok[0] + s1 * ux, kok[1] + s1 * uy)})
+
+    # --- bükümler: eş merkezli, yarıçap farkı t
+    kul = set()
+    for i, a in enumerate(yay):
+        if i in kul:
+            continue
+        for j in range(len(yay)):
+            if j == i or j in kul:
+                continue
+            b = yay[j]
+            if math.dist(a["m"], b["m"]) > tol:
+                continue
+            if abs(abs(a["r"] - b["r"]) - t) > tol:
+                continue
+            if abs(a["aci"] - b["aci"]) > 0.02:
+                continue
+            kul.add(i); kul.add(j)
+            r_ic, r_dis = min(a["r"], b["r"]), max(a["r"], b["r"])
+            r_o = (r_ic + r_dis) / 2.0
+            dis = a if a["r"] > b["r"] else b
+            uc = []
+            for p in (dis["p"], dis["q"]):
+                ac = math.atan2(p[1] - a["m"][1], p[0] - a["m"][0])
+                uc.append((a["m"][0] + r_o * math.cos(ac),
+                           a["m"][1] + r_o * math.sin(ac)))
+            ogeler.append({"tip": "bukum", "r_ic": r_ic, "r_orta": r_o,
+                           "aci": a["aci"], "m": a["m"],
+                           "p": uc[0], "q": uc[1]})
             break
-    return duvar, (u, v)
+
+    if not ogeler:
+        raise AcilimYok("Kesitin orta çizgisi kurulamadı: karşılıklı "
+                        "yüzeyler eşleşmedi.")
+    return ogeler
 
 
-def bukum_ciftleri(bukumler, eksen, u, v):
-    """İç ve dış büküm silindirlerini tek bükümde birleştirir."""
-    def p2(p):
-        return (p[0] * u[0] + p[1] * u[1] + p[2] * u[2],
-                p[0] * v[0] + p[1] * v[1] + p[2] * v[2])
+def _zincir(ogeler, birles=0.2):
+    """Orta çizgi öğelerini uç uca sıralar. Sac şeridi tek parça, açık
+    bir zincir olmak zorundadır."""
+    uc = [[o["p"], o["q"]] for o in ogeler]
 
-    grup = defaultdict(list)
-    for b in bukumler:
-        c = p2(b["merkez"])
-        grup[(round(c[0], 1), round(c[1], 1))].append(dict(b, c2=c))
-    ciftler = []
-    for c, lst in grup.items():
-        ic = [x for x in lst if x["ic"]]
-        dis = [x for x in lst if not x["ic"]]
-        if not ic or not dis:
-            continue
-        r_ic = min(x["r"] for x in ic)
-        r_dis = max(x["r"] for x in dis)
-        aci = max(x["aci"] for x in lst)
-        ciftler.append({"c2": lst[0]["c2"], "r_ic": r_ic, "r_dis": r_dis,
-                        "t": r_dis - r_ic, "aci": aci})
-    return ciftler
+    def komsu(k, p):
+        return [d for d in range(len(ogeler)) if d != k and
+                min(math.dist(p, uc[d][0]), math.dist(p, uc[d][1])) < birles]
 
-
-def sac_acilim(sh, o, k_faktor=K_FAKTOR):
-    """Tek yönde bükülmüş sac parçanın açınım ölçülerini hesaplar.
-
-    Geri dönüş: kalınlık, açınım genişliği, açınım boyu, büküm listesi.
-    Açınım genişliği = düz duvarların orta çizgi uzunlukları
-                     + her büküm için nötr eksen yayı (büküm payı)."""
-    bukumler = bukum_yuzeyleri(sh)
-    eksen = bukum_ekseni(bukumler)
-    kb = kutu(sh)
-    # Eksen yönündeki uzunluk açınımda değişmez.
-    e_i = max(range(3), key=lambda i: abs(eksen[i]))
-    boy = kb[e_i + 3] - kb[e_i]
-
-    # Kalınlık: iç/dış büküm çiftlerinin yarıçap farkı
-    u = _dik_birim(eksen); v = _birim(_capraz(eksen, u))
-    ciftler = bukum_ciftleri(bukumler, eksen, u, v)
-    if not ciftler:
-        raise AcilimYok("Büküm silindirlerinin iç/dış çiftleri eşleşmedi; "
-                        "sac kalınlığı belirlenemedi.")
-    kal = [c["t"] for c in ciftler]
-    t = sum(kal) / len(kal)
-    if max(kal) - min(kal) > max(0.1, 0.05 * t):
+    kom = [(komsu(k, uc[k][0]), komsu(k, uc[k][1])) for k in range(len(ogeler))]
+    kopuk = [k for k, (a, b) in enumerate(kom) if not a and not b]
+    if kopuk:
         raise AcilimYok(
-            f"Sac kalınlığı sabit değil (bükümlerde {min(kal):.2f} - "
-            f"{max(kal):.2f} mm çıktı). Açınım yalnız sabit kalınlıklı "
-            f"sac parçalar için yapılabilir.")
+            f"Orta çizginin {len(kopuk)} parçası hiçbir komşuya değmiyor; "
+            f"kesit tek bir sac şeridi değil.")
+    uclar = [k for k, (a, b) in enumerate(kom) if not a or not b]
+    if not uclar:
+        raise AcilimYok("Kesitin orta çizgisi KAPALI çıktı. Kapalı profil - "
+                        "boru, kutu profil - açınımı verilemez.")
+    if len(uclar) != 2:
+        raise AcilimYok(
+            f"Orta çizginin {len(uclar)} serbest ucu var; sac şeridinin iki "
+            f"ucu olur. Kesitte dallanma ya da kopukluk var.")
+    k = uclar[0]
+    p = uc[k][0] if not kom[k][0] else uc[k][1]     # zincirin SERBEST ucu
+    zincir, gidilen = [], set()
+    while True:
+        zincir.append(ogeler[k]); gidilen.add(k)
+        i = 0 if math.dist(p, uc[k][0]) < math.dist(p, uc[k][1]) else 1
+        obur = uc[k][1 - i]
+        ileri = [d for d in kom[k][1 - i] if d not in gidilen]
+        if not ileri:
+            break
+        k, p = ileri[0], obur
+    if len(gidilen) != len(ogeler):
+        raise AcilimYok(
+            f"Kesit tek bir şerit oluşturmuyor ({len(ogeler)} parçanın "
+            f"{len(gidilen)} tanesi zincire girdi). Parça tek yönde bükülmüş "
+            f"düz sac değil ya da kesitte kaynak/ek var.")
+    return zincir
 
-    duvar, _ = sac_duvarlari(sh, eksen, t)
-    if not duvar:
-        raise AcilimYok("Profilin düz duvarları bulunamadı.")
 
-    # Her bükümün hangi iki duvara değdiğini bul: duvarın orta çizgisi,
-    # büküm merkezinden (r_ic + t/2) uzaklıkta olmalı.
-    for c in ciftler:
-        c["duvar"] = []
-        hedef = c["r_ic"] + t / 2.0
-        for i, d in enumerate(duvar):
-            uz = abs(d["n2"][0] * c["c2"][0] + d["n2"][1] * c["c2"][1] - d["d_orta"])
-            if abs(uz - hedef) < max(0.15, 0.06 * t):
-                c["duvar"].append(i)
-        c["duvar"] = c["duvar"][:2]
+def sac_acilim(sh, o=None, k_faktor=K_FAKTOR, istasyon=11):
+    """Tek yönde bükülmüş sac parçanın açınımını hesaplar.
 
-    # Her duvarın KENDİ doğrultusundaki gerçek uzanımı (köşelerinden).
-    for d in duvar:
-        yon = (-d["n2"][1], d["n2"][0])
-        pr = []
-        for yz in d["yuzler"]:
-            ex = TopExp_Explorer(yz, TopAbs_VERTEX)
-            while ex.More():
-                pt = BRep_Tool.Pnt_s(TopoDS.Vertex_s(ex.Current()))
-                q = (pt.X() * u[0] + pt.Y() * u[1] + pt.Z() * u[2],
-                     pt.X() * v[0] + pt.Y() * v[1] + pt.Z() * v[2])
-                pr.append(q[0] * yon[0] + q[1] * yon[1])
-                ex.Next()
-        d["s0"], d["s1"] = (min(pr), max(pr)) if pr else (0.0, 0.0)
-        d["yon"] = yon
-        d["bukum"] = []
+    Yöntem: büküm ekseni Z'ye döndürülür, parçadan DELİKSİZ bir kesit
+    alınır, kesitin orta çizgisi sıralı olarak kurulur. Açınım genişliği
+    düz duvarların uzunlukları ile her bükümün payının (BA) toplamıdır.
+    Hesap ayrıca kesit alanıyla çapraz denetlenir: alan / kalınlık, orta
+    çizginin uzunluğuna eşit olmak zorundadır."""
+    ciftler = bukum_ciftleri(bukum_yuzeyleri(sh))
+    eksen = bukum_ekseni(ciftler)
+    t = sum(c["t"] for c in ciftler) / len(ciftler)
+    sh = _eksene_dondur(sh, eksen)      # büküm ekseni artık Z
 
-    # Duvar - büküm komşuluğu
-    for ci, c in enumerate(ciftler):
-        for i in c["duvar"]:
-            if i < len(duvar):
-                duvar[i]["bukum"].append(ci)
+    kb = kutu(sh)
+    boy = kb[5] - kb[2]
+    # Deliksiz kesit ara: delik alanı yer yer götürür, sağlam istasyon
+    # lazım. İlk tarama boş dönerse daha sık dene; delikli bir parçada
+    # temiz aralık dar olabilir.
+    en_iyi, konum = None, None
+    for n in (istasyon, istasyon * 4):
+        for i in range(n):
+            z = kb[2] + boy * (i + 0.5) / n
+            yuz = _kesit_yuzu(sh, z, kb)
+            if yuz is None:
+                continue
+            g = GProp_GProps(); BRepGProp.SurfaceProperties_s(yuz, g)
+            if not en_iyi or g.Mass() > en_iyi[0]:
+                en_iyi, konum = (g.Mass(), yuz), z
+        if en_iyi:
+            break
+    if not en_iyi:
+        raise AcilimYok(
+            "Parçanın hiçbir yerinde deliksiz, tek parça kesit bulunamadı.\n"
+            "Boydan boya giden delik ya da oyuk varsa açınım genişliği "
+            "güvenilir ölçülemez.")
+    alan, yuz = en_iyi
 
-    # Duvarın açınımdaki uzunluğu: iki bükümü varsa teğet noktaları arası,
-    # tek bükümü varsa büküm teğetinden serbest uca kadar. Hiç bükümü
-    # olmayan düzlem parçanın duvarı değildir (kesik yüzeyi, pah vb.).
-    gen, kullanilan = 0.0, 0
-    for d in duvar:
-        teget = [ciftler[ci]["c2"][0] * d["yon"][0] + ciftler[ci]["c2"][1] * d["yon"][1]
-                 for ci in d["bukum"]]
-        if len(teget) >= 2:
-            d["uzunluk"] = abs(max(teget) - min(teget))
-        elif len(teget) == 1:
-            d["uzunluk"] = max(abs(teget[0] - d["s0"]), abs(teget[0] - d["s1"]))
+    ogeler = _orta_ogeler(yuz, t)
+    zincir = _zincir(ogeler, max(0.2, 0.1 * t))
+    duzler = [z for z in zincir if z["tip"] == "duz"]
+    bkm = [z for z in zincir if z["tip"] == "bukum"]
+    if not bkm:
+        raise AcilimYok("Kesitte büküm yayı bulunamadı.")
+
+    # Çapraz denetim: orta çizgi uzunluğu = kesit alanı / kalınlık
+    orta = sum(z["uz"] for z in duzler) + sum(z["aci"] * z["r_orta"] for z in bkm)
+    if abs(orta - alan / t) > max(0.5, 0.01 * orta):
+        raise AcilimYok(
+            f"Açınım denetimi tutmadı: orta çizgi {orta:.1f} mm, kesit "
+            f"alanından çıkan {alan / t:.1f} mm. Aradaki fark, kesitin sac "
+            f"şeridi gibi çözülemediğini gösteriyor; bu parçanın açınımı "
+            f"verilemez.")
+
+    # Açınım: düz duvarlar aynen, bükümler nötr eksen yayı kadar (BA)
+    gen, yer, bilgi = 0.0, [], []
+    for z in zincir:
+        if z["tip"] == "duz":
+            gen += z["uz"]
         else:
-            d["uzunluk"] = 0.0
-            continue
-        gen += d["uzunluk"]
-        kullanilan += 1
-    if not kullanilan:
-        raise AcilimYok("Duvarlar bükümlerle eşleşmedi; profil zinciri kurulamadı.")
-
-    paylar = []
-    for c in ciftler:
-        ba = c["aci"] * (c["r_ic"] + k_faktor * t)
-        paylar.append({"r_ic": round(c["r_ic"], 2), "r_dis": round(c["r_dis"], 2),
-                       "aci_derece": round(math.degrees(c["aci"]), 1),
-                       "pay_mm": round(ba, 2)})
-        gen += ba
-    return {"kalinlik_mm": round(t, 2), "duvar_sayisi": kullanilan,
+            ba = z["aci"] * (z["r_ic"] + k_faktor * t)
+            bilgi.append({"r_ic": round(z["r_ic"], 2),
+                          "r_dis": round(z["r_ic"] + t, 2),
+                          "aci_derece": round(math.degrees(z["aci"]), 1),
+                          "pay_mm": round(ba, 2),
+                          "acinimda_bas_mm": round(gen, 2),
+                          "acinimda_son_mm": round(gen + ba, 2)})
+            yer.append((gen, gen + ba))
+            gen += ba
+    return {"kalinlik_mm": round(t, 2),
             "acinim_genislik_mm": round(gen, 2),
             "acinim_boy_mm": round(boy, 2),
-            "bukum_sayisi": len(ciftler),
+            "bukum_sayisi": len(bkm),
+            "duvar_sayisi": len(duzler),
             "k_faktor": k_faktor,
-            "bukumler": sorted(paylar, key=lambda q: -q["aci_derece"])}
+            "kesit_konumu_mm": round(konum - kb[2], 1),
+            "kesit_alani_mm2": round(alan, 1),
+            "orta_cizgi_mm": round(orta, 2),
+            "bukum_yerleri": yer,
+            "bukumler": bilgi}
+
+
+def dxf_acilim(r, k, yol, P=None):
+    """Açınım resmi: sacın düz haldeki blank ölçüsü ve büküm çizgileri.
+
+    DİKKAT - bu çizim BLANK ÖLÇÜSÜDÜR: dış kontur kesikleri ve delikler
+    bu resimde yoktur. Büküm tezgâhı için gereken açınım genişliği,
+    büküm yerleri ve büküm payları buradadır."""
+    gen, boy, t = r["acinim_genislik_mm"], r["acinim_boy_mm"], r["kalinlik_mm"]
+    doc = dxf_kur(); msp = doc.modelspace()
+    # Yazı boyu KISA kenara göre: uzun bir profilde boya göre seçilirse
+    # yazılar açınım genişliğinden büyük çıkar, büküm etiketleri üst üste biner.
+    h = min(12.0, max(2.0, min(gen, boy) / 30.0))
+    olcu_stili(doc, h)
+    msp.add_lwpolyline([(0, 0), (boy, 0), (boy, gen), (0, gen), (0, 0)],
+                       dxfattribs={"layer": "GORUNEN"})
+    for i, b in enumerate(r["bukumler"], 1):
+        for y in (b["acinimda_bas_mm"], b["acinimda_son_mm"]):
+            msp.add_line((0, y), (boy, y), dxfattribs={"layer": "EKSEN"})
+        orta = (b["acinimda_bas_mm"] + b["acinimda_son_mm"]) / 2.0
+        _yaz(msp, f"B{i}", boy + 0.6 * h, orta - 0.45 * h, 0.9 * h)
+    d = 4.0 * h
+    msp.add_linear_dim(base=(0, -d), p1=(0, 0), p2=(boy, 0),
+                       dimstyle=OLCU_STILI, dxfattribs={"layer": "OLCU"}).render()
+    msp.add_linear_dim(base=(-d, 0), p1=(0, 0), p2=(0, gen), angle=90,
+                       dimstyle=OLCU_STILI, dxfattribs={"layer": "OLCU"}).render()
+    # Büküm çizelgesi. Konumlar burada yazılı olduğu için ölçü çizgisi
+    # yalnız az bükümlü parçalara konur; çok bükümlüde üst üste binerdi.
+    x = boy + 4.0 * h
+    y = gen
+    _yaz(msp, "BUKUM  ACI      IC R   PAY      ALT KENARDAN", x, y, h)
+    y -= 2.0 * h
+    for i, b in enumerate(r["bukumler"], 1):
+        _yaz(msp, f"B{i:<5d} {b['aci_derece']:>6.1f}  {b['r_ic']:>6.2f} "
+                  f"{b['pay_mm']:>6.2f}  {b['acinimda_bas_mm']:>8.2f} - "
+                  f"{b['acinimda_son_mm']:.2f}", x, y, h)
+        y -= 1.8 * h
+    if len(r["bukumler"]) <= 4:
+        # Sol tarafa, genel genişlik ölçüsünün dışına diz: sağda büküm
+        # etiketleri ve çizelge var.
+        for i, b in enumerate(r["bukumler"], 1):
+            msp.add_linear_dim(base=(-d - i * 3.5 * h, 0), p1=(boy, 0),
+                               p2=(boy, b["acinimda_bas_mm"]), angle=90,
+                               dimstyle=OLCU_STILI,
+                               dxfattribs={"layer": "OLCU"}).render()
+    poz = f"POZ {k['poz']}   " if k.get("poz") else ""
+    sat = [(f"{poz}{k.get('kod','')}   {(k.get('ad') or '')[:60]}   AÇINIM", 1.5 * h),
+           (f"adet: {k.get('adet','-')}", 1.1 * h),
+           (f"ACINIM : {gen} x {boy} mm   sac kalinlik {t} mm", 1.1 * h),
+           (f"{r['bukum_sayisi']} bukum   K-faktoru {r['k_faktor']}", 1.1 * h),
+           ("olcek 1:1   birim: mm", 1.1 * h),
+           ("BLANK OLCUSUDUR: dis kontur kesikleri ve delikler "
+            "bu resimde yoktur.", 1.1 * h)]
+    y = gen + 4.0 * h + len(sat) * 2.2 * h
+    for metin, yaz_h in sat:
+        _yaz(msp, metin, 0.0, y, yaz_h)
+        y -= 2.2 * h
+    doc.saveas(yol)
+    return yol
+
+
+def poz_numaralari(komp, poz_harita=None):
+    """Komponent sırasına göre poz numaraları. calistir'daki ile aynı
+    kural: kaynak dikişi poz almaz, standart eleman alır."""
+    poz, out = 0, {}
+    for i, k in enumerate(komp):
+        if k.get("sinif") == "kaynak":
+            out[i] = ""
+            continue
+        poz += 1
+        out[i] = (poz_harita or {}).get(k.get("kod"), poz)
+    return out
+
+
+def acilim_yaz(kayit, komp, P, klasor, kodlar=None, k_faktor=K_FAKTOR,
+               log=print, ilerleme=None, iptal=None):
+    """Seçilen parçaların açınımını hesaplar, DXF ve tablo yazar.
+
+    kodlar None ise bütün komponentler denenir. Geriye (sonuclar, hatalar)
+    döner; hata listesi kullanıcıya OLDUĞU GİBİ gösterilmelidir, çünkü
+    hangi parçanın neden açılamadığını tek tek söyler."""
+    sonuc, hata = [], []
+    pozlar = poz_numaralari(komp)
+    secili = [(pozlar[i], k) for i, k in enumerate(komp)
+              if kodlar is None or (k.get("kod") or k.get("ad")) in kodlar]
+    for i, (poz, k) in enumerate(secili):
+        if iptal and iptal():
+            break
+        ad = k.get("kod") or k.get("ad") or "?"
+        if ilerleme:
+            ilerleme(i, len(secili), ad)
+        try:
+            sh = kayit[k["indeks"][0]][1]
+            r = sac_acilim(sh, k, k_faktor=k_faktor)
+        except AcilimYok as e:
+            hata.append((ad, str(e)))
+            log(f"  {ad}: açınım yok - {str(e).splitlines()[0]}")
+            continue
+        except Exception as e:
+            hata.append((ad, f"beklenmeyen hata: {type(e).__name__}: {e}"))
+            log(f"  {ad}: hata - {type(e).__name__}: {e}")
+            continue
+        sade = re.sub(r"[^\w\-]+", "_", ad)[:34]
+        dosya = os.path.join(klasor, f"A{poz or i + 1}_{sade}_acinim.dxf")
+        dxf_acilim(r, dict(k, poz=poz), dosya, P)
+        r["kod"] = ad
+        r["ad"] = k.get("ad", "")
+        r["poz"] = poz
+        r["adet"] = k.get("adet", 1)
+        r["dxf"] = os.path.basename(dosya)
+        sonuc.append(r)
+        log(f"  {os.path.basename(dosya)}  {r['acinim_genislik_mm']} x "
+            f"{r['acinim_boy_mm']} mm, t={r['kalinlik_mm']}, "
+            f"{r['bukum_sayisi']} bükum")
+    if sonuc:
+        yol = os.path.join(klasor, "ACINIM.csv")
+        with open(yol, "w", newline="", encoding="utf-8-sig") as f:
+            w = csv.writer(f, delimiter=";")
+            w.writerow(["poz", "kod", "ad", "adet", "kalinlik_mm",
+                        "acinim_genislik_mm", "acinim_boy_mm", "bukum_sayisi",
+                        "k_faktor", "bukumler", "dxf"])
+            for r in sonuc:
+                w.writerow([r["poz"], r["kod"], r["ad"], r["adet"],
+                            r["kalinlik_mm"], r["acinim_genislik_mm"],
+                            r["acinim_boy_mm"], r["bukum_sayisi"],
+                            r["k_faktor"],
+                            " | ".join(f"{b['aci_derece']:g}d R{b['r_ic']:g} "
+                                       f"pay{b['pay_mm']:g} @"
+                                       f"{b['acinimda_bas_mm']:g}"
+                                       for b in r["bukumler"]),
+                            r["dxf"]])
+        log(f"  ACINIM.csv  ({len(sonuc)} parça)")
+    if hata:
+        yol = os.path.join(klasor, "ACINIM_yapilamayanlar.txt")
+        with open(yol, "w", encoding="utf-8") as f:
+            for ad, m in hata:
+                f.write(f"{ad}\n    " + m.replace("\n", "\n    ") + "\n\n")
+        log(f"  ACINIM_yapilamayanlar.txt  ({len(hata)} parça)")
+    return sonuc, hata
 
 
 # ---------------------------------------------------------------- kesit
@@ -1813,6 +2203,11 @@ def main():
                     help="çizilecek görünüşler, en çok 4: ON,ARKA,SAG,SOL,UST,ALT")
     ap.add_argument("--kesit", action="store_true",
                     help="parçanın ortasından A-A tam kesit görünüşü ekle")
+    ap.add_argument("--acinim", default="",
+                    help="bükümlü sacların açınımı: kod listesi (virgülle) "
+                         "ya da HEPSI")
+    ap.add_argument("--k-faktor", type=float, default=K_FAKTOR,
+                    help=f"büküm payı K-faktörü (varsayılan {K_FAKTOR})")
     ap.add_argument("--zip", action="store_true", help="çıktıları cizimler.zip'te topla")
     a = ap.parse_args()
     if a.malzeme_liste:
@@ -1873,6 +2268,11 @@ def main():
         print("  --malzeme <ad> | --malzeme-dosya <csv> | --malzeme-sor ile değiştirin.")
         print(f"  Şablon yazıldı: {sab}  (doldurup --malzeme-dosya ile verin)")
 
+    if a.acinim:
+        kodlar = None if a.acinim.strip().upper() in ("HEPSI", "HEPSİ", "*") \
+            else {t.strip() for t in a.acinim.replace(";", ",").split(",") if t.strip()}
+        print("açınım:")
+        acilim_yaz(kayit, komp, P, on, kodlar=kodlar, k_faktor=a.k_faktor)
     calistir(a.step, on, kayit, komp, P, asama=asama, esl=esl, agac=agac, genel=genel,
              yogunluk=a.yogunluk, en_az_hacim=a.en_az_hacim, tek=a.tek,
              en_cok=a.en_cok, log=lambda t: print(f"{t}  [{time.time()-t0:.0f}s]"))
