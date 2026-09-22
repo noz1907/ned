@@ -37,11 +37,11 @@ from OCP.GProp import GProp_GProps
 from OCP.BRepAdaptor import BRepAdaptor_Surface, BRepAdaptor_Curve
 from OCP.GeomAbs import (GeomAbs_Plane, GeomAbs_Cylinder, GeomAbs_Cone,
                          GeomAbs_Sphere, GeomAbs_Line)
-from OCP.TopAbs import TopAbs_FACE, TopAbs_EDGE, TopAbs_REVERSED
+from OCP.TopAbs import TopAbs_FACE, TopAbs_EDGE, TopAbs_VERTEX, TopAbs_REVERSED
 from OCP.TopExp import TopExp, TopExp_Explorer
 from OCP.TopTools import TopTools_IndexedMapOfShape
 from OCP.TopoDS import TopoDS, TopoDS_Compound
-from OCP.BRep import BRep_Builder
+from OCP.BRep import BRep_Builder, BRep_Tool
 from OCP.Bnd import Bnd_Box
 from OCP.BRepBndLib import BRepBndLib
 from OCP.BRepPrimAPI import BRepPrimAPI_MakeBox
@@ -827,6 +827,267 @@ def merkez_cizgileri(msp, o, yer, kaydir, en_cok=1500):
                 msp.add_line((x, y - u), (x, y + u), dxfattribs={"layer": "EKSEN"})
                 sayac += 1
     return sayac
+
+
+# ---------------------------------------------------------------- açınım
+# Sac büküm açınımı: bükümü açıp düz sac hâlini verir.
+#
+# Kapsam: bütün büküm eksenleri BİRBİRİNE PARALEL olan parçalar - C, U, L, Z
+# profilleri, köşebentler, kutu kesitler. Bu tür parçada açınım tek boyutlu
+# bir problemdir: profil kesiti boyunca düz parçalar uzunluklarını korur,
+# bükümler ise NÖTR EKSEN yayı kadar yer kaplar.
+#
+# Büküm payı (bend allowance):   BA = teta * (r_ic + K * t)
+#   teta  büküm açısı (radyan), r_ic iç yarıçap, t sac kalınlığı,
+#   K     nötr eksenin sac içindeki yeri (K-faktörü). Yumuşak çelikte
+#         genellikle 0,40 - 0,50; varsayılan 0,44.
+# K-faktörü tezgâha ve malzemeye göre değişir, bu yüzden dışarıdan verilir.
+K_FAKTOR = 0.44
+
+
+class AcilimYok(Exception):
+    """Bu parçanın açınımı çıkarılamıyor; mesaj kullanıcıya gösterilir."""
+
+
+def bukum_yuzeyleri(sh, en_az_oran=0.30, en_cok_yaricap=60.0):
+    """Gerçek büküm silindirlerini bulur.
+
+    Delik ve köşe pahları da silindirdir; onlardan ayırmak için silindirin
+    EKSEN BOYUNCA UZUNLUĞU parçanın en büyük ölçüsünün belli bir oranından
+    büyük olmalı: büküm sacın boyunca gider, delik gitmez."""
+    kb = kutu(sh)
+    enb = max(kb[3] - kb[0], kb[4] - kb[1], kb[5] - kb[2])
+    m = TopTools_IndexedMapOfShape()
+    TopExp.MapShapes_s(sh, TopAbs_FACE, m)
+    out = []
+    for i in range(1, m.Extent() + 1):
+        f = TopoDS.Face_s(m.FindKey(i))
+        ad = BRepAdaptor_Surface(f)
+        if ad.GetType() != GeomAbs_Cylinder:
+            continue
+        cyl = ad.Cylinder()
+        r = cyl.Radius()
+        if r > en_cok_yaricap:
+            continue
+        fk = kutu(f)
+        uz = max(fk[3] - fk[0], fk[4] - fk[1], fk[5] - fk[2])
+        if uz < en_az_oran * enb:
+            continue
+        d = cyl.Position().Direction()
+        try:
+            aci = abs(ad.LastUParameter() - ad.FirstUParameter())
+        except Exception:
+            aci = math.pi / 2
+        ek = cyl.Position().Location()
+        out.append({"yuz": f, "r": r, "aci": aci,
+                    "eksen": (d.X(), d.Y(), d.Z()),
+                    "merkez": (ek.X(), ek.Y(), ek.Z()),
+                    "ic": f.Orientation() == TopAbs_REVERSED})
+    return out
+
+
+def _paralel(a, b, tol=0.02):
+    return abs(abs(a[0] * b[0] + a[1] * b[1] + a[2] * b[2]) - 1.0) < tol
+
+
+def bukum_ekseni(bukumler):
+    """Bütün büküm eksenleri paralel mi? Değilse açınım çıkarılamaz."""
+    if not bukumler:
+        raise AcilimYok("Parçada büküm bulunamadı; zaten düz sac olabilir "
+                        "ya da bu bir sac parça değil.")
+    e0 = bukumler[0]["eksen"]
+    for b in bukumler[1:]:
+        if not _paralel(e0, b["eksen"]):
+            raise AcilimYok(
+                "Bükümlerin eksenleri birbirine paralel değil.\n"
+                "Bu sürüm yalnız tek yönde bükülmüş parçaların - C, U, L, Z\n"
+                "profilleri, köşebentler - açınımını çıkarabilir.")
+    return _birim(e0)
+
+
+def _dik_birim(e):
+    """e'ye dik birim vektör."""
+    y = (0.0, 0.0, 1.0) if abs(e[2]) < 0.9 else (1.0, 0.0, 0.0)
+    return _birim(_capraz(e, y))
+
+
+def sac_duvarlari(sh, eksen, t, tol=0.05):
+    """Profilin düz duvarları: eksene DİK normalli düzlem yüzeyler.
+
+    Her duvar sacın iki yüzünden oluşur (iç ve dış). İkisi orta yüzeyde
+    birleştirilir; açınımda uzunluğunu koruyan şey bu orta çizgidir."""
+    u = _dik_birim(eksen)
+    v = _birim(_capraz(eksen, u))
+
+    def p2(p):
+        return (p[0] * u[0] + p[1] * u[1] + p[2] * u[2],
+                p[0] * v[0] + p[1] * v[1] + p[2] * v[2])
+
+    m = TopTools_IndexedMapOfShape()
+    TopExp.MapShapes_s(sh, TopAbs_FACE, m)
+    ham = []
+    for i in range(1, m.Extent() + 1):
+        f = TopoDS.Face_s(m.FindKey(i))
+        ad = BRepAdaptor_Surface(f)
+        if ad.GetType() != GeomAbs_Plane:
+            continue
+        d = ad.Plane().Axis().Direction()
+        n = (d.X(), d.Y(), d.Z())
+        if abs(n[0] * eksen[0] + n[1] * eksen[1] + n[2] * eksen[2]) > tol:
+            continue                      # eksene dik değil: uç kapak yüzeyi
+        q = ad.Plane().Location()
+        n2 = _birim(p2(n))
+        # düzlemin 2B'de doğrultusu ve orijine dik uzaklığı
+        mes = p2((q.X(), q.Y(), q.Z()))
+        d0 = n2[0] * mes[0] + n2[1] * mes[1]
+        g = GProp_GProps(); BRepGProp.SurfaceProperties_s(f, g)
+        ham.append({"yuz": f, "n2": n2, "d": d0, "alan": g.Mass()})
+    # İç ve dış yüzü eşleştir: aynı doğrultu, uzaklık farkı = kalınlık
+    duvar, kullanildi = [], set()
+    for i, a1 in enumerate(ham):
+        if i in kullanildi:
+            continue
+        for j in range(i + 1, len(ham)):
+            if j in kullanildi:
+                continue
+            a2 = ham[j]
+            if abs(abs(a1["n2"][0] * a2["n2"][0] + a1["n2"][1] * a2["n2"][1]) - 1) > 0.02:
+                continue
+            fark = abs(abs(a1["d"]) - abs(a2["d"])) if \
+                (a1["n2"][0] * a2["n2"][0] + a1["n2"][1] * a2["n2"][1]) < 0 \
+                else abs(a1["d"] - a2["d"])
+            if abs(fark - t) > max(0.05, 0.05 * t):
+                continue
+            duvar.append({"n2": a1["n2"], "d_orta": (a1["d"] + a2["d"]) / 2.0
+                          if (a1["n2"][0] * a2["n2"][0] + a1["n2"][1] * a2["n2"][1]) > 0
+                          else (a1["d"] - a2["d"]) / 2.0,
+                          "yuzler": (a1["yuz"], a2["yuz"]),
+                          "alan": a1["alan"] + a2["alan"]})
+            kullanildi.add(i); kullanildi.add(j)
+            break
+    return duvar, (u, v)
+
+
+def bukum_ciftleri(bukumler, eksen, u, v):
+    """İç ve dış büküm silindirlerini tek bükümde birleştirir."""
+    def p2(p):
+        return (p[0] * u[0] + p[1] * u[1] + p[2] * u[2],
+                p[0] * v[0] + p[1] * v[1] + p[2] * v[2])
+
+    grup = defaultdict(list)
+    for b in bukumler:
+        c = p2(b["merkez"])
+        grup[(round(c[0], 1), round(c[1], 1))].append(dict(b, c2=c))
+    ciftler = []
+    for c, lst in grup.items():
+        ic = [x for x in lst if x["ic"]]
+        dis = [x for x in lst if not x["ic"]]
+        if not ic or not dis:
+            continue
+        r_ic = min(x["r"] for x in ic)
+        r_dis = max(x["r"] for x in dis)
+        aci = max(x["aci"] for x in lst)
+        ciftler.append({"c2": lst[0]["c2"], "r_ic": r_ic, "r_dis": r_dis,
+                        "t": r_dis - r_ic, "aci": aci})
+    return ciftler
+
+
+def sac_acilim(sh, o, k_faktor=K_FAKTOR):
+    """Tek yönde bükülmüş sac parçanın açınım ölçülerini hesaplar.
+
+    Geri dönüş: kalınlık, açınım genişliği, açınım boyu, büküm listesi.
+    Açınım genişliği = düz duvarların orta çizgi uzunlukları
+                     + her büküm için nötr eksen yayı (büküm payı)."""
+    bukumler = bukum_yuzeyleri(sh)
+    eksen = bukum_ekseni(bukumler)
+    kb = kutu(sh)
+    # Eksen yönündeki uzunluk açınımda değişmez.
+    e_i = max(range(3), key=lambda i: abs(eksen[i]))
+    boy = kb[e_i + 3] - kb[e_i]
+
+    # Kalınlık: iç/dış büküm çiftlerinin yarıçap farkı
+    u = _dik_birim(eksen); v = _birim(_capraz(eksen, u))
+    ciftler = bukum_ciftleri(bukumler, eksen, u, v)
+    if not ciftler:
+        raise AcilimYok("Büküm silindirlerinin iç/dış çiftleri eşleşmedi; "
+                        "sac kalınlığı belirlenemedi.")
+    kal = [c["t"] for c in ciftler]
+    t = sum(kal) / len(kal)
+    if max(kal) - min(kal) > max(0.1, 0.05 * t):
+        raise AcilimYok(
+            f"Sac kalınlığı sabit değil (bükümlerde {min(kal):.2f} - "
+            f"{max(kal):.2f} mm çıktı). Açınım yalnız sabit kalınlıklı "
+            f"sac parçalar için yapılabilir.")
+
+    duvar, _ = sac_duvarlari(sh, eksen, t)
+    if not duvar:
+        raise AcilimYok("Profilin düz duvarları bulunamadı.")
+
+    # Her bükümün hangi iki duvara değdiğini bul: duvarın orta çizgisi,
+    # büküm merkezinden (r_ic + t/2) uzaklıkta olmalı.
+    for c in ciftler:
+        c["duvar"] = []
+        hedef = c["r_ic"] + t / 2.0
+        for i, d in enumerate(duvar):
+            uz = abs(d["n2"][0] * c["c2"][0] + d["n2"][1] * c["c2"][1] - d["d_orta"])
+            if abs(uz - hedef) < max(0.15, 0.06 * t):
+                c["duvar"].append(i)
+        c["duvar"] = c["duvar"][:2]
+
+    # Her duvarın KENDİ doğrultusundaki gerçek uzanımı (köşelerinden).
+    for d in duvar:
+        yon = (-d["n2"][1], d["n2"][0])
+        pr = []
+        for yz in d["yuzler"]:
+            ex = TopExp_Explorer(yz, TopAbs_VERTEX)
+            while ex.More():
+                pt = BRep_Tool.Pnt_s(TopoDS.Vertex_s(ex.Current()))
+                q = (pt.X() * u[0] + pt.Y() * u[1] + pt.Z() * u[2],
+                     pt.X() * v[0] + pt.Y() * v[1] + pt.Z() * v[2])
+                pr.append(q[0] * yon[0] + q[1] * yon[1])
+                ex.Next()
+        d["s0"], d["s1"] = (min(pr), max(pr)) if pr else (0.0, 0.0)
+        d["yon"] = yon
+        d["bukum"] = []
+
+    # Duvar - büküm komşuluğu
+    for ci, c in enumerate(ciftler):
+        for i in c["duvar"]:
+            if i < len(duvar):
+                duvar[i]["bukum"].append(ci)
+
+    # Duvarın açınımdaki uzunluğu: iki bükümü varsa teğet noktaları arası,
+    # tek bükümü varsa büküm teğetinden serbest uca kadar. Hiç bükümü
+    # olmayan düzlem parçanın duvarı değildir (kesik yüzeyi, pah vb.).
+    gen, kullanilan = 0.0, 0
+    for d in duvar:
+        teget = [ciftler[ci]["c2"][0] * d["yon"][0] + ciftler[ci]["c2"][1] * d["yon"][1]
+                 for ci in d["bukum"]]
+        if len(teget) >= 2:
+            d["uzunluk"] = abs(max(teget) - min(teget))
+        elif len(teget) == 1:
+            d["uzunluk"] = max(abs(teget[0] - d["s0"]), abs(teget[0] - d["s1"]))
+        else:
+            d["uzunluk"] = 0.0
+            continue
+        gen += d["uzunluk"]
+        kullanilan += 1
+    if not kullanilan:
+        raise AcilimYok("Duvarlar bükümlerle eşleşmedi; profil zinciri kurulamadı.")
+
+    paylar = []
+    for c in ciftler:
+        ba = c["aci"] * (c["r_ic"] + k_faktor * t)
+        paylar.append({"r_ic": round(c["r_ic"], 2), "r_dis": round(c["r_dis"], 2),
+                       "aci_derece": round(math.degrees(c["aci"]), 1),
+                       "pay_mm": round(ba, 2)})
+        gen += ba
+    return {"kalinlik_mm": round(t, 2), "duvar_sayisi": kullanilan,
+            "acinim_genislik_mm": round(gen, 2),
+            "acinim_boy_mm": round(boy, 2),
+            "bukum_sayisi": len(ciftler),
+            "k_faktor": k_faktor,
+            "bukumler": sorted(paylar, key=lambda q: -q["aci_derece"])}
 
 
 # ---------------------------------------------------------------- kesit
