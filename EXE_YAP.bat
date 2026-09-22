@@ -29,12 +29,18 @@ if errorlevel 1 goto OLMADI
 echo.
 echo  Derleniyor, birkac dakika surebilir...
 echo.
+echo  NOT: Akan yazilarda WARNING satirlari gorebilirsiniz. Uyari hata
+echo  degildir, derleme devam eder. Sonunda "Tamam" yaziyorsa is bitmistir.
+echo.
 ".venv\Scripts\python.exe" -m PyInstaller --noconfirm --clean pifikstur.spec
 if errorlevel 1 goto OLMADI
 
 echo.
 echo  Tamam:  dist\PiFikstur\PiFikstur.exe
 echo  Bu klasorun TAMAMINI kopyalayin, tek basina exe calismaz.
+echo.
+echo  Yukarida WARNING satirlari varsa onemli degil; derleme tamamlandi.
+echo  Denemek icin exe yi acip bir STEP dosyasi okutun, DXF uretiyorsa tamamdir.
 echo.
 pause
 exit /b 0

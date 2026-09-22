@@ -16,8 +16,18 @@ from PyInstaller.utils.hooks import collect_all, collect_data_files
 
 # OCP (OpenCascade) saf .pyd + yanindaki DLL'lerdir; PyInstaller bunlari
 # kendiliginden bulamaz, hepsini acikca toplamak gerekir.
-ocp_bin, ocp_data, ocp_gizli = collect_all("OCP")
-ezdxf_bin, ezdxf_data, ezdxf_gizli = collect_all("ezdxf")
+#
+# on_error="ignore" NEDEN:
+# OCP'de her modulun icinde kendi adiyla bir sinif vardir; ornegin
+# OCP/TopoDS/__init__.py icinde "TopoDS" adinda bir ad bulunur.
+# PyInstaller alt modulleri gezerken bunu da bir alt modul sanip
+# "OCP.TopoDS.TopoDS" diye import etmeye calisir ve
+#   ModuleNotFoundError: No module named 'OCP.TopoDS.OCP'
+# uyarisini basar. Uyaridir, hata degil: toplama devam eder, OCP.TopoDS
+# dahil 321 modulun hepsi pakete girer. on_error="ignore" yalnizca bu
+# yaniltici satiri susturur, toplanan dosyalari DEGISTIRMEZ.
+ocp_bin, ocp_data, ocp_gizli = collect_all("OCP", on_error="ignore")
+ezdxf_bin, ezdxf_data, ezdxf_gizli = collect_all("ezdxf", on_error="ignore")
 
 a = Analysis(
     ["pf3_gui.py"],

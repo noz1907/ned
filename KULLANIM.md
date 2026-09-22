@@ -156,6 +156,35 @@ PyInstaller'ı kurar ve `pifikstur.spec` tarifine göre derler.
 Derleme yalnız **çalıştırıldığı işletim sistemi için** üretir: Windows'ta
 derlerseniz Windows `.exe`'si çıkar, Linux'ta derlerseniz Linux çalıştırılabiliri.
 
+#### Derlerken çıkan uyarılar
+
+```
+WARNING: Failed to collect submodules for 'OCP.TopoDS.TopoDS' because
+importing 'OCP.TopoDS.TopoDS' raised:
+ModuleNotFoundError: No module named 'OCP.TopoDS.OCP'
+```
+
+**Bu bir hata değil, zararsız bir uyarıdır.** Sebebi: OCP'de her modülün
+içinde kendi adıyla bir isim vardır (`OCP.TopoDS` modülünün içinde
+`TopoDS`). PyInstaller alt modülleri gezerken bunu da bir alt modül sanıp
+`OCP.TopoDS.TopoDS` diye içeri almaya çalışır, bulamaz ve bu satırı basar.
+Toplama kaldığı yerden devam eder: **OCP'nin 321 modülünün hepsi, `TopoDS`
+dahil, pakete girer.**
+
+`pifikstur.spec` bu satırı `on_error="ignore"` ile susturur; toplanan
+dosyalarda hiçbir değişiklik olmaz. Eski bir spec dosyanız varsa uyarıyı
+görmezden gelebilirsiniz.
+
+**Derlemenin gerçekten tuttuğunu nasıl anlarsınız:** derleme bittikten
+sonra `dist\PiFikstur\PiFikstur.exe` açılıyor ve bir STEP dosyasını
+okuyup DXF üretiyorsa iş tamamdır. Paketlenmiş program ile Python'dan
+çalıştırılan program **aynı sayıları** vermelidir; burada denendi, aynı
+DXF çıktı (167 varlık, toplam çizgi boyu 1889,8418 mm).
+
+Derleme durursa (uyarı değil, **ERROR** ya da `Build failed`), sık sebep
+disk doludur: paket klasörü ~700 MB, derleme sırasında geçici olarak iki
+katı yer ister.
+
 ---
 
 ## 2. Arayüzle kullanım (kolay yol)
