@@ -184,8 +184,33 @@ Malzeme vermenin yolları:
 > Kutudaki malzeme yalnız **uygulanacak** malzemedir. Bir parçaya alüminyum
 > verdiğinizde diğerleri çelik kalır.
 
-**BOM ÇIKART ▸** → `BOM.csv`, `BOM.md`, `olculer.csv`, `olculer.json`,
-`rapor.md` yazılır. Tablo gerçek ölçü ve kütlelerle dolar.
+**BOM ÇIKART ▸** → `BOM.csv`, `BOM.md`, `BOM_AGAC.csv`, `BOM_AGAC.md`,
+`olculer.csv`, `olculer.json`, `rapor.md` yazılır. Tablo gerçek ölçü ve
+kütlelerle dolar.
+
+#### Hiyerarşik (çok kademeli) BOM
+
+Tablo, **montaj ağacını** olduğu gibi gösterir:
+
+```
+1          ▸ 520260925 XL-S KAYAR BABA            montaj   1
+1.1        ▸ 510260925-01 ...                     montaj   1
+1.1.1.1    ▸ 510260901-50 GOVDE                   montaj   1
+1.1.1.1.1    01.051.000.01 C-Profil-Runge XL-H    parça    1
+1.1.1.1.2  ▸ 01.050.000.20 BG Mechanismus         montaj   1
+1.1.1.1.2.1  01.050.000.01 U-Blech-Mechanismus    parça    1
+```
+
+Ana ürün → alt montaj → alt montajın altı… kaç kademe varsa o kadar iner.
+Üstteki kutucukla düz listeye geçebilirsiniz.
+
+> **ADET her zaman bir üst montaj başınadır** (montaj tekniğindeki alışılmış
+> kural). Bir alt montaj 2 kez geçiyorsa kendi satırında `2` yazar,
+> altındaki parçada o montaj başına düşen sayı yazar; ürünün tamamındaki
+> sayı parantez içinde `(top …)` ve dosyada `toplam_adet` sütununda verilir.
+
+Aynı yapı `BOM_AGAC.csv` (Excel) ve `BOM_AGAC.md` dosyalarına da yazılır;
+`poz` sütunu `1.1.2.3` biçiminde kademe numarasıdır.
 
 ### Adım 3 — GÖRÜNÜŞ ve KESİT
 
@@ -310,7 +335,7 @@ python pf3_olcu.py parca.stp -o cikti            # 1 + 2 + 3, hepsi
 
 | aşama | ne yapar | çıktı |
 |-------|----------|-------|
-| 1 | komponent detaylandırma + BOM | `BOM.csv`, `BOM.md`, `olculer.csv/json`, `rapor.md` |
+| 1 | komponent detaylandırma + BOM | `BOM.csv`, `BOM.md`, `BOM_AGAC.csv/md` (hiyerarşik), `olculer.csv/json`, `rapor.md` |
 | 2 | detay parçaların çizimi ve ölçülendirilmesi | `P01_<kod>.dxf`, `P02_…` |
 | 3 | montaj resmi + içinde BOM tablosu | `00_MONTAJ.dxf` |
 
@@ -393,7 +418,10 @@ hacim 163651.2 mm3   kutle 1.2847 kg   yuzey 114694.7 mm2
 malzeme: Celik (S235JR / St37)   yogunluk 7.85 g/cm3   [varsayilan]
 ```
 
-Sağ tarafta **DELİK TABLOSU** ve **RADÜS TABLOSU** durur.
+Çizimde tablo yoktur: delikler görünüşlerde `2x Ø9`, kenar yuvarlamaları
+`4x R3` olarak ölçülendirilir; yazı deliğin hemen yanına, kısa bir kılavuz
+çizgisiyle konur. Tam delik ve radüs listeleri `rapor.md`, `olculer.csv` ve
+`olculer.json` dosyalarındadır.
 
 > **Çap yalnız tam çember delikler için verilir.** Bir silindirik yüzeyin
 > açısal açıklığı toplanır; 360°'ye yakınsa delik, değilse kenar

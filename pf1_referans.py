@@ -201,7 +201,7 @@ def brep_oku(yol, malzeme=False):
     return out
 
 
-def oku(yol, malzeme=False):
+def oku(yol, malzeme=False, agac=None):
     """Dosyayı biçimine göre okur: STEP, IGES ya da BREP.
 
     Geri dönüş: (ad, katı) ikilileri; malzeme=True ise (ad, katı, malzeme).
@@ -211,14 +211,23 @@ def oku(yol, malzeme=False):
         return iges_oku(yol, malzeme)
     if b == "BREP":
         return brep_oku(yol, malzeme)
-    return step_oku(yol, malzeme)
+    return step_oku(yol, malzeme, agac)
 
 
-def step_oku(yol, malzeme=False):
+def _dugum(ad, kod=""):
+    return {"ad": ad, "kod": kod, "adet": 1, "alt": [], "katilar": [],
+            "montaj": False}
+
+
+def step_oku(yol, malzeme=False, agac=None):
     """XCAF ile okur: montaj ağacı + gerçek parça adları.
 
     malzeme=True verilirse her katı (ad, katı, malzeme) üçlüsü olarak döner;
-    malzeme STEP'te tanımlı değilse None'dır. Olmazsa düz okuyucuya düşer."""
+    malzeme STEP'te tanımlı değilse None'dır. Olmazsa düz okuyucuya düşer.
+
+    agac bir listeyse, montaj ağacı oraya konur: iç içe sözlükler
+    {"ad", "kod", "adet", "montaj", "alt": [...], "katilar": [kayıt indeksi]}.
+    Aynı alt montajın kopyaları tek düğümde toplanır, adet'i artar."""
     try:
         app = XCAFApp_Application.GetApplication_s()
         doc = TDocStd_Document(TCollection_ExtendedString("d"))
@@ -236,18 +245,48 @@ def step_oku(yol, malzeme=False):
             mt = None
         out = []
 
-        def gez(lab, loc):
+        def _anahtar(lab):
+            """Aynı parçanın/alt montajın kopyalarını eşleştiren kimlik."""
+            try:
+                return lab.EntryDumpToString()
+            except Exception:
+                return _ad(lab) or "?"
+
+        def gez(lab, loc, ust, say=True):
+            """Ağacı gezer.
+
+            say=False: bu dal, daha önce sayılmış bir alt montajın
+            KOPYASIDIR. Katıları yine toplanır (montaj resmi için her
+            kopyanın kendi konumu gerekir) ama ağaçta yeni düğüm açılmaz
+            ve çocukların adedi bir daha artırılmaz — çok kademeli BOM'da
+            adet HER ZAMAN bir üst montaj başınadır."""
             ad = _ad(lab) or "?"
+            an = _anahtar(lab)
+            bu = None
+            if ust is not None:
+                for d in ust["alt"]:
+                    if d.get("_an") == an:
+                        bu = d
+                        break
+                if bu is None:
+                    bu = _dugum(ad)
+                    bu["_an"] = an
+                    ust["alt"].append(bu)
+                elif say:
+                    bu["adet"] += 1
+                    say = False        # bundan sonrası kopya dalı
             if st.IsAssembly_s(lab):
+                if bu is not None:
+                    bu["montaj"] = True
                 ch = TDF_LabelSequence(); st.GetComponents_s(lab, ch)
                 for i in range(1, ch.Length() + 1):
                     c = ch.Value(i)
                     ref = TDF_Label()
                     cl = st.GetLocation_s(c)
                     if st.GetReferredShape_s(c, ref):
-                        gez(ref, loc.Multiplied(cl))
+                        gez(ref, loc.Multiplied(cl), bu, say)
                     else:
-                        gez(c, loc.Multiplied(cl))
+                        gez(c, loc.Multiplied(cl), bu, say)
             else:
                 sh = st.GetShape_s(lab)
                 if sh.IsNull():
@@ -259,12 +298,19 @@ def step_oku(yol, malzeme=False):
                 while ex.More():
                     k = TopoDS.Solid_s(ex.Current())
                     out.append((ad, k, mal) if malzeme else (ad, k))
+                    if bu is not None and say:
+                        bu["katilar"].append(len(out) - 1)
                     ex.Next()
 
+        kok = _dugum(os.path.splitext(os.path.basename(yol))[0])
+        kok["montaj"] = True
         free = TDF_LabelSequence(); st.GetFreeShapes(free)
         for i in range(1, free.Length() + 1):
-            gez(free.Value(i), TopLoc_Location())
+            gez(free.Value(i), TopLoc_Location(), kok)
         if out:
+            if agac is not None:
+                # Tek serbest kök varsa onu ana ürün yap, sahte kökü atla.
+                agac.append(kok["alt"][0] if len(kok["alt"]) == 1 else kok)
             return out
     except Exception:
         pass

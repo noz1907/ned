@@ -179,6 +179,7 @@ class Uygulama(ttk.Frame):
         self.iptal_istendi = False
         self.gorunus_sirasi = []         # seçim sırası (en çok 4 tutmak için)
         self.ornek_adaylar = []
+        self.agac = None                 # montaj ağacı (hiyerarşik BOM)
         self._kur()
         self.after(80, self._kuyruk_isle)
         threading.Thread(target=self._motoru_yukle, daemon=True).start()
@@ -251,7 +252,10 @@ class Uygulama(ttk.Frame):
         sut = ("poz", "kod", "tanim", "adet", "sinif", "malzeme", "kaynak", "olcu", "kg")
         gen = (40, 165, 250, 45, 70, 145, 80, 120, 70)
         cer = ttk.Frame(f); cer.pack(fill="both", expand=True)
-        self.ag = ttk.Treeview(cer, columns=sut, show="headings", selectmode="extended")
+        self.ag = ttk.Treeview(cer, columns=sut, show="tree headings",
+                               selectmode="extended")
+        self.ag.column("#0", width=150, stretch=False)
+        self.ag.heading("#0", text="KADEME")
         for c, w in zip(sut, gen):
             self.ag.heading(c, text=c.upper())
             self.ag.column(c, width=w,
@@ -262,6 +266,12 @@ class Uygulama(ttk.Frame):
         self.ag.tag_configure("std", foreground="#777")
         self.ag.tag_configure("kaynak", foreground="#b06")
         self.ag.tag_configure("data", foreground="#070")
+        self.ag.tag_configure("montaj", foreground="#036", font=("Segoe UI", 9, "bold"))
+        self.v_hiyerarsik = tk.BooleanVar(value=True)
+        ttk.Checkbutton(f, text="montaj ağacı olarak göster  "
+                               "(ana ürün ▸ alt montaj ▸ parça)",
+                        variable=self.v_hiyerarsik,
+                        command=self._agac_doldur).pack(anchor="w", pady=(4, 0))
 
         mf = ttk.LabelFrame(f, text=" Malzeme – kütle = hacim × yoğunluk ", padding=6)
         mf.pack(fill="x", pady=(8, 0))
@@ -494,7 +504,8 @@ class Uygulama(ttk.Frame):
         """Motoru arka planda, yalnız düz veriyle çağırır."""
         return self.M.calistir(
             g["step"], g["on"], self.kayit, komp or self.komp, g["P"],
-            asama=asama, esl=g["esl"], genel=g["genel"], log=self._yaz,
+            asama=asama, esl=g["esl"], agac=self.agac, genel=g["genel"],
+            log=self._yaz,
             ilerleme=lambda y, t: self.kuyruk.put(("ilerleme", (y, t))),
             iptal=lambda: self.iptal_istendi, **ek)
 
@@ -545,13 +556,14 @@ class Uygulama(ttk.Frame):
 
     def _incele_is(self, yol, P):
         try:
-            kayit, komp = self.M.step_komponentleri(yol, P, log=self._yaz)
-            self.kuyruk.put(("komponent", (kayit, komp)))
+            kayit, komp, agac = self.M.step_komponentleri(yol, P, log=self._yaz)
+            self.kuyruk.put(("komponent", (kayit, komp, agac)))
         except Exception:
             self.kuyruk.put(("hata", "STEP okunamadı:\n\n" + traceback.format_exc(limit=3)))
 
-    def _komponent_geldi(self, kayit, komp):
+    def _komponent_geldi(self, kayit, komp, agac=None):
         self.kayit, self.komp, self.satirlar = kayit, komp, []
+        self.agac = agac
         self.ornek_dxf = None
         self.malzemeler = {}
         self._bitir()
@@ -573,6 +585,9 @@ class Uygulama(ttk.Frame):
 
     def _agac_doldur(self):
         self.ag.delete(*self.ag.get_children())
+        if self.agac and self.v_hiyerarsik.get():
+            self._hiyerarsik_doldur()
+            return
         if self.satirlar:
             for r in self.satirlar:
                 t = ("std",) if r["sinif"] == "standart" else \
@@ -595,6 +610,28 @@ class Uygulama(ttk.Frame):
             self.ag.insert("", "end", tags=t,
                            values=(i, k["kod"][:40], k["ad"][:60], k["adet"],
                                    k["sinif"], mal, kay, "-", "-"))
+
+    def _hiyerarsik_doldur(self):
+        """Montaj ağacını kademeli göster: ana ürün > alt montaj > parça."""
+        satir = self.M.agac_bom(self.agac, self.komp, self.satirlar or [])
+        for r in satir:
+            ust = r["poz"].rsplit(".", 1)[0] if "." in r["poz"] else ""
+            t = ("montaj",) if r["tur"] == "montaj" else \
+                ("std",) if r["tur"] == "standart" else \
+                ("kaynak",) if r["tur"] == "kaynak" else ()
+            ad = r["ad"][:60]
+            if r["tur"] == "montaj":
+                ad = "▸ " + ad
+            adet = f"{r['adet']}" + (f"  (top {r['toplam_adet']})"
+                                     if r["toplam_adet"] != r["adet"] else "")
+            try:
+                self.ag.insert(ust, "end", iid=r["poz"], open=r["seviye"] < 3,
+                               tags=t,
+                               values=(r["poz"], r["kod"][:40], ad, adet,
+                                       r["tur"], (r["malzeme_ad"] or "-")[:28],
+                                       "-", r["olcu"] or "-", r["kg_adet"] or "-"))
+            except Exception:
+                pass
 
     def malzeme_uygula(self, yalniz_secili):
         if not self.komp:

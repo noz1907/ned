@@ -244,7 +244,7 @@ hangi menüden STEP alınacağını söyler.
 
 | aşama | ne yapar | çıktı |
 |-------|----------|-------|
-| 1 | komponent parçaların detaylandırılması ve BOM çıkarılması | `BOM.csv`, `BOM.md`, `olculer.csv/json`, `rapor.md` |
+| 1 | komponent parçaların detaylandırılması ve BOM çıkarılması | `BOM.csv`, `BOM.md`, **`BOM_AGAC.csv/md`** (hiyerarşik), `olculer.csv/json`, `rapor.md` |
 | 2 | detay parçaların çizilmesi ve ölçülendirilmesi | `P01_<kod>.dxf` … |
 | 3 | montaj resmi ve ölçülendirilmesi | `00_MONTAJ.dxf` (BOM tablosu içinde) |
 
@@ -377,6 +377,14 @@ numaralı parçalar **standart eleman** sayılır: çizim üretilmez, kod ve ade
 listelenir. Kaynak dikişleri ayrı tutulur, parça sayılmaz.
 
 ## BOM
+
+**İki biçimde** üretilir:
+
+* **Düz liste** (`BOM.csv`) — her poz bir satır, satın alma/maliyet için.
+* **Hiyerarşik liste** (`BOM_AGAC.csv`) — montaj ağacı: ana ürün ▸ alt
+  montaj ▸ parça, `1.1.2.3` biçiminde kademe numarasıyla. Adet bir üst
+  montaj başınadır; ürün genelindeki sayı `toplam_adet` sütunundadır.
+  Arayüzde de ağaç olarak görünür.
 
 Aşama 1'in çıktısı: her poz için kod, tanım, adet, malzeme, ölçü (BxExK),
 adet başına kütle ve toplam kütle. Civata, somun, pul gibi standart elemanlar

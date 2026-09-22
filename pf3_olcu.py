@@ -690,15 +690,25 @@ def gorunus_ciz(msp, kenar, ox, oy, ad, h=4.0, olcu2=True, etiket=None):
     return G, Y, dx, dy
 
 
-def cap_olculeri(msp, o, yer, kaydir, h, ust, en_cok_grup=6):
-    """Her görünüşte, o görünüşte daire görünen delikler için çap ölçüsü.
+def _cakisiyor(k, digerleri, pay=0.0):
+    """İki dikdörtgen (x0, y0, x1, y1) üst üste biniyor mu?"""
+    for d in digerleri:
+        if (k[0] - pay < d[2] and k[2] + pay > d[0]
+                and k[1] - pay < d[3] and k[3] + pay > d[1]):
+            return True
+    return False
 
-    Ölçü çizgisi deliğin merkezinden geçer (dimtofl=1). Yazı, görünüşün
-    üstünde satır satır dizilir: her çap grubu kendi satırına konur, böylece
-    yazılar ne birbirinin ne de görünüşlerin üstüne biner.
-    Aynı çaptaki delikler için tek ölçü yazılır, adet önüne konur ("2x Ø9").
-    Radüsler ayrıca R olarak verilir."""
-    kova = defaultdict(list)                 # görünüş -> ölçülecek gruplar
+
+def cap_olculeri(msp, o, yer, kaydir, gkutu, h, ust, en_cok_grup=8):
+    """Delik çapı ve kenar radüsü ölçüleri.
+
+    Ölçü çizgisi deliğin/yuvarlamanın merkezinden geçer (dimtofl=1). Yazı
+    deliğin HEMEN YANINA, kısa bir kılavuz çizgisiyle konur: önce 45°'lik
+    köşegenler denenir (çizim geleneği), yer tutulmuşsa sırayla başka yön
+    ve biraz daha uzak nokta denenir. Böylece yazı ne görünüşün üstüne
+    biner ne de gereksiz uzağa kaçar.
+    Aynı ölçüdeki delikler tek ölçüyle verilir, adet önüne konur: "2x Ø9"."""
+    kova = defaultdict(list)
     for tip, liste in (("cap", o.get("delikler") or []), ("radus", o.get("radusler") or [])):
         for d in liste:
             gad = next((g for g in DELIK_GOR.get(d["eksen"], ()) if g in yer), None)
@@ -707,27 +717,54 @@ def cap_olculeri(msp, o, yer, kaydir, h, ust, en_cok_grup=6):
             r = (d["cap_mm"] / 2.0) if tip == "cap" else d["yaricap_mm"]
             if r < 0.5 or len(kova[gad]) >= en_cok_grup:
                 continue
-            kova[gad].append((tip, d, gad, r))
+            kova[gad].append((tip, d, r))
+    # Denenecek yönler: köşegenler önce, sonra dik yönler.
+    YON = [45, 135, 225, 315, 90, 270, 0, 180]
     en_ust = dict(ust)
-    en_sag = max(x for x, _y in yer.values())
+    en_sag = max(k[2] for k in gkutu.values())
     for gad, gruplar in kova.items():
         dx, dy = kaydir[gad]
-        # Büyük çap üstte: kılavuz çizgileri birbirini az kessin.
-        gruplar.sort(key=lambda q: -q[3])
-        noktalar = [[(p[0] + dx, p[1] + dy)
-                     for p in (izdusum(c, gad) for c in d["merkezler"])]
-                    for _t, d, _g, _r in gruplar]
-        orta = sum(p[0] for pl in noktalar for p in pl) / max(
-            sum(len(pl) for pl in noktalar), 1)
-        for k, ((tip, d, _g, r), pl) in enumerate(zip(gruplar, noktalar)):
-            # Ölçü, o gruptaki deliklerden görünüşün ortasına en uzak olanına
-            # konur; yazı dışarı taşsın, görünüşü kapatmasın.
-            x, y = max(pl, key=lambda q: abs(q[0] - orta))
-            satir_y = en_ust.get(gad, y) + (0.4 + 1.9 * k) * h
-            yazi_yeri = (x + 1.2 * h, satir_y)
+        gk = gkutu[gad]
+        # Görünüşün kendisi ve üstündeki görünüş etiketi doludur.
+        et = GORUNUS_AD.get(gad, gad)
+        etiket_k = (gk[0], gk[3] + 0.7 * h,
+                    gk[0] + len(et) * 0.72 * 1.3 * h, gk[3] + 2.0 * h)
+        dolu = [gk, etiket_k]
+        gruplar.sort(key=lambda q: -q[2])
+        for tip, d, r in gruplar:
+            noktalar = [(p[0] + dx, p[1] + dy)
+                        for p in (izdusum(c, gad) for c in d["merkezler"])]
+            # Görünüşün ortasına en uzak delik: yazı dışarı doğru çıksın.
+            mx, my = (gk[0] + gk[2]) / 2.0, (gk[1] + gk[3]) / 2.0
+            x, y = max(noktalar, key=lambda q: (q[0] - mx) ** 2 + (q[1] - my) ** 2)
             onek = f"{d['adet']}x " if d["adet"] > 1 else ""
             metin = (f"{onek}%%c{d['cap_mm']:g}" if tip == "cap"
                      else f"{onek}R{d['yaricap_mm']:g}")
+            yw, yy = len(metin) * 0.72 * h, 1.3 * h       # yazı kutusu
+            yazi_yeri, kutu_y = None, None
+            for uz_k in range(7):                          # uzaklık kademeleri
+                uz = r + (1.8 + 1.3 * uz_k) * h
+                for a in YON:
+                    ra = math.radians(a)
+                    px, py = x + math.cos(ra) * uz, y + math.sin(ra) * uz
+                    # Yazının hangi yöne doğru yazılacağı ölçü stiline göre
+                    # değişebildiğinden iki yana da yer ayrılır; böylece
+                    # hangi hizalama kullanılırsa kullanılsın çakışma olmaz.
+                    k = (px - yw, py - yy / 2, px + yw, py + yy / 2)
+                    if not _cakisiyor(k, dolu, 0.3 * h):
+                        yazi_yeri, kutu_y = (px, py), k
+                        break
+                if yazi_yeri:
+                    break
+            if not yazi_yeri:              # hiç yer yoksa görünüşün üstüne
+                py = en_ust.get(gad, gk[3]) + 1.2 * h
+                for _ in range(12):        # boş satır bulana dek yukarı çık
+                    k = (x - yw, py - yy / 2, x + yw, py + yy / 2)
+                    if not _cakisiyor(k, dolu, 0.3 * h):
+                        break
+                    py += 1.6 * h
+                yazi_yeri, kutu_y = (x, py), k
+            dolu.append(kutu_y)
             ovr = {"dimtofl": 1, "dimtad": 0, "dimtix": 0, "dimtmove": 1,
                    "dimatfit": 3, "dimgap": h * 0.3}
             try:
@@ -741,8 +778,8 @@ def cap_olculeri(msp, o, yer, kaydir, h, ust, en_cok_grup=6):
                                        dxfattribs={"layer": "OLCU"}).render()
             except Exception:
                 continue
-            en_ust[gad] = max(en_ust.get(gad, y), satir_y + 1.4 * h)
-            en_sag = max(en_sag, yazi_yeri[0] + (len(metin) + 1) * 0.72 * h)
+            en_ust[gad] = max(en_ust.get(gad, gk[3]), kutu_y[3] + 0.6 * h)
+            en_sag = max(en_sag, kutu_y[2] + h)
     return en_ust, en_sag
 
 
@@ -934,7 +971,7 @@ def dxf_komponent(s, o, k, yol, P):
     # Görünüşler arası boşluk: araya giren ölçü çizgisi + yazı + kılavuz kadar.
     g = max(L, W, T) * 0.10 + 14 * h
     yer = gorunus_yerlesimi(L, W, T, g, gorunusler)
-    ust, kaydir = {}, {}
+    ust, kaydir, gkutu = {}, {}, {}
     for gad in gorunusler:
         goz, xref = GORUNUS[gad]
         kenar = hlr(s, goz, xref, gizli=P.get("gizli", True))
@@ -942,8 +979,9 @@ def dxf_komponent(s, o, k, yol, P):
         G, Y, dx, dy = gorunus_ciz(msp, kenar, ox, oy, gad, h=h, olcu2=True)
         ust[gad] = oy + Y + 2.2 * h          # görünüş etiketinin de üstü
         kaydir[gad] = (dx, dy)
+        gkutu[gad] = (ox, oy, ox + G, oy + Y)
     merkez_cizgileri(msp, o, yer, kaydir)
-    ust, sag = cap_olculeri(msp, o, yer, kaydir, h, ust)
+    ust, sag = cap_olculeri(msp, o, yer, kaydir, gkutu, h, ust)
     if P.get("kesit"):
         try:
             ky0 = kesit_yeri(yer, L, W, T, g, gorunusler)
@@ -972,19 +1010,9 @@ def dxf_komponent(s, o, k, yol, P):
     ]
     tepe = y0 + len(satir) * sat_h
     _tablo(msp, satir, sol, tepe, h, sat_h)
-    # Delik ve radüs tabloları: çizimin sağında, yan yana, üstleri aynı hizada.
-    x = sag + 6.0 * h
-    # Radüs tablosu çizime konmaz; kenar yuvarlamaları görünüşlerde R olarak
-    # ölçülendirilir, tam listesi rapor.md ve olculer.csv içindedir.
-    liste = o.get("delikler") or []
-    if liste:
-        st = [("DELIK TABLOSU", 1.3 * h),
-              (f"{'cap':>8s} {'adet':>5s} {'eksen':>6s} {'derinlik':>9s}", 1.05 * h)]
-        st += [(f"%%c{d['cap_mm']:>6.2f} {d['adet']:>5d} {d['eksen']:>6s} "
-                f"{d['derinlik_mm']:>9.2f}", 1.05 * h) for d in liste[:18]]
-        if len(liste) > 18:
-            st.append((f"... +{len(liste) - 18} satir daha", 1.05 * h))
-        _tablo(msp, st, x, tepe, h, sat_h)
+    # Çizimde tablo yok: delikler görünüşlerde "2x Ø9", kenar yuvarlamaları
+    # "4x R3" olarak ölçülendirilir. Tam delik ve radüs listeleri rapor.md,
+    # olculer.csv ve olculer.json dosyalarındadır.
     doc.saveas(yol)
 
 
@@ -1222,7 +1250,8 @@ def malzeme_ata(k, esl, genel, data_oncelik=True):
 def step_komponentleri(step, P, log=print):
     """STEP'i okur, kopyaları birleştirip komponent listesini döndürür."""
     b = E.bicim_tani(step)
-    kayit = E.oku(step, malzeme=True)
+    ag = []
+    kayit = E.oku(step, malzeme=True, agac=ag)
     log(f"{os.path.basename(step)}: {b}, {len(kayit)} katı okundu")
     if b != "STEP":
         # IGES ve BREP montaj ağacı ve parça adı taşımaz: ölçüler doğru
@@ -1233,7 +1262,91 @@ def step_komponentleri(step, P, log=print):
     komp = komponentle(kayit, P)
     sayim = Counter(k["sinif"] for k in komp)
     log(f"{len(komp)} komponent  (" + ", ".join(f"{a}: {b}" for a, b in sayim.items()) + ")")
-    return kayit, komp
+    agac = ag[0] if ag else None
+    if agac:
+        kat = agac_derinlik(agac)
+        log(f"montaj ağacı: {agac_dugum_sayisi(agac)} düğüm, {kat} kademe")
+    return kayit, komp, agac
+
+
+def agac_derinlik(d, k=1):
+    return max([k] + [agac_derinlik(a, k + 1) for a in d.get("alt") or []])
+
+
+def agac_dugum_sayisi(d):
+    return 1 + sum(agac_dugum_sayisi(a) for a in d.get("alt") or [])
+
+
+def agac_bom(agac, komp, satirlar):
+    """Çok kademeli (hiyerarşik) parça listesi.
+
+    Ana ürün, alt montajlar ve onların altındaki parçalar kademe kademe
+    numaralanır: 1, 1.1, 1.1.1 ... ADET HER ZAMAN BİR ÜST MONTAJ BAŞINADIR
+    (montaj tekniğindeki alışılmış kural): bir alt montaj 2 kez geçiyorsa
+    kendi satırında 2 yazar, altındaki parçalarda o montaj başına düşen
+    sayı yazar. Toplam adet ayrıca 'toplam_adet' sütununda verilir."""
+    # katı indeksi -> komponent  eşlemesi (ölçü/malzeme oradan gelir)
+    kati_komp = {}
+    for i, k in enumerate(komp):
+        for j in k["indeks"]:
+            kati_komp[j] = i
+    poz_komp = {}
+    for r in satirlar:
+        poz_komp[r["kod"]] = r
+
+    out = []
+
+    def gez(d, poz, seviye, ust_adet):
+        montaj = bool(d.get("montaj")) or bool(d.get("alt"))
+        adet = d.get("adet", 1)
+        toplam = adet * ust_adet
+        sat = {"poz": poz, "seviye": seviye, "kod": "", "ad": d["ad"],
+               "adet": adet, "toplam_adet": toplam,
+               "tur": "montaj" if montaj else "parca",
+               "malzeme_ad": "", "olcu": "", "kg_adet": "", "toplam_kg": ""}
+        # Yaprak düğüm: hangi komponente denk geldiğini katı indeksinden bul.
+        if not montaj and d.get("katilar"):
+            ki = kati_komp.get(d["katilar"][0])
+            if ki is not None:
+                k = komp[ki]
+                sat["kod"] = k["kod"]
+                sat["tur"] = k["sinif"]
+                r = poz_komp.get(k["kod"])
+                if r:
+                    for alan in ("malzeme_ad", "olcu", "kg_adet"):
+                        sat[alan] = r.get(alan) or ""
+                    if r.get("kg_adet"):
+                        sat["toplam_kg"] = round(r["kg_adet"] * toplam, 4)
+        out.append(sat)
+        for i, a in enumerate(d.get("alt") or [], 1):
+            gez(a, f"{poz}.{i}", seviye + 1, toplam)
+
+    gez(agac, "1", 0, 1)
+    return out
+
+
+def agac_bom_yaz(on, agac_satir):
+    """Hiyerarşik BOM'u CSV ve okunabilir tablo olarak yazar."""
+    alan = ["poz", "seviye", "tur", "kod", "ad", "adet", "toplam_adet",
+            "malzeme_ad", "olcu", "kg_adet", "toplam_kg"]
+    with open(os.path.join(on, "BOM_AGAC.csv"), "w", newline="",
+              encoding="utf-8-sig") as f:
+        w = csv.DictWriter(f, fieldnames=alan, extrasaction="ignore", delimiter=";")
+        w.writeheader()
+        for r in agac_satir:
+            w.writerow(r)
+    L = ["# Hiyerarşik parça listesi (çok kademeli BOM)\n",
+         "Ana ürün → alt montaj → parça. **Adet bir üst montaj başınadır**; "
+         "ürünün tamamındaki sayı `toplam` sütunundadır.\n",
+         "| poz | kademe | tür | kod | tanım | adet | toplam | malzeme | ölçü | kg/adet |",
+         "|-----|--------|-----|-----|-------|------|--------|---------|------|---------|"]
+    for r in agac_satir:
+        girinti = "&nbsp;" * (4 * r["seviye"])
+        L.append(f"| {r['poz']} | {r['seviye']} | {r['tur']} | {r['kod'][:26]} | "
+                 f"{girinti}{r['ad'][:44]} | {r['adet']} | {r['toplam_adet']} | "
+                 f"{(r['malzeme_ad'] or '-')[:26]} | {r['olcu'] or '-'} | "
+                 f"{r['kg_adet'] or '-'} |")
+    open(os.path.join(on, "BOM_AGAC.md"), "w", encoding="utf-8").write("\n".join(L) + "\n")
 
 
 def ornek_sec(komp, en_az_hacim=0.0):
@@ -1258,7 +1371,7 @@ def zip_yap(on, ad="cizimler.zip", desen=(".dxf",)):
     return yol, n
 
 
-def calistir(step, on, kayit, komp, P, asama=(1, 2, 3), esl=None,
+def calistir(step, on, kayit, komp, P, asama=(1, 2, 3), esl=None, agac=None,
              genel=VARSAYILAN_MALZEME, yogunluk=0.0, en_az_hacim=0.0,
              tek=None, en_cok=0, poz_harita=None, tablo_yok=False,
              log=print, ilerleme=None, iptal=None):
@@ -1352,6 +1465,11 @@ def calistir(step, on, kayit, komp, P, asama=(1, 2, 3), esl=None,
 
     if 1 in asama:
         bom_yaz(on, bom, satirlar)
+        if agac:
+            ags = agac_bom(agac, komp, satirlar)
+            agac_bom_yaz(on, ags)
+            log(f"  BOM_AGAC.csv, BOM_AGAC.md  ({len(ags)} satır, "
+                f"{agac_derinlik(agac)} kademe)")
     alan = ["poz", "kod", "ad", "adet", "sinif", "tip", "malzeme_ad", "yogunluk_g_cm3",
             "boy_mm", "en_mm", "kalinlik_mm", "sac_kalinlik_mm", "hacim_mm3",
             "kutle_kg", "toplam_kg", "yuzey_mm2", "delik_adedi", "radus_adedi", "dxf"]
@@ -1429,8 +1547,8 @@ def main():
     except E.OkunamazBicim as ex:
         print("\n" + str(ex) + "\n")
         return
-    kayit, komp = step_komponentleri(a.step, P,
-                                     log=lambda t: print(f"{t}  [{time.time()-t0:.0f}s]"))
+    kayit, komp, agac = step_komponentleri(
+        a.step, P, log=lambda t: print(f"{t}  [{time.time()-t0:.0f}s]"))
     if a.liste:
         print(f"\n{'kod':<24s}{'adet':>5s}{'hacim mm3':>14s}  sınıf      ad")
         for k in komp:
@@ -1466,7 +1584,7 @@ def main():
         print("  --malzeme <ad> | --malzeme-dosya <csv> | --malzeme-sor ile değiştirin.")
         print(f"  Şablon yazıldı: {sab}  (doldurup --malzeme-dosya ile verin)")
 
-    calistir(a.step, on, kayit, komp, P, asama=asama, esl=esl, genel=genel,
+    calistir(a.step, on, kayit, komp, P, asama=asama, esl=esl, agac=agac, genel=genel,
              yogunluk=a.yogunluk, en_az_hacim=a.en_az_hacim, tek=a.tek,
              en_cok=a.en_cok, log=lambda t: print(f"{t}  [{time.time()-t0:.0f}s]"))
     if a.zip:
