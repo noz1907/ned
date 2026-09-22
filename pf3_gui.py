@@ -19,7 +19,7 @@ hesabını yapmaz. Motor ağır (OpenCascade) olduğu için pencere açıldıkta
 sonra arka planda yüklenir; arayüz hiçbir işte kilitlenmez.
 """
 from __future__ import annotations
-import math, os, queue, sys, threading, traceback
+import math, os, queue, sys, threading, time, traceback
 import tkinter as tk
 from tkinter import ttk, filedialog, messagebox
 
@@ -566,16 +566,50 @@ class Uygulama(ttk.Frame):
                     messagebox.showerror("Hata", veri)
         except queue.Empty:
             pass
-        self.after(80, self._kuyruk_isle)
+        except Exception:
+            # Bir mesajı işlerken hata çıkarsa DÖNGÜ ÖLMEMELİ. Ölürse motor
+            # işini bitirir ama sonucu kimse almaz: ekranda "STEP okunuyor"
+            # yazılı kalır, program bitmiş gibi görünmez. Hatayı göster,
+            # döngü aşağıdaki finally ile devam etsin.
+            iz = traceback.format_exc()
+            try:
+                self._bitir()
+                self.v_durum.set("iç hata – ayrıntı günlükte")
+                self._yaz("İÇ HATA (arayüz):\n" + iz)
+                messagebox.showerror(
+                    "İç hata",
+                    "Arayüzde beklenmeyen bir hata oldu. İşlem sürüyor "
+                    "olabilir; günlükteki ayrıntıyı gönderin.\n\n" + iz)
+            except Exception:
+                pass
+        finally:
+            self.after(80, self._kuyruk_isle)
 
     def _basla(self, durum):
         self.calisiyor = True; self.iptal_istendi = False
+        self.is_basi = time.time()
+        self.is_adi = durum
+        self._sayaci_isle()
         for b in (self.b_incele, self.b_bom, self.b_ornek, self.b_onay):
             b.configure(state="disabled")
         self.b_iptal.configure(state="normal")
         self.v_durum.set(durum)
 
+    def _sayaci_isle(self):
+        """Çalışan işin yanında geçen süreyi say. Program takıldı mı yoksa
+        çalışıyor mu, kullanıcı buradan anlar."""
+        if not self.calisiyor:
+            return
+        g = int(time.time() - getattr(self, "is_basi", time.time()))
+        self.v_durum.set(f"{self.is_adi}   ({g // 60}:{g % 60:02d} geçti"
+                         + ("  –  uzun sürüyor, İptal ile durdurabilirsiniz)"
+                            if g > 90 else ")"))
+        self.after(1000, self._sayaci_isle)
+
     def _bitir(self):
+        if self.calisiyor:
+            g = time.time() - getattr(self, "is_basi", time.time())
+            self._yaz(f"  ({g:.1f} saniye sürdü)")
         self.calisiyor = False
         self.ilerleme.stop(); self.ilerleme.configure(mode="determinate")
         self.b_incele.configure(state="normal" if self.v_step.get() else "disabled")
@@ -592,6 +626,12 @@ class Uygulama(ttk.Frame):
     def _motoru_yukle(self):
         try:
             import pf3_olcu as M
+            # Saklanmış ayarı da BURADA, arka planda oku. Ana iş parçacığında
+            # dosya okumak, o dosya ağ sürücüsündeyse arayüzü dondurur.
+            try:
+                M.k_faktor_ayari()
+            except Exception:
+                pass
             self.kuyruk.put(("motor", M))
         except ModuleNotFoundError as ex:
             # En sık sebep: program, paketlerin kurulu olmadığı bir Python ile
@@ -601,6 +641,13 @@ class Uygulama(ttk.Frame):
         except Exception:
             self.kuyruk.put(("hata", "Hesap motoru yüklenemedi:\n\n"
                              + traceback.format_exc(limit=3)))
+
+    def _kfaktoru_tazele(self):
+        """Motor yüklendikten sonra kutuya saklanmış K-faktörünü koyar."""
+        try:
+            self.v_kfaktor.set(str(self.M.k_faktor_ayari()))
+        except Exception:
+            pass
 
     def _motor_geldi(self, M):
         self.M = M

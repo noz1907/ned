@@ -893,7 +893,26 @@ K_FAKTOR = 0.40
 # Kullanıcının verdiği K-faktörü gibi ayarlar, program kapansa da kalsın.
 # Dosya kullanıcının kendi klasöründe durur: program Program Files gibi
 # yazma izni olmayan bir yere kurulmuş olabilir.
-AYAR_DOSYA = os.path.join(os.path.expanduser("~"), ".pifikstur.json")
+def _ayar_yolu():
+    """Ayar dosyasının yeri.
+
+    Windows'ta LOCALAPPDATA kullanılır, %USERPROFILE% değil: kurumsal
+    bilgisayarlarda kullanıcı klasörü ağ sürücüsünde (gezici profil)
+    olabilir; oradan dosya okumak ağ yavaşsa saniyeler sürer, sürücü
+    erişilemezse program o satırda bekler. LOCALAPPDATA her zaman
+    yereldir."""
+    kok = (os.environ.get("LOCALAPPDATA")
+           or os.environ.get("XDG_CONFIG_HOME")
+           or os.path.join(os.path.expanduser("~"), ".config"))
+    try:
+        d = os.path.join(kok, "PiFikstur")
+        os.makedirs(d, exist_ok=True)
+        return os.path.join(d, "ayarlar.json")
+    except Exception:
+        return os.path.join(os.path.expanduser("~"), ".pifikstur.json")
+
+
+AYAR_DOSYA = _ayar_yolu()
 
 
 def ayar_oku():
