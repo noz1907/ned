@@ -107,6 +107,8 @@ MALZEME_DESEN = [
     (r"\bahsap\b|ahşap|\bwood\b|\bholz\b", "ahsap"),
     (r"\bcam\b|\bglass\b|\bglas\b", "cam"),
     (r"\bsteel\b|\bstahl\b|\bcelik\b|çelik", "celik"),
+    (r"\biron\b|\bdemir\b|\beisen\b", "celik"),
+    (r"\bplastic\b|\bplastik\b|\bkunststoff\b", "plastik"),
 ]
 
 
@@ -137,7 +139,9 @@ def malzeme_coz(ad):
     for k, (tam, _r) in MALZEME.items():
         if a in _tr_sade(tam):
             return k
-    return None
+    # CATIA/SolidWorks gibi programlar malzemeyi İngilizce yazar
+    # ("Steel", "Aluminium", "Stainless Steel", "Rubber"...); desenlerden tanı.
+    return malzeme_tahmin(ad)
 
 
 def yogunluk_kg_mm3(anahtar):
@@ -538,6 +542,14 @@ def dxf_kur(doc=None):
     doc = doc or ezdxf.new("R2010", setup=True)
     doc.header["$LWDISPLAY"] = 1            # çizgi kalınlıkları ekranda görünsün
     doc.header["$MEASUREMENT"] = 1          # metrik
+    # BIRIM: 1 çizim birimi = 1 mm. $INSUNITS yazılmazsa AutoCAD dosyayı
+    # "birimsiz" sayar; başka bir çizime INSERT/XREF edildiğinde hedef
+    # çizimin birimine göre ölçekler (mm -> m eklenirse 1000 kat büyür,
+    # ölçü yazıları çizgiye dönüşmüş olduğu için eski değerde kalır ve
+    # "30 yazıyor ama 3000 ölçüyor" durumu çıkar).
+    doc.header["$INSUNITS"] = 4             # 4 = millimeters
+    doc.header["$LUNITS"] = 2               # ondalık
+    doc.header["$DIMLUNIT"] = 2
     for kat, (renk, kal) in KATMAN.items():
         if kat not in doc.layers:
             doc.layers.add(kat, color=renk)
@@ -601,14 +613,49 @@ def gorunus_ciz(msp, kenar, ox, oy, ad, h=4.0, olcu2=True, etiket=None):
         return 0.0, 0.0, 0.0, 0.0
     dx, dy = ox - min(xs), oy - min(ys)
 
-    def _anahtar(a, b):
-        a = (round(a[0], 1), round(a[1], 1)); b = (round(b[0], 1), round(b[1], 1))
-        return (a, b) if a <= b else (b, a)
+    # Teknik resim kuralı: görünen çizgiyle aynı yere düşen gizli çizgi
+    # ÇİZİLMEZ (görünen kazanır). HLR görünen ve gizli kenarları ayrı ayrı
+    # noktalara böldüğü için uç noktaları karşılaştırmak yetmez: aynı doğru
+    # parçası iki tarafta farklı noktalanmış olabilir. Bu yüzden her parça
+    # "hangi doğru üzerinde" ve "o doğrunun neresinde" diye saklanır, gizli
+    # parça o aralıkla ÖRTÜŞÜYORSA atılır.
+    AC_TOL, UZ_TOL = 0.02, 0.12          # radyan, mm
 
-    gorunen = set()
+    def _dogru(a, b):
+        ux, uy = b[0] - a[0], b[1] - a[1]
+        n = math.hypot(ux, uy)
+        if n < 1e-9:
+            return None
+        ux, uy = ux / n, uy / n
+        if (ux, uy) < (0.0, 0.0):        # yön ters olsa da aynı doğru
+            ux, uy = -ux, -uy
+        aci = math.atan2(uy, ux) % math.pi
+        uzak = ux * a[1] - uy * a[0]     # doğrunun orijine dik uzaklığı
+        t0, t1 = (a[0] * ux + a[1] * uy), (b[0] * ux + b[1] * uy)
+        return aci, uzak, min(t0, t1), max(t0, t1)
+
+    gorunen = defaultdict(list)          # (açı kovası, uzaklık kovası) -> aralıklar
     for c in kenar.get("GORUNEN", []):
         for a, b in zip(c, c[1:]):
-            gorunen.add(_anahtar(a, b))
+            d = _dogru(a, b)
+            if not d:
+                continue
+            aci, uzak, t0, t1 = d
+            gorunen[(round(aci / AC_TOL), round(uzak / UZ_TOL))].append((t0, t1))
+
+    def _ortusuyor(a, b):
+        d = _dogru(a, b)
+        if not d:
+            return False
+        aci, uzak, t0, t1 = d
+        ka, ku = round(aci / AC_TOL), round(uzak / UZ_TOL)
+        # Komşu kovalara da bak: yuvarlama sınırına denk gelen parçalar kaçmasın.
+        for i in (ka - 1, ka, ka + 1):
+            for j in (ku - 1, ku, ku + 1):
+                for g0, g1 in gorunen.get((i, j), ()):
+                    if min(t1, g1) - max(t0, g0) > 0.3 * (t1 - t0):
+                        return True
+        return False
     for kat, poli in kenar.items():
         for c in poli:
             if kat != "GIZLI":
@@ -619,7 +666,7 @@ def gorunus_ciz(msp, kenar, ox, oy, ad, h=4.0, olcu2=True, etiket=None):
             # kesintisiz parçaları ayrı çizgi olarak çiz.
             par = []
             for a, b in zip(c, c[1:]):
-                if _anahtar(a, b) in gorunen:
+                if _ortusuyor(a, b):
                     if len(par) > 1:
                         msp.add_lwpolyline([(x + dx, y + dy) for x, y in par],
                                            dxfattribs={"layer": kat})
@@ -918,30 +965,26 @@ def dxf_komponent(s, o, k, yol, P):
         (f"{poz}{k['kod']}   {k['ad'][:60]}", 1.5 * h),
         (f"adet: {k['adet']}", 1.1 * h),
         (f"BOY x EN x KALINLIK : {o['boy_mm']} x {o['en_mm']} x {o['kalinlik_mm']} mm", 1.1 * h),
-        (f"hacim {o['hacim_mm3']} mm3   kutle {o['kutle_kg']} kg   yuzey {o['yuzey_mm2']} mm2", 1.1 * h),
-        (f"malzeme: {k.get('malzeme_ad', '-')}   yogunluk {k.get('yogunluk_g_cm3', '-')} g/cm3"
-         + (f"   [{k['malzeme_kaynak']}]" if k.get("malzeme_kaynak") else ""), 1.1 * h),
+        (f"kutle {o['kutle_kg']} kg   malzeme: {k.get('malzeme_ad', '-')}", 1.1 * h),
+        # Ölçek ve birim resmin üstünde yazsın: DXF başka bir çizime
+        # eklendiğinde ölçek kaymışsa bu satırdan anlaşılır.
+        ("olcek 1:1   birim: mm", 1.1 * h),
     ]
     tepe = y0 + len(satir) * sat_h
     _tablo(msp, satir, sol, tepe, h, sat_h)
     # Delik ve radüs tabloları: çizimin sağında, yan yana, üstleri aynı hizada.
     x = sag + 6.0 * h
-    for baslik, liste, bicim in (
-        ("DELIK TABLOSU", o.get("delikler") or [],
-         lambda d: f"%%c{d['cap_mm']:>6.2f} {d['adet']:>5d} {d['eksen']:>6s} {d['derinlik_mm']:>9.2f}"),
-        ("RADUS TABLOSU (kenar yuvarlamalari)", o.get("radusler") or [],
-         lambda d: f"R{d['yaricap_mm']:>7.2f} {d['adet']:>5d} {d['eksen']:>6s} {d['uzunluk_mm']:>9.2f}"),
-    ):
-        if not liste:
-            continue
-        radus = baslik.startswith("RADUS")
-        st = [(baslik, 1.3 * h),
-              (f"{'R' if radus else 'cap':>8s} {'adet':>5s} {'eksen':>6s} "
-               f"{'uzunluk' if radus else 'derinlik':>9s}", 1.05 * h)]
-        st += [(bicim(d), 1.05 * h) for d in liste[:18]]
+    # Radüs tablosu çizime konmaz; kenar yuvarlamaları görünüşlerde R olarak
+    # ölçülendirilir, tam listesi rapor.md ve olculer.csv içindedir.
+    liste = o.get("delikler") or []
+    if liste:
+        st = [("DELIK TABLOSU", 1.3 * h),
+              (f"{'cap':>8s} {'adet':>5s} {'eksen':>6s} {'derinlik':>9s}", 1.05 * h)]
+        st += [(f"%%c{d['cap_mm']:>6.2f} {d['adet']:>5d} {d['eksen']:>6s} "
+                f"{d['derinlik_mm']:>9.2f}", 1.05 * h) for d in liste[:18]]
         if len(liste) > 18:
             st.append((f"... +{len(liste) - 18} satir daha", 1.05 * h))
-        x += _tablo(msp, st, x, tepe, h, sat_h) + 4.0 * h
+        _tablo(msp, st, x, tepe, h, sat_h)
     doc.saveas(yol)
 
 
@@ -1031,22 +1074,86 @@ def komponentle(kayit, P):
 
 
 # ---------------------------------------------------------------- malzeme seçimi
+# CAD'lerin parça listesi dışa aktarımlarında sütun başlıkları.
+KOD_BASLIK = ("kod", "code", "part number", "partnumber", "part no", "partno",
+              "reference", "référence", "malzeme no", "stok kodu", "item",
+              "no", "number", "parca", "parça", "part")
+MAL_BASLIK = ("malzeme", "material", "matiere", "matière", "werkstoff",
+              "material name", "malzeme adi", "malzeme adı")
+YOG_BASLIK = ("yogunluk", "yoğunluk", "density", "densite", "densité", "dichte")
+
+
+def _ayirici(satir):
+    for a in ("\t", ";", ","):
+        if a in satir:
+            return a
+    return ";"
+
+
+def _sutun(basliklar, adaylar):
+    """Başlık satırında aranan sütunun indeksi; yoksa None."""
+    b = [_tr_sade(x) for x in basliklar]
+    for i, x in enumerate(b):                    # tam eşleşme önce
+        if x in adaylar:
+            return i
+    for i, x in enumerate(b):                    # sonra içinde geçen
+        if any(a in x for a in adaylar):
+            return i
+    return None
+
+
 def malzeme_dosya_oku(yol):
-    """kod;malzeme biçiminde eşleme dosyası (CSV veya JSON)."""
-    esl = {}
+    """kod -> malzeme eşlemesi okur.
+
+    İki biçimi de anlar:
+      * bizim şablonumuz            kod;malzeme;ad
+      * CAD'in parça listesi çıktısı (CATIA "Analyze > Bill of Material",
+        SolidWorks BOM, Excel'den CSV): başlık satırındaki "Part Number" ve
+        "Material" sütunları adlarından bulunur, sekme/noktalı virgül/virgül
+        ayırıcı kendiliğinden anlaşılır.
+
+    Malzeme adı İngilizce ya da Fransızca olabilir ("Steel", "Aluminium",
+    "Stainless Steel"); desenlerden tanınır. Tanınmayanlar ayrıca döndürülür
+    ki kullanıcıya hangi malzemeleri eşleyemediğimiz söylenebilsin."""
     if yol.lower().endswith(".json"):
-        for kod, mal in (json.load(open(yol, encoding="utf-8")) or {}).items():
-            esl[_tr_sade(kod)] = mal
-        return esl
-    with open(yol, encoding="utf-8-sig") as f:
-        ilk = f.readline()
-        ayr = ";" if ";" in ilk else ("," if "," in ilk else "\t")
-        f.seek(0)
-        for sat in csv.reader(f, delimiter=ayr):
-            if len(sat) < 2 or _tr_sade(sat[0]) in ("kod", "poz", ""):
-                continue
-            esl[_tr_sade(sat[0])] = sat[1].strip()
-    return esl
+        ham = {_tr_sade(k): str(v) for k, v in
+               (json.load(open(yol, encoding="utf-8")) or {}).items()}
+        esl = {k: malzeme_coz(v) for k, v in ham.items()}
+        return {k: v for k, v in esl.items() if v}, \
+               sorted({ham[k] for k, v in esl.items() if not v})
+
+    with open(yol, encoding="utf-8-sig", errors="replace") as f:
+        satirlar = [x.rstrip("\n") for x in f if x.strip()]
+    if not satirlar:
+        return {}, []
+    ayr = _ayirici(satirlar[0])
+    tablo = [x.split(ayr) for x in satirlar]
+
+    # Başlık satırını bul: ilk 10 satırdan kod + malzeme sütunu bulunanı.
+    ik = im = iy = bas = None
+    for n, sat in enumerate(tablo[:10]):
+        k = _sutun(sat, KOD_BASLIK)
+        m = _sutun(sat, MAL_BASLIK)
+        if k is not None and m is not None and k != m:
+            ik, im, bas = k, m, n
+            iy = _sutun(sat, YOG_BASLIK)
+            break
+    if bas is None:                     # başlık yok: kod;malzeme varsayılır
+        ik, im, bas = 0, 1, -1
+
+    esl, bilinmeyen = {}, []
+    for sat in tablo[bas + 1:]:
+        if len(sat) <= max(ik, im):
+            continue
+        kod, mal = sat[ik].strip().strip('"'), sat[im].strip().strip('"')
+        if not kod or not mal or _tr_sade(kod) in KOD_BASLIK:
+            continue
+        m = malzeme_coz(mal)
+        if m:
+            esl[_tr_sade(kod)] = m
+        else:
+            bilinmeyen.append(mal)
+    return esl, sorted(set(bilinmeyen))
 
 
 def malzeme_sablonu(komp, yol):
@@ -1090,8 +1197,16 @@ def malzeme_ata(k, esl, genel, data_oncelik=True):
     if esl:
         m = malzeme_coz(esl.get(_tr_sade(k["kod"]), "") or "")
         if not m:
+            # Tam eşleşme yoksa adın içinde geçen kodu ara. Kısa anahtarlar
+            # ("1", "A12" gibi) neredeyse her kodun içinde geçer ve yanlış
+            # malzeme atanmasına yol açar; bu yüzden en az 5 karakter ve
+            # sınırları harf/rakam olmayan bir eşleşme aranır.
+            kod_s, ad_s = _tr_sade(k["kod"]), _tr_sade(k["ad"])
             for kod, mal in esl.items():
-                if kod and (kod in _tr_sade(k["kod"]) or kod in _tr_sade(k["ad"])):
+                if not kod or len(kod) < 5:
+                    continue
+                dsn = r"(?<![0-9a-z])" + re.escape(kod) + r"(?![0-9a-z])"
+                if re.search(dsn, kod_s) or re.search(dsn, ad_s):
                     m = malzeme_coz(mal)
                     break
         if m:
@@ -1329,8 +1444,12 @@ def main():
     # ---- malzeme: kütle bunun üzerinden hesaplanır, tahmin edilmez
     esl, genel = {}, VARSAYILAN_MALZEME
     if a.malzeme_dosya:
-        esl = malzeme_dosya_oku(a.malzeme_dosya)
-        print(f"malzeme dosyası: {a.malzeme_dosya} ({len(esl)} kayıt)")
+        esl, bilinmeyen = malzeme_dosya_oku(a.malzeme_dosya)
+        print(f"malzeme dosyası: {a.malzeme_dosya} ({len(esl)} kayıt eşleşti)")
+        if bilinmeyen:
+            print("! tanınmayan malzeme adı: " + ", ".join(bilinmeyen[:10])
+                  + (f" (+{len(bilinmeyen)-10})" if len(bilinmeyen) > 10 else ""))
+            print("  --malzeme-liste ile tanınan adlara bakıp dosyada düzeltin.")
     if a.malzeme:
         genel = malzeme_coz(a.malzeme)
         if not genel:

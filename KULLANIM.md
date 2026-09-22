@@ -176,6 +176,10 @@ Malzeme vermenin yolları:
 * Tablodan satır(lar) seçip **Seçili satırlara** *(Ctrl ile çoklu seçim)*
 * **malzeme.csv yaz…** ile şablon çıkarıp Excel'de doldurun, sonra
   **malzeme.csv yükle…** ile geri verin
+* **CAD'inizin parça listesini** doğrudan yükleyin: CATIA'nın
+  *Analyze ▸ Bill of Material* çıktısı, SolidWorks BOM'u ya da Excel'den
+  kaydedilmiş bir CSV olur. `Part Number` ve `Material` sütunları
+  başlıklarından bulunur (bkz. `CATIA_MALZEME.md`)
 
 > Kutudaki malzeme yalnız **uygulanacak** malzemedir. Bir parçaya alüminyum
 > verdiğinizde diğerleri çelik kalır.
@@ -249,8 +253,49 @@ CATIA V5:  File > Save As > "STEP (*.stp)"
 Montajın tamamı tek STEP dosyası olur; **parça ağacı ve parça adları
 korunur**, yani BOM eksiksiz çıkar. AP214 ya da AP242 fark etmez.
 
+**Malzeme STEP'e geçmiyor** — CATIA'da tanımlı olsa bile. Çözümü ayrı bir
+belgede anlattım: **`CATIA_MALZEME.md`**. Özeti:
+
+1. CATIA'da `.CATProduct` açıkken **Analyze ▸ Bill of Material**
+2. **Define formats** ile *Material* sütununu görünür listeye ekleyin
+3. **Save As…** ile `.txt` olarak kaydedin
+4. PiFikstür 2. adımda → **malzeme.csv yükle…** → o dosyayı seçin
+
+Program `Part Number` ve `Material` sütunlarını başlıklarından bulur,
+ayırıcıyı (sekme / `;` / `,`) kendi anlar, `Steel` · `Aluminium` ·
+`Stainless Steel` gibi İngilizce adları tanır. Tanıyamadığı bir ad olursa
+hangisi olduğunu söyler. Geometri STEP'ten, malzeme bu listeden gelir.
+
+Toplu iş için `catia_malzeme_cikar.CATScript` makrosu da pakette.
+
 Program tanımadığı bir dosya seçtiğinizde susmaz: biçimin ne olduğunu ve
 hangi CAD menüsünden STEP alınacağını söyler.
+
+---
+
+## 2c. Ölçek ve birim — "30 yazıyor ama AutoCAD 3000 ölçüyor"
+
+Çizim **1:1**'dir ve **1 çizim birimi = 1 mm**'dir. Her detay resminin
+başlığında `olcek 1:1   birim: mm` satırı bunu söyler.
+
+DXF dosyasına artık `$INSUNITS = 4` (millimeters) yazılıyor. Bu satır
+yokken AutoCAD dosyayı **birimsiz** sayar; başka bir çizime `INSERT` ya da
+`XREF` ile eklerseniz hedef çizimin birimine göre ölçekler. Ölçü yazıları
+çizgiye dönüştürülmüş olduğu için eski değerde kalır — **"30 yazıyor ama
+3000 ölçüyor"** durumu tam olarak budur.
+
+Kontrol listesi:
+
+1. DXF'i **ayrı açın** (INSERT etmeyin): `DIST` ile iki nokta arası ölçün,
+   ölçü yazısıyla aynı çıkmalı.
+2. Hedef çizimde `UNITS` komutu → *Insertion scale* **Millimeters** olsun.
+   *Unitless* ise AutoCAD tahmin yürütür.
+3. `INSERT` ederken ölçek kutusunun **1** olduğunu doğrulayın.
+4. Başlıktaki `olcek 1:1  birim: mm` satırıyla ölçtüğünüz değer
+   uyuşmuyorsa dosya yolda ölçeklenmiş demektir.
+
+> Annotation çubuğundaki `1:1` **kâğıt (layout) ölçeğidir**, model uzayındaki
+> birimle ilgisi yoktur; oradaki değere bakarak birim doğrulanamaz.
 
 ---
 
@@ -430,6 +475,8 @@ anlamlı çıkmıyorsa o parçada kesit çizilmez, diğer görünüşler yine ç
 | `PiFikstur_baslat.bat` | Windows'ta tek tıkla kurulum + başlatma |
 | `PiFikstur_baslat_KUCUK.bat` | dar disk için küçük kurulum (~800 MB) |
 | `EXE_YAP.bat` + `pifikstur.spec` | çalıştırılabilir dosya (.exe) üretir |
+| `CATIA_MALZEME.md` | CATIA malzemesini kaybetmeden aktarma |
+| `catia_malzeme_cikar.CATScript` | CATIA makrosu: ağacı gezip `malzeme.csv` yazar |
 
 Ayrıntılar için `README.md`.
 

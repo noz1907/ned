@@ -620,12 +620,14 @@ class Uygulama(ttk.Frame):
     def malzeme_dosya(self):
         if not (self.M and self.komp):
             return
-        y = filedialog.askopenfilename(title="malzeme eşleme dosyası",
-                                       filetypes=[("CSV/JSON", "*.csv *.json"), ("Tümü", "*.*")])
+        y = filedialog.askopenfilename(
+            title="Malzeme listesi  (kendi şablonumuz ya da CAD'in parça listesi)",
+            filetypes=[("Malzeme listesi", "*.csv *.txt *.tsv *.json"),
+                       ("Tümü", "*.*")])
         if not y:
             return
         try:
-            esl = self.M.malzeme_dosya_oku(y)
+            esl, bilinmeyen = self.M.malzeme_dosya_oku(y)
         except Exception as ex:
             messagebox.showerror("Malzeme dosyası", str(ex)); return
         n = 0
@@ -633,13 +635,19 @@ class Uygulama(ttk.Frame):
             if k["sinif"] != "parca":
                 continue
             m, kay = self.M.malzeme_ata(k, esl, "", data_oncelik=False)
-            m = m if kay == "secim" else None
-            if m:
+            if kay == "secim" and m:
                 self.malzemeler[k["kod"]] = m
                 n += 1
         self.satirlar = []
         self._agac_doldur()
-        self._yaz(f"{os.path.basename(y)}: {len(esl)} kayıt, {n} parça eşleşti")
+        self._yaz(f"{os.path.basename(y)}: {len(esl)} kayıt okundu, {n} parça eşleşti")
+        if bilinmeyen:
+            self._yaz("! tanınmayan malzeme adı: " + ", ".join(bilinmeyen[:8]))
+            messagebox.showwarning(
+                "Tanınmayan malzeme",
+                "Dosyadaki şu malzeme adları tanınmadı, bu parçalar varsayılan "
+                "malzemede kalır:\n\n" + "\n".join(bilinmeyen[:15])
+                + "\n\nTanınan adlar için malzeme kutusundaki listeye bakın.")
 
     def malzeme_sablon(self):
         if not (self.M and self.komp):

@@ -1,0 +1,122 @@
+' ==========================================================================
+'  PiFikstur - CATIA V5 malzeme cikarma makrosu
+'
+'  Acik olan .CATProduct'in agacini gezer, her parcanin malzemesini okur ve
+'  urun dosyasinin yanina "malzeme.csv" yazar:
+'
+'      kod;malzeme;ad
+'      01.050.000.01;Steel;U-Blech-Mechanismus
+'
+'  Bu dosyayi PiFikstur'de 2. adimda "malzeme.csv yukle..." ile verin.
+'
+'  Calistirmak: Tools > Macro > Macros... > Select an external file >
+'               bu dosyayi secip Run.
+'
+'  NOT: Malzeme okuma arayuzu CATIA surumune gore degisebilir; makro uc
+'  ayri yolu sirayla dener. Hicbiri tutmazsa menuden
+'  Analyze > Bill of Material yolunu kullanin - o kesin calisir,
+'  ayrintisi CATIA_MALZEME.md dosyasinda.
+' ==========================================================================
+
+Option Explicit
+
+Sub CATMain()
+
+    Dim oDoc
+    Set oDoc = CATIA.ActiveDocument
+    If InStr(1, TypeName(oDoc), "Product", 1) = 0 Then
+        MsgBox "Once bir .CATProduct acin.", vbExclamation, "PiFikstur"
+        Exit Sub
+    End If
+
+    Dim yol
+    yol = Left(oDoc.FullName, InStrRev(oDoc.FullName, "\")) & "malzeme.csv"
+
+    Dim fso, f
+    Set fso = CreateObject("Scripting.FileSystemObject")
+    Set f = fso.CreateTextFile(yol, True)
+    f.WriteLine "kod;malzeme;ad"
+
+    Dim sayac, bulunan
+    sayac = 0 : bulunan = 0
+    Gez oDoc.Product, f, sayac, bulunan
+
+    f.Close
+    MsgBox "Yazildi:" & vbCrLf & yol & vbCrLf & vbCrLf & _
+           sayac & " parca gezildi, " & bulunan & " tanesinde malzeme bulundu." & _
+           vbCrLf & vbCrLf & _
+           "Bu dosyayi PiFikstur'de 2. adimda 'malzeme.csv yukle...' ile verin.", _
+           vbInformation, "PiFikstur"
+
+End Sub
+
+
+' Montaj agacini yinelemeli gezer.
+Sub Gez(oUrun, f, sayac, bulunan)
+
+    Dim i, oAlt
+    If oUrun.Products.Count > 0 Then
+        For i = 1 To oUrun.Products.Count
+            Set oAlt = oUrun.Products.Item(i)
+            Gez oAlt, f, sayac, bulunan
+        Next
+        Exit Sub
+    End If
+
+    ' Yaprak dugum: gercek parca
+    sayac = sayac + 1
+
+    Dim kod, ad, mal
+    kod = Temizle(oUrun.PartNumber)
+    ad = Temizle(oUrun.Name)
+    mal = MalzemeAdi(oUrun)
+    If mal <> "" Then bulunan = bulunan + 1
+
+    f.WriteLine kod & ";" & mal & ";" & ad
+
+End Sub
+
+
+' Malzeme adini uc ayri yoldan okumaya calisir.
+Function MalzemeAdi(oUrun)
+
+    Dim ad
+    ad = ""
+
+    ' 1) Urun dugumunun kendi malzemesi
+    On Error Resume Next
+    ad = oUrun.Material.Name
+    On Error GoTo 0
+    If ad <> "" Then MalzemeAdi = Temizle(ad) : Exit Function
+
+    ' 2) Parcanin malzemesi (CATMatManagerVBExt)
+    Dim oPartDoc, oYonetici, oMat
+    On Error Resume Next
+    Set oPartDoc = oUrun.ReferenceProduct.Parent
+    Set oYonetici = oPartDoc.Part.GetItem("CATMatManagerVBExt")
+    Set oMat = oYonetici.GetMaterialOnPart(oPartDoc.Part)
+    ad = oMat.Name
+    On Error GoTo 0
+    If ad <> "" Then MalzemeAdi = Temizle(ad) : Exit Function
+
+    ' 3) Ana govdenin malzemesi
+    On Error Resume Next
+    Set oMat = oYonetici.GetMaterialOnBody(oPartDoc.Part.MainBody)
+    ad = oMat.Name
+    On Error GoTo 0
+    If ad <> "" Then MalzemeAdi = Temizle(ad) : Exit Function
+
+    MalzemeAdi = ""
+
+End Function
+
+
+' Noktali virgulu ve satir sonunu temizler, CSV bozulmasin.
+Function Temizle(metin)
+    Dim t
+    t = metin
+    t = Replace(t, ";", ",")
+    t = Replace(t, vbCr, " ")
+    t = Replace(t, vbLf, " ")
+    Temizle = Trim(t)
+End Function
