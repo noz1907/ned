@@ -481,7 +481,8 @@ Kâğıt **her zaman yatay**. A3 için (420 × 297 mm):
 ```
 
 - Çerçeve kâğıdın kenarından **15 mm** içeridedir; resim hiçbir zaman
-  bundan dışarı taşmaz.
+  bundan dışarı taşmaz ve çerçeveye de dayanmaz, 12 mm daha boşluk
+  bırakır.
 - Sağ alt köşedeki **150 × 100 mm**'lik kutu **boş bırakılır** ve oraya
   **asla çizim gelmez**. Antetinizi oraya kopyala-yapıştır ile
   koyarsınız.
@@ -493,10 +494,32 @@ Kâğıt **her zaman yatay**. A3 için (420 × 297 mm):
 Program antet **çizmez**. Her firmanın anteti başka; programın
 uyduracağı bir şey değil. Kutuyu boş bırakır, gerisi sizin.
 
+#### Görünüşler kâğıda nasıl dağılır
+
+Resim tek parça hâlinde bir pencereden gösterilmez. Program her
+görünüşü **ayrı pencereye** alır ve kâğıda **ortadan dışa, eşit
+aralıklarla** dağıtır:
+
+- Resimdeki büyük model boşlukları atılır; yerine kâğıtta eşit aralık
+  konur (en az 12, en çok 45 mm). Öbek kâğıdın ortasına oturur —
+  dayanak noktası hiçbir zaman kenar değildir.
+- **İzdüşüm ızgarası bozulmaz:** aynı satırdaki görünüşler kâğıtta da
+  aynı hizada, aynı sütundakiler aynı düşeydedir, hepsi aynı ölçektedir.
+- Çerçeveden ve antet kutusundan her yönde **12 mm** boşluk kalır.
+- Hiçbir çizgi açıkta kalmaz: her varlık en yakın görünüşe yazılır,
+  pencereler ne çakışır ne de bir şeyi dışarıda bırakır.
+
+Bu, aynı kâğıtta **daha büyük ölçek** demektir. Örnek montajın 16
+parçasında ölçekler 1:20'den 1:10'a, 1:5'ten 1:2'ye çıktı; resimlerin
+yazıları 1,4 mm'den 2,8 mm'ye büyüdü.
+
+Görünüş işareti taşımayan resimler (eski çıktılar, elle çizilmiş
+DXF'ler) tek pencereyle, yine ortalanarak yerleşir.
+
 #### Ölçek nasıl seçilir
 
-Çizim, antet kutusunun **üstündeki** (390 × 167 mm) ya da **solundaki**
-(240 × 267 mm) boşluğa oturur; hangisi daha büyük ölçek veriyorsa o
+Çizim, antet kutusunun **üstündeki** (366 × 143 mm) ya da **solundaki**
+(216 × 243 mm) boşluğa oturur; hangisi daha büyük ölçek veriyorsa o
 kullanılır. Ölçek standart merdivenden seçilir: **1:1, 1:2, 1:5, 1:10,
 1:20, 1:50…** Ara ölçek uydurulmaz, 1:7 diye bir resim olmaz.
 Kendiliğinden **büyütme yapılmaz**: küçük bir parça 2:1 çizilmez.

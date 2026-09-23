@@ -801,6 +801,45 @@ def _cakisiyor(k, digerleri, pay=0.0):
     return False
 
 
+def _varlik_kutulari(msp):
+    """Resimdeki her varlığın ÖLÇÜLMÜŞ sınırı. Yer ayırırken kullanılır."""
+    try:
+        return [(k.extmin.x, k.extmin.y, k.extmax.x, k.extmax.y)
+                for k in ezdxf.bbox.multi_flat(list(msp)) if k.has_data]
+    except Exception:
+        return []
+
+
+def _olcu_yazi_kutusu(dim):
+    """Çizilmiş bir ölçünün YAZISININ gerçek sınırı.
+
+    Ölçünün çizgileri değil, yalnız yazısı: çakışmayı yaratan odur,
+    kılavuz çizgisinin bir şeyin üstünden geçmesi normaldir."""
+    try:
+        kut = [ezdxf.bbox.extents([v], fast=False)
+               for v in dim.dimension.virtual_entities()
+               if v.dxftype() in ("TEXT", "MTEXT")]
+        kut = [k for k in kut if k.has_data]
+        if not kut:
+            return None
+        return (min(k.extmin.x for k in kut), min(k.extmin.y for k in kut),
+                max(k.extmax.x for k in kut), max(k.extmax.y for k in kut))
+    except Exception:
+        return None
+
+
+def _olcu_sil(msp, dim):
+    """Yeri tutmayan ölçüyü resimden kaldırır, bloğunu da bırakmaz."""
+    try:
+        e = dim.dimension
+        ad = e.dxf.get("geometry", None)
+        msp.delete_entity(e)
+        if ad and ad in msp.doc.blocks:
+            msp.doc.blocks.delete_block(ad, safe=False)
+    except Exception:
+        pass
+
+
 def cap_olculeri(msp, o, yer, kaydir, gkutu, h, ust, en_cok_grup=8):
     """Delik çapı ve kenar radüsü ölçüleri.
 
@@ -809,7 +848,17 @@ def cap_olculeri(msp, o, yer, kaydir, gkutu, h, ust, en_cok_grup=8):
     köşegenler denenir (çizim geleneği), yer tutulmuşsa sırayla başka yön
     ve biraz daha uzak nokta denenir. Böylece yazı ne görünüşün üstüne
     biner ne de gereksiz uzağa kaçar.
-    Aynı ölçüdeki delikler tek ölçüyle verilir, adet önüne konur: "2x Ø9"."""
+    Aynı ölçüdeki delikler tek ölçüyle verilir, adet önüne konur: "2x Ø9".
+
+    İKİ ŞEY TAHMİN EDİLMEZ, ÖLÇÜLÜR:
+    1. Resimde hâlihazırda ne varsa (görünüş çizgileri, etiketler ve
+       ÇİZGİSEL ÖLÇÜ YAZILARI) sınırları ölçülür ve dolu sayılır. Eskiden
+       yalnız görünüş kutusu ve daha önce konan Ø/R yazıları biliniyordu;
+       "34,5" gibi bir çizgisel ölçünün yazısı hesaba katılmadığı için
+       üstüne "4x R3.5" biniyordu.
+    2. Yazı çizildikten SONRA gerçek yeri ölçülür. Tahmin tutmazsa ölçü
+       silinir ve bir sonraki aday yer denenir. Yazının kâğıtta kapladığı
+       yer ölçü stiline ve yazı tipine bağlıdır; hesapla bulunmaz."""
     kova = defaultdict(list)
     for tip, liste in (("cap", o.get("delikler") or []), ("radus", o.get("radusler") or [])):
         for d in liste:
@@ -824,14 +873,16 @@ def cap_olculeri(msp, o, yer, kaydir, gkutu, h, ust, en_cok_grup=8):
     YON = [45, 135, 225, 315, 90, 270, 0, 180]
     en_ust = dict(ust)
     en_sag = max(k[2] for k in gkutu.values())
+    mevcut = _varlik_kutulari(msp)      # resimde şu an ne varsa, ölçülmüş
     for gad, gruplar in kova.items():
         dx, dy = kaydir[gad]
         gk = gkutu[gad]
-        # Görünüşün kendisi ve üstündeki görünüş etiketi doludur.
+        # Görünüşün kendisi, etiketi ve çevresindeki her şey doludur.
         et = GORUNUS_AD.get(gad, gad)
         etiket_k = (gk[0], gk[3] + 0.7 * h,
                     gk[0] + len(et) * 0.72 * 1.3 * h, gk[3] + 2.0 * h)
-        dolu = [gk, etiket_k]
+        yakin = (gk[0] - 14 * h, gk[1] - 14 * h, gk[2] + 14 * h, gk[3] + 14 * h)
+        dolu = [gk, etiket_k] + [b for b in mevcut if _cakisiyor(b, [yakin])]
         gruplar.sort(key=lambda q: -q[2])
         for tip, d, r in gruplar:
             noktalar = [(p[0] + dx, p[1] + dy)
@@ -843,7 +894,7 @@ def cap_olculeri(msp, o, yer, kaydir, gkutu, h, ust, en_cok_grup=8):
             metin = (f"{onek}%%c{d['cap_mm']:g}" if tip == "cap"
                      else f"{onek}R{d['yaricap_mm']:g}")
             yw, yy = len(metin) * 0.72 * h, 1.3 * h       # yazı kutusu
-            yazi_yeri, kutu_y = None, None
+            adaylar, yazi_yeri = [], None
             for uz_k in range(7):                          # uzaklık kademeleri
                 uz = r + (1.8 + 1.3 * uz_k) * h
                 for a in YON:
@@ -854,32 +905,55 @@ def cap_olculeri(msp, o, yer, kaydir, gkutu, h, ust, en_cok_grup=8):
                     # hangi hizalama kullanılırsa kullanılsın çakışma olmaz.
                     k = (px - yw, py - yy / 2, px + yw, py + yy / 2)
                     if not _cakisiyor(k, dolu, 0.3 * h):
-                        yazi_yeri, kutu_y = (px, py), k
-                        break
-                if yazi_yeri:
+                        adaylar.append(((px, py), k))
+                        yazi_yeri = True
+                        if len(adaylar) >= 6:
+                            break
+                if len(adaylar) >= 6:
                     break
-            if not yazi_yeri:              # hiç yer yoksa görünüşün üstüne
-                py = en_ust.get(gad, gk[3]) + 1.2 * h
-                for _ in range(12):        # boş satır bulana dek yukarı çık
-                    k = (x - yw, py - yy / 2, x + yw, py + yy / 2)
-                    if not _cakisiyor(k, dolu, 0.3 * h):
-                        break
-                    py += 1.6 * h
-                yazi_yeri, kutu_y = (x, py), k
-            dolu.append(kutu_y)
+            # Yakında yer yoksa görünüşün üstüne, boş satır bulana dek
+            # yukarı çıkarak. Buradan her zaman bir yer çıkar; ölçü
+            # düşürmek son çaredir, düşen ölçü eksik resim demektir.
+            py = en_ust.get(gad, gk[3]) + 1.2 * h
+            for _ in range(14):
+                k = (x - yw, py - yy / 2, x + yw, py + yy / 2)
+                if not _cakisiyor(k, dolu, 0.3 * h):
+                    adaylar.append(((x, py), k))
+                py += 1.6 * h
             ovr = {"dimtofl": 1, "dimtad": 0, "dimtix": 0, "dimtmove": 1,
-                   "dimatfit": 3, "dimgap": h * 0.3}
-            try:
-                if tip == "cap":
-                    msp.add_diameter_dim(center=(x, y), radius=r, location=yazi_yeri,
-                                         dimstyle=OLCU_STILI, override=ovr, text=metin,
-                                         dxfattribs={"layer": "OLCU"}).render()
-                else:
-                    msp.add_radius_dim(center=(x, y), radius=r, location=yazi_yeri,
-                                       dimstyle=OLCU_STILI, override=ovr, text=metin,
-                                       dxfattribs={"layer": "OLCU"}).render()
-            except Exception:
-                continue
+                   "dimatfit": 3, "dimgap": h * 0.3,
+                   # dimtoh/dimtih = 1: yazı HER ZAMAN YATAY.
+                   # Bu bir süsleme değil, çakışmanın kaynağıydı: yazı
+                   # ölçü çizgisiyle dönünce yukarıda yatay olarak
+                   # ayrılan yer tutmuyor, kılavuz dikleşince yazı
+                   # görünüşün konturuna biniyordu.
+                   "dimtoh": 1, "dimtih": 1}
+            kutu_y = None
+            for yer_d, kaba in adaylar:
+                try:
+                    if tip == "cap":
+                        dim = msp.add_diameter_dim(
+                            center=(x, y), radius=r, location=yer_d,
+                            dimstyle=OLCU_STILI, override=ovr, text=metin,
+                            dxfattribs={"layer": "OLCU"})
+                    else:
+                        dim = msp.add_radius_dim(
+                            center=(x, y), radius=r, location=yer_d,
+                            dimstyle=OLCU_STILI, override=ovr, text=metin,
+                            dxfattribs={"layer": "OLCU"})
+                    dim.render()
+                except Exception:
+                    kutu_y = None
+                    continue
+                gercek = _olcu_yazi_kutusu(dim)
+                if gercek is None or not _cakisiyor(gercek, dolu, 0.3 * h):
+                    kutu_y = gercek or kaba
+                    break
+                _olcu_sil(msp, dim)      # yeri tutmadı, bir sonrakini dene
+                kutu_y = None
+            if kutu_y is None:
+                continue                 # hiçbir yere sığmadı: yazma
+            dolu.append(kutu_y)
             en_ust[gad] = max(en_ust.get(gad, gk[3]), kutu_y[3] + 0.6 * h)
             en_sag = max(en_sag, kutu_y[2] + h)
     return en_ust, en_sag
