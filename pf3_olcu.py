@@ -894,7 +894,13 @@ def cap_olculeri(msp, o, yer, kaydir, gkutu, h, ust, en_cok_grup=8):
         etiket_k = (gk[0], gk[3] + 0.7 * h,
                     gk[0] + len(et) * 0.72 * 1.3 * h, gk[3] + 2.0 * h)
         yakin = (gk[0] - 14 * h, gk[1] - 14 * h, gk[2] + 14 * h, gk[3] + 14 * h)
-        dolu = [gk, etiket_k] + [b for b in mevcut if _cakisiyor(b, [yakin])]
+        # ÖBÜR GÖRÜNÜŞLER DE DOLUDUR. Yer bulamayan bir yazı yukarı
+        # tırmanırken kendi görünüşünün alanından çıkıp komşusunun
+        # içine düşebiliyor: gerçek montajda ÜST görünüşün deliğine ait
+        # "R5.06" yazısı 85 mm yukarı tırmanıp ÖN görünüşün konturuna
+        # oturmuştu. Yakın çevre süzgeci o mesafeyi görmüyordu.
+        dolu = ([gk, etiket_k] + [v for a, v in gkutu.items() if a != gad]
+                + [b for b in mevcut if _cakisiyor(b, [yakin])])
         gruplar.sort(key=lambda q: -q[2])
         for tip, d, r in gruplar:
             noktalar = [(p[0] + dx, p[1] + dy)
@@ -932,6 +938,16 @@ def cap_olculeri(msp, o, yer, kaydir, gkutu, h, ust, en_cok_grup=8):
                 if not _cakisiyor(k, dolu, 0.3 * h):
                     adaylar.append(((x, py), k))
                 py += 1.6 * h
+            # Hiçbir yere sığmadıysa kılavuzu uzatıp görünüşün soluna
+            # koy: orası her zaman boştur, kaçacak komşu yoktur.
+            if not adaylar:
+                px = gk[0] - 2.0 * yw
+                for _ in range(10):
+                    k = (px - yw, y - yy / 2, px + yw, y + yy / 2)
+                    if not _cakisiyor(k, dolu, 0.3 * h):
+                        adaylar.append(((px, y), k))
+                        break
+                    px -= 1.4 * yw
             ovr = {"dimtofl": 1, "dimtad": 0, "dimtix": 0, "dimtmove": 1,
                    "dimatfit": 3, "dimgap": h * 0.3,
                    # dimtoh/dimtih = 1: yazı HER ZAMAN YATAY.
