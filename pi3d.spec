@@ -7,12 +7,33 @@ PyInstaller tarifi - Pi3D'u tek klasorluk calistirilabilir hale getirir.
 Cikti:  dist/Pi3D/Pi3D.exe   (Windows)
         dist/Pi3D/Pi3D       (Linux/macOS)
 
+LOGOLU MU LOGOSUZ MU
+    Varsayilan logoludur. Logosuz surum icin derlemeden once:
+
+        set PI3D_LOGO=0        (Windows)
+        export PI3D_LOGO=0     (Linux/macOS)
+
+    Logolu surumde logolar EXE'NIN ICINE GOMULUDUR (pi3d_logo.py):
+    yanindaki klasorden silinemez, degistirilemez. logo/ klasoru de
+    pakete konur ama program once gomulu olani kullanir.
+    Logosuz surumde gomulu modul ve logo klasoru pakete hic girmez,
+    exe'nin kendi ikonu da olmaz; basliktaki serit yalnizca "Pi3D"
+    yazar.
+
 Neden onedir (tek klasor), onefile degil:
 OpenCascade kutuphanesi ~700 MB. Tek dosyaya sikistirilirsa program her
 acilista bunu gecici klasore acar; acilis 1-2 dakika surer ve disk iki kat
 yer kaplar. Tek klasor surumu aninda acilir.
 """
+import os
+
 from PyInstaller.utils.hooks import collect_all, collect_data_files
+
+# PI3D_LOGO=0 / yok / hayir  -> logosuz surum.
+LOGOLU = os.environ.get("PI3D_LOGO", "1").strip().lower() not in (
+    "0", "yok", "hayir", "hayır", "no", "false", "off")
+print(f"pi3d.spec: {'LOGOLU' if LOGOLU else 'LOGOSUZ'} surum derleniyor "
+      f"(PI3D_LOGO={os.environ.get('PI3D_LOGO', '1')})")
 
 # OCP (OpenCascade) saf .pyd + yanindaki DLL'lerdir; PyInstaller bunlari
 # kendiliginden bulamaz, hepsini acikca toplamak gerekir.
@@ -33,20 +54,22 @@ a = Analysis(
     ["pf3_gui.py"],
     pathex=["."],
     binaries=ocp_bin + ezdxf_bin,
-    # logo/ klasoru pakete girsin: pencere ikonu ve baslik seridi oradan
-    # okunur. Exe'de sys._MEIPASS altinda ayni adla acilir.
+    # Logolu surumde logo/ klasoru de pakete girer (exe'de sys._MEIPASS
+    # altinda ayni adla acilir), ama program once pi3d_logo icindeki
+    # gomulu kopyayi kullanir.
     datas=ocp_data + ezdxf_data + collect_data_files("matplotlib")
-          + [("logo/*", "logo")],
+          + ([("logo/*", "logo")] if LOGOLU else []),
     hiddenimports=ocp_gizli + ezdxf_gizli + [
         "pf3_olcu", "pf4_pafta", "pf1_referans",
         "matplotlib.backends.backend_agg",
-    ],
+    ] + (["pi3d_logo"] if LOGOLU else []),
     hookspath=[],
     runtime_hooks=[],
     # Programin kullanmadigi agir paketler disarida kalsin.
     excludes=["vtk", "trame", "casadi", "numba", "llvmlite", "scipy",
               "pandas", "sklearn", "tensorflow", "cv2", "IPython",
-              "notebook", "PyQt5", "PySide2", "PySide6", "wx"],
+              "notebook", "PyQt5", "PySide2", "PySide6", "wx"]
+             + ([] if LOGOLU else ["pi3d_logo"]),
     noarchive=False,
 )
 pyz = PYZ(a.pure)
@@ -62,7 +85,7 @@ exe = EXE(
     disable_windowed_traceback=False,
     argv_emulation=False,
     # Gorev cubugunda ve dosya gezgininde gorunen ikon.
-    icon="logo/pi3d.ico",
+    icon=("logo/pi3d.ico" if LOGOLU else None),
 )
 coll = COLLECT(
     exe, a.binaries, a.datas,

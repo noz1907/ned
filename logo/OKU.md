@@ -41,3 +41,18 @@ zeminiyle aynı tonda.
 Program logosuz da çalışır: dosya bulunamazsa pencere varsayılan ikonla
 açılır, üst şeritte resim yerine "PiVision" yazısı görünür. Hiçbir hata
 vermez.
+
+## Değiştirdikten sonra
+
+Logolar programa **gömülüdür** (`pi3d_logo.py`), exe'nin içinde taşınır.
+Buradaki dosyaları değiştirdikten sonra gömülü kopyayı tazeleyin:
+
+```bash
+python logo_gom.py
+```
+
+Yapmazsanız kaynak koddan çalıştırdığınızda yeniyi, exe'de eskiyi
+görürsünüz.
+
+Logosuz sürüm derlemek için: `EXE_YAP.bat 2` ya da `set PI3D_LOGO=0`.
+O sürümde bu klasör pakete hiç girmez, başlıkta yalnız "Pi3D" yazar.

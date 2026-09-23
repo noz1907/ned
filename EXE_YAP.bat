@@ -3,6 +3,10 @@ REM ==========================================================================
 REM  Pi3D'u calistirilabilir dosyaya (.exe) cevirir.
 REM
 REM  Once Pi3D_baslat.bat ile .venv kurulmus olmali.
+REM  Logolu / logosuz secimi sorulur. Sormasini istemiyorsaniz once
+REM  set PI3D_LOGO=1 (logolu) ya da set PI3D_LOGO=0 (logosuz) verin,
+REM  ya da EXE_YAP.bat 1   /   EXE_YAP.bat 0  diye calistirin.
+REM
 REM  Cikti:  dist\Pi3D\Pi3D.exe
 REM
 REM  Olusan klasor Python kurulu OLMAYAN bilgisayarlarda da calisir;
@@ -10,6 +14,27 @@ REM  klasorun tamamini kopyalayin, tek basina .exe yetmez.
 REM ==========================================================================
 setlocal
 cd /d "%~dp0"
+
+REM ---- logolu mu logosuz mu -------------------------------------------
+if not "%~1"=="" set "PI3D_LOGO=%~1"
+REM  Menude 2 = logosuz; spec 0 bekler.
+if "%PI3D_LOGO%"=="2" set "PI3D_LOGO=0"
+if not "%PI3D_LOGO%"=="" goto SECILDI
+echo.
+echo  Hangi surum derlensin?
+echo.
+echo    1 = LOGOLU    PiVision ve Pi3D logolari exe'nin ICINE gomulur;
+echo                  yanindaki klasorden silinemez, degistirilemez.
+echo    2 = LOGOSUZ   hic logo konmaz; baslikta yalniz "Pi3D" yazar,
+echo                  exe'nin kendi ikonu da olmaz.
+echo.
+set "PI3D_LOGO="
+set "SECIM="
+set /p SECIM=  Seciminiz [1]: 
+if "%SECIM%"=="2" (set "PI3D_LOGO=0") else (set "PI3D_LOGO=1")
+
+:SECILDI
+if "%PI3D_LOGO%"=="0" (echo  LOGOSUZ surum derlenecek.) else (echo  LOGOLU surum derlenecek.)
 
 if not exist ".venv\Scripts\python.exe" goto ORTAM_YOK
 
@@ -36,6 +61,7 @@ echo.
 if errorlevel 1 goto OLMADI
 
 echo.
+if "%PI3D_LOGO%"=="0" (echo  Tamam - LOGOSUZ surum.) else (echo  Tamam - LOGOLU surum, logolar exe'nin icinde.)
 echo  Tamam:  dist\Pi3D\Pi3D.exe
 echo  Bu klasorun TAMAMINI kopyalayin, tek basina exe calismaz.
 echo.

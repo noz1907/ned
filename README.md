@@ -264,7 +264,7 @@ Pencere adım adım ilerler, bir adım bitmeden sonraki sekme açılmaz:
 | **4 ÖRNEK ONAY** | üretilen örnek resim pencerede gösterilir; beğenmezseniz *AYARA DÖN*, beğenirseniz **ONAYLA** |
 | **5 TÜM ÇİZİMLER** | onay sonrası bütün DXF'ler üretilir, listelenir, **ZIP OLUŞTUR** ile tek pakette toplanır |
 | **6 AÇINIM** | bükümlü sac parçaların kesim konturu: dış kontur, kenar kesikleri, delikler gerçek yerlerinde + büküm çizgileri ve büküm tablosu. K-faktörü ayarlanır ve saklanır. Hesap güvenilir değilse açınım **verilmez**, sebebi yazılır |
-| **7 ANTET ve PAFTA** | 1:1 resimlerin **kopyalarına** firma antetini (`<<ALAN>>` yer tutuculu DXF) ve kâğıdı ekler. A4/A3'e sığan 1:1 çizilir, sığmayana kâğıdı siz seçersiniz. **1:1 çizime dokunulmaz.** PDF kendiliğinden basılmaz, isteyince basılır |
+| **7 PAFTA** | 1:1 resimlerin **kopyalarına** standart yatay A3 çerçevesi ekler: kenardan 15 mm pay, sağ alt köşede 150×100 mm boş antet alanı (oraya asla resim gelmez), kenarlarda bölge işaretleri. Ölçek standart merdivenden seçilir; **ölçü rakamları her zaman 1:1 kalır.** PDF kendiliğinden basılmaz, isteyince basılır |
 
 Ağır işler arka planda çalışır: pencere kilitlenmez, günlük akar, ilerleme
 çubuğu dolar, **İptal** çalışan adım bitince işi bırakır. Listede/çizim
@@ -287,18 +287,22 @@ python pf3_olcu.py parca.stp -o cikti --acinim HEPSI --k-faktor 0.40
                                                       # sac parçaların kesim konturu
 ```
 
-Antet ve pafta ayrı programdır, istenen DXF'e uygulanır:
+Pafta ayrı programdır, istenen DXF'e uygulanır:
 
 ```
-python pf4_pafta.py --ornek-antet ANTET_A3.dxf        # örnek antet üret
-python pf4_pafta.py --plan --antet ANTET_A3.dxf cikti/*.dxf
-                                                      # hangi resim hangi kâğıda sığar
-python pf4_pafta.py --antet ANTET_A3.dxf --kagit A2 --cikti cikti/PAFTA \
-       --firma "FİRMA A.Ş." --cizen "N. ÖZDEMİR" --bas cikti/*.dxf
+python pf4_pafta.py --plan cikti/*.dxf                # hangi resim hangi ölçekte oturur
+python pf4_pafta.py --cikti cikti/PAFTA --bas cikti/*.dxf     # A3 pafta + PDF
+python pf4_pafta.py --kagit A2 --cikti cikti/PAFTA cikti/*.dxf
 ```
 
 Kaynak DXF'lere dokunulmaz: pafta her zaman ayrı bir dosyaya yazılır ve
 model uzayı birebir korunur (program bunu her yazımda kendi denetler).
+Ölçek paftanın penceresine aittir — 1:10 basılan 1860 mm'lik bir parçanın
+ölçü çizgisinde yine **1860** yazar.
+
+Exe iki türlü derlenir: **logolu** (logolar exe'nin içine gömülür,
+silinemez) ya da **logosuz** (başlıkta yalnız "Pi3D" yazar).
+`EXE_YAP.bat` derlerken sorar; `set PI3D_LOGO=0` ile sormadan da olur.
 
 ## Malzeme — kütle neye göre hesaplanıyor
 

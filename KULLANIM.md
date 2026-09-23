@@ -187,13 +187,32 @@ katı yer ister.
 
 ---
 
-## 1b. Logolar ve ikon
+## 1b. Logolar ve ikon — logolu / logosuz sürüm
+
+İki sürüm derlenebilir. `EXE_YAP.bat` derlemeye başlarken sorar:
+
+```
+  1 = LOGOLU    PiVision ve Pi3D logoları exe'nin İÇİNE gömülür;
+                yanındaki klasörden silinemez, değiştirilemez.
+  2 = LOGOSUZ   hiç logo konmaz; başlıkta yalnız "Pi3D" yazar,
+                exe'nin kendi ikonu da olmaz.
+```
+
+Sormasını istemiyorsanız `EXE_YAP.bat 1` / `EXE_YAP.bat 2`, ya da
+derlemeden önce `set PI3D_LOGO=0` (logosuz) / `=1` (logolu).
+
+### Logolu sürüm
 
 Program açıldığında üstte koyu bir şerit görürsünüz: solda **PiVision**
 logosu, sağda uygulama adı ve ikonu. Pencerenin ve `.exe`'nin ikonu da
 uygulama ikonudur.
 
-Bütün görseller `logo/` klasöründedir ve **her ölçü ayrı ayrı** hazırdır:
+Logolar **koda gömülüdür** (`pi3d_logo.py`): exe'nin içindedirler,
+yanındaki klasörden silinemez ya da değiştirilemezler. `logo/` klasörü
+de pakete konur ama program önce gömülü kopyayı kullanır — kaynak
+koddan çalıştıranlar klasördekini görür.
+
+Kaynak dosyalar `logo/` klasöründedir ve **her ölçü ayrı ayrı** hazırdır:
 
 * `pi3d.ico` – 16/24/32/48/64/128/256 boyutları tek dosyada. Windows
   görev çubuğunda 32'yi, masaüstünde 48'i, dosya gezgininde 256'yı ister;
@@ -203,11 +222,22 @@ Bütün görseller `logo/` klasöründedir ve **her ölçü ayrı ayrı** hazır
 * `pivision_64.png` / `_56` / `_44` / `_32` – arayüz şeridi için hazır
   boyutlar; şeritte 64 px'lik kullanılıyor.
 
-Logoyu değiştirmek isterseniz aynı adla, aynı ölçüde yenisini koyun;
-kodda değişiklik gerekmez. Ayrıntı: `logo/OKU.md`.
+Logoyu değiştirmek isterseniz aynı adla, aynı ölçüde yenisini koyun,
+sonra **gömülü kopyayı tazeleyin**:
 
-Dosyalar silinse bile program çalışır: pencere varsayılan ikonla açılır,
-şeritte resim yerine yazı görünür.
+```bash
+python logo_gom.py
+```
+
+Bu komut `logo/` klasöründen `pi3d_logo.py`'yi yeniden üretir. Yapmazsanız
+kaynak koddan çalıştırdığınızda yeni logoyu görürsünüz ama exe'de eskisi
+kalır. Ayrıntı: `logo/OKU.md`.
+
+### Logosuz sürüm
+
+Gömülü modül ve `logo/` klasörü pakete hiç girmez; exe'nin kendi ikonu
+da olmaz. Başlık şeridinde yalnızca büyük puntoyla **Pi3D** ve altında
+açıklaması yazar. Program bunun dışında birebir aynıdır.
 
 ---
 
@@ -416,12 +446,12 @@ daha iyidir.
 
 ---
 
-### Adım 7 — ANTET ve PAFTA
+### Adım 7 — PAFTA
 
 Buraya kadar çıkan resimler **1:1**'dir ve öyle kalır. Bu adım onları
 silmez, ölçeklerini değiştirmez, üzerlerine yazmaz. Yaptığı iş şudur:
-her resmin bir **kopyasına** firma antetinizi ve seçtiğiniz kâğıdı
-ekler, kopyayı `PAFTA` alt klasörüne yazar.
+her resmin bir **kopyasına** standart bir çerçeve ekler ve kopyayı
+`PAFTA` alt klasörüne yazar.
 
 Ölçek, paftanın **penceresine** aittir — çizime değil. "1:10 bastım"
 demek çizimi küçülttüm demek değildir; aynı 1:1 çizime uzaktan bakmak
@@ -430,50 +460,72 @@ demektir. Paftalı dosyayı AutoCAD'de açıp Model sekmesine geçerseniz her
 kendisi de denetler: model uzayında tek bir varlık oynamışsa pafta
 yazılmaz, hata verir.
 
-**Antet nasıl hazırlanır.** Anteti kendi CAD'inizde çizip DXF olarak
-kaydedin. Kâğıdın sol alt köşesi (0,0) olsun. Değerin geleceği yerlere
-alan adını yazın:
+#### Paftanın yapısı
+
+Kâğıt **her zaman yatay**. A3 için (420 × 297 mm):
 
 ```
-<<FIRMA>>   <<PROJE>>   <<AD>>      <<KOD>>     <<POZ>>     <<ADET>>
-<<MALZEME>> <<KALINLIK>> <<KUTLE>>  <<OLCU>>    <<OLCEK>>   <<PAFTA>>
-<<CIZEN>>   <<KONTROL>> <<ONAY>>    <<TARIH>>   <<REVIZYON>>
-<<ACIKLAMA>> <<TOLERANS>> <<YUZEY>> <<DOSYA>>   <<BIRIM>>   <<SAYFA>>
+ +----------------------------------------------------+
+ |   1     2     3     4     5     6     7     8       |   <- bölge rakamları
+ | +------------------------------------------------+ |
+ |A|                                                |A|
+ | |              Ç İ Z İ M   B U R A Y A           | |
+ |B|                                                |B|
+ | |                                                | |
+ |C|                          +---------------------+ |
+ | |                          |   A N T E T         | |
+ |D|                          |   150 x 100 mm      |D|
+ | +--------------------------+---------------------+ |
+ |   1     2     3     4     5     6     7     8       |
+ +----------------------------------------------------+
 ```
 
-Program bu yazıları bulup gerçek değerle değiştirir. İstemediğiniz alanı
-hiç koymazsınız; değeri olmayan alan **boş bırakılır**, paftada
-`<<CIZEN>>` yazısı kalmaz.
+- Çerçeve kâğıdın kenarından **15 mm** içeridedir; resim hiçbir zaman
+  bundan dışarı taşmaz.
+- Sağ alt köşedeki **150 × 100 mm**'lik kutu **boş bırakılır** ve oraya
+  **asla çizim gelmez**. Antetinizi oraya kopyala-yapıştır ile
+  koyarsınız.
+- Kenarlardaki rakam ve harfler bölge işaretleridir ("B3'teki delik"
+  demek için). Kenar ortalarındaki kısa çizgiler katlama işareti.
+- Her biri ayrı katmandadır (`PAFTA_CERCEVE`, `PAFTA_ANTET_ALANI`,
+  `PAFTA_BOLGE`, `PAFTA_BILGI`); istemediğinizi tek tıkla silersiniz.
 
-Çizimin oturacağı boşluğu da siz belirlersiniz: `CIZIM_ALANI` adlı bir
-katmana bir dikdörtgen koyun. O dikdörtgen paftada görünmez, yalnız
-çizimin yerini ve ölçeğini belirler. Koymazsanız program kâğıdın
-kenarından 10 mm pay bırakıp kalanını kullanır — o zaman çizim antetin
-üstüne binebilir.
+Program antet **çizmez**. Her firmanın anteti başka; programın
+uyduracağı bir şey değil. Kutuyu boş bırakır, gerisi sizin.
 
-Elinizde antet yoksa **"Örnek antet üret…"** düğmesine basın: çalışır
-durumda bir A3 antet yazar. Hem işinizi görür hem de kendi antetinizi
-çizerken şablon olur.
+#### Ölçek nasıl seçilir
 
-**Kâğıt seçimi.** A4 ya da A3'e **1:1 sığan** resim oraya, birebir
-çizilir — teknik resimde tercih her zaman budur. Sığmayanlar için
-aşağıdaki kutudan kâğıt seçersiniz (A3 / A2 / A1 / A0); o kâğıda sığan
-**en büyük standart ölçek** (1:2, 1:5, 1:10, 1:20…) kendiliğinden
-bulunur. Ara ölçek uydurulmaz. Seçtiğiniz kâğıda standart bir ölçekle
-sığmayan resim için satırda ne gerektiği yazar ve o satır üretilmez.
+Çizim, antet kutusunun **üstündeki** (390 × 167 mm) ya da **solundaki**
+(240 × 267 mm) boşluğa oturur; hangisi daha büyük ölçek veriyorsa o
+kullanılır. Ölçek standart merdivenden seçilir: **1:1, 1:2, 1:5, 1:10,
+1:20, 1:50…** Ara ölçek uydurulmaz, 1:7 diye bir resim olmaz.
+Kendiliğinden **büyütme yapılmaz**: küçük bir parça 2:1 çizilmez.
 
-Her kâğıda ayrı antet çizmek isterseniz: `ANTET.dxf`'in yanına
-`ANTET_A1.dxf` koyun, A1 paftada o kullanılır. Koymazsanız tek antet
-kâğıttan kâğıda oranlanır (A3 anteti A1'de iki kat büyür; yazı boyları
-da büyür).
+> **Ölçüler her zaman 1:1'dir.** Ölçek paftanın penceresinin işidir,
+> rakamın değil. 1860 mm'lik bir parçayı A3'e 1:10 sığdırsanız da
+> ölçü çizgisinde **1860** yazar ve CAD'de ölçtüğünüzde 1860 çıkar.
+> Program hiçbir ölçü rakamına dokunmaz, `DIMLFAC` çarpanını
+> değiştirmez; denetim betiği her sürümde bunu ayrıca doğrular.
 
-**Baskı kendiliğinden yapılmaz.** PDF istediğinizde üretilir: paftası
-hazır satırları seçip **"SEÇİLİ PAFTALARI BAS (PDF)"**. PDF'in sayfa
-ölçüsü kâğıdın birebir ölçüsüdür (A3 → 420×297 mm), çizgiler siyahtır.
+Ölçek **geometriye göre değil, yazılar dahil** seçilir. Büküm tablosu,
+ölçü rakamı, başlık — hepsi resmin parçasıdır; pencereyi yalnız
+geometriye göre açarsak bunlar kenardan kırpılır.
+
+Seçtiğiniz kâğıda sığmayan resim **üretilmez**; satırda hangi kâğıtta
+hangi ölçekte oturacağı yazar. Kâğıt kutusundan A4/A2/A1/A0 da
+seçebilirsiniz.
+
+> **Uzun parçalarda yazıya dikkat.** 2,5 m'lik bir sac A3'e ancak 1:10
+> girer; resmin kendi yazıları da 10'a bölünür ve kâğıtta 0,7 mm kalır —
+> okunmaz. Program bunu satırda **DİKKAT** diye yazar ve "A2 olsa 1:5
+> olurdu" der. Böyle parçalar için büyük kâğıt seçin.
+
+#### Baskı
+
+**Kendiliğinden yapılmaz.** PDF istediğinizde üretilir: paftası hazır
+satırları seçip **"SEÇİLİ PAFTALARI BAS (PDF)"**. PDF'in sayfa ölçüsü
+kâğıdın birebir ölçüsüdür (A3 → 420×297 mm), çizgiler siyahtır.
 Yazıcıda **"sayfaya sığdır" demeyin**, %100 basın; yoksa ölçek bozulur.
-
-Antet yolu, firma, çizen gibi bilgiler saklanır; her açılışta yeniden
-yazmazsınız.
 
 ---
 
@@ -623,33 +675,28 @@ python pf3_olcu.py parca.stp -o cikti --asama 1 --acinim 01.051.000.01
 python pf3_olcu.py parca.stp -o cikti --acinim HEPSI --k-faktor 0.32
 ```
 
-### Antet ve pafta
+### Pafta
 
 Pafta işi ayrı bir programdır; istediğiniz DXF'e uygulanır:
 
 ```bash
-# önce elinizde antet yoksa bir örnek üretin
-python pf4_pafta.py --ornek-antet ANTET_A3.dxf --firma "FİRMA A.Ş."
+# hangi resim hangi ölçekte oturuyor - hiçbir şey yazmaz, sadece söyler
+python pf4_pafta.py --plan cikti/*.dxf
 
-# hangi resim hangi kâğıda 1:1 sığıyor - hiçbir şey yazmaz, sadece söyler
-python pf4_pafta.py --plan --antet ANTET_A3.dxf cikti/*.dxf
+# paftaya al (varsayılan A3)
+python pf4_pafta.py --cikti cikti/PAFTA --bas cikti/*.dxf
 
-# paftaya al (kâğıt verilmezse A4/A3'e sığanlar yapılır, kalanı listelenir)
-python pf4_pafta.py --antet ANTET_A3.dxf --kagit A2 --cikti cikti/PAFTA \
-       --firma "FİRMA A.Ş." --cizen "N. ÖZDEMİR" --proje "K0 TELEVRE" \
-       --bas  cikti/*.dxf
+# büyük kâğıt
+python pf4_pafta.py --kagit A2 --cikti cikti/PAFTA cikti/*.dxf
 ```
 
 | seçenek | ne yapar |
 |---------|----------|
-| `--antet YOL` | `<<ALAN>>` yer tutuculu antet DXF'i |
-| `--ornek-antet YOL` | çalışır durumda örnek antet üretir, çıkar |
-| `--kagit A4..A0` | kâğıt; verilmezse sığan en küçüğü seçilir |
+| `--kagit A4..A0` | kâğıt, her zaman yatay (varsayılan A3) |
 | `--olcek 0.1` | ölçeği elle verir; kâğıda sığmıyorsa pafta yazılmaz |
 | `--cikti KLASÖR` | paftaların yazılacağı klasör (varsayılan `PAFTA`) |
-| `--plan` | hiçbir şey yazmaz, yalnız kâğıt/ölçek raporu verir |
+| `--plan` | hiçbir şey yazmaz, yalnız ölçek raporu verir |
 | `--bas` | paftaların PDF'ini de üretir |
-| `--firma --cizen --proje --aciklama` | antete yazılacak ortak bilgiler |
 
 Kaynak DXF'lere dokunulmaz; her pafta ayrı bir dosyaya yazılır.
 
@@ -788,7 +835,8 @@ anlamlı çıkmıyorsa o parçada kesit çizilmez, diğer görünüşler yine ç
 |-------|----------|
 | `pf3_olcu.py` | **ana motor** — STEP → BOM + detay resmi + montaj resmi |
 | `pf3_gui.py` | **ana arayüz** — yukarıdaki 7 adımlı pencere |
-| `pf4_pafta.py` | **antet ve pafta** — 1:1 resmin kopyasını Ax kâğıda yerleştirir, PDF basar |
+| `pf4_pafta.py` | **pafta** — 1:1 resmin kopyasını standart A3 çerçeveye yerleştirir, PDF basar |
+| `logo_gom.py` | logoları koda gömer (`logo/` → `pi3d_logo.py`) |
 | `pf1_referans.py` | STEP'ten XYZ referans yönü ve 3 konumlandırma noktası önerir |
 | `pf_gui.py` | `pf1_referans` için 3B önizlemeli arayüz |
 | `pf2_fikstur.py` | kaynak/montaj fikstürü üretici (3-2-1 prensibi) |
