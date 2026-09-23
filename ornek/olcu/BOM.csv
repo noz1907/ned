@@ -1,21 +1,21 @@
 ﻿poz;kod;ad;adet;sinif;tip;malzeme_ad;olcu;kg_adet;toplam_kg;dxf
-1;01.051.000.01;01.051.000.01 C-Profil-Runge XL-H;1;parca;;Celik (S235JR / St37);2480.0x120.0x34.5;10.6724;10.6724;
-2;09.025.000.02;09.025.000.02 C-Profil Teleskop;1;parca;;Celik (S235JR / St37);1940.0x100.0x27.5;8.9579;8.9579;
-3;TIRSAN_Ray 112,5;TIRSAN_Ray 112,5;1;parca;;Celik (S235JR / St37);200.0x112.52x125.48;3.0402;3.0402;
-4;510206504-00;510206504-00_KAYAR BABA YAN YAPI YUVASI GALVANiZLi;10;parca;;Celik (S235JR / St37);120.0x57.0x31.5;0.2673;2.673;
-5;01.050.000.01;01.050.000.01 U-Blech-Mechanismus;1;parca;;Celik (S235JR / St37);483.04x76.5x32.0;1.2847;1.2847;
-6;01.050.000.14;01.050.000.14 Führungsschale-Fuß-links mechanisch bearbeitet;1;parca;;Celik (S235JR / St37);301.65x45.01x68.07;1.2144;1.2144;
-7;01.050.000.15;01.050.000.15 Führungsschale-FuB-rechts mechanisch bearbeitet;1;parca;;Celik (S235JR / St37);301.65x45.01x68.07;1.2144;1.2144;
-8;06.001.001.34;06.001.001.34-Keil-forging;1;parca;;Celik (S235JR / St37);175.42x70.65x31.95;1.0859;1.0859;
+1;01.051.000.01;01.051.000.01 C-Profil-Runge XL-H;1;parca;;Celik (S235JR / St37);2480.0x120.0x34.5;10.6724;10.6724;P01_01_051_000_01.dxf
+2;09.025.000.02;09.025.000.02 C-Profil Teleskop;1;parca;;Celik (S235JR / St37);1940.0x100.0x27.5;8.9579;8.9579;P02_09_025_000_02.dxf
+3;TIRSAN_Ray 112,5;TIRSAN_Ray 112,5;1;parca;;Celik (S235JR / St37);200.0x112.52x125.48;3.0402;3.0402;P03_TIRSAN_Ray_112_5.dxf
+4;510206504-00;510206504-00_KAYAR BABA YAN YAPI YUVASI GALVANiZLi;10;parca;;Celik (S235JR / St37);120.0x57.0x31.5;0.2673;2.673;P04_510206504-00.dxf
+5;01.050.000.01;01.050.000.01 U-Blech-Mechanismus;1;parca;;Celik (S235JR / St37);483.04x76.5x32.0;1.2847;1.2847;P05_01_050_000_01.dxf
+6;01.050.000.14;01.050.000.14 Führungsschale-Fuß-links mechanisch bearbeitet;1;parca;;Celik (S235JR / St37);301.65x45.01x68.07;1.2144;1.2144;P06_01_050_000_14.dxf
+7;01.050.000.15;01.050.000.15 Führungsschale-FuB-rechts mechanisch bearbeitet;1;parca;;Celik (S235JR / St37);301.65x45.01x68.07;1.2144;1.2144;P07_01_050_000_15.dxf
+8;06.001.001.34;06.001.001.34-Keil-forging;1;parca;;Celik (S235JR / St37);175.42x70.65x31.95;1.0859;1.0859;P08_06_001_001_34.dxf
 9;06.002.008.30;06.002.008.30 - Rungenlager, kurz TIRSAN;1;standart;rulman;;;;;
-10;09.020.000.01;09.020.000.01 Dachplatte 45x195mm;1;parca;;Celik (S235JR / St37);195.0x50.0x8.0;0.5671;0.5671;
-11;09.020.000.03;09.020.000.03 Rollenplatte;1;parca;;Celik (S235JR / St37);175.0x100.0x5.0;0.2833;0.2833;
-12;06.000.001.07;06.000.001.07 - Handhebel - roh;1;parca;;Celik (S235JR / St37);166.0x38.0x23.0;0.2431;0.2431;
-13;07.007.070.04;07.007.070.04 - Kniehebel - KTL;1;parca;;Celik (S235JR / St37);211.01x48.01x21.01;0.2123;0.2123;
+10;09.020.000.01;09.020.000.01 Dachplatte 45x195mm;1;parca;;Celik (S235JR / St37);195.0x50.0x8.0;0.5671;0.5671;P10_09_020_000_01.dxf
+11;09.020.000.03;09.020.000.03 Rollenplatte;1;parca;;Celik (S235JR / St37);175.0x100.0x5.0;0.2833;0.2833;P11_09_020_000_03.dxf
+12;06.000.001.07;06.000.001.07 - Handhebel - roh;1;parca;;Celik (S235JR / St37);166.0x38.0x23.0;0.2431;0.2431;P12_06_000_001_07.dxf
+13;07.007.070.04;07.007.070.04 - Kniehebel - KTL;1;parca;;Celik (S235JR / St37);211.01x48.01x21.01;0.2123;0.2123;P13_07_007_070_04.dxf
 14;06.002.001.03;06.002.001.03-Handhebellagerung-600;1;standart;rulman;;;;;
 15;01.050.000.06;01.050.000.06 Bolzen 12x100;1;standart;pim;;;;;
 16;6,4x14_Percin_percinli;6,4x14_Percin_percinli;20;standart;perçin;;;;;
-17;01.050.000.02;01.050.000.02 Federanschlag;1;parca;;Celik (S235JR / St37);77.0x70.0x5.0;0.0708;0.0708;
+17;01.050.000.02;01.050.000.02 Federanschlag;1;parca;;Celik (S235JR / St37);77.0x70.0x5.0;0.0708;0.0708;P17_01_050_000_02.dxf
 18;06.000.001.08;06.000.001.08 - Sicherung - verzinkt;1;standart;segman;;;;;
 19;01.050.000.09;01.050.000.09 Bolzen 10x100;1;standart;pim;;;;;
 20;09.020.000.05;09.020.000.05 Rillenkugellager DIN 608 2RSR;4;standart;DIN;;;;;
@@ -28,9 +28,9 @@
 27;07.007.070.05;07.007.070.05 - Halbhohlniet Ø8x37 - KTL;1;standart;perçin;;;;;
 28;M8 Somun;M8 Somun;2;standart;somun;;;;;
 29;09.020.000.06;09.020.000.06 Unterlegscheibe 8,4x16x1,6 DIN 125 - A;4;standart;DIN;;;;;
-30;Ausprägung 2-oa0;Ausprägung 2-oa0;1;parca;;Celik (S235JR / St37);12.3x12.35x9.89;0.007;0.007;
-31;1;1;1;parca;;Celik (S235JR / St37);12.3x12.35x9.89;0.0065;0.0065;
-32;510206504-00;510206504-00_KAYAR BABA YAN YAPI YUVASI GALVANiZLi;20;parca;;Celik (S235JR / St37);7.0x4.0x1.5;0.0002;0.004;
+30;Ausprägung 2-oa0;Ausprägung 2-oa0;1;parca;;Celik (S235JR / St37);12.3x12.35x9.89;0.007;0.007;P30_Ausprägung_2-oa0.dxf
+31;1;1;1;parca;;Celik (S235JR / St37);12.3x12.35x9.89;0.0065;0.0065;P31_1.dxf
+32;510206504-00;510206504-00_KAYAR BABA YAN YAPI YUVASI GALVANiZLi;20;parca;;Celik (S235JR / St37);7.0x4.0x1.5;0.0002;0.004;P32_510206504-00.dxf
 33;06.000.001.10;06.000.001.10 - Blindniet ISO 15983 - 5 × 10 - AIA-St - L (vernietet);1;standart;ISO;;;;;
 34;ISO 7090;ISO 7090 WASHER 8X16 STEEL GRADE A PLAIN CHAMFERED NORMAL SERIES;1;standart;ISO;;;;;
 35;06.000.001.09;06.000.001.09 - Druckfeder 1 x 6,5 x L1 = 27,5 mm;1;standart;yay;;;;;
