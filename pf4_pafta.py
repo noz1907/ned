@@ -716,9 +716,16 @@ def pafta_kur(kaynak_dxf, cikti_dxf, kagit=VARSAYILAN_KAGIT, olcek=None,
 
     not_ = ""
     if bilgi:
-        not_ = (f"{kagit}   PAFTA ÖLÇEĞİ {olcek_metni(olcek)}"
-                + ("   (model uzayı 1:1)" if abs(olcek - 1) > 1e-9 else "")
-                + f"   {os.path.basename(kaynak_dxf)}")
+        bas = (f"{kagit}   PAFTA ÖLÇEĞİ {olcek_metni(olcek)}"
+               + ("   (model uzayı 1:1)" if abs(olcek - 1) > 1e-9 else ""))
+        # Antet kutusundan taşmasın: kutuya kaç harf sığıyorsa o kadar.
+        # Taşan yazı kutunun dışına çıkıp çizimin üstüne biniyordu.
+        sigan = int((ANTET_EN - 8.0) / (HARF_ORAN * 3.0))
+        ek = os.path.basename(kaynak_dxf)
+        if len(bas) + 3 + len(ek) > sigan:
+            ek = ek[:max(0, sigan - len(bas) - 4)] + (
+                "…" if sigan > len(bas) + 4 else "")
+        not_ = (bas + "   " + ek).rstrip()[:sigan]
     _pafta_cerceve_ciz(pafta, kagit, not_)
 
     # --- pencere(ler): 1:1 çizime buradan bakılır

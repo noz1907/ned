@@ -25,7 +25,7 @@ normali kalınlık ekseni, o yüzeydeki en uzun kenar yönü boy eksenidir. Böy
 montaj içinde eğik duran bir sac da kendi boy/en/kalınlık ölçüsüyle çıkar.
 """
 from __future__ import annotations
-import argparse, bisect, csv, json, math, os, re, sys, time
+import argparse, bisect, csv, json, math, os, re, sys, textwrap, time
 from collections import Counter, defaultdict
 
 import ezdxf
@@ -662,7 +662,19 @@ def olcu_stili(doc, h):
 
 
 def _yaz(msp, metin, x, y, h=4.0, kat="YAZI"):
-    msp.add_text(str(metin), dxfattribs={"layer": kat, "height": h}).set_placement((x, y))
+    e = msp.add_text(str(metin), dxfattribs={"layer": kat, "height": h})
+    e.set_placement((x, y))
+    return e
+
+
+def _yazi_siniri(e):
+    """Çizilmiş bir yazının ÖLÇÜLMÜŞ sınırı; ölçülemezse None."""
+    try:
+        k = ezdxf.bbox.extents([e], fast=False)
+        return None if not k.has_data else (k.extmin.x, k.extmin.y,
+                                            k.extmax.x, k.extmax.y)
+    except Exception:
+        return None
 
 
 def gorunus_ciz(msp, kenar, ox, oy, ad, h=4.0, olcu2=True, etiket=None):
@@ -1448,6 +1460,7 @@ def sac_acilim(sh, o=None, k_faktor=K_FAKTOR, istasyon=11,
     ciftler = bukum_ciftleri(bukum_yuzeyleri(sh))
     eksen = bukum_ekseni(ciftler)
     t = sum(c["t"] for c in ciftler) / len(ciftler)
+    ham = sh                            # döndürülmemiş hâli: kesim konturu
     sh = _eksene_dondur(sh, eksen)      # büküm ekseni artık Z
 
     kb = kutu(sh)
@@ -1521,9 +1534,23 @@ def sac_acilim(sh, o=None, k_faktor=K_FAKTOR, istasyon=11,
     # Kesitten değil, YÜZEYLERDEN açılır; kesiti boy boyunca değişen
     # parçalar da böyle doğru çıkar.
     if kontur:
+        hac = o.get("hacim_mm3") if isinstance(o, dict) else None
+        # ÖNCE DÖNDÜRÜLMEMİŞ HÂLİ. Kesim konturu kendi eksenini zaten
+        # buluyor, döndürülmüşe ihtiyacı yok; üstelik döndürmek zarar
+        # veriyor. Teleskop profilinde ölçülen: ham parça 193,47x1940,
+        # 96 delikle tam çıkıyor, döndürülmüşünde OpenCascade'in yüzey
+        # birleştirmesi bozulup açınımı ikiye ayırıyordu (246188 +
+        # 39864 mm2, oysa toplam 360236). Döndürme her yüzeyi yeniden
+        # hesaplatıyor ve boole işlemlerinin sağlamlığını düşürüyor.
+        #
+        # Yine de ikisi de denenir: parça montajda eğik duruyorsa bu kez
+        # ham hâli zorlanabilir. Her denemeyi hacim ve tek-parça
+        # denetimleri ayrı ayrı korur, yani yanlış bir kontur geçemez.
         try:
-            ac = acilim_kesim(sh, t, k_faktor, hacim=o.get("hacim_mm3")
-                              if isinstance(o, dict) else None)
+            try:
+                ac = acilim_kesim(ham, t, k_faktor, hacim=hac)
+            except AcilimYok:
+                ac = acilim_kesim(sh, t, k_faktor, hacim=hac)
             sonuc.update(ac)
             # İki bağımsız yöntem aynı genişliği vermeli: kesitten çıkan
             # orta çizgi hesabı ile yüzeyden açılan konturun genişliği.
@@ -2462,11 +2489,31 @@ def dxf_acilim(r, k, yol, P=None):
     else:
         msp.add_lwpolyline([(0, 0), (boy, 0), (boy, gen), (0, gen), (0, 0)],
                            dxfattribs={"layer": "GORUNEN"})
+    # Büküm çizgileri ve etiketleri. Bükümler birbirine yakınsa (bu
+    # profilde 5 mm) etiketler üst üste biner; o yüzden her etiket
+    # bir öncekinin altına sığmıyorsa SAĞA KAYDIRILIR. Aynı hizada
+    # kalır, okunur ve çakışmaz.
+    yazi_h = 0.9 * h
+    kul = []                                   # ölçülmüş dolu kutular
+    etiket_sag = boy
     for i, b in enumerate(r["bukumler"], 1):
         for y in (b["acinimda_bas_mm"], b["acinimda_son_mm"]):
             msp.add_line((0, y), (boy, y), dxfattribs={"layer": "EKSEN"})
         orta = (b["acinimda_bas_mm"] + b["acinimda_son_mm"]) / 2.0
-        _yaz(msp, f"B{i}", boy + 0.6 * h, orta - 0.45 * h, 0.9 * h)
+        ey = orta - 0.45 * yazi_h
+        ex = boy + 0.6 * h
+        # Yazının yeri TAHMİN EDİLMEZ, ÖLÇÜLÜR: yaz, sınırını ölç,
+        # çakışıyorsa sil ve sağa kaydırıp yeniden yaz. Bükümler 5 mm
+        # arayken etiketler üst üste biniyordu.
+        for _ in range(14):
+            e = _yaz(msp, f"B{i}", ex, ey, yazi_h)
+            kt = _yazi_siniri(e)        # k parametredir, gölgelenmemeli
+            if kt is None or not _cakisiyor(kt, kul, 0.15 * yazi_h):
+                kul.append(kt or (ex, ey, ex + yazi_h, ey + yazi_h))
+                etiket_sag = max(etiket_sag, kt[2] if kt else ex + yazi_h)
+                break
+            msp.delete_entity(e)
+            ex = kt[2] + 0.5 * yazi_h
     d = 4.0 * h
     msp.add_linear_dim(base=(0, -d), p1=(0, 0), p2=(boy, 0),
                        dimstyle=OLCU_STILI, dxfattribs={"layer": "OLCU"}).render()
@@ -2474,7 +2521,10 @@ def dxf_acilim(r, k, yol, P=None):
                        dimstyle=OLCU_STILI, dxfattribs={"layer": "OLCU"}).render()
     # Büküm çizelgesi. Konumlar burada yazılı olduğu için ölçü çizgisi
     # yalnız az bükümlü parçalara konur; çok bükümlüde üst üste binerdi.
-    x = boy + 4.0 * h
+    # Tablo, büküm etiketlerinin bittiği yerden sonra başlar. Etiketler
+    # bükümler sıkışıksa sağa kayıyor; sabit bir yerden başlatılırsa
+    # tablonun üstüne biniyorlardı.
+    x = max(boy + 4.0 * h, etiket_sag + 2.0 * h)
     y = gen
     _yaz(msp, "BUKUM  ACI      IC R   PAY      ALT KENARDAN", x, y, h)
     y -= 2.0 * h
@@ -2505,7 +2555,11 @@ def dxf_acilim(r, k, yol, P=None):
         sat.append(("BLANK OLCUSUDUR: dis kontur kesikleri ve delikler "
                     "bu resimde YOKTUR.", 1.1 * h))
         if r.get("kontur_notu"):
-            sat.append((r["kontur_notu"][:110], 1.0 * h))
+            # Sebebi KESME, SARDIR. Eskiden 110 karakterde kesiliyordu ve
+            # tam da işe yarayan yerde - "Parça alanları: 2461" diye -
+            # bitiyordu; okuyan neyin yanlış olduğunu anlayamıyordu.
+            for p in textwrap.wrap(r["kontur_notu"], 108):
+                sat.append((p, 1.0 * h))
     y = gen + 4.0 * h + len(sat) * 2.2 * h
     for metin, yaz_h in sat:
         _yaz(msp, metin, 0.0, y, yaz_h)
