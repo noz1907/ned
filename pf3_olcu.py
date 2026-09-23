@@ -25,7 +25,7 @@ normali kalınlık ekseni, o yüzeydeki en uzun kenar yönü boy eksenidir. Böy
 montaj içinde eğik duran bir sac da kendi boy/en/kalınlık ölçüsüyle çıkar.
 """
 from __future__ import annotations
-import argparse, csv, json, math, os, re, sys, time
+import argparse, bisect, csv, json, math, os, re, sys, time
 from collections import Counter, defaultdict
 
 import ezdxf
@@ -43,7 +43,11 @@ from OCP.GeomAbs import (GeomAbs_Plane, GeomAbs_Cylinder, GeomAbs_Cone,
                          GeomAbs_Ellipse)
 from OCP.TopAbs import TopAbs_FACE, TopAbs_EDGE, TopAbs_VERTEX, TopAbs_REVERSED
 from OCP.TopExp import TopExp, TopExp_Explorer
-from OCP.TopTools import TopTools_IndexedMapOfShape, TopTools_ListOfShape
+from OCP.TopTools import (TopTools_IndexedMapOfShape,
+                          TopTools_ListOfShape,
+                          TopTools_HSequenceOfShape,
+                          TopTools_IndexedDataMapOfShapeListOfShape)
+from OCP.ShapeAnalysis import ShapeAnalysis_FreeBounds
 from OCP.TopoDS import TopoDS, TopoDS_Compound
 from OCP.BRep import BRep_Builder, BRep_Tool
 from OCP.Bnd import Bnd_Box
@@ -1438,6 +1442,56 @@ def sac_acilim(sh, o=None, k_faktor=K_FAKTOR, istasyon=11,
     return sonuc
 
 
+def _nokta_icinde(p, halka):
+    """Nokta çokgenin içinde mi (ışın yöntemi)."""
+    x, y = p
+    ic = False
+    n = len(halka)
+    for i in range(n):
+        x1, y1 = halka[i]
+        x2, y2 = halka[(i + 1) % n]
+        if (y1 > y) != (y2 > y):
+            kes = x1 + (y - y1) * (x2 - x1) / (y2 - y1)
+            if kes > x:
+                ic = not ic
+    return ic
+
+
+def _dis_halkalar(sekil, sapma=0.02):
+    """Birleştirilmiş bölgenin sınır halkalarını çıkarır.
+
+    OpenCascade eş düzlemli yüzleri her zaman tek yüze kaynatmıyor;
+    kaynatmadığında yüz yüz sınır almak, aradaki dikişleri de kesim
+    çizgisi gibi gösterir. Bunun yerine TOPOLOJİ kullanılır: iki yüzün
+    paylaştığı kenar iç dikiştir, yalnız TEK yüze ait kenarlar bölgenin
+    gerçek sınırıdır. Kalan kenarlar halkalara dizilir."""
+    h = TopTools_IndexedDataMapOfShapeListOfShape()
+    TopExp.MapShapesAndAncestors_s(sekil, TopAbs_EDGE, TopAbs_FACE, h)
+    kenar = TopTools_HSequenceOfShape()
+    for i in range(1, h.Extent() + 1):
+        if h.FindFromIndex(i).Extent() == 1:
+            kenar.Append(h.FindKey(i))
+    if kenar.Length() == 0:
+        return [], []
+    teller = TopTools_HSequenceOfShape()
+    ShapeAnalysis_FreeBounds.ConnectEdgesToWires_s(kenar, 1e-5, False, teller)
+    halka = []
+    for i in range(1, teller.Length() + 1):
+        p = _tel_dizisi(TopoDS.Wire_s(teller.Value(i)), sapma)
+        n = [(q.X(), q.Y()) for q in p]
+        if len(n) > 2:
+            halka.append(n)
+    if not halka:
+        return [], []
+    # En büyük halka dış konturdur; içinde kalanlar deliktir. İçinde
+    # kalmayan ikinci bir halka varsa açınım parçalı demektir.
+    halka.sort(key=lambda w: abs(_cokgen_alani(w)), reverse=True)
+    dis, ic = [halka[0]], []
+    for w in halka[1:]:
+        (ic if _nokta_icinde(w[0], halka[0]) else dis).append(w)
+    return dis, ic
+
+
 def acilim_kesim(sh, t, k_faktor, hacim=None, en_cok_sapma=0.03):
     """Sacı yüzeylerinden açar ve KESİM KONTURUNU döndürür.
 
@@ -1471,23 +1525,20 @@ def acilim_kesim(sh, t, k_faktor, hacim=None, en_cok_sapma=0.03):
                 f"{alan * t + duzelt:.0f} mm3, parçanın hacmi {hacim:.0f} "
                 f"mm3 (%{100 * sapma:+.1f}). Açma haritası bu parçada "
                 f"doğru kurulamamış; kontur verilmiyor.")
-    # Telleri çıkar, düzlemin sol alt köşesini başlangıç yap
-    dis, ic = [], []
-    m = TopTools_IndexedMapOfShape()
-    TopExp.MapShapes_s(taban, TopAbs_FACE, m)
-    for i in range(1, m.Extent() + 1):
-        f = TopoDS.Face_s(m.FindKey(i))
-        d0, i0 = _yuz_telleri(f, sapma=0.02)
-        dis.append([(p.X(), p.Y()) for p in d0])
-        ic += [[(p.X(), p.Y()) for p in w] for w in i0]
+    # Sınırı topolojiden çıkar: paylaşılan kenarlar iç dikiştir.
+    dis, ic = _dis_halkalar(taban)
+    if not dis:
+        raise AcilimYok("Açınımın sınırı çıkarılamadı.")
     # Açınım TEK PARÇA olmak zorundadır. Parçalı çıkıyorsa duvarlar
     # düzlemde uç uca oturmamış demektir; o zaman aradaki dikişler
     # kesim çizgisi gibi görünür ve lazerde parça ikiye ayrılır.
     if len(dis) != 1:
+        ayri = sorted((abs(_cokgen_alani(w)) for w in dis), reverse=True)
         raise AcilimYok(
             f"Açınım düzlemde {len(dis)} ayrı parça çıktı; duvarlar uç uca "
-            f"oturmadı. Bükümlerin eksenleri birbirine tam paralel "
-            f"olmadığında oluyor. Kesim konturu verilmiyor.")
+            f"oturmadı. Parça alanları: "
+            + ", ".join(f"{a:.0f} mm2" for a in ayri[:4])
+            + ". Kesim konturu verilmiyor.")
     xs = [p[0] for w in dis for p in w]; ys = [p[1] for w in dis for p in w]
     dx, dy = -min(xs), -min(ys)
     kay = lambda w: [(x + dx, y + dy) for x, y in w]
@@ -2084,6 +2135,24 @@ def _acma_haritasi(duvarlar, bukumler, t, k_faktor):
     return harita, b_harita
 
 
+def _dikise_yapistir(tel, dikis, pay=0.002):
+    """Dikişe çok yakın düşen noktaları tam dikiş değerine oturtur.
+
+    pay 2 mikron: gerçek bir kenarı kaydırmayacak kadar küçük, kayan
+    nokta gürültüsünü (nanometreler) kapatacak kadar büyük."""
+    if not dikis:
+        return tel
+    out = []
+    for x, y in tel:
+        i = bisect.bisect_left(dikis, y)
+        for j in (i - 1, i):
+            if 0 <= j < len(dikis) and abs(dikis[j] - y) <= pay:
+                y = dikis[j]
+                break
+        out.append((x, y))
+    return out
+
+
 def sac_ac(sh, t, k_faktor, en_az_alan=1.0):
     """Sacı yüzeylerinden açar. (düzlem telleri, delik telleri, büküm
     bilgisi, kullanılan duvar sayısı) döndürür."""
@@ -2122,6 +2191,15 @@ def sac_ac(sh, t, k_faktor, en_az_alan=1.0):
             if len(dis) > 2:
                 parca.append([hb(p) for p in dis])
             delik += [[hb(p) for p in q] for q in ic if len(q) > 2]
+    # Dikişleri tam oturt. Duvar düzlemdeki yerini DOĞRUSAL, büküm ise
+    # AÇISAL formülle buluyor; ikisi teğet çizgisinde aynı sayıyı vermek
+    # zorunda ama kayan noktada nanometrelerce ayrılıyorlar. O kadarcık
+    # ayrılık bile boole işleminde parçaların kaynamamasına yetiyor.
+    # Teğet çizgilerinin yeri zaten tam biliniyor: oraya yapıştır.
+    dikis = sorted({round(v, 9) for b in b_harita.values()
+                    for v in (b["s"], b["s_son"])})
+    parca = [_dikise_yapistir(w, dikis) for w in parca]
+    delik = [_dikise_yapistir(w, dikis) for w in delik]
     return parca, delik, harita, b_harita, duvarlar, bukumler
 
 
