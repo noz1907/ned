@@ -65,6 +65,13 @@ BOLGE = {"A4": (6, 4), "A3": (8, 4), "A2": (12, 6),
          "A1": (16, 8), "A0": (24, 12)}
 BOLGE_HARF = "ABCDEFGHIJKL"
 
+GORUNUS_KATMAN = "PI3D_GORUNUS_ALANI"   # motorun bıraktığı görünüş yerleri
+GORUNUS_APPID = "PI3D"
+BASLIK_AD = "BASLIK"
+IC_PAY = 12.0            # çerçevenin ve antet kutusunun resme uzaklığı
+ARA_EN_AZ = 12.0         # görünüşler arasında kâğıtta en az bu kadar mm
+ARA_EN_COK = 45.0        # ve en çok bu kadar; yoksa köşelere dağılırlar
+
 HARF_ORAN = 0.62         # yazı genişliği ~ harf sayısı x yükseklik x bu
 EN_AZ_YAZI_MM = 1.8      # kâğıtta bundan küçük yazı okunmaz (ISO 3098: 2,5)
 
@@ -165,7 +172,9 @@ def cizim_kutusu(yol):
     açar ve yazıyı yazı tipinden ölçer, o yüzden önce o denenir."""
     d = ezdxf.readfile(yol)
     try:
-        k = ezdxf.bbox.extents(d.modelspace(), fast=False)
+        k = ezdxf.bbox.extents(
+            [e for e in d.modelspace() if e.dxf.layer != GORUNUS_KATMAN],
+            fast=False)
         if k.has_data:
             return (float(k.extmin.x), float(k.extmin.y),
                     float(k.extmax.x), float(k.extmax.y))
@@ -175,6 +184,146 @@ def cizim_kutusu(yol):
     if not k:
         raise PaftaYok(f"{os.path.basename(yol)}: çizimde varlık yok.")
     return k
+
+
+def gorunus_alanlari(d):
+    """Motorun işaretlediği görünüş yerleri: {ad: (x0, y0, x1, y1)}.
+
+    Yoksa boş sözlük döner - eski resimler ve elle çizilmiş DXF'ler
+    tek pencereyle yerleşir."""
+    a = {}
+    for e in d.modelspace().query(f'LWPOLYLINE[layer=="{GORUNUS_KATMAN}"]'):
+        try:
+            x = e.get_xdata(GORUNUS_APPID)
+        except Exception:
+            continue
+        ad = next((v for k, v in x if k == 1000), None)
+        if not ad:
+            continue
+        p = [(q[0], q[1]) for q in e.get_points()]
+        a[ad] = (min(q[0] for q in p), min(q[1] for q in p),
+                 max(q[0] for q in p), max(q[1] for q in p))
+    return a
+
+
+def _kumele(araliklar, pay=1e-6):
+    """Üst üste binen aralıkları gruplar, küçükten büyüğe sıralı döner.
+
+    Görünüşler izdüşüm ızgarasındadır: aynı sütundakiler x'te örtüşür,
+    aynı satırdakiler y'de. Örtüşmeye bakmak merkezleri yuvarlamaktan
+    sağlamdır - görünüş boyları birbirinden çok farklı olabilir."""
+    if not araliklar:
+        return []
+    sirali = sorted(araliklar, key=lambda t: t[0])
+    grup = [[sirali[0][0], sirali[0][1], [sirali[0][2]]]]
+    for a, b, ad in sirali[1:]:
+        if a < grup[-1][1] - pay:
+            grup[-1][1] = max(grup[-1][1], b)
+            grup[-1][2].append(ad)
+        else:
+            grup.append([a, b, [ad]])
+    return grup
+
+
+def _kutu_uzakligi(k, b):
+    """Bir varlık kutusunun bir görünüş kutusuna uzaklığı (içindeyse 0)."""
+    dx = max(b[0] - k[2], k[0] - b[2], 0.0)
+    dy = max(b[1] - k[3], k[1] - b[3], 0.0)
+    return dx * dx + dy * dy
+
+
+def _gorunus_kutulari(d, alanlar):
+    """Her görünüşün GERÇEK sınırı: ona ait bütün çizgi, ölçü ve yazı.
+
+    Motorun bıraktığı işaret yalnız görünüşün kendisini gösterir; ölçü
+    çizgileri, etiketler, çap yazıları onun dışına taşar. Her varlık en
+    yakın görünüşe verilir, sınır o varlıklardan çıkarılır. Hücrelerin
+    GERÇEKTEN dar olması şart: görünüşler arasındaki büyük model
+    boşlukları böyle dışarıda kalır ve kâğıtta yerlerine eşit aralıklar
+    konur. Aynı kâğıtta daha büyük ölçek buradan çıkar.
+
+    Hiçbir varlık dışarıda kalmaz: her biri bir görünüşe yazılır."""
+    gor = {k: v for k, v in alanlar.items() if k != BASLIK_AD}
+    if not gor:
+        return {}
+    bas = alanlar.get(BASLIK_AD)
+    kutu = {k: list(v) for k, v in gor.items()}
+    try:
+        varlik = [e for e in d.modelspace() if e.dxf.layer != GORUNUS_KATMAN]
+        kutular = ezdxf.bbox.multi_flat(varlik)
+    except Exception:
+        return {k: tuple(v) for k, v in kutu.items()}
+    for k in kutular:
+        if not k.has_data:
+            continue
+        b = (k.extmin.x, k.extmin.y, k.extmax.x, k.extmax.y)
+        if bas and (b[0] >= bas[0] - 0.01 and b[1] >= bas[1] - 0.01
+                    and b[2] <= bas[2] + 0.01 and b[3] <= bas[3] + 0.01):
+            continue                    # başlık bloğunun parçası
+        ad = min(gor, key=lambda a: _kutu_uzakligi(b, gor[a]))
+        q = kutu[ad]
+        q[0] = min(q[0], b[0]); q[1] = min(q[1], b[1])
+        q[2] = max(q[2], b[2]); q[3] = max(q[3], b[3])
+    return {k: tuple(v) for k, v in kutu.items()}
+
+
+def _izgara(d, alanlar, kutu):
+    """Görünüşleri satır/sütun ızgarasına oturtur.
+
+    İzdüşüm ızgarası BOZULMAZ: aynı satırdaki görünüşler kâğıtta da aynı
+    hizada, aynı sütundakiler aynı düşeyde kalır. Bunu sağlamak için bir
+    satırdaki bütün hücreler o satırın ORTAK y aralığını, bir sütundaki
+    hücreler ortak x aralığını kullanır; yoksa görünüşler birbirinden
+    kayar ve resim teknik resim olmaktan çıkar.
+
+    Döner: (sutun_gen, satir_boy, hucre) ya da None."""
+    dar = _gorunus_kutulari(d, alanlar)
+    if len(dar) < 2:
+        return None
+    sut = _kumele([(v[0], v[2], k) for k, v in dar.items()])
+    sat = _kumele([(v[1], v[3], k) for k, v in dar.items()])
+    if len(sut) < 2 and len(sat) < 2:
+        return None                     # tek göz: dağıtılacak bir şey yok
+    for g in (sut, sat):                # gruplar üst üste binmemeli
+        for a, b in zip(g, g[1:]):
+            if b[0] < a[1] - 1e-6:
+                return None
+    yerm = {}
+    for j, g in enumerate(sut):
+        for ad in g[2]:
+            yerm.setdefault(ad, [0, 0])[0] = j
+    for i, g in enumerate(sat):
+        for ad in g[2]:
+            yerm.setdefault(ad, [0, 0])[1] = i
+    hucre = {ad: (j, i, (sut[j][0], sat[i][0], sut[j][1], sat[i][1]))
+             for ad, (j, i) in yerm.items()}
+    return ([g[1] - g[0] for g in sut], [g[1] - g[0] for g in sat], hucre)
+
+
+def _acikta_kalan(d, hucreler, baslik):
+    """Hiçbir hücreye girmeyen çizgi var mı?
+
+    Hücreler çizimi kaplamalı. Kapamıyorsa - ızgarada boş göz varsa ve
+    oraya bir şey çizilmişse - o çizgi paftada görünmez. Böyle bir şey
+    varsa çok pencereli yerleşimden vazgeçilir; eksik resim vermektense
+    tek pencere daha iyidir."""
+    import ezdxf.bbox
+    kutular = list(hucreler) + ([baslik] if baslik else [])
+    try:
+        for k in ezdxf.bbox.multi_flat(
+                [e for e in d.modelspace()
+                 if e.dxf.layer != GORUNUS_KATMAN]):
+            if not k.has_data:
+                continue
+            x0, y0 = k.extmin.x, k.extmin.y
+            x1, y1 = k.extmax.x, k.extmax.y
+            if not any(x0 >= c[0] - 0.01 and y0 >= c[1] - 0.01
+                       and x1 <= c[2] + 0.01 and y1 <= c[3] + 0.01
+                       for c in kutular):
+                return True
+    except Exception:
+        return True
+    return False
 
 
 def en_kucuk_yazi(yol):
@@ -228,11 +377,16 @@ def cizim_alanlari(kagit=VARSAYILAN_KAGIT):
     Antet kutusu sağ alt köşeyi yediği için kalan boşluk L biçimindedir.
     Bir resim dikdörtgendir; L'ye iki türlü sığar: kutunun ÜSTÜNE tam
     genişlikte, ya da SOLUNA tam yükseklikte. Hangisi daha büyük ölçek
-    veriyorsa o kullanılır."""
+    veriyorsa o kullanılır.
+
+    Alanlar çerçeveye ve antet kutusuna DAYANMAZ: her yönde IC_PAY
+    kadar (12 mm) boşluk bırakılır. Çerçeveye yapışmış bir resim hem
+    kötü görünür hem de baskıda kenara taşma riski taşır."""
     fx0, fy0, fx1, fy1 = cerceve(kagit)
     ax0, _, _, ay1 = antet_kutusu(kagit)
-    return {"ust": (fx0, ay1, fx1, fy1),
-            "sol": (fx0, fy0, ax0, fy1)}
+    p = IC_PAY
+    return {"ust": (fx0 + p, ay1 + p, fx1 - p, fy1 - p),
+            "sol": (fx0 + p, fy0 + p, ax0 - p, fy1 - p)}
 
 
 def sigan_olcek(gx, gy, alan_g, alan_y, buyutme=False):
@@ -278,6 +432,87 @@ def kagit_sec(gx, gy, adaylar=KAGIT_SIRA, en_az_olcek=1.0):
 
 
 # --------------------------------------------------------------- pafta
+def cok_pencere_plani(d, kutu, alan_g, alan_y):
+    """Görünüşleri kâğıda ORTADAN DIŞA, eşit aralıklarla dağıtan plan.
+
+    Mantık: görünüşler resimde zaten izdüşüm ızgarasındadır (ÖN'ün solu
+    SAĞ, sağı SOL, altı ÜST). O ızgara bozulmaz - bozulursa resim teknik
+    resim olmaktan çıkar. Değişen yalnız ARALIKLAR: resimdeki büyük
+    model boşlukları atılır, yerine kâğıtta eşit aralıklar konur ve
+    öbek kâğıdın ortasına oturur.
+
+    Dar ve uzun bir parçada da kural aynıdır; yalnız ölçek düşer ve
+    aralık daralır. Dayanak noktası hiçbir zaman kenar değildir.
+
+    Döner: {"olcek", "sutun", "satir", "hucre", "baslik", ...} ya da
+    None (ızgara kurulamadıysa; o zaman tek pencere kullanılır)."""
+    alanlar = gorunus_alanlari(d)
+    iz = _izgara(d, alanlar, kutu)
+    if not iz:
+        return None
+    sutun, satir, hucre = iz
+    baslik = alanlar.get(BASLIK_AD)
+    bg = (baslik[2] - baslik[0]) if baslik else 0.0
+    bb = (baslik[3] - baslik[1]) if baslik else 0.0
+    if _acikta_kalan(d, [h[2] for h in hucre.values()], baslik):
+        return None
+
+    ts, tr = sum(sutun), sum(satir)
+    nj, ni = len(sutun), len(satir)
+    olcek = None
+    for k in KUCULTME:
+        o = 1.0 / k
+        gen = max(ts * o + (nj - 1) * ARA_EN_AZ, bg * o)
+        boy = tr * o + (ni - 1) * ARA_EN_AZ + (bb * o + ARA_EN_AZ if baslik else 0)
+        if gen <= alan_g + 1e-6 and boy <= alan_y + 1e-6:
+            olcek = o
+            break
+    if not olcek:
+        return None
+
+    def _kis(v, alt, ust):
+        return alt if v < alt else (ust if v > ust else v)
+
+    ax = _kis((alan_g - ts * olcek) / (nj + 1), ARA_EN_AZ, ARA_EN_COK) if nj > 1 else 0.0
+    kalan_y = alan_y - (bb * olcek + ARA_EN_AZ if baslik else 0)
+    ay = _kis((kalan_y - tr * olcek) / (ni + 1), ARA_EN_AZ, ARA_EN_COK) if ni > 1 else 0.0
+    obek_g = ts * olcek + (nj - 1) * ax
+    obek_y = tr * olcek + (ni - 1) * ay
+    return {"olcek": olcek, "sutun": sutun, "satir": satir, "hucre": hucre,
+            "baslik": baslik, "ara_x": ax, "ara_y": ay,
+            "obek": (max(obek_g, bg * olcek),
+                     obek_y + (bb * olcek + ARA_EN_AZ if baslik else 0)),
+            "gorunus_obek": (obek_g, obek_y), "baslik_olcu": (bg, bb)}
+
+
+def _cok_pencere_ciz(pafta, plan, sol, alt):
+    """Planı kâğıda koyar. (sol, alt) öbeğin sol alt köşesi."""
+    o = plan["olcek"]
+    og, oy = plan["gorunus_obek"]
+    tg, ty = plan["obek"]
+    bg, bb = plan["baslik_olcu"]
+    say = 0
+    if plan["baslik"]:
+        x0, y0, x1, y1 = plan["baslik"]
+        pafta.add_viewport(
+            center=(sol + bg * o / 2.0, alt + ty - bb * o / 2.0),
+            size=(bg * o, bb * o),
+            view_center_point=((x0 + x1) / 2.0, (y0 + y1) / 2.0),
+            view_height=(y1 - y0))
+        say += 1
+    gsol = sol + (tg - og) / 2.0          # görünüş öbeği kendi içinde ortalı
+    for _ad, (j, i, c) in plan["hucre"].items():
+        gx = gsol + sum(plan["sutun"][:j]) * o + j * plan["ara_x"]
+        gy = alt + sum(plan["satir"][:i]) * o + i * plan["ara_y"]
+        w, hh = plan["sutun"][j] * o, plan["satir"][i] * o
+        pafta.add_viewport(
+            center=(gx + w / 2.0, gy + hh / 2.0), size=(w, hh),
+            view_center_point=((c[0] + c[2]) / 2.0, (c[1] + c[3]) / 2.0),
+            view_height=(c[3] - c[1]))
+        say += 1
+    return say
+
+
 def _pafta_cerceve_ciz(pafta, kagit, bilgi=""):
     """Standart pafta çerçevesini çizer.
 
@@ -354,13 +589,16 @@ def _pafta_cerceve_ciz(pafta, kagit, bilgi=""):
 
 
 def pafta_kur(kaynak_dxf, cikti_dxf, kagit=VARSAYILAN_KAGIT, olcek=None,
-              buyutme=False, pafta_adi="PAFTA", bilgi=True):
+              buyutme=False, pafta_adi="PAFTA", bilgi=True, cok=True):
     """1:1 DXF'in KOPYASINA standart bir pafta ekler.
 
     kaynak_dxf : 1:1 çizim. AÇILIR, OKUNUR, DEĞİŞTİRİLMEZ.
     cikti_dxf  : yeni dosya. Kaynak dosyaya dokunulmaz.
     kagit      : "A4".."A0", her zaman yatay. Varsayılan A3.
     olcek      : 1.0 / 0.1 gibi. None ise sığan en büyük standart ölçek.
+    cok        : görünüşleri ayrı pencerelere alıp kâğıda ortadan dışa
+                 eşit aralıklarla dağıt. Resimde görünüş işareti yoksa
+                 ya da bölünemiyorsa kendiliğinden tek pencereye düşer.
 
     Döner: {"olcek":, "olcek_metni":, "kagit":, "yer":, "olcu": (gx,gy),
             "alan": (g,y), "dosya":}
@@ -376,8 +614,21 @@ def pafta_kur(kaynak_dxf, cikti_dxf, kagit=VARSAYILAN_KAGIT, olcek=None,
     x0, y0, x1, y1 = cizim_kutusu(kaynak_dxf)
     gx, gy = max(x1 - x0, 1e-9), max(y1 - y0, 1e-9)
 
+    # --- görünüşleri kâğıda eşit dağıtan plan (varsa)
+    plan = None
+    if cok and olcek is None:
+        for ad, a in cizim_alanlari(kagit).items():
+            p = cok_pencere_plani(d, (x0, y0, x1, y1),
+                                  a[2] - a[0], a[3] - a[1])
+            if p and (plan is None or p["olcek"] > plan["olcek"]):
+                p["yer"], p["alan"] = ad, a
+                plan = p
+
     # --- ölçek ve hangi boşluğa oturacağı
-    if olcek is None:
+    if plan:
+        olcek = plan["olcek"]
+        yer = {"olcek": olcek, "yer": plan["yer"], "alan": plan["alan"]}
+    elif olcek is None:
         yer = yerlesim(gx, gy, kagit, buyutme)
         if not yer:
             raise PaftaYok(
@@ -404,19 +655,55 @@ def pafta_kur(kaynak_dxf, cikti_dxf, kagit=VARSAYILAN_KAGIT, olcek=None,
                 "Ölçeği küçültün ya da kâğıdı büyütün.")
     alan = yer["alan"]
     ag, ay = alan[2] - alan[0], alan[3] - alan[1]
-    # Pencere tam çizim kadar olsun; ölçek küçükse çizim alanının
-    # ortasında değil, KÂĞIDIN ortasında dursun - antet kutusuna
-    # girmiyorsa. Yoksa kısa parçalar kâğıdın bir kenarına sıkışıyor.
-    pg, py = max(gx * olcek, 1e-6), max(gy * olcek, 1e-6)
-    mx, my = (alan[0] + alan[2]) / 2.0, (alan[1] + alan[3]) / 2.0
+    # Pencere tam çizim kadar olsun ve MÜMKÜN OLDUĞUNCA KÂĞIDIN
+    # ORTASINDA dursun.
+    #
+    # Önce tam kâğıt ortası denenir; antet kutusuna değmiyorsa iş
+    # bitmiştir. Değiyorsa, çizimin sığdığı HER boşluk için kâğıt
+    # ortasına en yakın nokta bulunur ve bunların en yakını seçilir -
+    # yalnız ölçeği veren boşluğa bakmak yetmez, ölçek aynıysa öbür
+    # boşluk daha ortada olabilir. Böylece kısa parçalar kâğıdın bir
+    # kenarına sıkışmaz, uzun olanlar da anteti ezmez.
+    if plan:
+        pg, py = plan["obek"]
+    else:
+        pg, py = max(gx * olcek, 1e-6), max(gy * olcek, 1e-6)
+    pg, py = max(pg, 1e-6), max(py, 1e-6)
     fx0, fy0, fx1, fy1 = cerceve(kagit)
     ox, oy = (fx0 + fx1) / 2.0, (fy0 + fy1) / 2.0
-    ax0, ay0, ax1, ay1 = antet_kutusu(kagit)
-    if (ox - pg / 2 >= fx0 - 1e-6 and ox + pg / 2 <= fx1 + 1e-6
-            and oy - py / 2 >= fy0 - 1e-6 and oy + py / 2 <= fy1 + 1e-6
-            and not (ox - pg / 2 < ax1 and ox + pg / 2 > ax0
-                     and oy - py / 2 < ay1 and oy + py / 2 > ay0)):
+    kutu = antet_kutusu(kagit)
+
+    def _uygun(cx, cy):
+        """Bu merkezde duran çizim çerçevenin içinde, kenarlardan ve
+        antet kutusundan IC_PAY kadar uzakta mı?"""
+        r = (cx - pg / 2, cy - py / 2, cx + pg / 2, cy + py / 2)
+        return (r[0] >= fx0 + IC_PAY - 1e-6 and r[1] >= fy0 + IC_PAY - 1e-6
+                and r[2] <= fx1 - IC_PAY + 1e-6 and r[3] <= fy1 - IC_PAY + 1e-6
+                and not (r[0] < kutu[2] + IC_PAY - 1e-6
+                         and r[2] > kutu[0] - IC_PAY + 1e-6
+                         and r[1] < kutu[3] + IC_PAY - 1e-6
+                         and r[3] > kutu[1] - IC_PAY + 1e-6))
+
+    def _kis(v, alt, ust):
+        return alt if v < alt else (ust if v > ust else v)
+
+    if _uygun(ox, oy):
         mx, my = ox, oy
+    else:
+        aday = []
+        for a in cizim_alanlari(kagit).values():
+            if pg > a[2] - a[0] + 1e-6 or py > a[3] - a[1] + 1e-6:
+                continue
+            cx = _kis(ox, a[0] + pg / 2, a[2] - pg / 2)
+            cy = _kis(oy, a[1] + py / 2, a[3] - py / 2)
+            if _uygun(cx, cy):
+                aday.append(((cx - ox) ** 2 + (cy - oy) ** 2, cx, cy))
+        if not aday:                     # olmamalı; olduysa pafta yazılmaz
+            raise PaftaYok(
+                f"{os.path.basename(kaynak_dxf)}: {olcek_metni(olcek)} "
+                f"ölçekteki çizim {kagit} paftada antet alanını ezmeden "
+                "yerleştirilemedi.")
+        _, mx, my = min(aday)
 
     # --- paftayı kur
     try:
@@ -434,12 +721,15 @@ def pafta_kur(kaynak_dxf, cikti_dxf, kagit=VARSAYILAN_KAGIT, olcek=None,
                 + f"   {os.path.basename(kaynak_dxf)}")
     _pafta_cerceve_ciz(pafta, kagit, not_)
 
-    # --- pencere: 1:1 çizime buradan bakılır
-    pafta.add_viewport(
-        center=(mx, my), size=(pg, py),
-        view_center_point=((x0 + x1) / 2.0, (y0 + y1) / 2.0),
-        view_height=gy,
-    )
+    # --- pencere(ler): 1:1 çizime buradan bakılır
+    if plan:
+        pencere = _cok_pencere_ciz(pafta, plan, mx - pg / 2.0, my - py / 2.0)
+    else:
+        pafta.add_viewport(
+            center=(mx, my), size=(pg, py),
+            view_center_point=((x0 + x1) / 2.0, (y0 + y1) / 2.0),
+            view_height=gy)
+        pencere = 1
 
     # --- model uzayı bozulmadı mı? Bu kontrol pazarlık konusu değil.
     sonra = len(list(msp))
@@ -461,7 +751,9 @@ def pafta_kur(kaynak_dxf, cikti_dxf, kagit=VARSAYILAN_KAGIT, olcek=None,
     return {"olcek": olcek, "olcek_metni": olcek_metni(olcek), "kagit": kagit,
             "yer": yer["yer"], "olcu": (gx, gy), "alan": (ag, ay),
             "dosya": cikti_dxf, "yazi_mm": round(yz, 2),
-            "yazi_kucuk": 0 < yz < EN_AZ_YAZI_MM}
+            "yazi_kucuk": 0 < yz < EN_AZ_YAZI_MM,
+            "pencere": pencere, "dagitildi": bool(plan),
+            "obek": (round(pg, 1), round(py, 1))}
 
 
 def _en_buyuk_alan_metni(kagit):

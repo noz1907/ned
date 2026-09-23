@@ -9,6 +9,8 @@
      1860 ölçülmelidir - ölçek pencerenin işidir, rakamın değil.)
   2. Sağ alt köşedeki 150x100 mm antet alanına ASLA çizim girmez.
      (Pencerenin dikdörtgeni ile antet kutusu kesişmemeli.)
+  3. Çizim MÜMKÜN OLDUĞUNCA kâğıdın ortasındadır: 1 mm daha ortaya
+     kaydırmak ya çerçeveyi aşar ya anteti ezer.
 
 Kalanı: kenar payı, ölçek merdiveni, kâğıdın her zaman yatay olması,
 sığmayanın reddedilmesi ve baskı.
@@ -120,6 +122,42 @@ def kesisir(a, b, pay=1e-6):
             and a[1] < b[3] - pay and a[3] > b[1] + pay)
 
 
+def ortada_mi(p, kagit, adim=1.0):
+    """Çizim daha ortaya kaydırılabilir miydi?
+
+    Merkezi kâğıdın ortasına doğru 1 mm oynatıp bakarız: yeni yer
+    geçerliyse program çizimi gereksiz yere kenarda bırakmış demektir."""
+    kg, ky = P.KAGIT[kagit]
+    fx0, fy0, fx1, fy1 = P.cerceve(kagit)
+    ox, oy = (fx0 + fx1) / 2.0, (fy0 + fy1) / 2.0
+    kutu = P.antet_kutusu(kagit)
+    g, y = p[2] - p[0], p[3] - p[1]
+    cx, cy = (p[0] + p[2]) / 2.0, (p[1] + p[3]) / 2.0
+
+    p = P.IC_PAY
+    genis = (kutu[0] - p, kutu[1] - p, kutu[2] + p, kutu[3] + p)
+
+    def uygun(ax, ay):
+        r = (ax - g / 2, ay - y / 2, ax + g / 2, ay + y / 2)
+        return (r[0] >= fx0 + p - 1e-6 and r[1] >= fy0 + p - 1e-6
+                and r[2] <= fx1 - p + 1e-6 and r[3] <= fy1 - p + 1e-6
+                and not kesisir(r, genis))
+
+    for eksen, sim, o in ((0, cx, ox), (1, cy, oy)):
+        if abs(sim - o) < 1e-6:
+            continue
+        d = adim if o > sim else -adim
+        if abs(o - sim) < adim:
+            d = o - sim
+        yeni = (cx + d, cy) if eksen == 0 else (cx, cy + d)
+        if uygun(*yeni):
+            return False, (f"{'x' if eksen == 0 else 'y'} ekseninde "
+                           f"{abs(d):.1f} mm daha ortaya alınabilirdi "
+                           f"(merkez {cx:.1f},{cy:.1f}; kâğıt ortası "
+                           f"{ox:.1f},{oy:.1f})")
+    return True, ""
+
+
 kl = tempfile.mkdtemp(prefix="pafta_denetim_")
 try:
     print("\n-- kâğıt her zaman yatay")
@@ -135,18 +173,19 @@ try:
     esit("antet eni", ak[2] - ak[0], 150.0)
     esit("antet boyu", ak[3] - ak[1], 100.0)
     a = P.cizim_alanlari("A3")
+    # Alanlar çerçeveye ve antete dayanmaz: her yönde IC_PAY boşluk kalır.
     esit("üstteki boşluk", (a["ust"][2] - a["ust"][0], a["ust"][3] - a["ust"][1]),
-         (390.0, 167.0))
+         (390.0 - 2 * P.IC_PAY, 167.0 - 2 * P.IC_PAY))
     esit("soldaki boşluk", (a["sol"][2] - a["sol"][0], a["sol"][3] - a["sol"][1]),
-         (240.0, 267.0))
+         (240.0 - 2 * P.IC_PAY, 267.0 - 2 * P.IC_PAY))
     for ad, r in a.items():
         dogru(f"{ad} boşluğu antete girmiyor", not kesisir(r, ak), str(r))
 
     print("\n-- ölçek merdiveni")
     esit("küçük parça 1:1", P.yerlesim(200, 150, "A3")["olcek"], 1.0)
-    esit("yüksek parça sola oturur", P.yerlesim(200, 260, "A3")["yer"], "sol")
+    esit("yüksek parça sola oturur", P.yerlesim(200, 240, "A3")["yer"], "sol")
     esit("uzun parça üste oturur", P.yerlesim(1860, 238, "A3")["yer"], "ust")
-    esit("1860x238 A3", P.yerlesim(1860, 238, "A3")["olcek"], 1 / 5)
+    esit("1860x238 A3", P.yerlesim(1860, 238, "A3")["olcek"], 1 / 10)
     esit("2480x233 A3", P.yerlesim(2480, 233, "A3")["olcek"], 1 / 10)
     esit("kendiliğinden büyütme yok", P.yerlesim(20, 15, "A3")["olcek"], 1.0)
     esit("ölçek metni 1:10", P.olcek_metni(0.1), "1:10")
@@ -189,13 +228,22 @@ try:
                   f"pencere {tuple(round(v) for v in p)} antet "
                   f"{P.antet_kutusu(kagit)} ile kesişiyor")
             kg, ky = P.KAGIT[kagit]
-            dogru(f"{ad}: kenardan 15 mm uzak",
-                  (p[0] >= P.KENAR - 1e-6 and p[1] >= P.KENAR - 1e-6
-                   and p[2] <= kg - P.KENAR + 1e-6
-                   and p[3] <= ky - P.KENAR + 1e-6),
+            en_az = P.KENAR + P.IC_PAY
+            dogru(f"{ad}: kenardan {en_az:.0f} mm uzak",
+                  (p[0] >= en_az - 1e-6 and p[1] >= en_az - 1e-6
+                   and p[2] <= kg - en_az + 1e-6
+                   and p[3] <= ky - en_az + 1e-6),
+                  f"pencere {tuple(round(v, 1) for v in p)}")
+            dogru(f"{ad}: antet alanından {P.IC_PAY:.0f} mm uzak",
+                  not kesisir(p, tuple(
+                      q + s for q, s in zip(P.antet_kutusu(kagit),
+                                            (-P.IC_PAY, -P.IC_PAY,
+                                             P.IC_PAY, P.IC_PAY)))),
                   f"pencere {tuple(round(v, 1) for v in p)}")
             esit(f"{ad}: pencere eni = çizim x ölçek",
                  round(p[2] - p[0], 3), round(r["olcu"][0] * r["olcek"], 3))
+            dogru(f"{ad}: olabildiğince ortada",
+                  *ortada_mi(p, kagit))
         d = ezdxf.readfile(cik)
         pf = d.layout("PAFTA")
         vp = [e for e in pf if e.dxftype() == "VIEWPORT" and e.dxf.id != 1][0]
@@ -230,6 +278,64 @@ try:
     k = P.cizim_kutusu(y2)
     dogru("yazı sınıra katıldı", k[2] > 300.0 + 50,
           f"sınır {k[2]:.0f}, geometri 300'de bitiyor")
+
+    print("\n-- görünüşler kâğıda eşit dağılıyor mu")
+    import pf3_olcu as M                                       # noqa: E402
+    yol = os.path.join(kl, "dort_gorunus.dxf")
+    d = ezdxf.new(setup=True)
+    d.header["$INSUNITS"] = 4
+    m = d.modelspace()
+    # ÖN (0,0) 300x40 | SAĞ solunda | SOL sağında | ÜST altında.
+    # Aralarında BÜYÜK model boşluğu var: paftanın bunları atıp yerine
+    # kâğıtta eşit aralık koyması gerekir.
+    kut = {"SAG": (-700, 0, -600, 40), "ON": (0, 0, 300, 40),
+           "SOL": (900, 0, 1000, 40), "UST": (0, -700, 300, -600)}
+    for ad, (a, b, c, e) in kut.items():
+        m.add_lwpolyline([(a, b), (c, b), (c, e), (a, e)], close=True)
+        M.gorunus_isareti(m, ad, (a, b, c, e))
+    m.add_text("BASLIK", height=10).set_placement((-700, 120))
+    M.gorunus_isareti(m, "BASLIK", (-700, 120, -400, 140))
+    d.saveas(yol)
+
+    cik = os.path.join(kl, "CIK", "dort.dxf")
+    r = P.pafta_kur(yol, cik, "A3")
+    dogru("dağıtıldı", r["dagitildi"], "tek pencerede kaldı")
+    esit("pencere sayısı", r["pencere"], 5)
+    dd = ezdxf.readfile(cik)
+    lay = dd.layout("PAFTA")
+    vp = [e for e in lay if e.dxftype() == "VIEWPORT" and e.dxf.id != 1]
+    esit("paftadaki pencere", len(vp), 5)
+    kutular = [(v.dxf.center.x - v.dxf.width / 2, v.dxf.center.y - v.dxf.height / 2,
+                v.dxf.center.x + v.dxf.width / 2, v.dxf.center.y + v.dxf.height / 2)
+               for v in vp]
+    fx0, fy0, fx1, fy1 = P.cerceve("A3")
+    ak = P.antet_kutusu("A3")
+    for i, b in enumerate(kutular):
+        dogru(f"pencere {i} çerçeve içinde",
+              (b[0] >= fx0 + P.IC_PAY - 1e-6 and b[1] >= fy0 + P.IC_PAY - 1e-6
+               and b[2] <= fx1 - P.IC_PAY + 1e-6
+               and b[3] <= fy1 - P.IC_PAY + 1e-6),
+              f"{tuple(round(v, 1) for v in b)}")
+        dogru(f"pencere {i} antetten uzak", not kesisir(b, ak),
+              f"{tuple(round(v, 1) for v in b)}")
+    for i in range(len(kutular)):
+        for j in range(i + 1, len(kutular)):
+            dogru(f"pencere {i}-{j} çakışmıyor",
+                  not kesisir(kutular[i], kutular[j]),
+                  "iki pencere üst üste: çizgi iki kere basılır")
+    # Ölçekler eşit olmalı: farklı ölçekli görünüş teknik resim değildir.
+    olcekler = {round(v.dxf.height / v.dxf.view_height, 6) for v in vp}
+    esit("bütün pencereler aynı ölçekte", len(olcekler), 1)
+    # İzdüşüm hizası: SAĞ-ÖN-SOL aynı satırda -> kâğıtta aynı y merkezi
+    satir = sorted(kutular, key=lambda b: -(b[1] + b[3]))
+    ust_satir = [b for b in kutular
+                 if abs((b[1] + b[3]) / 2 - (satir[1][1] + satir[1][3]) / 2) < 0.01]
+    dogru("aynı satırdaki görünüşler hizada", len(ust_satir) == 3,
+          f"{len(ust_satir)} görünüş hizada (3 bekleniyordu)")
+    # Model boşlukları atıldı mı: öbek, çizimin ham ölçüsünden küçük olmalı
+    dogru("model boşlukları atıldı",
+          r["obek"][0] < (r["olcu"][0] * r["olcek"]) - 1.0,
+          f"öbek {r['obek'][0]} mm, ham çizim {r['olcu'][0] * r['olcek']:.0f} mm")
 
     print("\n-- baskı")
     pdf = P.bas(os.path.join(kl, "CIK", "kucuk.dxf"),

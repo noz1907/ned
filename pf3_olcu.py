@@ -29,6 +29,7 @@ import argparse, bisect, csv, json, math, os, re, sys, time
 from collections import Counter, defaultdict
 
 import ezdxf
+import ezdxf.bbox
 
 from OCP.gp import gp_Pnt, gp_Dir, gp_Trsf, gp_Ax2, gp_Ax3, gp_Vec
 from OCP.BRepBuilderAPI import (BRepBuilderAPI_Transform,
@@ -547,6 +548,32 @@ KATMAN = {
     "CERCEVE": (5, CIZGI_KAL),
     "TARAMA":  (5, CIZGI_KAL),   # kesit taraması
 }
+
+
+GORUNUS_KATMAN = "PI3D_GORUNUS_ALANI"   # görünüş yerleri; çizim değildir
+GORUNUS_APPID = "PI3D"
+
+
+def gorunus_isareti(msp, ad, kutu_):
+    """Bir görünüşün resimde nerede durduğunu işaretler.
+
+    Bu bir çizgi değil, BİLGİDİR: paftaya yerleştirirken hangi
+    görünüşün nerede olduğunu bilmek gerekir ki her biri ayrı pencereye
+    alınıp kâğıda eşit aralıklarla dağıtılabilsin. Kendi katmanındadır,
+    baskıya girmez, sınır hesabına katılmaz; silmek isteyen katmanı
+    siler, resim bundan etkilenmez."""
+    d = msp.doc
+    if GORUNUS_KATMAN not in d.layers:
+        k = d.layers.add(GORUNUS_KATMAN, color=8)
+        k.dxf.plot = 0
+        k.off()
+    if GORUNUS_APPID not in d.appids:
+        d.appids.add(GORUNUS_APPID)
+    x0, y0, x1, y1 = kutu_
+    e = msp.add_lwpolyline([(x0, y0), (x1, y0), (x1, y1), (x0, y1)],
+                           close=True, dxfattribs={"layer": GORUNUS_KATMAN})
+    e.set_xdata(GORUNUS_APPID, [(1000, str(ad))])
+    return e
 
 
 def dxf_kur(doc=None):
@@ -2699,11 +2726,39 @@ def dxf_komponent(s, o, k, yol, P):
         ("olcek 1:1   birim: mm", 1.1 * h),
     ]
     tepe = y0 + len(satir) * sat_h
+    onceki = {e.dxf.handle for e in msp}
     _tablo(msp, satir, sol, tepe, h, sat_h)
+    # Görünüşlerin ve başlığın yerini işaretle: pafta bunlara bakıp her
+    # görünüşü ayrı pencereye alır ve kâğıda eşit dağıtır.
+    #
+    # Başlığın yeri TAHMİN EDİLMEZ, ÖLÇÜLÜR: yazının kapladığı yer yazı
+    # tipine bağlıdır, harf sayısından hesaplanan genişlik tutmaz.
+    # Ölçüm, görünüş işaretleri konmadan ÖNCE yapılır - yoksa kendi
+    # işaretlerimizi de ölçer ve başlık bütün resmi kaplar.
+    _baslik_isareti(msp, onceki, (sol, y0, sol + 40.0 * h, tepe))
+    for gad, kt in gkutu.items():
+        gorunus_isareti(msp, gad, kt)
+    if KESIT_AD in ust:
+        gorunus_isareti(msp, KESIT_AD,
+                        (ky0[0], ky0[1], ky0[0] + kg, ust[KESIT_AD]))
     # Çizimde tablo yok: delikler görünüşlerde "2x Ø9", kenar yuvarlamaları
     # "4x R3" olarak ölçülendirilir. Tam delik ve radüs listeleri rapor.md,
     # olculer.csv ve olculer.json dosyalarındadır.
     doc.saveas(yol)
+
+
+def _baslik_isareti(msp, onceki, kaba):
+    """Başlık bloğunun gerçek sınırını ölçüp işaretler."""
+    yeni = [e for e in msp if e.dxf.handle not in onceki
+            and e.dxf.layer != GORUNUS_KATMAN]
+    kutu_ = kaba
+    try:
+        k = ezdxf.bbox.extents(yeni, fast=False)
+        if k.has_data:
+            kutu_ = (k.extmin.x, k.extmin.y, k.extmax.x, k.extmax.y)
+    except Exception:
+        pass
+    return gorunus_isareti(msp, "BASLIK", kutu_)
 
 
 def dxf_montaj(katilar, yol, ad, P, bom=None):
