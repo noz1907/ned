@@ -1980,6 +1980,46 @@ def _agac_kur(duvarlar, bukumler, t, tol=None):
     return [b for b in bukumler if len(b["duvar"]) == 2]
 
 
+def _bagsiz_duvar_raporu(duvarlar, bukumler, disarda, t, en_cok=6):
+    """Bağlanamayan duvarları, NEDEN bağlanamadıklarıyla birlikte yazar.
+
+    Her duvar için en yakın bükümü bulup iki ölçüyü gösterir: teğetlik
+    uzaklığı (olması gereken r_ic + t/2) ve boy boyunca örtüşme. Hangisi
+    tutmuyorsa sorun oradadır."""
+    if not disarda:
+        return ""
+    sat = ["", "Bağlanamayan duvarlar (en büyükten):"]
+    sirali = sorted(disarda, key=lambda i: -duvarlar[i]["alan"])
+    for i in sirali[:en_cok]:
+        w = duvarlar[i]
+        en_iyi = None
+        for b in bukumler:
+            ort = (max(w["z"][0], b["z"][0]), min(w["z"][1], b["z"][1]))
+            zo = (ort[0] + ort[1]) / 2.0 if ort[1] > ort[0] else w["z"][0]
+            uz = abs(b["m"][0] * w["n"][0] + b["m"][1] * w["n"][1]
+                     + zo * w["n"][2] - w["d0"])
+            hedef = b["r_ic"] + t / 2.0
+            puan = abs(uz - hedef)
+            if en_iyi is None or puan < en_iyi[0]:
+                en_iyi = (puan, uz, hedef, ort[1] - ort[0])
+        if en_iyi is None:
+            sat.append(f"  alan {w['alan']:8.0f} mm2 - hiç büküm yok")
+            continue
+        _, uz, hedef, ort = en_iyi
+        if ort < 0.5:
+            neden = f"boy boyunca hiç örtüşmüyor ({ort:.1f} mm)"
+        elif abs(uz - hedef) > 0.15:
+            neden = (f"teğet değil: bükümden uzaklık {uz:.2f} mm, "
+                     f"olması gereken {hedef:.2f} mm")
+        else:
+            neden = "ağacın kopuk bir dalında kalmış"
+        sat.append(f"  alan {w['alan']:8.0f} mm2  boy [{w['z'][0]:.0f}, "
+                   f"{w['z'][1]:.0f}]  ->  {neden}")
+    if len(sirali) > en_cok:
+        sat.append(f"  ... ve {len(sirali) - en_cok} duvar daha")
+    return "\n".join(sat)
+
+
 def _acma_haritasi(duvarlar, bukumler, t, k_faktor):
     """Ağacı gezerek her duvara ve her büküme düzlemdeki yerini verir.
 
@@ -2034,7 +2074,8 @@ def _acma_haritasi(duvarlar, bukumler, t, k_faktor):
         raise AcilimYok(
             f"Duvarların {len(disarda)} tanesi büküm ağacına bağlanamadı "
             f"(sac yüzeyinin %{100 * alan / toplam:.0f}'i). Parça tek bir "
-            f"sac şeridi değil; kaynaklı ya da çok yönlü bükülmüş olabilir.")
+            f"sac şeridi değil; kaynaklı ya da çok yönlü bükülmüş olabilir."
+            + _bagsiz_duvar_raporu(duvarlar, bukumler, disarda, t))
     if len(b_harita) > len(harita) - 1:
         raise AcilimYok(
             f"Büküm ağacında çevrim var ({len(harita)} duvar, "
