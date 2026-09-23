@@ -1827,6 +1827,48 @@ def _bitisik_gruplar(yuzler):
     return list(grup.values())
 
 
+def _yuz_p_araligi(yuzler, u):
+    """Yüzlerin duvar üzerindeki (u yönündeki) uzanımı."""
+    pr = []
+    for f in yuzler:
+        ex = TopExp_Explorer(f, TopAbs_VERTEX)
+        while ex.More():
+            p = BRep_Tool.Pnt_s(TopoDS.Vertex_s(ex.Current()))
+            pr.append(p.X() * u[0] + p.Y() * u[1])
+            ex.Next()
+    return (min(pr), max(pr)) if pr else None
+
+
+def _ayni_duvar_birlestir(gruplar, n, en_az_ortusme=0.5):
+    """Aynı duvarın, boy boyunca kesiklerle ayrılmış parçalarını birleştirir.
+
+    Kenar komşuluğuna göre bölmek şart: sacın ortasına basılmış bir
+    kaburga, alt yüzeyi iki AYRI duvara böler ve bunlar açınımda ayrı
+    yerlere düşer. Ama uzun bir flanşı boydan boya kesikler de bölüyor;
+    onlar AYNI duvardır, açınımda aynı yere düşerler.
+
+    İkisini ayıran ölçü: kesitteki uzanım (p). Kaburganın iki yanındaki
+    şeritler p'de ayrıktır; kesiklerle bölünmüş flanş parçaları ise aynı
+    p aralığını paylaşır, yalnız boyda (z) ayrıktır."""
+    u = _kanonik_yon((-n[1], n[0]))
+    if not u or len(gruplar) < 2:
+        return gruplar
+    kutu = [(_yuz_p_araligi(g, u), g) for g in gruplar]
+    kutu = [(a, g) for a, g in kutu if a]
+    birlesik = []
+    for a, g in sorted(kutu, key=lambda x: x[0][0]):
+        for b in birlesik:
+            ort = min(a[1], b["p"][1]) - max(a[0], b["p"][0])
+            en_dar = min(a[1] - a[0], b["p"][1] - b["p"][0])
+            if ort > en_az_ortusme * max(en_dar, 1e-9):
+                b["yuz"] += g
+                b["p"] = (min(a[0], b["p"][0]), max(a[1], b["p"][1]))
+                break
+        else:
+            birlesik.append({"p": a, "yuz": list(g)})
+    return [b["yuz"] for b in birlesik]
+
+
 def _duzlem_duvarlar(sh, t, tol=None):
     """Sac duvarları: eksene paralel, kalınlık kadar aralıklı düzlem çifti.
 
@@ -1874,7 +1916,8 @@ def _duzlem_duvarlar(sh, t, tol=None):
     for v in kume.values():
         if v["alan"] <= 1.0:
             continue
-        for parcalar in _bitisik_gruplar(v["uye"]):
+        for parcalar in _ayni_duvar_birlestir(_bitisik_gruplar(v["uye"]),
+                                              v["n"]):
             a = 0.0; zr = []
             for f in parcalar:
                 g = GProp_GProps(); BRepGProp.SurfaceProperties_s(f, g)
