@@ -450,14 +450,17 @@ daha iyidir.
 Program her sac parça için **hangi tezgâhta yapılabileceğini** söyler.
 Bu bir tahmin değil, fizik:
 
-- Abkantta parça bir **V kalıbın ağzına oturur** ve bıçak bastırır.
-  Kanat kalıbın ağzını tutamayacak kadar kısaysa parça kalıbın içine
-  düşer — bükülemez.
-- İç yarıçap, kalınlığın belli bir oranının altına inemez; altında sac
-  çatlar.
+- **Kanat**: abkantta parça bir **V kalıbın ağzına oturur** ve bıçak
+  bastırır. Kanat kalıbın ağzını tutamayacak kadar kısaysa parça
+  kalıbın içine düşer — büküm **imkânsızdır**. Bu, yöntemi belirler:
+  rollform (ya da başka bir yöntem) gerekir.
+- **İç yarıçap**: küçük yarıçap bükümü **riskli** kılar, imkânsız
+  değil. Çatlayıp çatlamayacağı malzeme kalitesine, hadde yönüne ve
+  kalıbın keskinliğine bağlıdır; ince sacta 0,5×t iç yarıçap keskin
+  kalıpla bükülür. Bu yüzden yarıçap parçayı rollform ilan **etmez**,
+  yalnız **uyarı** verir.
 
-Bu iki ölçü sınırın altındaysa parça **abkantta yapılamaz**; rollform
-(ya da başka bir yöntem) gerekir. Üstündeyse abkantla yapılır.
+İkisi aynı şey değildir ve program da öyle davranır.
 
 Sonuç açınım resminin üstüne, `ACINIM.csv`'ye ve 6. adımdaki
 **YÖNTEM** sütununa yazılır — ölçüsüyle ve gerekçesiyle:
@@ -476,19 +479,30 @@ bükme için yaygın değerlerdir:
 | sınır | varsayılan | anlamı |
 |-------|-----------|--------|
 | `abkant_en_az_kanat` | 4 × kalınlık | en kısa kanat bundan kısaysa abkant olmaz |
-| `abkant_en_az_r` | 0,6 × kalınlık | en küçük iç yarıçap bundan küçükse abkant olmaz |
+| `abkant_en_az_r` | 0,6 × kalınlık | iç yarıçap bundan küçükse **uyarı** (yasak değil) |
 | `silindir_en_az_r` | 20 × kalınlık | bundan geniş yarıçap silindirde (kalender) yapılır |
 
 Kendi kalıbınıza göre değiştirmek için ayar dosyasını düzenleyin
 (K-faktörüyle aynı dosya, bkz. aşağıdaki not).
 
-Örnek montajdan ölçülenler:
+Gerçek bir şasi montajında (1262 katı, 148 parça) ölçülen:
 
-| parça | kalınlık | büküm | en kısa kanat | en küçük r | yöntem |
-|-------|---------|-------|---------------|-----------|--------|
-| 01.051.000.01 | 2,5 | 4 | 22,5 mm (9,0×t) | 3,5 mm (1,40×t) | **abkant** |
-| 09.025.000.02 | 3,0 | 10 | 0,81 mm (0,27×t) | 1,50 mm (0,50×t) | **rollform** |
-| 01.050.000.01 | 3,0 | 8 | 2,51 mm (0,84×t) | 0,50 mm (0,17×t) | **rollform** |
+| | sayı |
+|---|---|
+| açınımı çıkan sac parça | 60 |
+| **abkant** | 53 |
+| **rollform** (kanat çok kısa) | 7 |
+| küçük yarıçap uyarısı alan | 12 |
+
+Kanat oranının dağılımında net bir boşluk var: 3,1×t ile 5×t arasında
+hiçbir parça yok. Varsayılan 4×t eşiği tam o boşluğa düşüyor, o yüzden
+kararı verilere dayanıyor. Rollform çıkanların kanatları 1,0–3,0×t
+arasında — 2 mm sacta 5 mm kanat standart bir V kalıba oturmaz.
+
+Yarıçap ayrı hikâye: aynı montajda 12 parçanın iç yarıçapı 0,40–0,60×t
+arasındaydı ve **hepsi abkant parçasıydı**. İlk sürümde yarıçapı da
+yasaklayıcı saymıştım; bu 12 parçayı yanlışlıkla rollform ilan
+ediyordu. Ölçüm düzeltti.
 
 ---
 

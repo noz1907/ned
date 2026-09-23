@@ -40,9 +40,20 @@ print("\n-- kanat sınırı  (varsayılan 4 x kalınlık)")
 esit("kanat 4.1xt geçer", yontem(3.0, [12.3, 90.0], [3.0]), "abkant")
 esit("kanat 3.9xt geçmez", yontem(3.0, [11.7, 90.0], [3.0]), "rollform")
 
-print("\n-- yarıçap sınırı  (varsayılan 0.6 x kalınlık)")
-esit("r 0.7xt geçer", yontem(3.0, [40.0, 90.0], [2.1]), "abkant")
-esit("r 0.5xt geçmez", yontem(3.0, [40.0, 90.0], [1.5]), "rollform")
+print("\n-- yarıçap YASAK DEĞİL, UYARIDIR")
+# Kısa kanat bükmeyi imkânsız kılar; küçük yarıçap yalnız riskli kılar.
+# İnce sacta 0,5xt iç yarıçap keskin kalıpla bükülür.
+esit("r 0.7xt: abkant, uyarı yok", yontem(3.0, [40.0, 90.0], [2.1]), "abkant")
+esit("r 0.5xt: yine abkant", yontem(3.0, [40.0, 90.0], [1.5]), "abkant")
+kucuk_r = M.bukum_yontemi(3.0, [40.0, 90.0], [1.5], [1.57], 500)
+esit("ama uyarı var", bool(kucuk_r.get("uyari")), True)
+esit("uyarısız parçada uyarı yok",
+     bool(M.bukum_yontemi(3.0, [40.0, 90.0], [2.1], [1.57], 500).get("uyari")),
+     False)
+esit("kısa kanat + küçük r: rollform ve uyarı birlikte",
+     (M.bukum_yontemi(3.0, [2.0, 90.0], [1.5], [1.57], 500)["yontem"],
+      bool(M.bukum_yontemi(3.0, [2.0, 90.0], [1.5], [1.57], 500)["uyari"])),
+     ("rollform", True))
 
 print("\n-- gerçek parçalardan ölçülen değerler")
 esit("01.051.000.01 (kanat 9.0xt, r 1.40xt)",
@@ -51,13 +62,17 @@ esit("09.025.000.02 Teleskop (kanat 0.27xt, r 0.50xt)",
      yontem(3.0, [0.81, 91.0, 0.81], [1.5] * 10, 1940), "rollform")
 esit("01.050.000.01 U-Blech (kanat 0.84xt, r 0.17xt)",
      yontem(3.0, [2.51, 60.0], [0.5, 3.0] * 4, 483), "rollform")
+esit("K0 TELEVRE SACI 90 MM_SOL (kanat 2.5xt, r 1.25xt)",
+     yontem(2.0, [5.0, 90.0], [2.5] * 7, 2805), "rollform")
+esit("K0 KAMERA BRAKETI (kanat 2.5xt, r 0.83xt) - kanat yetmiyor",
+     yontem(3.0, [7.5, 60.0], [2.5], 200), "rollform")
 
 print("\n-- geniş yarıçap silindir bükümüdür")
 esit("r 25xt", yontem(2.0, [200.0, 200.0], [50.0]), "silindir bükümü")
 
 print("\n-- sebep yazılıyor mu")
 r = M.bukum_yontemi(3.0, [0.8, 90.0], [1.5], [1.57], 1940)
-for kelime in ("kanat", "yarıçap", "0.8", "0.50"):
+for kelime in ("kanat", "0.8", "kalıb"):
     if kelime not in r["neden"]:
         hata.append(f"sebepte '{kelime}' yok")
         print(f"  HATA  sebepte {kelime!r} geçmiyor: {r['neden'][:70]}")

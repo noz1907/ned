@@ -1082,7 +1082,7 @@ def k_faktor_ayari():
 # yaygın kullanılan değerlerdir, kanun değildir - kendi kalıbınıza
 # göre ayarlayın.
 ABKANT_EN_AZ_KANAT = 4.0     # en kısa kanat, kalınlığın bu katı kadar olmalı
-ABKANT_EN_AZ_R = 0.6         # en küçük iç yarıçap, kalınlığın bu katı kadar
+ABKANT_EN_AZ_R = 0.6         # iç yarıçap bunun altındaysa UYARI (yasak değil)
 SILINDIR_EN_AZ_R = 20.0      # iç yarıçap bu katın üstündeyse silindir bükümü
 
 
@@ -1108,11 +1108,20 @@ def bukum_yontemi(t, kanatlar, yaricaplar, aciler=(), boy_mm=0.0):
     kadar kısaysa parça kalıbın içine düşer, bükülemez. Aynı şekilde iç
     yarıçap kalınlığın belli bir oranının altına inemez - sac çatlar.
 
-    Bu iki ölçü sınırın altındaysa parça abkantta YAPILAMAZ; o zaman
-    rollform (ya da başka bir yöntem) ile üretilmiştir. Üstündeyse
-    abkantla yapılabilir.
+    İKİSİ AYNI ŞEY DEĞİLDİR:
+      - Kanat çok kısaysa büküm İMKÂNSIZDIR. Kalıbın ağzı tutmaz,
+        parça içine düşer. Bu, yöntemi belirler: rollform gerekir.
+      - İç yarıçap küçükse büküm RİSKLİDİR, imkânsız değil. Çatlayıp
+        çatlamayacağı malzeme kalitesine, hadde yönüne ve kalıbın
+        keskinliğine bağlıdır. İnce sacta 0,5xt iç yarıçap keskin
+        kalıpla bükülür. Bu yüzden yarıçap parçayı rollform ilan
+        etmez, yalnız UYARI verir.
 
-    Döner: {"yontem", "kesinlik", "neden", ...ölçüler}
+    (Gerçek bir montajda ölçüldü: 60 sac parçanın 12'sinin iç yarıçapı
+    0,40-0,60xt arasındaydı ve hepsi abkant parçasıydı; yarıçapı
+    yasaklayıcı saymak bunları yanlışlıkla rollform ilan ediyordu.)
+
+    Döner: {"yontem", "kesinlik", "neden", "uyari", ...ölçüler}
     """
     kanat_k, r_k, sil_k = abkant_siniri()
     if not yaricaplar:
@@ -1136,29 +1145,28 @@ def bukum_yontemi(t, kanatlar, yaricaplar, aciler=(), boy_mm=0.0):
                            f"{en_kucuk_r / t:.0f} katı; bu kadar geniş "
                            f"yarıçap abkantta değil silindirde (kalender) "
                            f"yapılır."))
-    sebep = []
-    if kanatlar and en_kisa / t < kanat_k:
-        sebep.append(f"en kısa kanat {en_kisa:.1f} mm = kalınlığın "
-                     f"{en_kisa / t:.1f} katı (abkant için en az {kanat_k:g} "
-                     f"kat gerekir; daha kısa kanat V kalıbın ağzını tutmaz)")
+    uyari = ""
     if en_kucuk_r / t < r_k:
-        sebep.append(f"en küçük iç yarıçap {en_kucuk_r:.2f} mm = kalınlığın "
-                     f"{en_kucuk_r / t:.2f} katı (abkant için en az {r_k:g} "
-                     f"kat gerekir; altında sac çatlar)")
-    if sebep:
-        return dict(olcu, yontem="rollform", kesinlik="olası",
-                    neden=("Abkantta yapılamaz: " + "; ".join(sebep)
-                           + ". Rollform ya da başka bir yöntemle "
-                             "üretilmiş olmalı."))
+        uyari = (f"En küçük iç yarıçap {en_kucuk_r:.2f} mm = kalınlığın "
+                 f"{en_kucuk_r / t:.2f} katı ({r_k:g} katın altında). "
+                 f"Bükülebilir ama çatlama riski var: malzeme kalitesine, "
+                 f"hadde yönüne ve kalıbın keskinliğine bakın.")
+    if kanatlar and en_kisa / t < kanat_k:
+        return dict(olcu, yontem="rollform", kesinlik="olası", uyari=uyari,
+                    neden=(f"Abkantta yapılamaz: en kısa kanat "
+                           f"{en_kisa:.1f} mm = kalınlığın {en_kisa / t:.1f} "
+                           f"katı; abkant için en az {kanat_k:g} kat gerekir, "
+                           f"daha kısa kanat V kalıbın ağzını tutmaz, parça "
+                           f"kalıbın içine düşer. Rollform ya da başka bir "
+                           f"yöntemle üretilmiş olmalı."))
     ek = ""
     if len(yaricaplar) >= 8 and boy_mm >= 1000:
         ek = (f" ({len(yaricaplar)} büküm ve {boy_mm:.0f} mm boy rollform "
               f"için de tipiktir; seri büyükse orayı da değerlendirin.)")
-    return dict(olcu, yontem="abkant", kesinlik="kesin",
+    return dict(olcu, yontem="abkant", kesinlik="kesin", uyari=uyari,
                 neden=(f"Bütün kanatlar en az kalınlığın {kanat_k:g} katı "
-                       f"(en kısası {en_kisa / t:.1f} kat) ve iç yarıçaplar "
-                       f"en az {r_k:g} kat (en küçüğü "
-                       f"{en_kucuk_r / t:.2f} kat): abkantta bükülür." + ek))
+                       f"(en kısası {en_kisa / t:.1f} kat): abkantta "
+                       f"bükülür." + ek))
 
 
 class AcilimYok(Exception):
@@ -2655,6 +2663,8 @@ def dxf_acilim(r, k, yol, P=None):
                     1.2 * h))
         for p in textwrap.wrap(yn.get("neden", ""), 108):
             sat.append((p, 1.0 * h))
+        for p in textwrap.wrap("DIKKAT: " + yn["uyari"], 108) if yn.get("uyari") else []:
+            sat.append((p, 1.0 * h))
     if kesim:
         sat.append(("KESIM KONTURUDUR: dis kontur ve delikler gercek "
                     "yerlerinde.", 1.1 * h))
@@ -2735,7 +2745,7 @@ def acilim_yaz(kayit, komp, P, klasor, kodlar=None, k_faktor=K_FAKTOR,
             w.writerow(["poz", "kod", "ad", "adet", "kalinlik_mm",
                         "acinim_genislik_mm", "acinim_boy_mm", "bukum_sayisi",
                         "yontem", "en_kisa_kanat_mm", "en_kisa_kanat_t",
-                        "en_kucuk_r_t", "yontem_nedeni",
+                        "en_kucuk_r_t", "yontem_nedeni", "uyari",
                         "k_faktor", "bukumler", "dxf"])
             for r in sonuc:
                 w.writerow([r["poz"], r["kod"], r["ad"], r["adet"],
@@ -2746,6 +2756,7 @@ def acilim_yaz(kayit, komp, P, klasor, kodlar=None, k_faktor=K_FAKTOR,
                             (r.get("yontem") or {}).get("en_kisa_kanat_t", ""),
                             (r.get("yontem") or {}).get("en_kucuk_r_t", ""),
                             (r.get("yontem") or {}).get("neden", ""),
+                            (r.get("yontem") or {}).get("uyari", ""),
                             r["k_faktor"],
                             " | ".join(f"{b['aci_derece']:g}d R{b['r_ic']:g} "
                                        f"pay{b['pay_mm']:g} @"
