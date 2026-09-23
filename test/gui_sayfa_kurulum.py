@@ -1,7 +1,7 @@
 # -*- coding: utf-8 -*-
 """tkinter olmayan makinede arayuzu SAHTE tk ile kurup, sayfa kurulum
 kodunda ad/yazim hatasi kalmadigini dogrular."""
-import os, sys, types
+import os, re, sys, types
 from unittest.mock import MagicMock
 
 class SahteVar:
@@ -30,7 +30,7 @@ for ad in ("Frame", "Label", "Button", "Entry", "Combobox", "Notebook",
            "Treeview", "Scrollbar", "Progressbar", "Checkbutton",
            "Radiobutton", "LabelFrame", "Style", "Separator", "PanedWindow"):
     setattr(ttk, ad, SahteWidget)
-fd = types.ModuleType("tkinter.filedialog"); fd.askopenfilename = fd.askdirectory = SahteWidget()
+fd = types.ModuleType("tkinter.filedialog"); fd.askopenfilename = fd.askdirectory = fd.asksaveasfilename = SahteWidget()
 mb = types.ModuleType("tkinter.messagebox")
 mb.showinfo = mb.showwarning = mb.showerror = mb.askyesno = SahteWidget()
 tk.ttk, tk.filedialog, tk.messagebox = ttk, fd, mb
@@ -50,8 +50,11 @@ u.kuyruk = _q.Queue()
 for ad in ("pack", "grid", "configure"):
     pass
 hata = []
-for i, fn in enumerate(("_sayfa1", "_sayfa2", "_sayfa3", "_sayfa4",
-                        "_sayfa5", "_sayfa6"), 1):
+sayfalar = sorted((a for a in dir(G.Uygulama)
+                   if re.fullmatch(r"_sayfa\d+", a)),
+                  key=lambda a: int(a[6:]))
+assert sayfalar, "hic sayfa kurulum islevi bulunamadi"
+for i, fn in enumerate(sayfalar, 1):
     try:
         getattr(u, fn)()
         print(f"  {fn}  kuruldu")

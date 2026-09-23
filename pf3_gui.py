@@ -74,7 +74,7 @@ Elle yapmak isterseniz, program klasorunde komut penceresi acip:
     python pf3_gui.py
 """
 ADIM = ["1  VERİ", "2  BOM ve MALZEME", "3  GÖRÜNÜŞ ve KESİT",
-        "4  ÖRNEK ONAY", "5  TÜM ÇİZİMLER", "6  AÇINIM"]
+        "4  ÖRNEK ONAY", "5  TÜM ÇİZİMLER", "6  AÇINIM", "7  ANTET ve PAFTA"]
 
 
 # =============================================================== yardımcılar
@@ -230,7 +230,7 @@ class Uygulama(ttk.Frame):
             self.defter.add(f, text=ad, state="disabled")
             self.sayfa.append(f)
         self._sayfa1(); self._sayfa2(); self._sayfa3()
-        self._sayfa4(); self._sayfa5(); self._sayfa6()
+        self._sayfa4(); self._sayfa5(); self._sayfa6(); self._sayfa7()
         self.ilerleme = ttk.Progressbar(self, mode="determinate")
         self.ilerleme.pack(fill="x", pady=(6, 2))
         gf = ttk.LabelFrame(self, text=" Günlük ", padding=4)
@@ -467,9 +467,10 @@ class Uygulama(ttk.Frame):
                   style="Baslik.TLabel").pack(anchor="w", pady=(0, 4))
         ttk.Label(f, foreground="#555", justify="left", wraplength=1000, text=(
             "Açınımı istediğiniz parçaları listeden seçin (Ctrl ve Shift ile "
-            "çoklu seçim). Kaç bükümü olduğu fark etmez. Üretilen resim BLANK "
-            "ÖLÇÜSÜDÜR: açınım genişliği, boy ve büküm çizgilerinin yerleri; "
-            "dış kontur kesikleri ve delikler o resimde yoktur.")
+            "çoklu seçim). Kaç bükümü olduğu fark etmez. Üretilen resim KESİM "
+            "KONTURUDUR: dış kontur, kenar kesikleri ve delikler gerçek "
+            "yerlerindedir; üstüne büküm çizgileri ve büküm tablosu işlenir. "
+            "Hesap güvenilir değilse açınım hiç verilmez, sebebi yazılır.")
                   ).pack(anchor="w", pady=(0, 8))
 
         orta = ttk.Frame(f); orta.pack(fill="both", expand=True)
@@ -568,6 +569,9 @@ class Uygulama(ttk.Frame):
         self._bitir()
         olan = {r["kod"]: r for r in sonuc}
         neden = dict(hata)
+        self.acilim_sonuc = getattr(self, "acilim_sonuc", {})
+        for r in sonuc:                    # pafta, antet alanları için kullanır
+            self.acilim_sonuc[r["dxf"]] = r
         for s, i in getattr(self, "ac_satir", {}).items():
             ad = self.komp[i].get("kod") or self.komp[i].get("ad")
             if ad in olan:
@@ -597,6 +601,359 @@ class Uygulama(ttk.Frame):
             yol = os.path.join(self.v_out.get().strip(), d.split("–")[-1].strip())
             if os.path.isfile(yol):
                 klasor_ac(yol)
+
+    # ------------------------------------------------------ 7 ANTET/PAFTA
+    PAFTA_ALAN = (("FIRMA", "Firma"), ("PROJE", "Proje / iş"),
+                  ("CIZEN", "Çizen"), ("KONTROL", "Kontrol eden"),
+                  ("REVIZYON", "Revizyon"), ("TOLERANS", "Genel tolerans"),
+                  ("YUZEY", "Yüzey işlem"), ("ACIKLAMA", "Açıklama / not"))
+
+    def _sayfa7(self):
+        f = self.sayfa[6]
+        ttk.Label(f, text="1:1 resimleri antetli paftaya yerleştir",
+                  style="Baslik.TLabel").pack(anchor="w", pady=(0, 4))
+        ttk.Label(f, foreground="#555", justify="left", wraplength=1050, text=(
+            "Üretilen resimler 1:1'dir ve OLDUĞU GİBİ KALIR: bu adım onları "
+            "silmez, ölçeklerini değiştirmez. Her resmin bir KOPYASINA firma "
+            "antetinizi ve seçtiğiniz kâğıdı ekler. Ölçek paftanın "
+            "penceresine aittir; model uzayında ölçüler yine birebirdir.\n"
+            "A4/A3'e 1:1 sığan resim oraya çizilir. Sığmayanlar için "
+            "aşağıdan kâğıt seçersiniz; o kâğıda sığan en büyük standart "
+            "ölçek kendiliğinden bulunur. Baskı kendiliğinden yapılmaz: "
+            "PDF'i siz istediğinizde üretilir.")).pack(anchor="w", pady=(0, 8))
+
+        ust = ttk.LabelFrame(f, text=" Antet ", padding=6)
+        ust.pack(fill="x")
+        self.v_antet = tk.StringVar()
+        ttk.Label(ust, text="Antet DXF:").grid(row=0, column=0, sticky="w")
+        ttk.Entry(ust, textvariable=self.v_antet, width=62).grid(
+            row=0, column=1, sticky="we", padx=4)
+        ttk.Button(ust, text="Gözat…", command=self.antet_sec).grid(row=0, column=2)
+        ttk.Button(ust, text="Örnek antet üret…",
+                   command=self.antet_ornek).grid(row=0, column=3, padx=4)
+        self.v_antet_bilgi = tk.StringVar(value="antet seçilmedi – yalın "
+                                                "çerçevesiz pafta yapılır")
+        ttk.Label(ust, textvariable=self.v_antet_bilgi, foreground="#555",
+                  wraplength=1000, justify="left").grid(
+            row=1, column=0, columnspan=4, sticky="w", pady=(4, 0))
+        ust.columnconfigure(1, weight=1)
+
+        alan = ttk.LabelFrame(f, text=" Anteti dolduracak bilgiler ", padding=6)
+        alan.pack(fill="x", pady=(6, 0))
+        self.v_alan = {}
+        for i, (ad, etiket) in enumerate(self.PAFTA_ALAN):
+            r, c = divmod(i, 2)
+            ttk.Label(alan, text=etiket + ":").grid(row=r, column=c * 2,
+                                                    sticky="w", pady=1)
+            self.v_alan[ad] = tk.StringVar()
+            ttk.Entry(alan, textvariable=self.v_alan[ad], width=44).grid(
+                row=r, column=c * 2 + 1, sticky="we", padx=(4, 18), pady=1)
+        alan.columnconfigure(1, weight=1); alan.columnconfigure(3, weight=1)
+        ttk.Label(alan, foreground="#555", text=(
+            "Parçaya özel alanlar (kod, ad, malzeme, kalınlık, adet, kütle, "
+            "ölçek, kâğıt, tarih) BOM'dan kendiliğinden yazılır.")).grid(
+            row=(len(self.PAFTA_ALAN) + 1) // 2, column=0, columnspan=4,
+            sticky="w", pady=(4, 0))
+
+        sec = ttk.Frame(f); sec.pack(fill="x", pady=(6, 0))
+        ttk.Label(sec, text="A4/A3'e sığmayan resimler için kâğıt:"
+                  ).pack(side="left")
+        self.v_buyuk = tk.StringVar(value="A3")
+        ttk.Combobox(sec, textvariable=self.v_buyuk, width=6, state="readonly",
+                     values=("A3", "A2", "A1", "A0")).pack(side="left", padx=4)
+        ttk.Label(sec, foreground="#555", text=(
+            "seçtiğiniz kâğıda sığan en büyük standart ölçek kullanılır")
+                  ).pack(side="left")
+        ttk.Button(sec, text="Listeyi tazele",
+                   command=self.pafta_doldur).pack(side="right", padx=4)
+
+        orta = ttk.Frame(f); orta.pack(fill="both", expand=True, pady=(6, 0))
+        sut = ("dosya", "olcu", "kagit", "olcek", "durum")
+        basl = {"dosya": ("RESİM", 300), "olcu": ("ÖLÇÜ  mm", 130),
+                "kagit": ("KÂĞIT", 70), "olcek": ("ÖLÇEK", 80),
+                "durum": ("DURUM", 430)}
+        self.pf_agac = ttk.Treeview(orta, columns=sut, show="headings",
+                                    selectmode="extended", height=10)
+        for c in sut:
+            self.pf_agac.heading(c, text=basl[c][0])
+            self.pf_agac.column(c, width=basl[c][1],
+                                anchor="w" if c in ("dosya", "durum") else "center")
+        kd = ttk.Scrollbar(orta, orient="vertical", command=self.pf_agac.yview)
+        self.pf_agac.configure(yscrollcommand=kd.set)
+        self.pf_agac.pack(side="left", fill="both", expand=True)
+        kd.pack(side="right", fill="y")
+
+        alt = ttk.Frame(f); alt.pack(fill="x", pady=(8, 0))
+        ttk.Button(alt, text="Tümünü seç",
+                   command=lambda: self.pf_agac.selection_set(
+                       self.pf_agac.get_children())).pack(side="left")
+        ttk.Button(alt, text="PAFTA klasörünü aç",
+                   command=self.pafta_klasor_ac).pack(side="left", padx=6)
+        self.b_bas = ttk.Button(alt, text="SEÇİLİ PAFTALARI BAS (PDF)",
+                                command=self.pafta_bas, state="disabled")
+        self.b_bas.pack(side="right", padx=4, ipadx=6, ipady=3)
+        self.b_pafta = ttk.Button(alt, text="SEÇİLİ RESİMLERİ PAFTAYA AL  ▸",
+                                  style="Bas.TButton", command=self.pafta_uret,
+                                  state="disabled")
+        self.b_pafta.pack(side="right", padx=4, ipadx=10, ipady=3)
+
+    # ---- antet
+    def antet_sec(self):
+        y = filedialog.askopenfilename(title="Antet DXF'i seçin",
+                                       filetypes=[("DXF", "*.dxf"),
+                                                  ("Tümü", "*.*")])
+        if y:
+            self.v_antet.set(y)
+            self._antet_tazele()
+
+    def antet_ornek(self):
+        y = filedialog.asksaveasfilename(
+            title="Örnek antet nereye yazılsın", defaultextension=".dxf",
+            initialfile="ANTET_A3.dxf", filetypes=[("DXF", "*.dxf")])
+        if not y:
+            return
+        try:
+            import pf4_pafta as PF
+            PF.ornek_antet(y, "A3", self.v_alan["FIRMA"].get() or "FİRMA ADI")
+        except Exception as ex:
+            messagebox.showerror("Örnek antet", str(ex)); return
+        self.v_antet.set(y)
+        self._antet_tazele()
+        messagebox.showinfo(
+            "Örnek antet",
+            "Örnek antet yazıldı:\n" + y + "\n\nKendi antetinizi çizerken "
+            "bunu şablon olarak kullanın: değer gelecek yerlere <<KOD>>, "
+            "<<AD>> gibi alan adlarını yazmanız yeterli. Çizimin oturacağı "
+            "boşluğu CIZIM_ALANI katmanındaki dikdörtgen belirler.")
+
+    def _antet_tazele(self):
+        """Seçilen antette hangi alanların bulunduğunu gösterir. Kullanıcı
+        yazdığı alan adını yanlış yazdıysa burada görür."""
+        y = self.v_antet.get().strip()
+        if not y:
+            self.v_antet_bilgi.set("antet seçilmedi – yalın çerçevesiz "
+                                   "pafta yapılır")
+            return
+        try:
+            import pf4_pafta as PF
+            b = PF.antet_incele(y)
+        except Exception as ex:
+            self.v_antet_bilgi.set("ANTET OKUNAMADI: " + str(ex))
+            return
+        m = (f"{b['kagit'] or 'ölçüsü tanınmadı'} antet, "
+             f"{b['olcu'][0]:.0f}x{b['olcu'][1]:.0f} mm.  "
+             f"{len(b['alanlar'])} alan bulundu: "
+             + ", ".join(b["alanlar"]))
+        if b["bilinmeyen"]:
+            m += ("\nTANINMAYAN ALAN (boş bırakılacak): "
+                  + ", ".join(b["bilinmeyen"]))
+        if not b["cizim_alani"]:
+            m += ("\nCIZIM_ALANI katmanı yok: çizim, kâğıdın kenarından "
+                  "10 mm pay bırakılarak yerleştirilecek ve antetin üstüne "
+                  "binebilir.")
+        self.v_antet_bilgi.set(m)
+
+    # ---- liste
+    def _pafta_klasoru(self):
+        return os.path.join(self.v_out.get().strip() or ".", "PAFTA")
+
+    def pafta_klasor_ac(self):
+        k = self._pafta_klasoru()
+        if os.path.isdir(k):
+            klasor_ac(k)
+        else:
+            messagebox.showinfo("PAFTA", "Henüz pafta üretilmedi.")
+
+    def pafta_doldur(self):
+        """Çıktı klasöründeki 1:1 DXF'leri listeler ve hangi kâğıda
+        sığdıklarını hesaplar."""
+        if not hasattr(self, "pf_agac"):
+            return
+        on = self.v_out.get().strip()
+        if not on or not os.path.isdir(on):
+            messagebox.showinfo("Pafta", "Önce çıktı klasörünü seçin ve "
+                                         "resimleri üretin.")
+            return
+        import glob
+        import pf4_pafta as PF
+        dosyalar = sorted(y for y in glob.glob(os.path.join(on, "*.dxf")))
+        self.pf_agac.delete(*self.pf_agac.get_children())
+        self.pf_satir = {}
+        if not dosyalar:
+            self.b_pafta.configure(state="disabled")
+            messagebox.showinfo("Pafta", "Çıktı klasöründe DXF yok. Önce "
+                                         "5. adımda resimleri üretin.")
+            return
+        antet = self.v_antet.get().strip() or None
+        try:
+            p = PF.kagit_plani(dosyalar, antet)
+        except Exception as ex:
+            messagebox.showerror("Antet", str(ex)); return
+        buyuk = self.v_buyuk.get()
+        for s in p["sigan"]:
+            i = self.pf_agac.insert("", "end", values=(
+                os.path.basename(s["dosya"]),
+                f"{s['olcu'][0]:.0f} x {s['olcu'][1]:.0f}",
+                s["kagit"], "1:1", "sığıyor – birebir çizilecek"))
+            self.pf_satir[i] = {"dosya": s["dosya"], "kagit": s["kagit"],
+                                "olcek": 1.0}
+        for s in p["sigmayan"]:
+            sec = dict((k, o) for k, o, _ in s["secenek"])
+            o = sec.get(buyuk)
+            if o:
+                d = (f"A4/A3'e sığmıyor – {buyuk} kâğıda "
+                     f"{PF.olcek_metni(o)} çizilecek")
+            else:
+                en_kucuk = s["secenek"][0][0] if s["secenek"] else None
+                d = (f"{buyuk} kâğıda standart ölçekle sığmıyor"
+                     + (f" – en az {en_kucuk} gerekiyor" if en_kucuk
+                        else " – çok büyük"))
+            i = self.pf_agac.insert("", "end", values=(
+                os.path.basename(s["dosya"]),
+                f"{s['olcu'][0]:.0f} x {s['olcu'][1]:.0f}",
+                buyuk, PF.olcek_metni(o) if o else "-", d))
+            self.pf_satir[i] = ({"dosya": s["dosya"], "kagit": buyuk,
+                                 "olcek": o} if o else None)
+        for y, e in p["hata"]:
+            i = self.pf_agac.insert("", "end", values=(
+                os.path.basename(y), "-", "-", "-", "okunamadı: " + e))
+            self.pf_satir[i] = None
+        self.b_pafta.configure(state="normal")
+        self.v_durum.set(f"pafta: {len(p['sigan'])} resim A4/A3'e sığıyor, "
+                         f"{len(p['sigmayan'])} resim büyük kâğıt istiyor")
+
+    # ---- üretim
+    def _pafta_degerleri(self, dosya):
+        """Dosya adından BOM satırını bulup antet alanlarını hazırlar."""
+        import pf4_pafta as PF
+        d = {a: v.get().strip() for a, v in self.v_alan.items() if v.get().strip()}
+        ad = os.path.basename(dosya)
+        for sat in self.satirlar or []:
+            if sat.get("dxf") and sat["dxf"] == ad:
+                d.update(PF.bom_degerleri(sat)); return d
+        ac = getattr(self, "acilim_sonuc", {}).get(ad)
+        if ac:
+            kod = ac.get("kod")
+            sat = next((s for s in (self.satirlar or [])
+                        if s.get("kod") == kod), None)
+            d.update(PF.bom_degerleri(sat, ac))
+        return d
+
+    def pafta_uret(self):
+        sec = [s for s in self.pf_agac.selection()
+               if getattr(self, "pf_satir", {}).get(s)]
+        if not sec:
+            messagebox.showinfo("Pafta", "Paftaya alınacak resim seçilmedi. "
+                                         "(Kâğıda sığmayan satırlar "
+                                         "seçilse de üretilmez.)")
+            return
+        antet = self.v_antet.get().strip() or None
+        if antet and not os.path.isfile(antet):
+            messagebox.showwarning("Antet", "Antet dosyası bulunamadı."); return
+        self.M.ayar_yaz(antet=antet, buyuk_kagit=self.v_buyuk.get(),
+                        **{"antet_" + a.lower(): v.get()
+                           for a, v in self.v_alan.items()})
+        isler = []
+        for s in sec:
+            it = dict(self.pf_satir[s])
+            it["degerler"] = self._pafta_degerleri(it["dosya"])
+            it["_satir"] = s
+            isler.append(it)
+            self.pf_agac.set(s, "durum", "paftaya alınıyor…")
+        self._basla("pafta hazırlanıyor…")
+        threading.Thread(target=self._pafta_is,
+                         args=(isler, antet, self._pafta_klasoru()),
+                         daemon=True).start()
+
+    def _pafta_is(self, isler, antet, klasor):
+        try:
+            import pf4_pafta as PF
+            sonuc = {}
+            for n, it in enumerate(isler, 1):
+                self.kuyruk.put(("ilerleme", (n, len(isler))))
+                try:
+                    r = PF.pafta_kur(
+                        it["dosya"], PF.antet_sec(antet, it["kagit"]),
+                        it["kagit"], it["degerler"],
+                        os.path.join(klasor, os.path.splitext(
+                            os.path.basename(it["dosya"]))[0]
+                            + f"_{it['kagit']}.dxf"),
+                        olcek=it.get("olcek"))
+                    sonuc[it["_satir"]] = ("ok", r)
+                    self._yaz(f"  pafta  {it['kagit']} {r['olcek_metni']}  "
+                              + os.path.basename(r["dosya"]))
+                except Exception as ex:
+                    sonuc[it["_satir"]] = ("hata", str(ex))
+                    self._yaz(f"  pafta HATA  "
+                              f"{os.path.basename(it['dosya'])}: {ex}")
+            self.kuyruk.put(("pafta", sonuc))
+        except Exception:
+            self.kuyruk.put(("hata", "Pafta hazırlanırken hata:\n\n"
+                             + traceback.format_exc()))
+
+    def _pafta_geldi(self, sonuc):
+        self._bitir()
+        self.pafta_dosya = getattr(self, "pafta_dosya", {})
+        iyi = 0
+        for s, (tip, v) in sonuc.items():
+            if not self.pf_agac.exists(s):
+                continue
+            if tip == "ok":
+                iyi += 1
+                self.pf_agac.set(s, "olcek", v["olcek_metni"])
+                self.pf_agac.set(s, "durum",
+                                 "pafta hazır: " + os.path.basename(v["dosya"]))
+                self.pafta_dosya[s] = v["dosya"]
+            else:
+                self.pf_agac.set(s, "durum", "HATA: " + v.splitlines()[0])
+        self.b_bas.configure(state="normal" if self.pafta_dosya else "disabled")
+        self.v_durum.set(f"pafta: {iyi} resim antetli paftaya alındı"
+                         + (f", {len(sonuc) - iyi} hata" if iyi < len(sonuc) else ""))
+
+    # ---- baskı (kendiliğinden çalışmaz, kullanıcı ister)
+    def pafta_bas(self):
+        sec = [s for s in self.pf_agac.selection()
+               if getattr(self, "pafta_dosya", {}).get(s)]
+        if not sec:
+            messagebox.showinfo("Baskı", "Önce paftası hazırlanmış "
+                                         "satırlardan seçin.")
+            return
+        self._basla("PDF üretiliyor…")
+        threading.Thread(target=self._bas_is,
+                         args=([(s, self.pafta_dosya[s]) for s in sec],),
+                         daemon=True).start()
+
+    def _bas_is(self, isler):
+        try:
+            import pf4_pafta as PF
+            sonuc = {}
+            for n, (s, y) in enumerate(isler, 1):
+                self.kuyruk.put(("ilerleme", (n, len(isler))))
+                try:
+                    p = PF.bas(y, os.path.splitext(y)[0] + ".pdf")
+                    sonuc[s] = ("ok", p)
+                    self._yaz("  PDF  " + os.path.basename(p))
+                except Exception as ex:
+                    sonuc[s] = ("hata", str(ex))
+                    self._yaz(f"  PDF HATA  {os.path.basename(y)}: {ex}")
+            self.kuyruk.put(("baski", sonuc))
+        except Exception:
+            self.kuyruk.put(("hata", "PDF üretilirken hata:\n\n"
+                             + traceback.format_exc()))
+
+    def _baski_geldi(self, sonuc):
+        self._bitir()
+        iyi = sum(1 for t, _ in sonuc.values() if t == "ok")
+        for s, (tip, v) in sonuc.items():
+            if self.pf_agac.exists(s):
+                self.pf_agac.set(s, "durum",
+                                 ("PDF hazır: " + os.path.basename(v))
+                                 if tip == "ok" else "PDF HATASI: " + v[:60])
+        self.v_durum.set(f"baskı: {iyi} PDF üretildi")
+        if iyi:
+            messagebox.showinfo(
+                "Baskı", f"{iyi} PDF üretildi. Kâğıt ölçüsü birebirdir; "
+                "yazıcıda 'sayfaya sığdır' DEMEYİN, %100 basın.")
 
     # ------------------------------------------------------------ kuyruk
     def _yaz(self, metin):
@@ -628,6 +985,10 @@ class Uygulama(ttk.Frame):
                     self._tumu_geldi(veri)
                 elif tip == "acilim":
                     self._acilim_geldi(*veri)
+                elif tip == "pafta":
+                    self._pafta_geldi(veri)
+                elif tip == "baski":
+                    self._baski_geldi(veri)
                 elif tip == "onizleme":
                     self.onizleme_png = veri
                     self._onizleme_ciz()
@@ -713,6 +1074,26 @@ class Uygulama(ttk.Frame):
             self.kuyruk.put(("hata", "Hesap motoru yüklenemedi:\n\n"
                              + traceback.format_exc(limit=3)))
 
+    def _pafta_ayari_tazele(self):
+        """Antet yolu, firma, çizen gibi bilgileri saklanmış ayardan geri
+        getirir. Her açılışta yeniden yazmak kimsenin işi değil."""
+        if not self.M or not hasattr(self, "v_antet"):
+            return
+        try:
+            a = self.M.ayar_oku()
+        except Exception:
+            return
+        y = a.get("antet") or ""
+        if y and os.path.isfile(y):
+            self.v_antet.set(y)
+            self._antet_tazele()
+        if a.get("buyuk_kagit") in ("A3", "A2", "A1", "A0"):
+            self.v_buyuk.set(a["buyuk_kagit"])
+        for ad, d in self.v_alan.items():
+            v = a.get("antet_" + ad.lower())
+            if v and not d.get():
+                d.set(v)
+
     def _kfaktoru_tazele(self):
         """Motor yüklendikten sonra kutuya saklanmış K-faktörünü koyar."""
         try:
@@ -726,6 +1107,7 @@ class Uygulama(ttk.Frame):
         self.cb_mal.configure(values=adlar)
         self.v_mal.set(next(a for a in adlar if a.startswith(M.VARSAYILAN_MALZEME + " ")))
         self._kfaktoru_tazele()
+        self._pafta_ayari_tazele()
         self.v_durum.set("hazır – STEP dosyasını seçin")
         self._yaz(f"motor hazır, {len(M.MALZEME)} malzeme tanımlı")
         if self.v_step.get():
@@ -838,6 +1220,7 @@ class Uygulama(ttk.Frame):
         self._acilim_doldur()
         self._adim_ac(1)
         self._adim_ac(5, gecis=False)     # açınım BOM'u beklemez
+        self._adim_ac(6, gecis=False)     # pafta da
         self.v_durum.set("komponentler hazır – malzemeyi verip BOM ÇIKART deyin")
 
     # ------------------------------------------------------------ 2 BOM

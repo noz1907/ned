@@ -38,7 +38,7 @@ a = Analysis(
     datas=ocp_data + ezdxf_data + collect_data_files("matplotlib")
           + [("logo/*", "logo")],
     hiddenimports=ocp_gizli + ezdxf_gizli + [
-        "pf3_olcu", "pf1_referans",
+        "pf3_olcu", "pf4_pafta", "pf1_referans",
         "matplotlib.backends.backend_agg",
     ],
     hookspath=[],

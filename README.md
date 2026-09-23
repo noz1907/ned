@@ -263,6 +263,8 @@ Pencere adım adım ilerler, bir adım bitmeden sonraki sekme açılmaz:
 | **3 GÖRÜNÜŞ ve KESİT** | ÖN / ARKA / SAĞ / SOL / ÜST / ALT arasından seçim (**en çok 4**; beşinciyi işaretleyince en eskisi kapanır), kesit **E/H**, gizli çizgi, montaj resmi, örnek parça → ÖRNEK DXF ÜRET |
 | **4 ÖRNEK ONAY** | üretilen örnek resim pencerede gösterilir; beğenmezseniz *AYARA DÖN*, beğenirseniz **ONAYLA** |
 | **5 TÜM ÇİZİMLER** | onay sonrası bütün DXF'ler üretilir, listelenir, **ZIP OLUŞTUR** ile tek pakette toplanır |
+| **6 AÇINIM** | bükümlü sac parçaların kesim konturu: dış kontur, kenar kesikleri, delikler gerçek yerlerinde + büküm çizgileri ve büküm tablosu. K-faktörü ayarlanır ve saklanır. Hesap güvenilir değilse açınım **verilmez**, sebebi yazılır |
+| **7 ANTET ve PAFTA** | 1:1 resimlerin **kopyalarına** firma antetini (`<<ALAN>>` yer tutuculu DXF) ve kâğıdı ekler. A4/A3'e sığan 1:1 çizilir, sığmayana kâğıdı siz seçersiniz. **1:1 çizime dokunulmaz.** PDF kendiliğinden basılmaz, isteyince basılır |
 
 Ağır işler arka planda çalışır: pencere kilitlenmez, günlük akar, ilerleme
 çubuğu dolar, **İptal** çalışan adım bitince işi bırakır. Listede/çizim
@@ -281,7 +283,22 @@ python pf3_olcu.py parca.stp -o cikti --tek 01.050.000.01 --asama 2
                                                       # tek parçanın resmi
 python pf3_olcu.py parca.stp -o cikti --gorunus ON,SAG,UST --kesit --zip
                                                       # görünüş seçimi + kesit + zip
+python pf3_olcu.py parca.stp -o cikti --acinim HEPSI --k-faktor 0.40
+                                                      # sac parçaların kesim konturu
 ```
+
+Antet ve pafta ayrı programdır, istenen DXF'e uygulanır:
+
+```
+python pf4_pafta.py --ornek-antet ANTET_A3.dxf        # örnek antet üret
+python pf4_pafta.py --plan --antet ANTET_A3.dxf cikti/*.dxf
+                                                      # hangi resim hangi kâğıda sığar
+python pf4_pafta.py --antet ANTET_A3.dxf --kagit A2 --cikti cikti/PAFTA \
+       --firma "FİRMA A.Ş." --cizen "N. ÖZDEMİR" --bas cikti/*.dxf
+```
+
+Kaynak DXF'lere dokunulmaz: pafta her zaman ayrı bir dosyaya yazılır ve
+model uzayı birebir korunur (program bunu her yazımda kendi denetler).
 
 ## Malzeme — kütle neye göre hesaplanıyor
 
