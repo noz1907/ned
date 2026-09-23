@@ -70,13 +70,17 @@ u.komp = [{"kod": "01.050.000.01", "ad": "U-Blech", "sinif": "parca", "adet": 2}
           {"kod": "01.051.000.01", "ad": "C-Profil", "sinif": "parca", "adet": 1}]
 print("\npoz numaralari:", M.poz_numaralari(u.komp))
 class SahteAgac:
-    def __init__(self): self.satir = {}; self.n = 0
+    """Sutun listesi arayuzden okunur: sutun eklenince test kirilmasin."""
+    def __init__(self, sut=None):
+        self.satir = {}; self.n = 0
+        self.sut = list(sut or ("poz", "kod", "ad", "kalinlik",
+                                "acinim", "yontem", "durum"))
     def delete(self, *a): self.satir.clear()
     def get_children(self): return list(self.satir)
     def insert(self, p, k, values=()):
         self.n += 1; s = f"I{self.n}"; self.satir[s] = list(values); return s
     def set(self, s, c, v=None):
-        i = ["poz","kod","ad","kalinlik","acinim","durum"].index(c)
+        i = self.sut.index(c)
         if v is None: return self.satir[s][i]
         self.satir[s][i] = v
     def selection(self): return list(self.satir)

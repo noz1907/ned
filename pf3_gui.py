@@ -518,20 +518,24 @@ class Uygulama(ttk.Frame):
             "çoklu seçim). Kaç bükümü olduğu fark etmez. Üretilen resim KESİM "
             "KONTURUDUR: dış kontur, kenar kesikleri ve delikler gerçek "
             "yerlerindedir; üstüne büküm çizgileri ve büküm tablosu işlenir. "
-            "Hesap güvenilir değilse açınım hiç verilmez, sebebi yazılır.")
+            "Hesap güvenilir değilse açınım hiç verilmez, sebebi yazılır. "
+            "YÖNTEM sütunu parçanın abkantta bükülüp bükülemeyeceğini söyler: "
+            "kanat V kalıbın ağzını tutamayacak kadar kısaysa ya da iç "
+            "yarıçap fazla küçükse abkantta yapılamaz, rollform gerekir.")
                   ).pack(anchor="w", pady=(0, 8))
 
         orta = ttk.Frame(f); orta.pack(fill="both", expand=True)
-        sut = ("poz", "kod", "ad", "kalinlik", "acinim", "durum")
-        basl = {"poz": ("POZ", 50), "kod": ("KOD", 150), "ad": ("AD", 300),
-                "kalinlik": ("SAC KALINLIK", 100), "acinim": ("AÇINIM  G x B", 160),
-                "durum": ("DURUM", 420)}
+        sut = ("poz", "kod", "ad", "kalinlik", "acinim", "yontem", "durum")
+        basl = {"poz": ("POZ", 50), "kod": ("KOD", 150), "ad": ("AD", 260),
+                "kalinlik": ("SAC KALINLIK", 100), "acinim": ("AÇINIM  G x B", 150),
+                "yontem": ("YÖNTEM", 110), "durum": ("DURUM", 360)}
         self.ac_agac = ttk.Treeview(orta, columns=sut, show="headings",
                                     selectmode="extended", height=14)
         for c in sut:
             self.ac_agac.heading(c, text=basl[c][0])
             self.ac_agac.column(c, width=basl[c][1],
-                                anchor="w" if c in ("kod", "ad", "durum") else "center")
+                                anchor="w" if c in ("kod", "ad", "durum")
+                                else "center")
         kd = ttk.Scrollbar(orta, orient="vertical", command=self.ac_agac.yview)
         self.ac_agac.configure(yscrollcommand=kd.set)
         self.ac_agac.pack(side="left", fill="both", expand=True)
@@ -567,7 +571,7 @@ class Uygulama(ttk.Frame):
                 continue        # standart eleman ve kaynak dikişi sac değil
             s = self.ac_agac.insert("", "end", values=(
                 pozlar[i], k.get("kod", ""), (k.get("ad") or "")[:60],
-                "", "", "seçilirse denenecek"))
+                "", "", "", "seçilirse denenecek"))
             self.ac_satir[s] = i
         self.b_acilim.configure(state="normal" if self.ac_satir else "disabled")
 
@@ -627,8 +631,12 @@ class Uygulama(ttk.Frame):
                 self.ac_agac.set(s, "kalinlik", f"{r['kalinlik_mm']} mm")
                 self.ac_agac.set(s, "acinim",
                                  f"{r['acinim_genislik_mm']} x {r['acinim_boy_mm']}")
-                self.ac_agac.set(s, "durum",
-                                 f"{r['bukum_sayisi']} büküm  –  {r['dxf']}")
+                yn = r.get("yontem") or {}
+                self.ac_agac.set(s, "yontem", yn.get("yontem", ""))
+                d = f"{r['bukum_sayisi']} büküm  –  {r['dxf']}"
+                if yn.get("yontem") == "rollform":
+                    d = "ABKANTTA YAPILAMAZ  –  " + d
+                self.ac_agac.set(s, "durum", d)
             elif ad in neden:
                 self.ac_agac.set(s, "durum",
                                  "açınım yok: " + neden[ad].splitlines()[0])

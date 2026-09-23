@@ -1076,6 +1076,91 @@ def k_faktor_ayari():
         return K_FAKTOR
 
 
+# ------------------------------------------------- büküm yöntemi
+# Abkant (pres büküm) sınırları. Tezgâha, kalıba ve malzemeye göre
+# değişir; ayarlardan değiştirilebilir. Varsayılanlar hava bükme için
+# yaygın kullanılan değerlerdir, kanun değildir - kendi kalıbınıza
+# göre ayarlayın.
+ABKANT_EN_AZ_KANAT = 4.0     # en kısa kanat, kalınlığın bu katı kadar olmalı
+ABKANT_EN_AZ_R = 0.6         # en küçük iç yarıçap, kalınlığın bu katı kadar
+SILINDIR_EN_AZ_R = 20.0      # iç yarıçap bu katın üstündeyse silindir bükümü
+
+
+def abkant_siniri():
+    """Saklanmış abkant sınırları; yoksa varsayılan."""
+    a = ayar_oku()
+    def _f(ad, vars_):
+        try:
+            v = float(a.get(ad, vars_))
+            return v if 0 < v < 100 else vars_
+        except (TypeError, ValueError):
+            return vars_
+    return (_f("abkant_en_az_kanat", ABKANT_EN_AZ_KANAT),
+            _f("abkant_en_az_r", ABKANT_EN_AZ_R),
+            _f("silindir_en_az_r", SILINDIR_EN_AZ_R))
+
+
+def bukum_yontemi(t, kanatlar, yaricaplar, aciler=(), boy_mm=0.0):
+    """Parça hangi yöntemle bükülmüş: abkant mı, rollform mu?
+
+    Karar FİZİĞE dayanır, tahmine değil. Abkantta parça bir V kalıbın
+    ağzına oturur ve bıçak bastırır; kanat kalıbın ağzını tutamayacak
+    kadar kısaysa parça kalıbın içine düşer, bükülemez. Aynı şekilde iç
+    yarıçap kalınlığın belli bir oranının altına inemez - sac çatlar.
+
+    Bu iki ölçü sınırın altındaysa parça abkantta YAPILAMAZ; o zaman
+    rollform (ya da başka bir yöntem) ile üretilmiştir. Üstündeyse
+    abkantla yapılabilir.
+
+    Döner: {"yontem", "kesinlik", "neden", ...ölçüler}
+    """
+    kanat_k, r_k, sil_k = abkant_siniri()
+    if not yaricaplar:
+        return {"yontem": "düz sac", "kesinlik": "kesin",
+                "neden": "Parçada büküm yok."}
+    if t <= 0:
+        return {"yontem": "bilinmiyor", "kesinlik": "-",
+                "neden": "Sac kalınlığı ölçülemedi."}
+    en_kisa = min(kanatlar) if kanatlar else 0.0
+    en_kucuk_r = min(yaricaplar)
+    olcu = {"en_kisa_kanat_mm": round(en_kisa, 2),
+            "en_kisa_kanat_t": round(en_kisa / t, 2),
+            "en_kucuk_r_mm": round(en_kucuk_r, 2),
+            "en_kucuk_r_t": round(en_kucuk_r / t, 2),
+            "bukum_sayisi": len(yaricaplar),
+            "sinir_kanat_t": kanat_k, "sinir_r_t": r_k}
+
+    if min(yaricaplar) / t >= sil_k:
+        return dict(olcu, yontem="silindir bükümü", kesinlik="olası",
+                    neden=(f"En küçük iç yarıçap kalınlığın "
+                           f"{en_kucuk_r / t:.0f} katı; bu kadar geniş "
+                           f"yarıçap abkantta değil silindirde (kalender) "
+                           f"yapılır."))
+    sebep = []
+    if kanatlar and en_kisa / t < kanat_k:
+        sebep.append(f"en kısa kanat {en_kisa:.1f} mm = kalınlığın "
+                     f"{en_kisa / t:.1f} katı (abkant için en az {kanat_k:g} "
+                     f"kat gerekir; daha kısa kanat V kalıbın ağzını tutmaz)")
+    if en_kucuk_r / t < r_k:
+        sebep.append(f"en küçük iç yarıçap {en_kucuk_r:.2f} mm = kalınlığın "
+                     f"{en_kucuk_r / t:.2f} katı (abkant için en az {r_k:g} "
+                     f"kat gerekir; altında sac çatlar)")
+    if sebep:
+        return dict(olcu, yontem="rollform", kesinlik="olası",
+                    neden=("Abkantta yapılamaz: " + "; ".join(sebep)
+                           + ". Rollform ya da başka bir yöntemle "
+                             "üretilmiş olmalı."))
+    ek = ""
+    if len(yaricaplar) >= 8 and boy_mm >= 1000:
+        ek = (f" ({len(yaricaplar)} büküm ve {boy_mm:.0f} mm boy rollform "
+              f"için de tipiktir; seri büyükse orayı da değerlendirin.)")
+    return dict(olcu, yontem="abkant", kesinlik="kesin",
+                neden=(f"Bütün kanatlar en az kalınlığın {kanat_k:g} katı "
+                       f"(en kısası {en_kisa / t:.1f} kat) ve iç yarıçaplar "
+                       f"en az {r_k:g} kat (en küçüğü "
+                       f"{en_kucuk_r / t:.2f} kat): abkantta bükülür." + ek))
+
+
 class AcilimYok(Exception):
     """Bu parçanın açınımı çıkarılamıyor; mesaj kullanıcıya gösterilir."""
 
@@ -1529,6 +1614,12 @@ def sac_acilim(sh, o=None, k_faktor=K_FAKTOR, istasyon=11,
              "orta_cizgi_mm": round(orta, 2),
              "bukum_yerleri": yer,
              "bukumler": bilgi}
+    # Parça hangi yöntemle bükülmüş? Kanat uzunlukları ve iç yarıçaplar
+    # buna karar vermeye yeter; tasarımcıya "bu abkantta yapılamaz"
+    # demek, yanlış tezgâha gönderilmesini önler.
+    sonuc["yontem"] = bukum_yontemi(
+        t, [z["uz"] for z in duzler], [z["r_ic"] for z in bkm],
+        [z["aci"] for z in bkm], boy)
 
     # Kesim konturu: lazer/pres için gereken gerçek dış kontur ve delikler.
     # Kesitten değil, YÜZEYLERDEN açılır; kesiti boy boyunca değişen
@@ -1681,7 +1772,16 @@ def acilim_kesim(sh, t, k_faktor, hacim=None, en_cok_sapma=0.03):
                     "pay_mm": round(b["pay"], 2),
                     "acinimda_bas_mm": round(a1, 2),
                     "acinimda_son_mm": round(a2, 2)})
-    return {"kontur_dis": [kay(w) for w in dis],
+    # Büküm yöntemi BURADAN hesaplanır, kesitten değil: kesit parçanın
+    # tek bir yerinden geçer, boy boyunca değişen dar kanatları
+    # kaçırabilir. Yüzey ağacı bütün parçayı görür.
+    yon = bukum_yontemi(
+        t, [abs(d["p"][1] - d["p"][0]) for d in duvarlar],
+        [bukumler[bi]["r_ic"] for bi in b_harita],
+        [b["aci"] for b in b_harita.values()],
+        max((d["z"][1] - d["z"][0] for d in duvarlar), default=0.0))
+    return {"yontem": yon,
+            "kontur_dis": [kay(w) for w in dis],
             "kontur_delik": [kay(w) for w in ic],
             "delik_adedi": len(ic),
             "acinim_boy_mm": round(max(xs) - min(xs), 2),
@@ -2548,6 +2648,13 @@ def dxf_acilim(r, k, yol, P=None):
            (f"{r['bukum_sayisi']} bukum   K-faktoru {r['k_faktor']}"
             + (f"   {r.get('delik_adedi', 0)} delik" if kesim else ""), 1.1 * h),
            ("olcek 1:1   birim: mm", 1.1 * h)]
+    yn = r.get("yontem") or {}
+    if yn.get("yontem"):
+        sat.append((f"BUKUM YONTEMI: {yn['yontem'].upper()}"
+                    + (f"  ({yn['kesinlik']})" if yn.get("kesinlik") else ""),
+                    1.2 * h))
+        for p in textwrap.wrap(yn.get("neden", ""), 108):
+            sat.append((p, 1.0 * h))
     if kesim:
         sat.append(("KESIM KONTURUDUR: dis kontur ve delikler gercek "
                     "yerlerinde.", 1.1 * h))
@@ -2627,11 +2734,18 @@ def acilim_yaz(kayit, komp, P, klasor, kodlar=None, k_faktor=K_FAKTOR,
             w = csv.writer(f, delimiter=";")
             w.writerow(["poz", "kod", "ad", "adet", "kalinlik_mm",
                         "acinim_genislik_mm", "acinim_boy_mm", "bukum_sayisi",
+                        "yontem", "en_kisa_kanat_mm", "en_kisa_kanat_t",
+                        "en_kucuk_r_t", "yontem_nedeni",
                         "k_faktor", "bukumler", "dxf"])
             for r in sonuc:
                 w.writerow([r["poz"], r["kod"], r["ad"], r["adet"],
                             r["kalinlik_mm"], r["acinim_genislik_mm"],
                             r["acinim_boy_mm"], r["bukum_sayisi"],
+                            (r.get("yontem") or {}).get("yontem", ""),
+                            (r.get("yontem") or {}).get("en_kisa_kanat_mm", ""),
+                            (r.get("yontem") or {}).get("en_kisa_kanat_t", ""),
+                            (r.get("yontem") or {}).get("en_kucuk_r_t", ""),
+                            (r.get("yontem") or {}).get("neden", ""),
                             r["k_faktor"],
                             " | ".join(f"{b['aci_derece']:g}d R{b['r_ic']:g} "
                                        f"pay{b['pay_mm']:g} @"

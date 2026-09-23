@@ -444,6 +444,52 @@ Kısacası: **yanlış bir kesim konturu çıkmaz.** Ya doğrusu çıkar, ya bla
 ölçüsü çıkar ve nedeni yazar. Lazerde hurda çıkarmaktansa hiç vermemek
 daha iyidir.
 
+
+#### Büküm yöntemi: abkant mı, rollform mu
+
+Program her sac parça için **hangi tezgâhta yapılabileceğini** söyler.
+Bu bir tahmin değil, fizik:
+
+- Abkantta parça bir **V kalıbın ağzına oturur** ve bıçak bastırır.
+  Kanat kalıbın ağzını tutamayacak kadar kısaysa parça kalıbın içine
+  düşer — bükülemez.
+- İç yarıçap, kalınlığın belli bir oranının altına inemez; altında sac
+  çatlar.
+
+Bu iki ölçü sınırın altındaysa parça **abkantta yapılamaz**; rollform
+(ya da başka bir yöntem) gerekir. Üstündeyse abkantla yapılır.
+
+Sonuç açınım resminin üstüne, `ACINIM.csv`'ye ve 6. adımdaki
+**YÖNTEM** sütununa yazılır — ölçüsüyle ve gerekçesiyle:
+
+```
+BUKUM YONTEMI: ROLLFORM  (olası)
+Abkantta yapılamaz: en kısa kanat 2,5 mm = kalınlığın 0,8 katı
+(abkant için en az 4 kat gerekir; daha kısa kanat V kalıbın ağzını
+tutmaz); en küçük iç yarıçap 0,50 mm = kalınlığın 0,17 katı (abkant
+için en az 0,6 kat gerekir; altında sac çatlar).
+```
+
+**Sınırlar sizin tezgâhınıza göredir**, kanun değil. Varsayılanlar hava
+bükme için yaygın değerlerdir:
+
+| sınır | varsayılan | anlamı |
+|-------|-----------|--------|
+| `abkant_en_az_kanat` | 4 × kalınlık | en kısa kanat bundan kısaysa abkant olmaz |
+| `abkant_en_az_r` | 0,6 × kalınlık | en küçük iç yarıçap bundan küçükse abkant olmaz |
+| `silindir_en_az_r` | 20 × kalınlık | bundan geniş yarıçap silindirde (kalender) yapılır |
+
+Kendi kalıbınıza göre değiştirmek için ayar dosyasını düzenleyin
+(K-faktörüyle aynı dosya, bkz. aşağıdaki not).
+
+Örnek montajdan ölçülenler:
+
+| parça | kalınlık | büküm | en kısa kanat | en küçük r | yöntem |
+|-------|---------|-------|---------------|-----------|--------|
+| 01.051.000.01 | 2,5 | 4 | 22,5 mm (9,0×t) | 3,5 mm (1,40×t) | **abkant** |
+| 09.025.000.02 | 3,0 | 10 | 0,81 mm (0,27×t) | 1,50 mm (0,50×t) | **rollform** |
+| 01.050.000.01 | 3,0 | 8 | 2,51 mm (0,84×t) | 0,50 mm (0,17×t) | **rollform** |
+
 ---
 
 ### Adım 7 — PAFTA
