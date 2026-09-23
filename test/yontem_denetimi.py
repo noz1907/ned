@@ -24,6 +24,14 @@ def esit(ad, olan, beklenen):
         print(f"  tamam {ad}: {olan!r}")
 
 
+def dogru(ad, kosul, aciklama=""):
+    if kosul:
+        print(f"  tamam {ad}")
+    else:
+        hata.append(f"{ad}: {aciklama}")
+        print(f"  HATA  {ad}: {aciklama}")
+
+
 def yontem(t, kanatlar, yaricaplar, boy=500.0):
     return M.bukum_yontemi(t, kanatlar, yaricaplar, [1.57] * len(yaricaplar),
                            boy)["yontem"]
@@ -89,6 +97,37 @@ try:
 finally:
     M.ayar_yaz(abkant_en_az_kanat=eski if eski else M.ABKANT_EN_AZ_KANAT)
 esit("sınır geri alındı", yontem(3.0, [0.8, 90.0], [3.0]), "rollform")
+
+print("\n-- şerit genişliği (orta çizgi kurulamayan profiller)")
+# Rollform profillerde orta çizgi kurulamayabilir; parça boy boyunca
+# aynı kesitteyse şerit genişliği yine verilebilir: kesit alanı /
+# kalınlık. İki kapısı var ve ikisi de tutmalı.
+from OCP.BRepPrimAPI import BRepPrimAPI_MakeBox, BRepPrimAPI_MakeCone  # noqa: E402
+from OCP.gp import gp_Pnt                                              # noqa: E402
+
+kutu_sh = BRepPrimAPI_MakeBox(gp_Pnt(0, 0, 0), 100.0, 3.0, 200.0).Shape()
+kb = M.kutu(kutu_sh)
+r = M._serit_genisligi(kutu_sh, kb, 3.0, 300.0, 200.0, "deneme")
+dogru("prizmatik şeritte sonuç verdi", r is not None, "None döndü")
+if r:
+    esit("genişlik = alan / kalınlık", r["acinim_genislik_mm"], 100.0)
+    esit("boy", r["acinim_boy_mm"], 200.0)
+    dogru("şerit genişliği diye işaretlendi", r.get("serit_genisligi") is True,
+          "işaret yok")
+    dogru("sebep ve doğrulama yazıldı",
+          "Hacimle doğrulandı" in r["kontur_notu"], r["kontur_notu"][:60])
+    dogru("büküm yeri verilmedi", r["bukumler"] == [] and r["k_faktor"] is None,
+          "büküm verisi uydurulmuş")
+
+# Konisi olan gövde: kesit boy boyunca değişir, şerit genişliği olmaz.
+koni = BRepPrimAPI_MakeCone(40.0, 10.0, 200.0).Shape()
+kb2 = M.kutu(koni)
+esit("kesiti değişen gövdede sonuç yok",
+     M._serit_genisligi(koni, kb2, 3.0, 1000.0, 200.0, "deneme"), None)
+
+# Hacimle tutmayan alan: kapı kapalı kalmalı.
+esit("alan hacimle tutmazsa sonuç yok",
+     M._serit_genisligi(kutu_sh, kb, 3.0, 300.0, 400.0, "deneme"), None)
 
 print("\nSONUC:", "TUM DENETIMLER GECTI" if not hata
       else f"{len(hata)} HATA\n  " + "\n  ".join(hata))

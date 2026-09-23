@@ -1354,16 +1354,19 @@ def _kesit_yuzu(sh, konum, kb):
         bul.append(f)
     if len(bul) != 1:
         return None                       # kesit parçalı: sac şeridi değil
-    # Yalnız DIŞ teli al. Sacın ortasındaki delikler kesitin dış sınırını
-    # değiştirmez; onları atınca delikli parçalarda da sağlam bir kesit
-    # elde edilir.
-    try:
-        dis = BRepTools.OuterWire_s(bul[0])
-        yap = BRepBuilderAPI_MakeFace(dis)
-        if yap.IsDone():
-            return yap.Face()
-    except Exception:
-        pass
+    # İÇ TELLER ATILMAZ. Eskiden yalnız dış tel alınıyordu, gerekçe
+    # "sacın ortasındaki delikler kesitin dış sınırını değiştirmez"di.
+    # Açık C/U profilde doğru, ama kendi içine kapanan bir profilde
+    # (rollform ray, kapalı kutu profil) atılan iç tel DELİK DEĞİL,
+    # profilin BOŞLUĞUDUR; atılınca alan şişer.
+    #
+    # Ölçülen: TIRSAN rayında dış tel 4219 mm2 veriyordu, telleriyle
+    # 1936,5 mm2 - ve parça prizmatik olduğu için doğrusu hacim/boy =
+    # 387290/200 = 1936,5. Şişmiş alan açınım genişliğini 1407 mm
+    # gösteriyordu, doğrusu 646 mm.
+    #
+    # Kesit bir sac deliğinden geçerse şerit ikiye ayrılır ve yukarıdaki
+    # "parçalı" denetimi zaten eler; o istasyon atlanır.
     return bul[0]
 
 
@@ -1557,6 +1560,75 @@ def _zincir(ogeler, birles=0.2):
     return zincir
 
 
+def _serit_genisligi(sh, kb, t, alan, boy, sebep, istasyon=9, sapma=0.03):
+    """Prizmatik bir profilin şerit (bobin) genişliği.
+
+    Orta çizgi kurulamayan parçalarda son çare. İki denetimden geçer,
+    ikisi de tutmazsa hiçbir şey verilmez:
+
+    1. Parça boy boyunca AYNI KESİTTE mi? Birkaç istasyonda alan
+       ölçülür; oynuyorsa parça prizmatik değildir, tek bir şerit
+       genişliğinden söz edilemez.
+    2. Kesit alanı x boy, parçanın GERÇEK HACMİNE eşit mi? Eşitse kesit
+       doğru ölçülmüş demektir. (TIRSAN rayında ölçülen: 1936,5 x 200 =
+       387.290 mm3, parçanın hacmi de 387.290 mm3.)
+    """
+    alanlar = []
+    for i in range(istasyon):
+        z = kb[2] + boy * (i + 0.5) / istasyon
+        yz = _kesit_yuzu(sh, z, kb)
+        if yz is None:
+            continue
+        g = GProp_GProps(); BRepGProp.SurfaceProperties_s(yz, g)
+        alanlar.append(g.Mass())
+    if len(alanlar) < max(3, istasyon - 2):
+        return None                       # kesit her yerde alınamadı
+    if max(alanlar) - min(alanlar) > 0.005 * max(alanlar):
+        return None                       # kesit boy boyunca değişiyor
+    a = sum(alanlar) / len(alanlar)
+    g = GProp_GProps(); BRepGProp.VolumeProperties_s(sh, g)
+    hac = g.Mass()
+    if hac <= 0 or abs(a * boy - hac) > sapma * hac:
+        return None                       # kesit hacimle tutmuyor
+    gen = a / t
+    # Yöntem: kanat uzunlukları bilinmiyor (orta çizgi kurulamadı), ama
+    # BÜKÜM YARIÇAPLARI biliniyor. Hepsi abkant sınırının altındaysa bu
+    # parça abkantta yapılamaz - söylenebilecek kadarı budur.
+    yon = {}
+    try:
+        ry = [b["r"] for b in bukum_yuzeyleri(sh)]
+        if ry:
+            _, r_k, _ = abkant_siniri()
+            kucuk = sum(1 for r in ry if r / t < r_k)
+            yon = {"yontem": "rollform" if kucuk > len(ry) / 2 else "",
+                   "kesinlik": "olası", "bukum_sayisi": len(ry),
+                   "en_kucuk_r_t": round(min(ry) / t, 2),
+                   "neden": (f"{len(ry)} büküm yüzeyi var, yarıçapları "
+                             f"{min(ry) / t:.2f}..{max(ry) / t:.2f} x kalınlık; "
+                             f"{kucuk} tanesi abkant sınırı {r_k:g} katın "
+                             f"altında. Kanat uzunlukları ölçülemedi.")}
+            if not yon["yontem"]:
+                yon = {}
+    except Exception:
+        yon = {}
+    return {"kalinlik_mm": round(t, 2), "yontem": yon,
+            "acinim_genislik_mm": round(gen, 2),
+            "acinim_boy_mm": round(boy, 2),
+            "bukum_sayisi": 0, "duvar_sayisi": 0,
+            "k_faktor": None,
+            "kesit_alani_mm2": round(a, 1),
+            "orta_cizgi_mm": round(gen, 2),
+            "bukum_yerleri": [], "bukumler": [],
+            "serit_genisligi": True,
+            "kontur_notu": (
+                f"ŞERİT GENİŞLİĞİDİR, açınım resmi değildir. Orta çizgi "
+                f"kurulamadı ({sebep}) Parça boy boyunca aynı kesitte; "
+                f"genişlik = kesit alanı / kalınlık = {a:.1f} / {t:.2f} = "
+                f"{gen:.1f} mm. Hacimle doğrulandı: {a:.0f} x {boy:.0f} = "
+                f"{a * boy:.0f} mm3, parçanın hacmi {hac:.0f} mm3. "
+                f"Büküm yerleri ve kesim konturu VERİLMEDİ.")}
+
+
 def sac_acilim(sh, o=None, k_faktor=K_FAKTOR, istasyon=11,
                kontur=True):
     """Tek yönde bükülmüş sac parçanın açınımını hesaplar.
@@ -1596,12 +1668,23 @@ def sac_acilim(sh, o=None, k_faktor=K_FAKTOR, istasyon=11,
             "güvenilir ölçülemez.")
     alan, yuz = en_iyi
 
-    ogeler = _orta_ogeler(yuz, t)
-    zincir = _zincir(ogeler, max(0.2, 0.1 * t))
-    duzler = [z for z in zincir if z["tip"] == "duz"]
-    bkm = [z for z in zincir if z["tip"] == "bukum"]
-    if not bkm:
-        raise AcilimYok("Kesitte büküm yayı bulunamadı.")
+    try:
+        ogeler = _orta_ogeler(yuz, t)
+        zincir = _zincir(ogeler, max(0.2, 0.1 * t))
+        duzler = [z for z in zincir if z["tip"] == "duz"]
+        bkm = [z for z in zincir if z["tip"] == "bukum"]
+        if not bkm:
+            raise AcilimYok("Kesitte büküm yayı bulunamadı.")
+    except AcilimYok as e:
+        # Orta çizgi kurulamadı. Yine de ŞERİT GENİŞLİĞİ verilebilir:
+        # parça boy boyunca aynı kesitteyse (prizmatik) genişlik,
+        # kesit alanı / kalınlıktır ve bunu HACİM bağımsız olarak
+        # doğrular. Rollform profillerde zaten istenen budur: bobin
+        # genişliği. Büküm yerleri ve kesim konturu verilmez.
+        r = _serit_genisligi(sh, kb, t, alan, boy, str(e))
+        if r is None:
+            raise
+        return r
 
     # Çapraz denetim: orta çizgi uzunluğu = kesit alanı / kalınlık
     orta = sum(z["uz"] for z in duzler) + sum(z["aci"] * z["r_orta"] for z in bkm)
@@ -2648,9 +2731,12 @@ def dxf_acilim(r, k, yol, P=None):
     # Tablo, büküm etiketlerinin bittiği yerden sonra başlar. Etiketler
     # bükümler sıkışıksa sağa kayıyor; sabit bir yerden başlatılırsa
     # tablonun üstüne biniyorlardı.
+    # Büküm yoksa çizelge de olmaz; ama BAŞLIK yine yazılır, o yüzden
+    # burada çıkılmaz, yalnız çizelge atlanır.
     x = max(boy + 4.0 * h, etiket_sag + 2.0 * h)
     y = gen
-    _yaz(msp, "BUKUM  ACI      IC R   PAY      ALT KENARDAN", x, y, h)
+    if r["bukumler"]:
+        _yaz(msp, "BUKUM  ACI      IC R   PAY      ALT KENARDAN", x, y, h)
     y -= 2.0 * h
     for i, b in enumerate(r["bukumler"], 1):
         _yaz(msp, f"B{i:<5d} {b['aci_derece']:>6.1f}  {b['r_ic']:>6.2f} "
@@ -2669,8 +2755,10 @@ def dxf_acilim(r, k, yol, P=None):
     sat = [(f"{poz}{k.get('kod','')}   {(k.get('ad') or '')[:60]}   AÇINIM", 1.5 * h),
            (f"adet: {k.get('adet','-')}", 1.1 * h),
            (f"ACINIM : {gen} x {boy} mm   sac kalinlik {t} mm", 1.1 * h),
-           (f"{r['bukum_sayisi']} bukum   K-faktoru {r['k_faktor']}"
-            + (f"   {r.get('delik_adedi', 0)} delik" if kesim else ""), 1.1 * h),
+           ((f"{r['bukum_sayisi']} bukum   K-faktoru {r['k_faktor']}"
+             + (f"   {r.get('delik_adedi', 0)} delik" if kesim else ""))
+            if r.get("k_faktor") is not None
+            else "bukum yerleri verilmedi", 1.1 * h),
            ("olcek 1:1   birim: mm", 1.1 * h)]
     yn = r.get("yontem") or {}
     if yn.get("yontem"):
@@ -2685,7 +2773,9 @@ def dxf_acilim(r, k, yol, P=None):
         sat.append(("KESIM KONTURUDUR: dis kontur ve delikler gercek "
                     "yerlerinde.", 1.1 * h))
     else:
-        sat.append(("BLANK OLCUSUDUR: dis kontur kesikleri ve delikler "
+        sat.append(("SERIT GENISLIGIDIR: bukum yerleri ve kesim konturu yok."
+                    if r.get("serit_genisligi") else
+                    "BLANK OLCUSUDUR: dis kontur kesikleri ve delikler "
                     "bu resimde YOKTUR.", 1.1 * h))
         if r.get("kontur_notu"):
             # Sebebi KESME, SARDIR. Eskiden 110 karakterde kesiliyordu ve

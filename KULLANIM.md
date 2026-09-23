@@ -445,6 +445,33 @@ Kısacası: **yanlış bir kesim konturu çıkmaz.** Ya doğrusu çıkar, ya bla
 daha iyidir.
 
 
+#### Orta çizgi kurulamazsa: şerit genişliği
+
+Rollform profillerde parçanın kesiti çok karmaşık olabilir ve program
+orta çizgiyi kuramayabilir. O zaman **açınım resmi verilmez** — ama
+parça boy boyunca aynı kesitteyse **şerit (bobin) genişliği** yine
+verilir, çünkü rollform için zaten istenen odur:
+
+```
+genişlik = kesit alanı / sac kalınlığı
+```
+
+İki kapıdan geçer, ikisi de tutmazsa hiçbir şey verilmez:
+
+1. **Parça prizmatik mi?** Boy boyunca dokuz istasyonda kesit alanı
+   ölçülür; %0,5'ten çok oynuyorsa tek bir şerit genişliğinden söz
+   edilemez.
+2. **Kesit alanı × boy, parçanın gerçek hacmine eşit mi?** Eşitse
+   kesit doğru ölçülmüş demektir.
+
+Resmin üstüne **ŞERİT GENİŞLİĞİDİR** yazar, doğrulama sayılarıyla
+birlikte; büküm yerleri ve kesim konturu verilmediği açıkça belirtilir.
+
+> Gerçek bir örnek: TIRSAN rayı (3 mm sac, 200 mm boy, 67 büküm
+> yüzeyi). Kesit alanı 1936,5 mm² → şerit genişliği **645,8 mm**.
+> Hacim denetimi: 1936,5 × 200 = 387.290 mm³, parçanın gerçek hacmi de
+> 387.290 mm³.
+
 #### Büküm yöntemi: abkant mı, rollform mu
 
 Program her sac parça için **hangi tezgâhta yapılabileceğini** söyler.
