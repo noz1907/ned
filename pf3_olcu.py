@@ -3000,8 +3000,8 @@ def dxf_komponent(s, o, k, yol, P):
     doc.saveas(yol)
 
 
-def _baslik_isareti(msp, onceki, kaba):
-    """Başlık bloğunun gerçek sınırını ölçüp işaretler."""
+def _baslik_isareti(msp, onceki, kaba, ad="BASLIK"):
+    """Yazı bloğunun gerçek sınırını ölçüp işaretler."""
     yeni = [e for e in msp if e.dxf.handle not in onceki
             and e.dxf.layer != GORUNUS_KATMAN]
     kutu_ = kaba
@@ -3011,7 +3011,7 @@ def _baslik_isareti(msp, onceki, kaba):
             kutu_ = (k.extmin.x, k.extmin.y, k.extmax.x, k.extmax.y)
     except Exception:
         pass
-    return gorunus_isareti(msp, "BASLIK", kutu_)
+    return gorunus_isareti(msp, ad, kutu_)
 
 
 def dxf_montaj(katilar, yol, ad, P, bom=None):
@@ -3028,13 +3028,14 @@ def dxf_montaj(katilar, yol, ad, P, bom=None):
     gorunusler = gorunus_sec(P.get("gorunusler"))
     g = max(L, W, H) * 0.08 + 10 * h
     yer = gorunus_yerlesimi(L, W, H, g, gorunusler)
-    ust = {}
+    ust, gkutu = {}, {}
     for gad in gorunusler:
         goz, xref = GORUNUS[gad]
         kenar = hlr(s, goz, xref, gizli=False)       # montajda gizli çizgi kapalı
         ox, oy = yer[gad]
         G, Y, _dx, _dy = gorunus_ciz(msp, kenar, ox, oy, gad, h=h, olcu2=True)
         ust[gad] = oy + Y + 2.2 * h
+        gkutu[gad] = (ox, oy, ox + G, oy + Y)
     sol = min(x for x, _y in yer.values()) - 5.0 * h
     sag = max(x + gorunus_olcusu(gd, L, W, H)[0] for gd, (x, _y) in yer.items())
     sat_h = 2.2 * h
@@ -3045,9 +3046,20 @@ def dxf_montaj(katilar, yol, ad, P, bom=None):
         agir = sum((r.get("toplam_kg") or 0.0) for r in bom)
         satir.append((f"toplam kutle: {agir:.3f} kg   poz sayisi: {len(bom)}", 1.1 * h))
     tepe = max(ust.values()) + 2.5 * h + len(satir) * sat_h
+    onceki = {e.dxf.handle for e in msp}
     _tablo(msp, satir, sol, tepe, h, sat_h)
+    _baslik_isareti(msp, onceki, (sol, tepe - len(satir) * sat_h,
+                                  sol + 40.0 * h, tepe))
     if bom:
+        onceki = {e.dxf.handle for e in msp}
         _tablo(msp, bom_satirlari(bom, h), sag + 6.0 * h, tepe, h, sat_h)
+        # BOM tablosu da bir "görünüş"tür: paftada kendi penceresine
+        # alınıp yerleştirilsin, yoksa görünüşlerle birlikte tek blok
+        # gibi taşınır ve kâğıdın yarısı boş kalır.
+        _baslik_isareti(msp, onceki, (sag + 6.0 * h, 0.0,
+                                      sag + 46.0 * h, tepe), "BOM")
+    for gad, kt in gkutu.items():
+        gorunus_isareti(msp, gad, kt)
     doc.saveas(yol)
     return {"boy_mm": round(L, 2), "en_mm": round(W, 2), "yukseklik_mm": round(H, 2)}
 

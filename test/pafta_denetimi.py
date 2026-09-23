@@ -293,8 +293,12 @@ try:
     for ad, (a, b, c, e) in kut.items():
         m.add_lwpolyline([(a, b), (c, b), (c, e), (a, e)], close=True)
         M.gorunus_isareti(m, ad, (a, b, c, e))
+    # Başlık işareti TAHMİN EDİLMEZ, ÖLÇÜLÜR - motorun yaptığı gibi.
+    # Elle yazılan kutu yazının alt çıkıntısını dışarıda bırakıyor ve
+    # başlık görünüşe yazılıyor.
+    onceki = {e.dxf.handle for e in m}
     m.add_text("BASLIK", height=10).set_placement((-700, 120))
-    M.gorunus_isareti(m, "BASLIK", (-700, 120, -400, 140))
+    M._baslik_isareti(m, onceki, (-700, 120, -400, 140))
     d.saveas(yol)
 
     cik = os.path.join(kl, "CIK", "dort.dxf")
@@ -336,6 +340,28 @@ try:
     dogru("model boşlukları atıldı",
           r["obek"][0] < (r["olcu"][0] * r["olcek"]) - 1.0,
           f"öbek {r['obek'][0]} mm, ham çizim {r['olcu'][0] * r['olcek']:.0f} mm")
+
+    print("\n-- pencereler çakışırsa dağıtımdan vazgeçiliyor mu")
+    # Bir pencere kendi "sahibi" olan çizgiyi değil, DİKDÖRTGENİNE düşen
+    # her şeyi gösterir. Pencereler üst üste binerse ortak bölge iki kere
+    # basılır, yazılar yarım yarım çıkar. Montaj resminde tam bu oldu.
+    yol2 = os.path.join(kl, "cakisan.dxf")
+    d = ezdxf.new(setup=True)
+    d.header["$INSUNITS"] = 4
+    m = d.modelspace()
+    kut2 = {"ON": (0, 0, 300, 40), "SOL": (900, 0, 1000, 40)}
+    for ad, (a, b, c, e) in kut2.items():
+        m.add_lwpolyline([(a, b), (c, b), (c, e), (a, e)], close=True)
+        M.gorunus_isareti(m, ad, (a, b, c, e))
+    # Başlık bloğu görünüşlerin ÜSTÜNE binecek şekilde işaretlendi
+    m.add_text("BASLIK", height=10).set_placement((100, 20))
+    M.gorunus_isareti(m, "BASLIK", (100, 10, 400, 30))
+    d.saveas(yol2)
+    r2 = P.pafta_kur(yol2, os.path.join(kl, "CIK", "cakisan.dxf"), "A3")
+    dogru("çakışan pencerede tek pencereye düşüldü",
+          not r2["dagitildi"] and r2["pencere"] == 1,
+          f"pencere={r2['pencere']} dagitildi={r2['dagitildi']} — "
+          "çakışan pencerelerle dağıtıldı, çizgiler iki kere basılır")
 
     print("\n-- baskı")
     pdf = P.bas(os.path.join(kl, "CIK", "kucuk.dxf"),

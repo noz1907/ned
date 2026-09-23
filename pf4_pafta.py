@@ -300,30 +300,48 @@ def _izgara(d, alanlar, kutu):
     return ([g[1] - g[0] for g in sut], [g[1] - g[0] for g in sat], hucre)
 
 
-def _acikta_kalan(d, hucreler, baslik):
-    """Hiçbir hücreye girmeyen çizgi var mı?
+def _pencere_temiz_mi(d, hucreler):
+    """Her çizgi TAM OLARAK BİR pencerenin içinde mi?
 
-    Hücreler çizimi kaplamalı. Kapamıyorsa - ızgarada boş göz varsa ve
-    oraya bir şey çizilmişse - o çizgi paftada görünmez. Böyle bir şey
-    varsa çok pencereli yerleşimden vazgeçilir; eksik resim vermektense
-    tek pencere daha iyidir."""
-    import ezdxf.bbox
-    kutular = list(hucreler) + ([baslik] if baslik else [])
+    Bu denetim şart, çünkü bir pencere kendisine "ait" olanı değil,
+    DİKDÖRTGENİNE DÜŞEN HER ŞEYİ gösterir. Bir yazı iki pencerenin
+    sınırına denk gelirse ikisinde de, yarım yarım çıkar; hiçbirine
+    düşmezse hiç çıkmaz. Montaj resminde tam bu oldu: başlık bloğu
+    görünüş pencerelerinin sınırına denk geldi ve paftada hem doğru
+    yerinde hem de görünüşlerin arasında parça parça göründü.
+
+    Bir tane bile şüpheli varlık varsa çok pencereli yerleşimden
+    vazgeçilir; tek pencere, bozuk resimden iyidir."""
+    # Önce pencereler birbirinin üstüne binmesin: binerse ortak bölgedeki
+    # çizgi İKİ kere basılır.
+    for i in range(len(hucreler)):
+        for j in range(i + 1, len(hucreler)):
+            a, b = hucreler[i], hucreler[j]
+            if (a[0] < b[2] - 0.02 and a[2] > b[0] + 0.02
+                    and a[1] < b[3] - 0.02 and a[3] > b[1] + 0.02):
+                return False
     try:
-        for k in ezdxf.bbox.multi_flat(
-                [e for e in d.modelspace()
-                 if e.dxf.layer != GORUNUS_KATMAN]):
+        varlik = [e for e in d.modelspace() if e.dxf.layer != GORUNUS_KATMAN]
+        for k in ezdxf.bbox.multi_flat(varlik):
             if not k.has_data:
                 continue
-            x0, y0 = k.extmin.x, k.extmin.y
-            x1, y1 = k.extmax.x, k.extmax.y
-            if not any(x0 >= c[0] - 0.01 and y0 >= c[1] - 0.01
-                       and x1 <= c[2] + 0.01 and y1 <= c[3] + 0.01
-                       for c in kutular):
-                return True
+            b = (k.extmin.x, k.extmin.y, k.extmax.x, k.extmax.y)
+            # Ölçüt tek: varlık TAM OLARAK BİR hücrenin içinde olmalı.
+            # Hücreler birbiriyle çakışmadığı için "birden fazlasının
+            # içinde" olamaz; hiçbirinin içinde değilse ya sınırı aşıyor
+            # (iki pencerede yarım yarım çıkar) ya da hepsinin dışında
+            # (hiç çıkmaz). İkisi de kabul edilemez.
+            #
+            # Pay şart: görünüşün tam kenarında duran sıfır genişlikli
+            # çizgiler var (parçanın kenar konturu), onlar hücrenin
+            # içinde sayılmalı.
+            if sum(1 for c in hucreler
+                   if b[0] >= c[0] - 0.02 and b[1] >= c[1] - 0.02
+                   and b[2] <= c[2] + 0.02 and b[3] <= c[3] + 0.02) != 1:
+                return False
     except Exception:
-        return True
-    return False
+        return False
+    return True
 
 
 def en_kucuk_yazi(yol):
@@ -454,7 +472,8 @@ def cok_pencere_plani(d, kutu, alan_g, alan_y):
     baslik = alanlar.get(BASLIK_AD)
     bg = (baslik[2] - baslik[0]) if baslik else 0.0
     bb = (baslik[3] - baslik[1]) if baslik else 0.0
-    if _acikta_kalan(d, [h[2] for h in hucre.values()], baslik):
+    hepsi = [h[2] for h in hucre.values()] + ([baslik] if baslik else [])
+    if not _pencere_temiz_mi(d, hepsi):
         return None
 
     ts, tr = sum(sutun), sum(satir)
