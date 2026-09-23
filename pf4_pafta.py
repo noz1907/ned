@@ -68,8 +68,18 @@ BOLGE_HARF = "ABCDEFGHIJKL"
 GORUNUS_KATMAN = "PI3D_GORUNUS_ALANI"   # motorun bıraktığı görünüş yerleri
 GORUNUS_APPID = "PI3D"
 BASLIK_AD = "BASLIK"
-IC_PAY = 12.0            # çerçevenin ve antet kutusunun resme uzaklığı
-ARA_EN_AZ = 12.0         # görünüşler arasında kâğıtta en az bu kadar mm
+IC_PAY = 12.0            # çerçevenin ve antet alanının resme uzaklığı
+# Çerçevenin üstünde resim no/isim için ayrılan şerit. Yazıların
+# gerçekten ihtiyacı kadar: 4,5 + 3,0 mm yazı + paylar. Bir mm fazlası
+# ölçeği bir kademe düşürebiliyor (A3'te 1:2 yerine 1:5), o yüzden dar
+# tutuluyor.
+BASLIK_YAZI, BASLIK_ALT_YAZI = 4.5, 3.0
+BASLIK_SERIT = 11.0
+# Görünüşler arasındaki aralık. EN_AZ bir tercih değil, alt sınırdır:
+# yüksek tutmak bir kademe ölçek kaybettirebiliyor (A3'te 1:2 yerine
+# 1:5, yani resim yarı yarıya küçülüyor). 8 mm iki görünüşü ayırmaya
+# yeter; yer varsa zaten EN_COK'a kadar açılıyor.
+ARA_EN_AZ = 10.0
 ARA_EN_COK = 45.0        # ve en çok bu kadar; yoksa köşelere dağılırlar
 
 HARF_ORAN = 0.62         # yazı genişliği ~ harf sayısı x yükseklik x bu
@@ -381,7 +391,11 @@ def cerceve(kagit=VARSAYILAN_KAGIT):
 
 
 def antet_kutusu(kagit=VARSAYILAN_KAGIT):
-    """Sağ alt köşede boş bırakılan alan (x0, y0, x1, y1).
+    """Sağ alt köşede BOŞ bırakılan alan (x0, y0, x1, y1).
+
+    Buraya asla resim gelmez; firma kendi antetini oraya yapıştırır.
+    ÇİZİLMEZ - kendi çerçevesi olan bir anteti yapıştırınca iki çizgi
+    üst üste binerdi. Alan yalnız hesapta vardır.
 
     Ölçüsü kâğıttan kâğıda değişmez: antet A3'te ne kadarsa A1'de de
     o kadardır. Yazı boyları kâğıtla büyümez."""
@@ -397,14 +411,19 @@ def cizim_alanlari(kagit=VARSAYILAN_KAGIT):
     genişlikte, ya da SOLUNA tam yükseklikte. Hangisi daha büyük ölçek
     veriyorsa o kullanılır.
 
-    Alanlar çerçeveye ve antet kutusuna DAYANMAZ: her yönde IC_PAY
+    Alanlar çerçeveye ve antet alanına DAYANMAZ: her yönde IC_PAY
     kadar (12 mm) boşluk bırakılır. Çerçeveye yapışmış bir resim hem
-    kötü görünür hem de baskıda kenara taşma riski taşır."""
+    kötü görünür hem de baskıda kenara taşma riski taşır. Çerçevenin
+    üstünde ayrıca BASLIK_SERIT kadar yer resim no ve isim içindir."""
     fx0, fy0, fx1, fy1 = cerceve(kagit)
     ax0, _, _, ay1 = antet_kutusu(kagit)
     p = IC_PAY
-    return {"ust": (fx0 + p, ay1 + p, fx1 - p, fy1 - p),
-            "sol": (fx0 + p, fy0 + p, ax0 - p, fy1 - p)}
+    # Resim no/isim, çerçevenin üstündeki İÇ PAYIN İÇİNE yazılır; o pay
+    # zaten boştu. Ayrıca yer ayırmak gereksiz yere ölçek düşürüyordu -
+    # A3'te 1:2 yerine 1:5, yani resim yarı yarıya küçülüyordu.
+    ust = fy1 - max(p, BASLIK_SERIT + 1.0)
+    return {"ust": (fx0 + p, ay1 + p, fx1 - p, ust),
+            "sol": (fx0 + p, fy0 + p, ax0 - p, ust)}
 
 
 def sigan_olcek(gx, gy, alan_g, alan_y, buyutme=False):
@@ -532,19 +551,22 @@ def _cok_pencere_ciz(pafta, plan, sol, alt):
     return say
 
 
-def _pafta_cerceve_ciz(pafta, kagit, bilgi=""):
+def _pafta_cerceve_ciz(pafta, kagit, resim_no="", resim_adi="", bilgi=""):
     """Standart pafta çerçevesini çizer.
 
         - kâğıdın kenarında ince dış çizgi
         - 15 mm içeride kalın çizim çerçevesi
         - ikisinin arasında bölge şeridi: rakamlar ve harfler
         - kenar ortalarında katlama/ortalama işaretleri
-        - sağ alt köşede BOŞ antet kutusu
+        - SAĞ ÜST köşede resim no ve ismi
+
+    Sağ alt köşedeki antet alanı ÇİZİLMEZ, yalnız boş bırakılır: kendi
+    çerçevesi olan bir anteti oraya yapıştırınca iki çizgi üst üste
+    binerdi.
 
     Her biri ayrı katmanda: istemediğinizi tek tıkla silersiniz."""
     d = pafta.doc
-    for ad, renk in ((KAT_CERCEVE, 7), (KAT_ANTET, 7),
-                     (KAT_BOLGE, 7), (KAT_BILGI, 8)):
+    for ad, renk in ((KAT_CERCEVE, 7), (KAT_BOLGE, 7), (KAT_BILGI, 7)):
         if ad not in d.layers:
             d.layers.add(ad, color=renk)
     kg, ky = KAGIT[kagit]
@@ -592,23 +614,28 @@ def _pafta_cerceve_ciz(pafta, kagit, bilgi=""):
         cizgi(x, y, x + dx * (KENAR - DIS_PAY), y + dy * (KENAR - DIS_PAY),
               KAT_CERCEVE, 50)
 
-    # --- antet kutusu: BOŞ. Firma kendi antetini buraya yapıştırır.
-    ax0, ay0, ax1, ay1 = antet_kutusu(kagit)
-    dikdortgen(ax0, ay0, ax1, ay1, KAT_ANTET, 50)
-
-    if bilgi:
-        # Paftanın ölçeği yazılmak zorunda: model uzayı 1:1 olduğu için
-        # çizimin kendi başlığında "olcek 1:1" yazar, kâğıtta ise 1:5
-        # olabilir. Antet kutusunun üst kenarına, kendi katmanında.
-        # Kendi antetinizi yapıştırırken bu katmanı kapatın: sizin
-        # antetinizde zaten ölçek gözü vardır.
-        t = pafta.add_text(bilgi, height=3.0,
+    # --- sağ üst köşe: resim no, ismi ve paftanın ölçeği.
+    # Ölçek yazılmak ZORUNDA: model uzayı 1:1 olduğu için çizimin kendi
+    # başlığında "olcek 1:1" yazar, kâğıtta ise 1:5 olabilir.
+    sag = fx1 - 2.0
+    y = fy1 - BASLIK_YAZI - 1.5
+    if resim_no:
+        t = pafta.add_text(str(resim_no), height=BASLIK_YAZI,
+                           dxfattribs={"layer": KAT_BILGI, "lineweight": 35})
+        t.set_placement((sag, y),
+                        align=ezdxf.enums.TextEntityAlignment.BOTTOM_RIGHT)
+        y -= BASLIK_ALT_YAZI + 1.5
+    alt = "   ".join(x for x in (str(resim_adi or ""), bilgi) if x)
+    if alt:
+        t = pafta.add_text(alt, height=BASLIK_ALT_YAZI,
                            dxfattribs={"layer": KAT_BILGI, "lineweight": 13})
-        t.set_placement((ax0 + 3, ay1 - 5))
+        t.set_placement((sag, y),
+                        align=ezdxf.enums.TextEntityAlignment.BOTTOM_RIGHT)
 
 
 def pafta_kur(kaynak_dxf, cikti_dxf, kagit=VARSAYILAN_KAGIT, olcek=None,
-              buyutme=False, pafta_adi="PAFTA", bilgi=True, cok=True):
+              buyutme=False, pafta_adi="PAFTA", bilgi=True, cok=True,
+              resim_no=None, resim_adi=None):
     """1:1 DXF'in KOPYASINA standart bir pafta ekler.
 
     kaynak_dxf : 1:1 çizim. AÇILIR, OKUNUR, DEĞİŞTİRİLMEZ.
@@ -618,6 +645,8 @@ def pafta_kur(kaynak_dxf, cikti_dxf, kagit=VARSAYILAN_KAGIT, olcek=None,
     cok        : görünüşleri ayrı pencerelere alıp kâğıda ortadan dışa
                  eşit aralıklarla dağıt. Resimde görünüş işareti yoksa
                  ya da bölünemiyorsa kendiliğinden tek pencereye düşer.
+    resim_no   : sağ üst köşeye yazılır; verilmezse dosya adı kullanılır
+    resim_adi  : resim no'nun altına yazılır (parçanın adı)
 
     Döner: {"olcek":, "olcek_metni":, "kagit":, "yer":, "olcu": (gx,gy),
             "alan": (g,y), "dosya":}
@@ -735,17 +764,18 @@ def pafta_kur(kaynak_dxf, cikti_dxf, kagit=VARSAYILAN_KAGIT, olcek=None,
 
     not_ = ""
     if bilgi:
-        bas = (f"{kagit}   PAFTA ÖLÇEĞİ {olcek_metni(olcek)}"
-               + ("   (model uzayı 1:1)" if abs(olcek - 1) > 1e-9 else ""))
-        # Antet kutusundan taşmasın: kutuya kaç harf sığıyorsa o kadar.
-        # Taşan yazı kutunun dışına çıkıp çizimin üstüne biniyordu.
-        sigan = int((ANTET_EN - 8.0) / (HARF_ORAN * 3.0))
-        ek = os.path.basename(kaynak_dxf)
-        if len(bas) + 3 + len(ek) > sigan:
-            ek = ek[:max(0, sigan - len(bas) - 4)] + (
-                "…" if sigan > len(bas) + 4 else "")
-        not_ = (bas + "   " + ek).rstrip()[:sigan]
-    _pafta_cerceve_ciz(pafta, kagit, not_)
+        not_ = (f"{kagit}  ÖLÇEK {olcek_metni(olcek)}"
+                + ("  (model 1:1)" if abs(olcek - 1) > 1e-9 else ""))
+    no = resim_no if resim_no is not None else os.path.splitext(
+        os.path.basename(kaynak_dxf))[0]
+    # Sağ üst köşedeki yazılar çerçeveden taşmasın: kalan genişliğe kaç
+    # harf sığıyorsa o kadar.
+    kg2 = (kg - 2 * KENAR) - 4.0
+    no = str(no)[:max(4, int(kg2 / (HARF_ORAN * BASLIK_YAZI)))]
+    if resim_adi:
+        sig = max(4, int(kg2 / (HARF_ORAN * BASLIK_ALT_YAZI)) - len(not_) - 3)
+        resim_adi = str(resim_adi)[:sig]
+    _pafta_cerceve_ciz(pafta, kagit, no, resim_adi or "", not_)
 
     # --- pencere(ler): 1:1 çizime buradan bakılır
     if plan:
@@ -883,7 +913,7 @@ def kagit_plani(dosyalar, tercih=VARSAYILAN_KAGIT):
             "hata": hata, "kagit": tercih}
 
 
-def toplu_pafta(isler, cikti_klasor):
+def toplu_pafta(isler, cikti_klasor, resim_no=None, resim_adi=None):
     """isler: [{"dosya":..., "kagit":"A3", "olcek": None}, ...]
 
     Her biri için kaynağın KOPYASINA pafta eklenir. Kaynak dosyalara
@@ -896,7 +926,9 @@ def toplu_pafta(isler, cikti_klasor):
         kagit = it.get("kagit", VARSAYILAN_KAGIT)
         try:
             r = pafta_kur(y, os.path.join(cikti_klasor, f"{ad}_{kagit}.dxf"),
-                          kagit, olcek=it.get("olcek"))
+                          kagit, olcek=it.get("olcek"),
+                          resim_no=it.get("resim_no", resim_no),
+                          resim_adi=it.get("resim_adi", resim_adi))
             r["kaynak"] = y
             yapilan.append(r)
         except Exception as e:
@@ -920,6 +952,9 @@ def _cli():
     a.add_argument("--plan", action="store_true",
                    help="hiçbir şey yazma, hangi ölçekte oturduğunu söyle")
     a.add_argument("--bas", action="store_true", help="PDF de üret")
+    a.add_argument("--no", help="sağ üst köşeye yazılacak resim no "
+                                "(verilmezse dosya adı)")
+    a.add_argument("--ad", help="resim no'nun altına yazılacak isim")
     n = a.parse_args()
 
     dosya = []
@@ -955,7 +990,7 @@ def _cli():
     if n.olcek:                       # ölçeği elle veren sığmayanları da dener
         isler += [{"dosya": s["dosya"], "kagit": n.kagit, "olcek": n.olcek}
                   for s in p["sigmayan"]]
-    r = toplu_pafta(isler, n.cikti)
+    r = toplu_pafta(isler, n.cikti, n.no, n.ad)
     print()
     for it in r["yapilan"]:
         print(f"  yazıldı  {it['kagit']} {it['olcek_metni']}  "

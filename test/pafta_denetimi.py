@@ -23,6 +23,7 @@ import tempfile
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 import ezdxf                                                  # noqa: E402
+import ezdxf.bbox                                             # noqa: E402
 import pf4_pafta as P                                         # noqa: E402
 
 hata = []
@@ -373,11 +374,50 @@ try:
     d = ezdxf.readfile(os.path.join(kl, "CIK", "kucuk.dxf"))
     pf = d.layout("PAFTA")
     kat = {e.dxf.layer for e in pf}
-    for k in (P.KAT_CERCEVE, P.KAT_ANTET, P.KAT_BOLGE):
+    for k in (P.KAT_CERCEVE, P.KAT_BOLGE):
         dogru(f"{k} katmanı var", k in kat, f"katmanlar: {sorted(kat)}")
+    # Antet alanı ÇİZİLMEZ: kendi çerçevesi olan bir anteti yapıştırınca
+    # iki çizgi üst üste binerdi. Alan yalnız hesapta var.
+    dogru("antet kutusu çizilmedi", P.KAT_ANTET not in kat,
+          "antet dikdörtgeni paftaya çizilmiş")
+    ak2 = P.antet_kutusu("A3")
+    ic = [e for e in pf if e.dxftype() in ("LWPOLYLINE", "LINE")
+          and all(ak2[0] - 0.1 <= q[0] <= ak2[2] + 0.1
+                  and ak2[1] - 0.1 <= q[1] <= ak2[3] + 0.1
+                  for q in ((e.get_points("xy") if e.dxftype() == "LWPOLYLINE"
+                             else ((e.dxf.start.x, e.dxf.start.y),
+                                   (e.dxf.end.x, e.dxf.end.y)))))]
+    esit("antet alanında çizgi", len(ic), 0)
     harf = {e.dxf.text for e in pf if e.dxftype() == "TEXT"}
     dogru("bölge rakamları var", {"1", "8"} <= harf, str(sorted(harf))[:80])
     dogru("bölge harfleri var", {"A", "D"} <= harf, str(sorted(harf))[:80])
+
+    print("\n-- resim no ve ismi sağ üst köşede")
+    cik2 = os.path.join(kl, "CIK", "nolu.dxf")
+    P.pafta_kur(os.path.join(kl, "kucuk.dxf"), cik2, "A3",
+                resim_no="P07", resim_adi="01.050.000.01 DENEME")
+    pf2 = ezdxf.readfile(cik2).layout("PAFTA")
+    bas2 = [e for e in pf2 if e.dxftype() == "TEXT"
+            and e.dxf.layer == P.KAT_BILGI]
+    dogru("iki satır yazıldı", len(bas2) == 2, f"{len(bas2)} satır")
+    yazi2 = " ".join(e.dxf.text for e in bas2)
+    for kelime in ("P07", "01.050.000.01", "A3", "1:1"):
+        dogru(f"{kelime!r} yazıyor", kelime in yazi2, yazi2[:90])
+    fx0b, fy0b, fx1b, fy1b = P.cerceve("A3")
+    for e in bas2:
+        k2 = ezdxf.bbox.extents([e], fast=False)
+        dogru("sağ üst köşede ve çerçeve içinde",
+              (k2.extmax.x <= fx1b + 0.01 and k2.extmax.y <= fy1b + 0.01
+               and k2.extmin.x > (fx0b + fx1b) / 2
+               and k2.extmin.y > fy1b - P.BASLIK_SERIT - 2),
+              f"{e.dxf.text[:20]!r} -> "
+              f"({k2.extmin.x:.1f},{k2.extmin.y:.1f})-"
+              f"({k2.extmax.x:.1f},{k2.extmax.y:.1f})")
+    # Başlık için ayrıca yer ayrılmamalı: ölçek düşmesin
+    esit("çizim alanı daralmadı",
+         (round(P.cizim_alanlari("A3")["ust"][3] - P.cizim_alanlari("A3")["ust"][1]),
+          round(P.cizim_alanlari("A3")["sol"][3] - P.cizim_alanlari("A3")["sol"][1])),
+         (143, 243))
 finally:
     shutil.rmtree(kl, ignore_errors=True)
 

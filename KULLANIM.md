@@ -528,14 +528,14 @@ Kâğıt **her zaman yatay**. A3 için (420 × 297 mm):
  +----------------------------------------------------+
  |   1     2     3     4     5     6     7     8       |   <- bölge rakamları
  | +------------------------------------------------+ |
- |A|                                                |A|
- | |              Ç İ Z İ M   B U R A Y A           | |
- |B|                                                |B|
- | |                                                | |
- |C|                          +---------------------+ |
- | |                          |   A N T E T         | |
- |D|                          |   150 x 100 mm      |D|
- | +--------------------------+---------------------+ |
+ |A|                                    RESIM NO     |A|
+ | |                               kod  ve  isim     | |
+ |B|          Ç İ Z İ M   B U R A Y A                |B|
+ | |                                                 | |
+ |C|                                                 |C|
+ | |                          . . . . . . . . . . .  | |
+ |D|                          . antet alanı: BOŞ  .  |D|
+ | +--------------------------. 150 x 100 mm . . .---+ |
  |   1     2     3     4     5     6     7     8       |
  +----------------------------------------------------+
 ```
@@ -543,9 +543,13 @@ Kâğıt **her zaman yatay**. A3 için (420 × 297 mm):
 - Çerçeve kâğıdın kenarından **15 mm** içeridedir; resim hiçbir zaman
   bundan dışarı taşmaz ve çerçeveye de dayanmaz, 12 mm daha boşluk
   bırakır.
-- Sağ alt köşedeki **150 × 100 mm**'lik kutu **boş bırakılır** ve oraya
+- Sağ alt köşedeki **150 × 100 mm**'lik alan **boş bırakılır** ve oraya
   **asla çizim gelmez**. Antetinizi oraya kopyala-yapıştır ile
-  koyarsınız.
+  koyarsınız. Bu alan **çizilmez** — kendi çerçevesi olan bir anteti
+  yapıştırınca iki çizgi üst üste binerdi.
+- **Resim no ve ismi sağ üst köşededir**; altında kâğıt ve pafta
+  ölçeği yazar. Çerçevenin üstündeki iç payın içine yazılır, yani
+  çizim alanından yer almaz — ölçeği düşürmez.
 - Kenarlardaki rakam ve harfler bölge işaretleridir ("B3'teki delik"
   demek için). Kenar ortalarındaki kısa çizgiler katlama işareti.
 - Her biri ayrı katmandadır (`PAFTA_CERCEVE`, `PAFTA_ANTET_ALANI`,
@@ -565,7 +569,7 @@ aralıklarla** dağıtır:
   dayanak noktası hiçbir zaman kenar değildir.
 - **İzdüşüm ızgarası bozulmaz:** aynı satırdaki görünüşler kâğıtta da
   aynı hizada, aynı sütundakiler aynı düşeydedir, hepsi aynı ölçektedir.
-- Çerçeveden ve antet kutusundan her yönde **12 mm** boşluk kalır.
+- Çerçeveden ve antet alanından her yönde **12 mm** boşluk kalır.
 - Hiçbir çizgi açıkta kalmaz: her varlık en yakın görünüşe yazılır,
   pencereler ne çakışır ne de bir şeyi dışarıda bırakır.
 
@@ -780,6 +784,8 @@ python pf4_pafta.py --kagit A2 --cikti cikti/PAFTA cikti/*.dxf
 | `--cikti KLASÖR` | paftaların yazılacağı klasör (varsayılan `PAFTA`) |
 | `--plan` | hiçbir şey yazmaz, yalnız ölçek raporu verir |
 | `--bas` | paftaların PDF'ini de üretir |
+| `--no` | sağ üst köşeye yazılacak resim no (verilmezse dosya adı) |
+| `--ad` | resim no'nun altına yazılacak isim |
 
 Kaynak DXF'lere dokunulmaz; her pafta ayrı bir dosyaya yazılır.
 

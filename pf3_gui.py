@@ -811,12 +811,33 @@ class Uygulama(ttk.Frame):
         isler = []
         for s in sec:
             it = dict(self.pf_satir[s]); it["_satir"] = s
+            it.update(self._resim_kimligi(it["dosya"]))
             isler.append(it)
             self.pf_agac.set(s, "durum", "paftaya alınıyor…")
         self._basla("pafta hazırlanıyor…")
         threading.Thread(target=self._pafta_is,
                          args=(isler, self._pafta_klasoru()),
                          daemon=True).start()
+
+    def _resim_kimligi(self, dosya):
+        """Resmin sağ üst köşesine yazılacak no ve isim.
+
+        No, dosya adının başındaki P07 / A12 gibi damgadır; isim BOM'dan
+        gelir. BOM'da yoksa dosya adı kullanılır."""
+        ad = os.path.basename(dosya)
+        kok = os.path.splitext(ad)[0]
+        no = kok.split("_")[0] if kok[:1] in ("P", "A") else kok
+        for sat in self.satirlar or []:
+            if sat.get("dxf") == ad:
+                return {"resim_no": no,
+                        "resim_adi": f"{sat.get('kod', '')}   "
+                                     f"{sat.get('ad', '')}".strip()}
+        r = getattr(self, "acilim_sonuc", {}).get(ad)
+        if r:
+            return {"resim_no": no,
+                    "resim_adi": f"{r.get('kod', '')}   {r.get('ad', '')}"
+                                 "   AÇINIM".strip()}
+        return {"resim_no": no, "resim_adi": ""}
 
     def _pafta_is(self, isler, klasor):
         try:
@@ -829,7 +850,8 @@ class Uygulama(ttk.Frame):
                     r = PF.pafta_kur(
                         it["dosya"],
                         os.path.join(klasor, f"{ad}_{it['kagit']}.dxf"),
-                        it["kagit"])
+                        it["kagit"], resim_no=it.get("resim_no"),
+                        resim_adi=it.get("resim_adi"))
                     sonuc[it["_satir"]] = ("ok", r)
                     self._yaz(f"  pafta  {it['kagit']} {r['olcek_metni']}  "
                               + os.path.basename(r["dosya"]))
