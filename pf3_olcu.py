@@ -1560,7 +1560,8 @@ def _zincir(ogeler, birles=0.2):
     return zincir
 
 
-def _serit_genisligi(sh, kb, t, alan, boy, sebep, istasyon=9, sapma=0.03):
+def _serit_genisligi(sh, kb, t, alan, boy, sebep, k_faktor=K_FAKTOR,
+                     istasyon=9, sapma=0.03):
     """Prizmatik bir profilin şerit (bobin) genişliği.
 
     Orta çizgi kurulamayan parçalarda son çare. İki denetimden geçer,
@@ -1572,6 +1573,14 @@ def _serit_genisligi(sh, kb, t, alan, boy, sebep, istasyon=9, sapma=0.03):
     2. Kesit alanı x boy, parçanın GERÇEK HACMİNE eşit mi? Eşitse kesit
        doğru ölçülmüş demektir. (TIRSAN rayında ölçülen: 1936,5 x 200 =
        387.290 mm3, parçanın hacmi de 387.290 mm3.)
+
+    K-FAKTÖRÜ: alan/kalınlık, sacın ORTA YÜZEYİNİN uzunluğudur, yani
+    K = 0,50 karşılığıdır. Gerçek K daha küçükse nötr eksen içe kayar
+    ve şerit daralır. Düzeltme her büküm için θ·t·(0,5−K) kadardır;
+    bükümlerin açıları, eşleştirme gerekmeden, içbükey (concave)
+    silindir yüzeylerinden okunur - her bükümün bir tane içbükey yüzü
+    vardır. (Rayda: 38 büküm, toplam 3076°; K 0,50'den 0,40'a inince
+    genişlik 645,9'dan 629,8 mm'ye düşüyor.)
     """
     alanlar = []
     for i in range(istasyon):
@@ -1590,7 +1599,17 @@ def _serit_genisligi(sh, kb, t, alan, boy, sebep, istasyon=9, sapma=0.03):
     hac = g.Mass()
     if hac <= 0 or abs(a * boy - hac) > sapma * hac:
         return None                       # kesit hacimle tutmuyor
-    gen = a / t
+    gen_orta = a / t                      # orta yüzey: K = 0,50 karşılığı
+    ic_aci = 0.0
+    ic_say = 0
+    try:
+        for b in bukum_yuzeyleri(sh):
+            if b.get("ic"):
+                ic_aci += b["aci"]; ic_say += 1
+    except Exception:
+        ic_aci = 0.0
+    duzelt = ic_aci * t * (0.5 - k_faktor)
+    gen = gen_orta - duzelt
     # Yöntem: kanat uzunlukları bilinmiyor (orta çizgi kurulamadı), ama
     # BÜKÜM YARIÇAPLARI biliniyor. Hepsi abkant sınırının altındaysa bu
     # parça abkantta yapılamaz - söylenebilecek kadarı budur.
@@ -1613,9 +1632,11 @@ def _serit_genisligi(sh, kb, t, alan, boy, sebep, istasyon=9, sapma=0.03):
         yon = {}
     return {"kalinlik_mm": round(t, 2), "yontem": yon,
             "acinim_genislik_mm": round(gen, 2),
+            "orta_yuzey_genislik_mm": round(gen_orta, 2),
+            "k_duzeltmesi_mm": round(-duzelt, 2),
             "acinim_boy_mm": round(boy, 2),
-            "bukum_sayisi": 0, "duvar_sayisi": 0,
-            "k_faktor": None,
+            "bukum_sayisi": ic_say, "duvar_sayisi": 0,
+            "k_faktor": k_faktor if ic_say else None,
             "kesit_alani_mm2": round(a, 1),
             "orta_cizgi_mm": round(gen, 2),
             "bukum_yerleri": [], "bukumler": [],
@@ -1624,9 +1645,13 @@ def _serit_genisligi(sh, kb, t, alan, boy, sebep, istasyon=9, sapma=0.03):
                 f"ŞERİT GENİŞLİĞİDİR, açınım resmi değildir. Orta çizgi "
                 f"kurulamadı ({sebep}) Parça boy boyunca aynı kesitte; "
                 f"genişlik = kesit alanı / kalınlık = {a:.1f} / {t:.2f} = "
-                f"{gen:.1f} mm. Hacimle doğrulandı: {a:.0f} x {boy:.0f} = "
-                f"{a * boy:.0f} mm3, parçanın hacmi {hac:.0f} mm3. "
-                f"Büküm yerleri ve kesim konturu VERİLMEDİ.")}
+                f"{gen_orta:.1f} mm (orta yüzey, K=0,50). Hacimle "
+                f"doğrulandı: {a:.0f} x {boy:.0f} = {a * boy:.0f} mm3, "
+                f"parçanın hacmi {hac:.0f} mm3."
+                + (f" K={k_faktor:g} icin {ic_say} bukumun toplam "
+                   f"{math.degrees(ic_aci):.0f} derecesinden {duzelt:+.1f} mm "
+                   f"duzeltme: {gen:.1f} mm." if ic_say else "")
+                + " Büküm YERLERİ ve kesim konturu VERİLMEDİ.")}
 
 
 def sac_acilim(sh, o=None, k_faktor=K_FAKTOR, istasyon=11,
@@ -1681,7 +1706,7 @@ def sac_acilim(sh, o=None, k_faktor=K_FAKTOR, istasyon=11,
         # kesit alanı / kalınlıktır ve bunu HACİM bağımsız olarak
         # doğrular. Rollform profillerde zaten istenen budur: bobin
         # genişliği. Büküm yerleri ve kesim konturu verilmez.
-        r = _serit_genisligi(sh, kb, t, alan, boy, str(e))
+        r = _serit_genisligi(sh, kb, t, alan, boy, str(e), k_faktor)
         if r is None:
             raise
         return r

@@ -119,6 +119,17 @@ if r:
     dogru("büküm yeri verilmedi", r["bukumler"] == [] and r["k_faktor"] is None,
           "büküm verisi uydurulmuş")
 
+# K-faktörü: alan/kalınlık ORTA YÜZEY uzunluğudur, yani K=0,50
+# karşılığı. Düz bir şeritte büküm yok, düzeltme de yok.
+for K in (0.50, 0.40, 0.33):
+    rk = M._serit_genisligi(kutu_sh, kb, 3.0, 300.0, 200.0, "deneme", K)
+    esit(f"bükümsüz şeritte K={K:.2f} genişliği değiştirmiyor",
+         rk["acinim_genislik_mm"], 100.0)
+    esit(f"K={K:.2f} düzeltmesi sıfır", rk["k_duzeltmesi_mm"], 0.0)
+esit("orta yüzey genişliği ayrıca veriliyor",
+     M._serit_genisligi(kutu_sh, kb, 3.0, 300.0, 200.0, "d", 0.4)
+     ["orta_yuzey_genislik_mm"], 100.0)
+
 # Konisi olan gövde: kesit boy boyunca değişir, şerit genişliği olmaz.
 koni = BRepPrimAPI_MakeCone(40.0, 10.0, 200.0).Shape()
 kb2 = M.kutu(koni)

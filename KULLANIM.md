@@ -464,13 +464,27 @@ genişlik = kesit alanı / sac kalınlığı
 2. **Kesit alanı × boy, parçanın gerçek hacmine eşit mi?** Eşitse
    kesit doğru ölçülmüş demektir.
 
+**K-faktörü burada da işler.** `alan / kalınlık`, sacın **orta
+yüzeyinin** uzunluğudur — yani K = 0,50 karşılığı. Gerçek K daha
+küçükse nötr eksen içe kayar ve şerit daralır; düzeltme her büküm için
+θ × t × (0,5 − K) kadardır. Bükümlerin açıları, eşleştirmeye gerek
+kalmadan, **içbükey silindir yüzeylerinden** okunur: her bükümün bir
+tane içbükey yüzü vardır.
+
 Resmin üstüne **ŞERİT GENİŞLİĞİDİR** yazar, doğrulama sayılarıyla
 birlikte; büküm yerleri ve kesim konturu verilmediği açıkça belirtilir.
 
-> Gerçek bir örnek: TIRSAN rayı (3 mm sac, 200 mm boy, 67 büküm
-> yüzeyi). Kesit alanı 1936,5 mm² → şerit genişliği **645,8 mm**.
-> Hacim denetimi: 1936,5 × 200 = 387.290 mm³, parçanın gerçek hacmi de
-> 387.290 mm³.
+> Gerçek bir örnek: TIRSAN rayı (3 mm sac, 200 mm boy, 38 büküm).
+> Kesit alanı 1936,5 mm² → orta yüzey **645,8 mm**. Hacim denetimi:
+> 1936,5 × 200 = 387.290 mm³, parçanın gerçek hacmi de 387.290 mm³.
+> Bükümlerin toplam açısı 3076°; K = 0,40 için −16,1 mm düzeltmeyle
+> şerit genişliği **629,7 mm**.
+>
+> Bu rayda açınım resmi neden çıkmıyor: büküm, "eş merkezli iki
+> silindir, yarıçap farkı = sac kalınlığı" diye tanınır. Kesitteki 67
+> yayın **66 ayrı merkezi** var — iç ve dış yüz eş merkezli değil, ki
+> rollformda beklenen budur. O yüzden orta çizgi zinciri kurulamıyor
+> ve büküm yerleri verilemiyor.
 
 #### Büküm yöntemi: abkant mı, rollform mu
 
