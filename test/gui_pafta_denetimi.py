@@ -158,9 +158,14 @@ try:
     # SahteWidget.__getattr__ eksik her alani DOLU gosterir; antetle
     # ilgili alanlari acikca bos birakmak gerekiyor, yoksa antetsiz
     # senaryo bile anteti acik saniyor.
+    # Gercek __init__'in kurdugu DURUM alanlari. SahteWidget.__getattr__
+    # eksik her alani dolu (ve dogru) gosterdigi icin bunlar acikca
+    # kurulmazsa "iptal istendi" saniliyor ve is hemen kesiliyor.
     u.sablon = None
     u.v_antet = None
     u.acilim_sonuc = {}
+    u.iptal_istendi = False
+    u.calisiyor = False
     u.after = lambda *a, **k: None
     u._basla = lambda d: u.v_durum.set(d)
     u._bitir = lambda: None

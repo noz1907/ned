@@ -71,9 +71,22 @@ a = Analysis(
     datas=ocp_data + ezdxf_data + collect_data_files("matplotlib")
           + ([("logo/*", "logo")] if LOGOLU else [])
           + ([("antet/*", "antet")] if ANTETLI else []),
+    # matplotlib arka uclarini ADIYLA yukler (fig.savefig bir .pdf
+    # gorunce backend_pdf'i calisma aninda import eder), bu yuzden
+    # PyInstaller onlari kendiliginden bulamaz. Yalniz backend_agg
+    # yaziliydi; exe'de PDF basimi
+    #   No module named 'matplotlib.backends.backend_pdf'
+    # diye patliyordu.
+    #
+    # Arka uclarin HEPSI toplanmaz (collect_submodules): o liste Qt,
+    # GTK ve wx arka uclarini da getiriyor, onlar da PyQt/PyGObject
+    # suruklemeye calisir. Programin kullandigi UC tanesi yeter -
+    # ekrana Agg, PDF'e backend_pdf, PNG'ye yine Agg.
     hiddenimports=ocp_gizli + ezdxf_gizli + [
         "pf3_olcu", "pf4_pafta", "pf5_antet", "pf1_referans",
         "matplotlib.backends.backend_agg",
+        "matplotlib.backends.backend_pdf",
+        "matplotlib.backends.backend_svg",
     ] + (["pi3d_logo"] if LOGOLU else []),
     hookspath=[],
     runtime_hooks=[],

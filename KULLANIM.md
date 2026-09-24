@@ -751,7 +751,19 @@ görüntü değişmedi. Antet her resme bir **blok** olarak girer: blok
 tanımı dosyada bir kez durur, ölçek blok referansının üstündedir.
 
 **Antet zorunlu değildir.** `antet/` klasörü yoksa ya da 7. adımda
-kutucuğu kapatırsanız Pi3D kendi sade paftasını çizer.
+kutucuğu kapatırsanız Pi3D kendi sade paftasını çizer. Antet
+bulunamazsa 7. adımda **nereye bakıldığı yazar** — tarih/çizen/
+onaylayan kutuları sessizce yok olmaz.
+
+Antet üç yerde aranır, bu sırayla:
+
+1. **exe'nin yanındaki** `antet\` klasörü — buraya koyduğunuz antet
+   gömülü olanı geçersiz kılar, exe'yi yeniden derlemeniz gerekmez
+2. exe'ye **gömülü** antet (EXE_YAP.bat → 2 ile derlenmişse)
+3. çıktı klasöründeki `antet\`
+
+Kaynaktan çalıştırıyorsanız `pf3_gui.py`'nin yanındaki `antet\`
+klasörüne bakılır.
 
 #### Görünüşler kâğıda nasıl dağılır
 

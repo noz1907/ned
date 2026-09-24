@@ -1105,6 +1105,20 @@ def bas(dxf_yolu, cikti, pafta_adi="PAFTA", siyah=True, dpi=300):
     import matplotlib
     matplotlib.use("Agg")
     import matplotlib.pyplot as plt
+    # matplotlib arka ucu ADIYLA, çalışma anında yükler: .pdf görünce
+    # backend_pdf'i import eder. PyInstaller bunu göremediği için
+    # exe'de "No module named 'matplotlib.backends.backend_pdf'" diye
+    # patlıyordu. Burada ÖNCEDEN denenir: hata anlaşılır olsun.
+    if str(cikti).lower().endswith(".pdf"):
+        try:
+            import matplotlib.backends.backend_pdf     # noqa: F401
+        except ImportError:
+            raise PaftaYok(
+                "matplotlib'in PDF arka ucu (backend_pdf) bu pakette yok, "
+                "PDF üretilemiyor. Kaynaktan çalıştırıyorsanız "
+                "'pip install -U matplotlib' deyin; exe kullanıyorsanız "
+                "exe eski demektir, EXE_YAP.bat ile yeniden derleyin. "
+                "PNG basımı bundan etkilenmez.")
     from ezdxf.addons.drawing import RenderContext, Frontend
     from ezdxf.addons.drawing.matplotlib import MatplotlibBackend
     from ezdxf.addons.drawing.config import (Configuration, ColorPolicy,
@@ -1140,13 +1154,15 @@ def bas(dxf_yolu, cikti, pafta_adi="PAFTA", siyah=True, dpi=300):
 
 
 # --------------------------------------------------------------- toplu
-def kagit_plani(dosyalar, tercih=VARSAYILAN_KAGIT, sablon=None):
+def kagit_plani(dosyalar, tercih=VARSAYILAN_KAGIT, sablon=None, dur=None):
     """Hangi çizim seçilen kâğıda hangi ölçekte oturur.
 
     Hiçbir dosya yazmaz, sadece bakar. Kullanıcı "hangisi 1:1 çıkıyor,
     hangisi küçülecek" diye görmek ister."""
     birebir, olcekli, sigmayan, hata = [], [], [], []
     for y in dosyalar:
+        if dur and dur():              # kullanıcı İPTAL dedi
+            break
         try:
             x0, y0, x1, y1 = cizim_kutusu(y)
             gx, gy = x1 - x0, y1 - y0

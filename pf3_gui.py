@@ -264,10 +264,11 @@ class Uygulama(ttk.Frame):
             f = ttk.Frame(self.defter, padding=10)
             self.defter.add(f, text=ad, state="disabled")
             self.sayfa.append(f)
+        # İptal düğmesi sayfalardan ÖNCE kurulur: _basla/_bitir onu
+        # sayfa kurulurken de çağırabilir.
+        self._durum_cubugu()
         self._sayfa1(); self._sayfa2(); self._sayfa3()
         self._sayfa4(); self._sayfa5(); self._sayfa6(); self._sayfa7()
-        self.ilerleme = ttk.Progressbar(self, mode="determinate")
-        self.ilerleme.pack(fill="x", pady=(6, 2))
         gf = ttk.LabelFrame(self, text=" Günlük ", padding=4)
         gf.pack(fill="both")
         self.gunluk = tk.Text(gf, height=7, wrap="none", font=("Consolas", 9))
@@ -279,6 +280,21 @@ class Uygulama(ttk.Frame):
         ttk.Label(self, textvariable=self.v_durum, relief="sunken",
                   anchor="w", padding=3).pack(fill="x", pady=(4, 0))
         self._adim_ac(0)
+
+    def _durum_cubugu(self):
+        """İlerleme çubuğu ve İPTAL düğmesi - her sayfadan görünür.
+
+        İptal eskiden yalnız 5. sayfadaydı. 6 (açınım) ve 7 (pafta)
+        adımlarında iş uzayınca durum çubuğu "İptal ile
+        durdurabilirsiniz" yazıyor ama ortada basılacak bir düğme
+        olmuyordu."""
+        ic = ttk.Frame(self)
+        ic.pack(fill="x", pady=(6, 2))
+        self.b_iptal = ttk.Button(ic, text="İPTAL", command=self.iptal,
+                                  state="disabled", width=9)
+        self.b_iptal.pack(side="right", padx=(8, 0))
+        self.ilerleme = ttk.Progressbar(ic, mode="determinate")
+        self.ilerleme.pack(side="left", fill="x", expand=True)
 
     def _pencere_ikonu(self):
         """Pencere ve gorev cubugu ikonu.
@@ -506,8 +522,8 @@ class Uygulama(ttk.Frame):
         self.b_zip = ttk.Button(af, text="ZIP OLUŞTUR", command=self.zip_olustur, state="disabled")
         self.b_zip.pack(side="left")
         ttk.Button(af, text="Klasörü aç", command=self.klasoru_ac).pack(side="left", padx=8)
-        self.b_iptal = ttk.Button(af, text="İptal", command=self.iptal, state="disabled")
-        self.b_iptal.pack(side="right")
+        # (İptal düğmesi artık ortak durum çubuğunda, her sayfadan
+        #  erişilebilir.)
 
     # ------------------------------------------------------------ 6 AÇINIM
     def _sayfa6(self):
@@ -775,6 +791,20 @@ class Uygulama(ttk.Frame):
 
         # --- firma anteti (varsa)
         self.sablon = self._sablon_bul()
+        if self.sablon is None:
+            # Sessizce yok olmasın: kullanıcı "çizen/tarih neden
+            # sorulmuyor" diye takılıyordu. Nereye bakıldığı yazılır.
+            ttk.Label(f, foreground="#777", justify="left", wraplength=1050,
+                      text=("Firma anteti yok – sade pafta çizilecek: "
+                            "sağ alt köşede 150 x 100 mm boş alan kalır, "
+                            "kendi antetinizi oraya yapıştırırsınız. "
+                            + getattr(self, "antet_neden", "") + "\n"
+                            "Antet istiyorsanız: exe'yi EXE_YAP.bat ile "
+                            "2 (FIRMA) seçeneğinde derleyin, ya da "
+                            "firma.dxf + firma.json dosyalarını şu "
+                            "klasörlerden birine koyun — "
+                            + "   |   ".join(getattr(self, "antet_aranan", []))
+                            )).pack(anchor="w", pady=(0, 6))
         if self.sablon is not None:
             an = ttk.Frame(f); an.pack(fill="x", pady=(0, 6))
             self.v_antet = tk.BooleanVar(value=True)
@@ -868,24 +898,43 @@ class Uygulama(ttk.Frame):
         görünmez ve Pi3D kendi sade paftasını çizer (sağ alt köşe boş).
         EXE_YAP.bat'ta 2 (logosuz) seçilerek derlenen sürümde antet
         klasörü exe'nin yanına konur."""
+        self.antet_aranan = []
         try:
             import pf5_antet as PA
-        except Exception:
+        except Exception as e:
+            self.antet_neden = f"pf5_antet yüklenemedi: {e}"
             return None
-        kok = os.path.dirname(os.path.abspath(
-            getattr(sys, "_MEIPASS", None) or __file__))
-        aday = [os.path.join(kok, "antet"),
-                os.path.join(os.path.dirname(sys.executable), "antet")]
+        aday = []
+        if getattr(sys, "frozen", False):
+            # exe'de İKİ yere bakılır ve ÖNCE EXE'NİN YANINA:
+            #   dist\Pi3D\antet          kullanıcının koyduğu antet
+            #   sys._MEIPASS\antet        derlemeye gömülen antet
+            # Böylece anteti değiştirmek için exe'yi yeniden derlemek
+            # gerekmez. Eskiden _MEIPASS'in BİR ÜSTÜNE bakılıyordu;
+            # gömülü antet orada olmadığı için hiç bulunamıyordu.
+            aday.append(os.path.join(
+                os.path.dirname(os.path.abspath(sys.executable)), "antet"))
+            if getattr(sys, "_MEIPASS", None):
+                aday.append(os.path.join(sys._MEIPASS, "antet"))
+        else:
+            aday.append(os.path.join(
+                os.path.dirname(os.path.abspath(__file__)), "antet"))
         try:                       # çıktı klasörü henüz seçilmemiş olabilir
             on = (self.v_out.get() or "").strip()
             if on:
                 aday.append(os.path.join(on, "antet"))
         except Exception:
             pass
+        self.antet_aranan = aday
         try:
-            return PA.sablon_bul(*aday)
-        except Exception:
+            sb = PA.sablon_bul(*aday)
+        except Exception as e:
+            self.antet_neden = f"antet okunamadı: {e}"
             return None
+        if sb is None:
+            self.antet_neden = ("antet klasöründe şablon yok "
+                                "(<ad>.dxf ve <ad>.json gerekli)")
+        return sb
 
     def _antet_acik(self):
         # getattr: sayfa 7 henüz kurulmamışsa (denetim betikleri sayfayı
@@ -935,8 +984,9 @@ class Uygulama(ttk.Frame):
     def _plan_is(self, dosyalar, kagit, sablon=None):
         try:
             import pf4_pafta as PF
-            self.kuyruk.put(("plan", (PF.kagit_plani(dosyalar, kagit,
-                                                     sablon=sablon), kagit)))
+            self.kuyruk.put(("plan", (PF.kagit_plani(
+                dosyalar, kagit, sablon=sablon,
+                dur=lambda: self.iptal_istendi), kagit)))
         except Exception:
             self.kuyruk.put(("hata", "Yerleşim hesaplanırken hata:\n\n"
                              + traceback.format_exc()))
@@ -1073,6 +1123,9 @@ class Uygulama(ttk.Frame):
             import pf4_pafta as PF
             sonuc = {}
             for n, it in enumerate(isler, 1):
+                if self.iptal_istendi:
+                    self._yaz("  ! pafta iptal edildi")
+                    break
                 self.kuyruk.put(("ilerleme", (n, len(isler))))
                 ad = os.path.splitext(os.path.basename(it["dosya"]))[0]
                 try:
@@ -1163,6 +1216,9 @@ class Uygulama(ttk.Frame):
             os.makedirs(klasor, exist_ok=True)
             sonuc = {}
             for n, (s, y, kagit) in enumerate(isler, 1):
+                if self.iptal_istendi:
+                    self._yaz("  ! baskı iptal edildi")
+                    break
                 self.kuyruk.put(("ilerleme", (n, len(isler))))
                 try:
                     # PDF asıl resmin yanına değil, PDF klasörüne ve

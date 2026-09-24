@@ -61,6 +61,25 @@ for i, fn in enumerate(sayfalar, 1):
     except Exception as e:
         hata.append((fn, e))
         print(f"  {fn}  HATA: {type(e).__name__}: {e}")
+# 7. sayfa: firma anteti varsa tarih / cizen / onaylayan kutulari
+# ACILMALI. Bunlar acilmayinca kullanici "sormuyor" diyordu; sebebi
+# sablonun bulunamamasiydi ve sessizce oluyordu.
+_antet = os.path.join(os.path.dirname(os.path.dirname(
+    os.path.abspath(__file__))), "antet")
+if os.path.isdir(_antet):
+    print("\nantet sablonu:", "bulundu" if u.sablon else "BULUNAMADI")
+    if u.sablon is None:
+        hata.append(("antet", "sablon bulunamadi: "
+                     + str(getattr(u, "antet_neden", ""))))
+    else:
+        for alan in ("v_tarih", "v_cizen", "v_onay"):
+            if not hasattr(u, alan):
+                hata.append(("antet girisi", f"{alan} kutusu acilmamis"))
+            else:
+                print(f"    {alan} = {getattr(u, alan).get()!r}")
+        if not hasattr(u, "v_antet"):
+            hata.append(("antet secimi", "v_antet kutucugu yok"))
+
 # Acinim sayfasinin kendi mantigi: poz_numaralari ve doldurma
 import pf3_olcu as M
 u.M = M
