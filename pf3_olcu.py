@@ -724,7 +724,8 @@ def _yazi_siniri(e):
         return None
 
 
-def gorunus_ciz(msp, kenar, ox, oy, ad, h=4.0, olcu2=True, etiket=None):
+def gorunus_ciz(msp, kenar, ox, oy, ad, h=4.0, olcu2=True, etiket=None,
+                pay_x=4.0, pay_y=4.0):
     """Bir görünüşü çizer. (genişlik, yükseklik, dx, dy) döndürür; dx/dy,
     ham izdüşüm koordinatını çizim koordinatına taşıyan kaydırmadır."""
     xs = [p[0] for v in kenar.values() for c in v for p in c]
@@ -843,11 +844,15 @@ def gorunus_ciz(msp, kenar, ox, oy, ad, h=4.0, olcu2=True, etiket=None):
     # Etiket görünüşün SOL ÜST köşesinde, parçanın ve ölçülerin dışında.
     _yaz(msp, etiket or GORUNUS_AD.get(ad, ad), ox, oy + Y + 0.7 * h, 1.3 * h)
     if olcu2:
-        d = 4.0 * h                              # ölçü çizgisi uzaklığı
-        msp.add_linear_dim(base=(ox, oy - d), p1=(ox, oy), p2=(ox + G, oy),
-                           dimstyle=OLCU_STILI, dxfattribs={"layer": "OLCU"}).render()
-        msp.add_linear_dim(base=(ox - d, oy), p1=(ox, oy), p2=(ox, oy + Y),
-                           angle=90, dimstyle=OLCU_STILI, dxfattribs={"layer": "OLCU"}).render()
+        # Gabari ölçüsü EN DIŞARIDA durur: konum ölçüleri varsa onların
+        # dışına itilir. Teknik resimde küçük ölçüler içeride, toplam
+        # ölçü en dışarıdadır; tersi olursa ölçü çizgileri kesişir.
+        msp.add_linear_dim(base=(ox, oy - pay_x * h), p1=(ox, oy),
+                           p2=(ox + G, oy), dimstyle=OLCU_STILI,
+                           dxfattribs={"layer": "OLCU"}).render()
+        msp.add_linear_dim(base=(ox - pay_y * h, oy), p1=(ox, oy),
+                           p2=(ox, oy + Y), angle=90, dimstyle=OLCU_STILI,
+                           dxfattribs={"layer": "OLCU"}).render()
     return G, Y, dx, dy
 
 
@@ -1032,6 +1037,259 @@ def cap_olculeri(msp, o, yer, kaydir, gkutu, h, ust, en_cok_grup=8):
             en_ust[gad] = max(en_ust.get(gad, gk[3]), kutu_y[3] + 0.6 * h)
             en_sag = max(en_sag, kutu_y[2] + h)
     return en_ust, en_sag
+
+
+# Konum ölçüsü: bir dizi sayılabilmesi için en az bu kadar delik gerek.
+DIZI_EN_AZ = 3
+DIZI_PAY = 0.02          # adımlar bu oranda tutuyorsa dizi sayılır
+KONUM_EN_COK = 6         # dizi değilse görünüş başına en çok bu kadar delik
+
+
+def _dizi(v, pay=DIZI_PAY):
+    """Sıralı koordinatlar eşit aralıklı bir dizi mi?
+
+    Döner: (adet, adım) ya da None. Bir sacta 124 delik 20 mm arayla
+    dizilmişse her birine ayrı konum ölçüsü konmaz - konamaz da, resim
+    okunmaz olur. Onun yerine kenardan ilk deliğe, sonra "123 x 20"
+    zinciri, sonra son delikten kenara yazılır."""
+    if len(v) < DIZI_EN_AZ:
+        return None
+    a = [v[i + 1] - v[i] for i in range(len(v) - 1)]
+    ort = sum(a) / len(a)
+    if ort <= 1e-6:
+        return None
+    if max(abs(x - ort) for x in a) <= max(0.05, pay * ort):
+        return (len(v), ort)
+    return None
+
+
+def _kenar_kutusu(kenar):
+    """Bir görünüşün HAM izdüşüm sınırı (x0, y0, x1, y1)."""
+    xs, ys = [], []
+    for grup in kenar.values():
+        for p in grup:
+            for q in p:
+                xs.append(q[0]); ys.append(q[1])
+    if not xs:
+        return None
+    return (min(xs), min(ys), max(xs), max(ys))
+
+
+def _yazi_eni(v, h, metin=None):
+    """Ölçü yazısının kaplayacağı genişlik (mm), kabaca ama tutarlı."""
+    t = metin if metin is not None else f"{v:.1f}".rstrip("0").rstrip(".")
+    return max(1.0, len(t)) * 0.62 * h * 1.15
+
+
+def _seviyele(araliklar, h):
+    """Her ölçüyü çakışmayacağı ilk kademeye koyar.
+
+    Kısa bir aralığın yazısı aralıktan geniştir: "3,2" yazısı 3,2 mm'ye
+    sığmaz, komşusunun üstüne biner. Gerçek resimde de böyle ölçüler
+    alt alta kademelendirilir. Kademe sayısı sonra gabari ölçüsünü ne
+    kadar dışarı iteceğimizi söyler."""
+    kademe = []                       # her kademede dolu [x0, x1] aralıkları
+    for r in araliklar:
+        a, b = min(r["a"], r["b"]), max(r["a"], r["b"])
+        orta = (a + b) / 2.0
+        en = max(b - a, _yazi_eni(b - a, h, r.get("metin")))
+        k0, k1 = orta - en / 2, orta + en / 2
+        for i, dolu in enumerate(kademe):
+            if all(k1 <= d0 or k0 >= d1 for d0, d1 in dolu):
+                dolu.append((k0, k1)); r["seviye"] = i + 1
+                break
+        else:
+            kademe.append([(k0, k1)]); r["seviye"] = len(kademe)
+    return len(kademe)
+
+
+def konum_plani(o, gorunusler, ham, h, tol=0.05):
+    """Konum ölçülerinin planı - HİÇBİR ŞEY ÇİZMEDEN.
+
+    Önce plan çıkarılır, çünkü gabari ölçüsünün ne kadar dışarı
+    iteleneceği kaç kademe konum ölçüsü gireceğine bağlıdır: teknik
+    resimde küçük ölçüler içeride, gabari en dışarıda durur.
+
+    Zincir kuralı: kenardan ilk deliğe, sonra dizinin adımı
+    ("123 x 20"), sonra son delikten öbür kenara. 124 deliğin her
+    birine 20 mm yazmak resmi okunmaz yapar ve hiçbir şey eklemez.
+
+    Döner: {gorunus: {"yatay": [...], "dusey": [...],
+                      "kademe_x": n, "kademe_y": n}}
+    Aralıklar HAM izdüşüm koordinatındadır."""
+    plan = {}
+    for gad in gorunusler:
+        kutu_ = ham.get(gad)
+        if not kutu_:
+            continue
+        nokta = []
+        for d in (o or {}).get("delikler") or []:
+            if gad not in DELIK_GOR.get(d["eksen"], ()):
+                continue
+            for c in d.get("merkezler") or []:
+                nokta.append(izdusum(c, gad))
+        if not nokta:
+            continue
+        cikti = {}
+        for ad, eksen, e0, e1 in (("yatay", 0, kutu_[0], kutu_[2]),
+                                  ("dusey", 1, kutu_[1], kutu_[3])):
+            # Aynı sıradaki delikleri bir araya topla, dizi mi diye bak.
+            obek = defaultdict(list)
+            for q in nokta:
+                obek[round(q[1 - eksen] / max(tol, 1e-9))].append(q[eksen])
+            kayit = []
+            for _k, v in obek.items():
+                v = sorted(set(round(x, 3) for x in v))
+                dz = _dizi(v)
+                if dz:
+                    kayit.append({"tip": "dizi", "bas": v[0], "son": v[-1],
+                                  "adet": dz[0], "adim": dz[1]})
+                elif len(v) <= KONUM_EN_COK:
+                    kayit += [{"tip": "tek", "bas": x, "son": x} for x in v]
+                else:
+                    # Ne dizi ne az sayıda: yalnız uçlar verilir, tam
+                    # liste olculer.csv'dedir. Aksi hâlde resim okunmaz.
+                    kayit += [{"tip": "tek", "bas": v[0], "son": v[0]},
+                              {"tip": "tek", "bas": v[-1], "son": v[-1]}]
+            # Aynı yeri iki kez ölçme.
+            gor, tek = set(), []
+            for r in sorted(kayit, key=lambda r: r["bas"]):
+                a = (round(r["bas"], 2), round(r["son"], 2))
+                if a not in gor:
+                    gor.add(a); tek.append(r)
+            # Zinciri kur: kenar -> delikler -> kenar
+            nok = [e0]
+            for r in tek:
+                nok.append(r["bas"])
+                if r["tip"] == "dizi":
+                    nok.append(r["son"])
+            nok.append(e1)
+            ara = []
+            for i in range(len(nok) - 1):
+                a, b = nok[i], nok[i + 1]
+                if b - a < 0.2:
+                    continue
+                metin = None
+                for r in tek:
+                    if (r["tip"] == "dizi" and abs(r["bas"] - a) < 0.2
+                            and abs(r["son"] - b) < 0.2):
+                        metin = f"{r['adet'] - 1} x {r['adim']:g}"
+                ara.append({"a": a, "b": b, "metin": metin, "seviye": 1})
+            cikti[ad] = ara
+        kx = _seviyele(cikti.get("yatay", []), h)
+        ky = _seviyele(cikti.get("dusey", []), h)
+        if cikti.get("yatay") or cikti.get("dusey"):
+            plan[gad] = {"yatay": cikti.get("yatay", []),
+                         "dusey": cikti.get("dusey", []),
+                         "kademe_x": kx, "kademe_y": ky}
+    return plan
+
+
+def konum_olculeri(msp, plan, kaydir, gkutu, h, en_cok_kademe=8):
+    """Planı çizer ve YERİNİ ÖLÇEREK doğrular.
+
+    Kademeleme tek başına yetmiyor: dar bir aralıkta ("3,2") yazı
+    ölçünün içine sığmaz, CAD onu uzatma çizgilerinin DIŞINA kaçırır
+    ve nereye kaçıracağı ölçü stiline bağlıdır. Hesapla bulunmaz.
+    Bu yüzden her ölçü çizilir, yazısının gerçek sınırı ölçülür,
+    çakışıyorsa SİLİNİP bir alt kademede yeniden denenir.
+
+    Uzun aralıklar önce yerleşir: en çok okunanlar onlardır, en iyi
+    yeri onlar alsın.
+
+    Döner: {gorunus: (en_alt_y, en_sol_x)} - gabari ölçüsü bunların
+    DIŞINA konacak."""
+    sinir = {}
+    for gad, pl in plan.items():
+        if gad not in gkutu:
+            continue
+        dx, dy = kaydir[gad]
+        gk = gkutu[gad]
+        dolu = _varlik_kutulari(msp)      # resimde şu an ne varsa, ölçülmüş
+        for yon, kayd in (("yatay", dx), ("dusey", dy)):
+            sirali = sorted(pl[yon], key=lambda r: -(r["b"] - r["a"]))
+            for r in sirali:
+                a, b = r["a"] + kayd, r["b"] + kayd
+                kutu_y = None
+                for sev in range(r["seviye"], r["seviye"] + en_cok_kademe):
+                    dim = _konum_ciz(msp, gk, yon, a, b, h, sev,
+                                     r.get("metin"))
+                    if dim is None:
+                        break
+                    kutu_y = _olcu_yazi_kutusu(dim)
+                    if kutu_y is None or not _cakisiyor(kutu_y, dolu, 0.2 * h):
+                        break
+                    _olcu_sil(msp, dim)
+                    dim = None
+                if dim is not None and kutu_y:
+                    dolu.append(kutu_y)
+                    s0, s1 = sinir.get(gad, (gk[1], gk[0]))
+                    sinir[gad] = (min(s0, kutu_y[1]), min(s1, kutu_y[0]))
+    return sinir
+
+
+def gabari_olculeri(msp, gkutu, sinir, h):
+    """Görünüşün TOPLAM ölçüsü - en dışarıda.
+
+    Konum ölçülerinden SONRA çizilir ve onların ÖLÇÜLEN sınırının
+    dışına konur. Önce çizilip yeri tahmin edilirse, bir konum ölçüsü
+    yerini bulamayıp alt kademeye kaçtığında gabarinin içine düşüyor
+    ve ölçü çizgileri kesişiyordu. Teknik resimde küçük ölçüler
+    içeride, toplam ölçü en dışarıdadır."""
+    dolu = _varlik_kutulari(msp)          # resimde ne varsa, ölçülmüş
+    for gad, gk in gkutu.items():
+        alt, sol = sinir.get(gad, (gk[1], gk[0]))
+        for yon, tabanlar in (
+                ("yatay", [min(alt, gk[1]) - (2.2 + 1.7 * i) * h
+                           for i in range(6)]),
+                ("dusey", [min(sol, gk[0]) - (2.2 + 1.7 * i) * h
+                           for i in range(6)])):
+            for t in tabanlar:
+                try:
+                    if yon == "yatay":
+                        dim = msp.add_linear_dim(
+                            base=(0, t), p1=(gk[0], gk[1]), p2=(gk[2], gk[1]),
+                            dimstyle=OLCU_STILI, dxfattribs={"layer": "OLCU"})
+                    else:
+                        dim = msp.add_linear_dim(
+                            base=(t, 0), p1=(gk[0], gk[1]), p2=(gk[0], gk[3]),
+                            angle=90, dimstyle=OLCU_STILI,
+                            dxfattribs={"layer": "OLCU"})
+                    dim.render()
+                except Exception:
+                    break
+                # Yeri TAHMİN EDİLMEZ, ölçülür: dar bir görünüşte gabari
+                # yazısı konturun üstüne düşebiliyor.
+                ky = _olcu_yazi_kutusu(dim)
+                if ky is None or not _cakisiyor(ky, dolu, 0.2 * h):
+                    if ky:
+                        dolu.append(ky)
+                    break
+                _olcu_sil(msp, dim)
+
+
+def _konum_ciz(msp, gk, yon, a, b, h, seviye, metin=None):
+    """Tek bir konum ölçüsü; görünüşün altına (yatay) ya da soluna."""
+    d = (1.8 + 1.7 * (seviye - 1)) * h
+    # text="<>" ÖLÇÜLEN DEĞERİ yazdırır. None verilirse ezdxf bunu bir
+    # metin sanıp ölçünün üstüne düz "None" yazıyor.
+    metin = "<>" if metin is None else metin
+    ovr = {"dimtoh": 1, "dimtih": 1, "dimtmove": 1, "dimatfit": 3}
+    try:
+        if yon == "yatay":
+            dim = msp.add_linear_dim(
+                base=(0, gk[1] - d), p1=(a, gk[1]), p2=(b, gk[1]),
+                text=metin, dimstyle=OLCU_STILI, override=ovr,
+                dxfattribs={"layer": "OLCU"})
+        else:
+            dim = msp.add_linear_dim(
+                base=(gk[0] - d, 0), p1=(gk[0], a), p2=(gk[0], b),
+                angle=90, text=metin, dimstyle=OLCU_STILI, override=ovr,
+                dxfattribs={"layer": "OLCU"})
+        dim.render()
+        return dim
+    except Exception:
+        return None
 
 
 def merkez_cizgileri(msp, o, yer, kaydir, en_cok=1500):
@@ -3443,16 +3701,27 @@ def dxf_komponent(s, o, k, yol, P):
     # Görünüşler arası boşluk: araya giren ölçü çizgisi + yazı + kılavuz kadar.
     g = max(L, W, T) * 0.10 + 14 * h
     yer = gorunus_yerlesimi(L, W, T, g, gorunusler)
+    # Konum ölçüleri ÖNCE planlanır: gabari ölçüsünün ne kadar dışarı
+    # iteleneceği kaç seviye konum ölçüsü gireceğine bağlı.
+    # Görünüşler BİR KEZ hesaplanır; plan da bu izdüşümlere dayanır.
+    kenarlar = {gad: hlr(s, *GORUNUS[gad], gizli=P.get("gizli", True))
+                for gad in gorunusler}
+    ham = {gad: _kenar_kutusu(k) for gad, k in kenarlar.items()}
+    kplan = (konum_plani(o, gorunusler, ham, h)
+             if P.get("konum", True) else {})
     ust, kaydir, gkutu = {}, {}, {}
     for gad in gorunusler:
-        goz, xref = GORUNUS[gad]
-        kenar = hlr(s, goz, xref, gizli=P.get("gizli", True))
         ox, oy = yer[gad]
-        G, Y, dx, dy = gorunus_ciz(msp, kenar, ox, oy, gad, h=h, olcu2=True)
+        # Gabari burada ÇİZİLMEZ: konum ölçüleri yerleştikten sonra,
+        # onların ÖLÇÜLEN sınırının dışına konur (bkz. gabari_olculeri).
+        G, Y, dx, dy = gorunus_ciz(msp, kenarlar[gad], ox, oy, gad, h=h,
+                                   olcu2=False)
         ust[gad] = oy + Y + 2.2 * h          # görünüş etiketinin de üstü
         kaydir[gad] = (dx, dy)
         gkutu[gad] = (ox, oy, ox + G, oy + Y)
     merkez_cizgileri(msp, o, yer, kaydir)
+    sinir = konum_olculeri(msp, kplan, kaydir, gkutu, h) if kplan else {}
+    gabari_olculeri(msp, gkutu, sinir, h)
     ust, sag = cap_olculeri(msp, o, yer, kaydir, gkutu, h, ust)
     if P.get("kesit"):
         try:

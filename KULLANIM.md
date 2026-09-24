@@ -863,6 +863,40 @@ yazılmıştı. Bunları paftaya aldığınızda program yazıları kendiliğind
 STEP'i baştan okumanıza gerek kalmaz. Metne ve konuma dokunulmaz,
 yalnız yazı stili değişir.
 
+#### Konum ölçüleri
+
+Resimde artık yalnız gabari yok: deliklerin **kenardan yeri** de
+ölçülendirilir.
+
+Zincir şöyle kurulur — kenardan ilk deliğe, sonra dizinin adımı, sonra
+son delikten öbür kenara:
+
+```
+|--10--|-------------- 123 x 20 --------------|--10--|
+|------------------------ 2480 ---------------------|
+```
+
+**Dizi tek ölçüye iner.** 124 deliğin her birine 20 mm yazmak resmi
+okunmaz yapar ve hiçbir şey eklemez; adımlar eşitse (%2 payla) dizi
+sayılır ve `123 x 20` diye tek ölçü konur. Dizi değilse ve delik sayısı
+azsa her biri tek tek ölçülür; ikisi de değilse yalnız uçlar verilir,
+tam liste `olculer.csv`'dedir.
+
+**Gabari en dışarıdadır.** Teknik resimde küçük ölçüler içeride, toplam
+ölçü en dışarıda durur; tersi olursa ölçü çizgileri kesişir. Bu yüzden
+gabari ölçüsü konum ölçülerinden SONRA, onların **ölçülen** sınırının
+dışına çizilir.
+
+**Yer tahmin edilmez, ölçülür.** Dar bir aralıkta ("3,2") yazı ölçünün
+içine sığmaz ve CAD onu uzatma çizgilerinin dışına kaçırır; nereye
+kaçıracağı ölçü stiline bağlıdır. Her ölçü çizilir, yazısının gerçek
+sınırı ölçülür, çakışıyorsa silinip bir alt kademede yeniden denenir.
+Örnek montajın 16 resminde 435 yazıda sıfır çakışma.
+
+> **Henüz yok:** açısal ölçüler, çapraz (pahlı) kesimlerin ölçüsü ve
+> girinti/çıkıntı ölçüleri. Kesit düzlemi en çok deliği açan yerden
+> geçiyor ama bunun da iyileştirilmesi gerekiyor.
+
 ---
 
 ### Adım 8 — LAZER (kesim resimleri)
