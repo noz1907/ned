@@ -69,6 +69,15 @@ def olcu_degerleri(yol):
     return out
 
 
+def subprocess_run(yol):
+    import subprocess
+    r = subprocess.run([sys.executable,
+                        os.path.join(os.path.dirname(os.path.abspath(__file__)),
+                                     "cizim_cakisma_denetimi.py"), yol],
+                       capture_output=True, text=True)
+    return r.stdout
+
+
 def main():
     kl = tempfile.mkdtemp(prefix="konum_denetim_")
     P = {"gizli": False, "en_az_delik": 1.0, "yogunluk": O.RHO,
@@ -285,6 +294,196 @@ def main():
           sum(1 for e in d4.modelspace()
               if e.dxftype() == "LINE" and e.dxf.layer == "OLCU") >= len(pah),
           "kılavuz çizgisi yok")
+
+    print("\n-- kapalı kontur: düzlemsel yüz dolaşımı")
+    kare = {"GORUNEN": [[(0, 0), (10, 0)], [(10, 0), (10, 5)],
+                        [(10, 5), (0, 5)], [(0, 5), (0, 0)]], "GIZLI": []}
+    esit("kare iki halka verir (biri artı biri eksi)",
+         sorted(round(O._cokgen_alani(q), 1) for q in O.halkalar(kare)),
+         [-50.0, 50.0])
+    esit("kareden dış hat çıkıyor",
+         round(O._cokgen_alani(O.dis_kontur(kare)), 1), 50.0)
+    # HLR aynı kenarı iki kez verir; kopya dış hattı yutuyordu.
+    kopya = {"GORUNEN": kare["GORUNEN"] + [[(0, 0), (10, 0)]], "GIZLI": []}
+    esit("kopya kenar dış hattı bozmuyor",
+         round(O._cokgen_alani(O.dis_kontur(kopya)), 1), 50.0)
+    # Havada biten siluet çizgisi de bozuyordu. (Parçanın içinde kalır:
+    # görünür bir kenar siluetin dışına çıkamaz.) Biri köşeye bağlı,
+    # biri tamamen boşta.
+    asili = {"GORUNEN": kare["GORUNEN"] + [[(10, 5), (6, 3)],
+                                          [(2, 1), (3, 4)]], "GIZLI": []}
+    esit("asılı kenar dış hattı bozmuyor",
+         round(O._cokgen_alani(O.dis_kontur(asili)), 1), 50.0)
+    # Dört kenara değmeyen halka dış hat sayılmaz.
+    kucuk = {"GORUNEN": [[(0, 0), (1, 0)], [(1, 0), (1, 1)],
+                         [(1, 1), (0, 1)], [(0, 1), (0, 0)],
+                         [(9, 9), (9.2, 9)]], "GIZLI": []}
+    esit("görünüşü doldurmayan halka dış hat sayılmadı",
+         O.dis_kontur(kucuk), None)
+
+    print("\n-- girinti: çentiğin yeri ve derinliği")
+    # 120 x 80 plakanın alt kenarından 30..50 arası 15 mm çentik.
+    # (50..70 OLMAZ: 50 + 70 = 120, çentik ortada kalır ve simetri
+    # kuralı ikinci ucu haklı olarak atar - o ayrıca sınanıyor.)
+    duz = plaka(120.0, 80.0, 5.0, [])
+    esit("düz plakada girinti yok",
+         O.kontur_ozellikleri([(0, 0), (120, 0), (120, 80), (0, 80)],
+                              (0.0, 0.0, 120.0, 80.0)), [])
+    # Derinlik TAM olmalı, kutucuktan değil konturdan: dik eğimde
+    # kutucuk hatası 2 mm'yi buluyordu (17,67 yerine 15,73).
+    def oz_(dis, k):
+        return [(r["a"], r["b"], r["derinlik"], r["ic"])
+                for r in O.kontur_ozellikleri(dis, k)]
+    kt = (0.0, 0.0, 120.0, 80.0)
+    esit("V çentik: 40..60, derinlik tam 25",
+         oz_([(0, 0), (40, 0), (50, 25), (60, 0), (120, 0), (120, 80),
+              (0, 80)], kt), [(40, 60, 25.0, True)])
+    esit("kırlangıç: ağız 40..60, derinlik tam 20",
+         oz_([(0, 0), (40, 0), (35, 20), (65, 20), (60, 0), (120, 0),
+              (120, 80), (0, 80)], kt), [(40, 60, 20.0, True)])
+    # Köşe kesiği iki kenarda da girinti olarak çıkar; bacaklarını
+    # iki konum verir, derinlik YAZILMAZ (ikinci kez olurdu).
+    ks = O.kontur_ozellikleri([(0, 0), (195, 0), (195, 43.67), (177.33, 50),
+                               (0, 50)], (0.0, 0.0, 195.0, 50.0))
+    esit("köşe kesiğinin bacakları tam",
+         sorted((r["taraf"], r["a"], r["b"]) for r in ks),
+         [("sag", 43.67, 50), ("ust", 177.33, 195)])
+    esit("köşe kesiğine derinlik yazılmaz",
+         [r["derinlik"] for r in ks], [None, None])
+    # Ağzı R2 ile yuvarlatılmış çentik: kontur kenardan TEĞET noktasında
+    # (28 ve 52) ayrılır; ölçü sanal keskin köşeye (30 ve 50) verilir.
+    yuv = [(0, 0), (28, 0), (29.414, 0.586), (30, 2), (30, 15), (50, 15),
+           (50, 2), (50.586, 0.586), (52, 0), (120, 0), (120, 80), (0, 80)]
+    duz_ = [True, False, False, True, True, True, False, False,
+            True, True, True, True]
+    esit("yuvarlak ağız: sanal köşe 30..50, derinlik 15",
+         [(r["a"], r["b"], r["derinlik"]) for r in
+          O.kontur_ozellikleri(yuv, kt, duz=duz_)], [(30, 50, 15.0)])
+    esit("yay bilgisi yoksa teğet noktası (28..52)",
+         [(r["a"], r["b"]) for r in O.kontur_ozellikleri(yuv, kt)],
+         [(28, 52)])
+    centikli = BRepAlgoAPI_Cut(duz, BRepPrimAPI_MakeBox(
+        gp_Pnt(30.0, -1.0, -1.0), 20.0, 16.0, 7.0).Shape()).Shape()
+    s7, o7 = O.komponent_olcu(centikli, P)
+    ken7 = O.hlr(s7, *O.GORUNUS["UST"], gizli=False)
+    kb7 = O._kenar_kutusu(ken7)
+    oz = O.gorunus_ozellikleri(ken7, kb7)
+    print("     girinti:", [(r["taraf"], round(r["a"], 1), round(r["b"], 1),
+                             round(r["derinlik"], 1)) for r in oz])
+    esit("tek girinti bulundu", len(oz), 1)
+    if oz:
+        r = oz[0]
+        esit("çentik alt kenarda", r["taraf"], "alt")
+        # TAM değer: kutucuk çözünürlüğü değil, gerçek köşe.
+        dogru("çentik tam 30..50 arasında",
+              abs(r["a"] - 30.0) < 0.01 and abs(r["b"] - 50.0) < 0.01,
+              f"{r['a']:.1f}..{r['b']:.1f}")
+        dogru("çentik tam 15 mm derin", abs(r["derinlik"] - 15.0) < 0.01,
+              f"{r['derinlik']:.1f}")
+
+    # Aynısı GERÇEK katıyla: çentiğin ağız kenarları R2 yuvarlatılmış;
+    # HLR'den gelen yayın doğru/yay ayrımı kenar_tani'den.
+    from OCP.BRepFilletAPI import BRepFilletAPI_MakeFillet
+    from OCP.TopExp import TopExp_Explorer
+    from OCP.TopAbs import TopAbs_EDGE
+    from OCP.TopoDS import TopoDS
+    from OCP.BRepAdaptor import BRepAdaptor_Curve
+    from OCP.GeomAbs import GeomAbs_Line
+    fl = BRepFilletAPI_MakeFillet(centikli)
+    ex = TopExp_Explorer(centikli, TopAbs_EDGE)
+    while ex.More():
+        e = TopoDS.Edge_s(ex.Current())
+        c = BRepAdaptor_Curve(e)
+        if c.GetType() == GeomAbs_Line:
+            a_, b_ = c.Value(c.FirstParameter()), c.Value(c.LastParameter())
+            if (abs(a_.X() - b_.X()) < 1e-6 and abs(a_.Y() - b_.Y()) < 1e-6
+                    and abs(a_.Y()) < 1e-6 and min(abs(a_.X() - 30.0),
+                                                   abs(a_.X() - 50.0)) < 1e-6):
+                fl.Add(2.0, e)
+        ex.Next()
+    fl.Build()
+    s10, o10 = O.komponent_olcu(fl.Shape(), P)
+    ken10 = O.hlr(s10, *O.GORUNUS["UST"], gizli=False)
+    oz10 = O.gorunus_ozellikleri(ken10, O._kenar_kutusu(ken10))
+    print("     R2 ağızlı çentik:", [(round(r["a"], 3), round(r["b"], 3),
+                                      r["derinlik"]) for r in oz10])
+    dogru("R2 ağızlı katı: sanal köşe tam 30..50, derinlik 15",
+          len(oz10) == 1 and abs(oz10[0]["a"] - 30.0) < 1e-3
+          and abs(oz10[0]["b"] - 50.0) < 1e-3
+          and oz10[0]["derinlik"] is not None
+          and abs(oz10[0]["derinlik"] - 15.0) < 1e-3, str(oz10))
+
+    print("\n-- çentiğin konumu ve derinliği resme giriyor mu")
+    yol7 = os.path.join(kl, "P07_CENTIK.dxf")
+    P7 = dict(P); P7["gorunusler"] = ("UST",)
+    O.dxf_komponent(s7, o7, {"poz": 7, "kod": "CENTIK", "ad": "Çentikli plaka",
+                             "adet": 1, "malzeme_ad": "Celik"}, yol7, P7)
+    deg = [v for _t, v in olcu_degerleri(yol7) if v is not None]
+    print("     ölçüler:", sorted(deg))
+    dogru("çentiğin başı (30) ölçülmüş",
+          any(abs(v - 30.0) < 0.01 for v in deg), str(sorted(deg)))
+    dogru("çentiğin sonu (50) ölçülmüş",
+          any(abs(v - 50.0) < 0.01 for v in deg), str(sorted(deg)))
+    dogru("çentiğin derinliği (15) ölçülmüş",
+          any(abs(v - 15.0) < 0.01 for v in deg), str(sorted(deg)))
+
+    # Ortadaki çentik: iki ucu ayna görüntüsü, yalnız biri ölçülür.
+    orta = BRepAlgoAPI_Cut(duz, BRepPrimAPI_MakeBox(
+        gp_Pnt(50.0, -1.0, -1.0), 20.0, 16.0, 7.0).Shape()).Shape()
+    s8, o8 = O.komponent_olcu(orta, P)
+    ken8 = {"UST": O.hlr(s8, *O.GORUNUS["UST"], gizli=False)}
+    pl8 = O.konum_plani(o8, ("UST",), {"UST": O._kenar_kutusu(ken8["UST"])},
+                        4.0, ken8)
+    y8 = sorted(round(abs(r["b"] - r["a"]), 2) for r in pl8["UST"]["yatay"])
+    print("     ortadaki çentik, yatay konum:", y8)
+    esit("ortadaki çentikte yalnız 50 ölçülür", y8, [50.0])
+    dogru("ortadaki çentik simetrik işaretlendi",
+          pl8["UST"]["yatay_simetrik"], "simetri işareti yok")
+    r7 = subprocess_run(yol7)
+    dogru("çentikli resimde çakışma yok", "CAKISMA YOK" in r7,
+          r7.strip().splitlines()[-1] if r7 else "?")
+
+    print("\n-- kenarın ucuna dayanan basamak; ayna görünüş")
+    # 120 x 80 plakanın sağ alt köşesinden 30 x 20 basamak: girinti
+    # 90..120. 90 konumdur; 120 gabaridir, konum diye tekrar yazılmaz.
+    basamak = BRepAlgoAPI_Cut(duz, BRepPrimAPI_MakeBox(
+        gp_Pnt(90.0, -1.0, -1.0), 31.0, 21.0, 7.0).Shape()).Shape()
+    s9, o9 = O.komponent_olcu(basamak, P)
+    ken9 = {g: O.hlr(s9, *O.GORUNUS[g], gizli=False) for g in ("UST", "ALT")}
+    ham9 = {g: O._kenar_kutusu(k) for g, k in ken9.items()}
+    pl9 = O.konum_plani(o9, ("UST", "ALT"), ham9, 4.0, ken9)
+    y9 = sorted(round(abs(r["b"] - r["a"]), 2) for r in pl9["UST"]["yatay"])
+    print("     basamak, yatay konum:", y9)
+    dogru("basamağın başı (90) ölçülmüş", 90.0 in y9, str(y9))
+    dogru("gabari (120) konum diye tekrar yazılmamış", 120.0 not in y9, str(y9))
+    # ÜST ile ALT aynı dış hattı gösterir; girinti yalnız birinde.
+    esit("girinti yalnız ÜST'te", [g for g in ("UST", "ALT")
+                                   if pl9.get(g, {}).get("ozellik")], ["UST"])
+
+    print("\n-- iç pencere (yuva): kenara açılmayan girinti")
+    # 120 x 80 plakada 20 x 10 dikdörtgen pencere (30..50, 40..50) ve
+    # bir Ø8 delik. Pencere konum ister; delik pencere SAYILMAZ (o 3B'den
+    # delik olarak ölçülüyor), dış kutuya değen halka da sayılmaz.
+    pen = BRepAlgoAPI_Cut(plaka(120.0, 80.0, 5.0, [(90.0, 20.0, 4.0)]),
+                          BRepPrimAPI_MakeBox(gp_Pnt(30.0, 40.0, -1.0),
+                                              20.0, 10.0, 7.0).Shape()).Shape()
+    s11, o11 = O.komponent_olcu(pen, P)
+    ken11 = O.hlr(s11, *O.GORUNUS["UST"], gizli=False)
+    pe = O.ic_pencereler(ken11, O._kenar_kutusu(ken11))
+    print("     pencere:", [r["kutu"] for r in pe])
+    esit("tek pencere, tam kutusu", [r["kutu"] for r in pe],
+         [(30.0, 40.0, 50.0, 50.0)])
+    pl11 = O.konum_plani(o11, ("UST",), {"UST": O._kenar_kutusu(ken11)},
+                         4.0, {"UST": ken11})
+    y11 = sorted(round(abs(r["b"] - r["a"]), 2) for r in pl11["UST"]["yatay"])
+    d11 = sorted(round(abs(r["b"] - r["a"]), 2) for r in pl11["UST"]["dusey"])
+    print("     yatay:", y11, " düşey:", d11)
+    dogru("pencerenin iki yatay kenarı (30, 50) ölçülmüş",
+          30.0 in y11 and 50.0 in y11, str(y11))
+    dogru("pencerenin iki düşey kenarı (40, 50) ölçülmüş",
+          40.0 in d11 and 50.0 in d11, str(d11))
+    dogru("delik de yerinde (90 / 20)", 90.0 in y11 and 20.0 in d11,
+          f"{y11} {d11}")
 
     print("\n-- eğri siluet: her eğik çizgi kesim değildir")
     import math

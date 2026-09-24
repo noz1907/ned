@@ -458,6 +458,8 @@ GOR_EKSEN = {
     "UST":  (0, 1, False, False),
     "ALT":  (0, 1, False, True),
 }
+# Aynı dış hattı iki yandan gösteren görünüş çiftleri.
+AYNA_CIFT = {"ON": 0, "ARKA": 0, "SAG": 1, "SOL": 1, "UST": 2, "ALT": 2}
 # Bir eksene paralel deliğin DAİRE göründüğü görünüşler (öncelik sırasıyla).
 DELIK_GOR = {"Y": ("ON", "ARKA"), "X": ("SAG", "SOL"), "Z": ("UST", "ALT")}
 
@@ -1389,6 +1391,606 @@ def _seviyele(araliklar, h):
     return len(kademe)
 
 
+# ------------------------------------------------- kapalı kontur (halka) çıkarımı
+# HLR görünüşü ayrık parçalar hâlinde verir; hangi parçanın hangisiyle bir
+# halka kurduğunu söylemez. Girinti/çıkıntı ölçüsü için KAPALI KONTUR şart:
+# parçanın dış hattı bilinmeden neyin girinti olduğu söylenemez.
+HALKA_TOL = 0.02          # mm; iki ucun çakıştığı sayılacağı en büyük aralık
+
+
+def _dugumle(noktalar, tol=HALKA_TOL):
+    """Birbirine değen uçları tek düğümde toplar.
+
+    Koordinatı yuvarlamak tek başına YETMEZ: hücre sınırına düşen iki uç
+    ayrı hücrelere gider ve halka orada kopar. Komşu dokuz hücreye de
+    bakılır.
+
+    Döner: (her noktanın düğüm indeksi, düğüm koordinatları)."""
+    hucre, dugum, out = {}, [], []
+    for q in noktalar:
+        i = (int(math.floor(q[0] / tol)), int(math.floor(q[1] / tol)))
+        bul = None
+        for dx in (-1, 0, 1):
+            for dy in (-1, 0, 1):
+                for j in hucre.get((i[0] + dx, i[1] + dy), ()):
+                    r = dugum[j]
+                    if (r[0] - q[0]) ** 2 + (r[1] - q[1]) ** 2 <= tol * tol:
+                        bul = j
+                        break
+                if bul is not None:
+                    break
+            if bul is not None:
+                break
+        if bul is None:
+            bul = len(dugum)
+            dugum.append(q)
+            hucre.setdefault(i, []).append(bul)
+        out.append(bul)
+    return out, dugum
+
+
+def halkalar(kenar, katman=("GORUNEN",), tol=HALKA_TOL, en_cok_kenar=6000,
+             kaynak=False):
+    """Görünüşteki bütün KAPALI halkalar.
+
+    Uçtan uca zincirleme YETMEZ, denedik: üç ya da daha çok parçanın
+    buluştuğu düğümde (teğet geçiş, çakışan kenar, ortak köşe) hangisiyle
+    devam edileceği belirsizdir; zincir ya yanlış dallanır ya hiç kapanmaz.
+    İlk denemede ya 0 halka ya da her şeyi yutan tek bir halka çıkıyordu.
+
+    Doğrusu DÜZLEMSEL YÜZ DOLAŞIMI: her düğümde çıkan yarı-kenarlar açıya
+    göre sıralanır; bir yarı-kenarla düğüme varınca, onun TERSİNİN açısal
+    sıradaki bir öncekiyle devam edilir. Bu kural düzlemsel bir çizgede
+    her yüzü tam bir kez dolaşır; dallanma ve çakışma bozmaz. Her halka
+    biri artı biri eksi alanlı olmak üzere iki kez çıkar - dış hat
+    EN EKSİ alanlı olandır.
+
+    Dolaşımdan önce iki temizlik şart; ikisi de ölçülerek bulundu:
+      * kopya kenar (HLR aynı çizgiyi iki kez verir),
+      * asılı kenar (bir ucu boşta biten siluet çizgisi).
+
+    Döner: [[(x, y), ...], ...]; kaynak=True ise [(noktalar, kenarlar)]
+    - kenarlar[i], noktalar[i] -> noktalar[i+1] parçasının geldiği HLR
+    kenarıdır (doğru mu yay mı, oradan anlaşılır)."""
+    parca = [q for kat in katman for q in (kenar.get(kat) or ())
+             if len(q) >= 2]
+    if not parca or len(parca) > en_cok_kenar:
+        return []
+    parca = _kopya_at(parca, tol)
+    parca = _asili_buda(parca, tol)
+    n = len(parca)
+    if n < 2:
+        return []
+    dug, _yer = _dugumle([p for q in parca for p in (q[0], q[-1])], tol)
+    bas = [0] * (2 * n); son = [0] * (2 * n); aci = [0.0] * (2 * n)
+    for i, q in enumerate(parca):
+        a, b = dug[2 * i], dug[2 * i + 1]
+        bas[2 * i], son[2 * i] = a, b
+        bas[2 * i + 1], son[2 * i + 1] = b, a
+        aci[2 * i] = math.atan2(q[1][1] - q[0][1], q[1][0] - q[0][0])
+        aci[2 * i + 1] = math.atan2(q[-2][1] - q[-1][1], q[-2][0] - q[-1][0])
+    cikan = defaultdict(list)
+    for hh in range(2 * n):
+        cikan[bas[hh]].append(hh)
+    sira = {}
+    for _d, hs in cikan.items():
+        hs.sort(key=lambda hh: aci[hh])
+        for k, hh in enumerate(hs):
+            sira[hh] = k
+
+    def sonraki(hh):
+        ters = hh ^ 1                  # varış düğümünden çıkan ters yarı-kenar
+        hs = cikan[son[hh]]
+        return hs[(sira[ters] - 1) % len(hs)]
+
+    gorulen, cikti = set(), []
+    for h0 in range(2 * n):
+        if h0 in gorulen:
+            continue
+        dizi, hh = [], h0
+        while hh not in gorulen:
+            gorulen.add(hh)
+            dizi.append(hh)
+            hh = sonraki(hh)
+        # Budamadan sonra kalan tek çift geçiş köprü kenarlarıdır (iki
+        # halkayı birbirine bağlayan çizgi); onlar da yüz sınırı değil.
+        if len(set(hh2 >> 1 for hh2 in dizi)) != len(dizi):
+            continue
+        nokta, kay = [], []
+        for hh2 in dizi:
+            q = parca[hh2 >> 1]
+            ek = (q if not (hh2 & 1) else q[::-1])[:-1]
+            nokta += ek
+            kay += [q] * len(ek)
+        if len(nokta) >= 3:
+            cikti.append((nokta, kay) if kaynak else nokta)
+    return cikti
+
+
+def _kopya_at(parca, tol=HALKA_TOL):
+    """Aynı kenarın ikinci kopyasını atar.
+
+    HLR aynı çizgiyi iki kez verebilir: VCompound ile OutLineVCompound
+    çakışır. İkinci kopya düzlemsel dolaşımda sıfır alanlı sahte bir yüz
+    yaratır ve dış hattı yutar. Ölçtük: 01.051.000.01'in ÖN görünüşünde
+    alt kenar iki kez geliyor, dış hattın alanı 85560 yerine 0 çıkıyordu."""
+    dug, _yer = _dugumle([p for q in parca for p in (q[0], q[-1])], tol)
+    gor, tek = set(), []
+    for i, q in enumerate(parca):
+        a, b = dug[2 * i], dug[2 * i + 1]
+        uz = sum(math.dist(q[j], q[j + 1]) for j in range(len(q) - 1))
+        o = q[len(q) // 2]
+        im = (min(a, b), max(a, b), round(uz, 3),
+              round(o[0], 2), round(o[1], 2))
+        if im not in gor:
+            gor.add(im)
+            tek.append(q)
+    return tek
+
+
+def _asili_buda(parca, tol=HALKA_TOL):
+    """Bir ucu boşta biten kenarları atar.
+
+    Asılı kenar hiçbir yüzün sınırı değildir: dolaşımda gidilip geri
+    dönülerek geçilir ve halkayı görünüşün dört köşesine kadar
+    sürükler; alanı sıfıra yakın, sınır kutusu bütün görünüş olan sahte
+    bir "dış hat" çıkar. HLR eğri yüzeylerde bunlardan bol bol verir -
+    ölçtük: 01.050.000.14'ün ÖN görünüşünde 122 açık uç.
+
+    Budama yinelemelidir: bir kenar kalkınca komşusu açıkta kalabilir."""
+    dug, _yer = _dugumle([p for q in parca for p in (q[0], q[-1])], tol)
+    n = len(parca)
+    derece = Counter()
+    for i in range(n):
+        derece[dug[2 * i]] += 1
+        derece[dug[2 * i + 1]] += 1
+    canli = [True] * n
+    degisti = True
+    while degisti:
+        degisti = False
+        for i in range(n):
+            if not canli[i]:
+                continue
+            a, b = dug[2 * i], dug[2 * i + 1]
+            if a == b:                 # kendine kapanan kenar: asılı değil
+                continue
+            if derece[a] <= 1 or derece[b] <= 1:
+                canli[i] = False
+                derece[a] -= 1
+                derece[b] -= 1
+                degisti = True
+    return [q for i, q in enumerate(parca) if canli[i]]
+
+
+def dis_kontur(kenar, katman=("GORUNEN",), tol=HALKA_TOL, kaynak=False):
+    """Görünüşün DIŞ HATTI; saat yönünün tersine. Bulunamazsa None.
+
+    Dış hat, yüz dolaşımının EN EKSİ alanlı halkasıdır: dışarıdaki
+    sonsuz yüz, parçanın çevresini ters yönde dolaşır. "En büyük artı
+    alanlı halka" demek yanlış olurdu - iç çizgileri olan bir görünüşte
+    (C profil, büküm çizgisi) parçanın içi birkaç yüze bölünür ve
+    hiçbiri tek başına dış hattı vermez.
+
+    kaynak=True ise (noktalar, kenarlar) döner; bkz. halkalar."""
+    hl = halkalar(kenar, katman, tol, kaynak=True)
+    if not hl:
+        return None
+    a, h, ky = min(((_cokgen_alani(q), q, k) for q, k in hl),
+                   key=lambda t: t[0])
+    if a >= 0:
+        return None
+    n_ = len(h)
+    h = h[::-1]
+    # Ters çevrilen halkada i. parça, eskisinin (n-2-i). parçasıdır.
+    ky = [ky[(n_ - 2 - i) % n_] for i in range(n_)]
+    # DENETİM: dış hat görünüşün dört kenarına da DEĞMELİ.
+    # Dövme/döküm parçalarda HLR'nin siluet kenarları havada biter
+    # (ölçtük: 01.050.000.14'ün ÖN görünüşünde 122 açık uç); o zaman
+    # dolaşım kapalı bir halka bulur ama o halka parçanın dış hattı
+    # değil, içerideki küçük bir çevrimdir. Böyle bir halkadan
+    # çıkarılacak girinti/çıkıntı ölçüsü yanlış olurdu; hiç vermemek
+    # yeğdir.
+    gk = _kenar_kutusu(kenar)
+    if not gk:
+        return None
+    hk = (min(q[0] for q in h), min(q[1] for q in h),
+          max(q[0] for q in h), max(q[1] for q in h))
+    pay = max(0.05, 0.004 * max(gk[2] - gk[0], gk[3] - gk[1]))
+    if any(abs(hk[i] - gk[i]) > pay for i in range(4)):
+        return None
+    return (h, ky) if kaynak else h
+
+
+GIRINTI_EN_AZ_ORAN = 0.02   # görünüşün uzun kenarına göre en küçük anlamlı girinti
+GIRINTI_EN_COK = 5          # bir görünüşte ölçülecek en çok girinti
+GIRINTI_SINIR = 12          # bundan fazlası girinti değil, biçimin kendisidir
+
+
+def kontur_ozellikleri(dis, kutu_, en_az_oran=GIRINTI_EN_AZ_ORAN,
+                       en_cok=GIRINTI_EN_COK, sinir=GIRINTI_SINIR, duz=None):
+    """Dış konturun GİRİNTİ ve ÇIKINTILARI.
+
+    Gabari ölçüsü parçanın o yöndeki en uç noktalarını verir; kenarın
+    ortasından alınmış bir çentiğin ya da dışarı taşan bir kulağın nerede
+    başlayıp nerede bittiğini söylemez. Atölyenin ihtiyacı olan da odur:
+    delik konumu gibi girinti konumu da ölçülendirilir.
+
+    YÖNTEM - YAKIN ZARF. Kenar boyunca adım adım ilerlenir ve her adımda
+    konturun o kenara EN YAKIN noktasının uzaklığı yazılır. Kenara değen
+    adımlar parçanın o kenara oturduğu yerlerdir; aralarında kalan
+    değmeyen diziler girintidir.
+
+    Halkayı dolaşıp "kenardan uzaklaşan diziyi girinti say" demek
+    YANLIŞTIR, denedik: dikdörtgen bir görünüşte halka alt kenardan
+    ayrılıp üst kenardan geçip döner ve bütün kenar "175 mm boyunda,
+    5 mm derinliğinde girinti" diye çıkar. Karşı kenar girinti değildir;
+    sorulacak olan, kenarın her noktasının KARŞISINDA konturun ne kadar
+    yakından geçtiğidir.
+
+    Çıkıntı ayrı bir durum değildir: dışarı taşan bir kulak gabariyi
+    kendi ucuyla belirlediği için iki yanı girinti olarak çıkar ve
+    verilen ölçüler kulağın yerini verir - istenen de budur.
+
+    Kapılar, eğik kesimde öğrendiğimizle aynı: görünüşün %2'sinden sığ ya
+    da dar çentik gürültüdür; sayısı GIRINTI_SINIR'ı aşıyorsa o kenar
+    "düz kenar + çentik" değil, biçimin kendisidir - ölçülmez.
+
+    SANAL KÖŞE. Çentiğin ağzı yuvarlatılmışsa (teğet yay), kontur
+    kenardan yayın TEĞET NOKTASINDA ayrılır. Ressam oraya ölçü vermez;
+    yayın öbür ucundaki DOĞRU kenarı kenara uzatır ve ölçüyü o kesişme
+    noktasına, yani sanal keskin köşeye verir - tasarımın asıl ölçüsü
+    odur, yay sonradan kırılmış bir kenardır. Ölçtük: Dachplatte'nin
+    köşe kesiği teğet noktalarında 41,09 / 22,51 çıkıyordu; kesik
+    doğrusu uzatılınca 45,0 / 20,05 - yani 20 x 5'lik bir kesik.
+    `duz[i]`, i. parçanın (dis[i] -> dis[i+1]) doğru bir kenardan gelip
+    gelmediğini söyler; verilmezse her parça doğru sayılır.
+
+    Döner: [{"taraf", "yon", "a", "b", "derinlik", "ic"}]; a ile b,
+    ölçünün alınacağı yöndeki HAM izdüşüm koordinatlarıdır."""
+    if not dis or not kutu_:
+        return []
+    x0, y0, x1, y1 = kutu_
+    buyuk = max(x1 - x0, y1 - y0)
+    if buyuk <= 0:
+        return []
+    tol = max(0.05, 0.004 * buyuk)
+    en_az = en_az_oran * buyuk
+    adim = max(tol, buyuk / 800.0)
+    n = len(dis)
+    out = []
+    for taraf, yon, uzak, boy, e0, e1 in (
+            ("alt", "yatay", lambda q: q[1] - y0, lambda q: q[0], x0, x1),
+            ("ust", "yatay", lambda q: y1 - q[1], lambda q: q[0], x0, x1),
+            ("sol", "dusey", lambda q: q[0] - x0, lambda q: q[1], y0, y1),
+            ("sag", "dusey", lambda q: x1 - q[0], lambda q: q[1], y0, y1)):
+        boyu = e1 - e0
+        if boyu <= 0:
+            continue
+        K = max(16, min(2000, int(boyu / adim) + 1))
+        zarf = [None] * K
+        # Örnek aralığı kutucuğun ÜÇTE BİRİ. Kutucuk kadar olunca bazı
+        # kutucuklara kenarın kendisinden hiç örnek düşmüyor, yalnız karşı
+        # kenardan düşüyordu: 120 x 80'lik düz dikdörtgenin üst kenarında
+        # 48 tane "80 mm derin" sahte girinti çıktı.
+        for i in range(n):
+            p, q = dis[i], dis[(i + 1) % n]
+            m = max(1, int(3.0 * math.dist(p, q) / adim) + 1)
+            for j in range(m):
+                t = j / m
+                r = (p[0] + (q[0] - p[0]) * t, p[1] + (q[1] - p[1]) * t)
+                kk = min(K - 1, max(0, int((boy(r) - e0) / boyu * K)))
+                d = uzak(r)
+                if zarf[kk] is None or d < zarf[kk]:
+                    zarf[kk] = d
+        # Örnek düşmeyen kutucuğu komşusundan doldur (iki yönde).
+        onceki = None
+        for kk in range(K):
+            if zarf[kk] is None:
+                zarf[kk] = onceki
+            else:
+                onceki = zarf[kk]
+        onceki = None
+        for kk in range(K - 1, -1, -1):
+            if zarf[kk] is None:
+                zarf[kk] = onceki
+            else:
+                onceki = zarf[kk]
+        if any(v is None for v in zarf):
+            continue
+        deger = [v <= tol for v in zarf]
+        if not any(deger):
+            continue
+        # Kutucuk yaklaşık bir yer verir (± bir adım); resme yazılacak
+        # ölçü TAM olmalı. Ölçtük: 50..70 arası çentik 50,2..69,8 diye
+        # çıkıyordu. Uçlar, kenara değen GERÇEK kontur köşesine oturtulur:
+        # boşluğun solundaki son, sağındaki ilk değen köşe. Boşluğun
+        # içinde değen köşe olamaz (olsaydı o kutucuk değerdi), yani bu
+        # iki köşe çentiğin tam başı ve sonudur. Kenarın ucuna dayanan
+        # boşlukta o uç gabarinin kendisidir. Yaklaşık değer ASLA yazılmaz.
+        #
+        # "Değen" köşe gerçekten ÜSTÜNDE olandır (1 mikron): gabari
+        # kutusu bu köşelerden hesaplandı. Kutucukların payı (tol) burada
+        # kullanılmaz; 195 mm'lik parçada o 0,8 mm'dir ve kenara 0,5 mm
+        # yaklaşan bir köşeyi yanlışlıkla çentiğin başı yapardı.
+        degen = sorted((boy(q), i) for i, q in enumerate(dis)
+                       if uzak(q) <= 1e-3)
+        degen_b = [t[0] for t in degen]
+
+        def sanal(i, ic_yon):
+            """i. köşeden çentiğe doğru yürü; ilk DOĞRU parçayı kenara
+            uzat. ic_yon: çentik büyük boy tarafındaysa +1, değilse -1."""
+            v0 = boy(dis[i])
+            if duz is None:
+                return v0
+            for yuru in (1, -1):
+                j = (i + yuru) % n
+                if (uzak(dis[j]) > 1e-3
+                        and (boy(dis[j]) - v0) * ic_yon > -1e-9):
+                    break
+            else:
+                return v0
+            k = i
+            for _ in range(n):
+                sg = k if yuru == 1 else (k - 1) % n
+                if duz[sg]:
+                    if k == i:         # ilk parça zaten doğru: keskin köşe
+                        return v0
+                    p, q = dis[sg], dis[(sg + 1) % n]
+                    up, uq = uzak(p), uzak(q)
+                    if abs(uq - up) < 1e-9:
+                        return v0      # kenara paralel: kesişme yok
+                    t = up / (up - uq)
+                    x = boy(p) + (boy(q) - boy(p)) * t
+                    # Makul mü: çentik tarafında ve yayın boyunu aşmayan
+                    # bir uzaklıkta olmalı.
+                    if ((x - v0) * ic_yon >= -1e-6
+                            and abs(x - v0) <= abs(boy(p) - v0) + tol):
+                        return round(x, 4)
+                    return v0
+                k = (k + yuru) % n
+                if k == i:
+                    break
+            return v0
+
+        def bas_kose(v):
+            i = bisect.bisect_right(degen_b, v + 1e-9) - 1
+            return sanal(degen[i][1], 1) if i >= 0 else e0
+
+        def son_kose(v):
+            i = bisect.bisect_left(degen_b, v - 1e-9)
+            return sanal(degen[i][1], -1) if i < len(degen) else e1
+
+        def der_tam(a, b):
+            """Çentiğin TAM derinliği; bulunamazsa None.
+
+            Kutucuk zarfı en derin yeri eksik bulur - eğim dikleştikçe
+            hata büyür: 6,33 x 17,67'lik köşe kesiğinde 15,73 çıkıyordu.
+            Tam değer için zarf konturun KENDİSİNDEN kurulur: bir hizada
+            konturu kesen her parça o hizada kesilir, kenara en yakını
+            zarfın değeridir.
+
+            Zarf parça parça doğrusaldır; en yüksek değeri bir köşenin
+            hizasında olur. Ama tam köşenin hizasında değil, HEMEN YANINDA
+            aranır: dik duvarlı çentikte dibin köşesi duvarın ayağıyla
+            aynı hizadadır, zarf orada 0'dan 15'e SIÇRAR - tam hizada
+            bakılınca derinlik 0 çıkıyordu."""
+            parca = []
+            for i in range(n):
+                p, q = dis[i], dis[(i + 1) % n]
+                bp, bq = boy(p), boy(q)
+                if abs(bq - bp) < 1e-12:
+                    continue           # kenara dik parça: zarfa girmez
+                if max(bp, bq) < a - 1e-9 or min(bp, bq) > b + 1e-9:
+                    continue
+                parca.append((bp, uzak(p), bq, uzak(q)))
+            olay = sorted({a, b} | {boy(q) for q in dis
+                                    if a - 1e-9 <= boy(q) <= b + 1e-9})
+            if len(olay) * len(parca) > 2_000_000:
+                return None
+            eps = 1e-7 * max(1.0, b - a)
+            en = None
+            for v in olay:
+                for x in (v - eps, v + eps):
+                    if not a < x < b:
+                        continue
+                    z = None
+                    for bp, dp, bq, dq in parca:
+                        if (bp - x) * (bq - x) > 0:
+                            continue
+                        w = dp + (dq - dp) * (x - bp) / (bq - bp)
+                        z = w if z is None else min(z, w)
+                    if z is not None:
+                        en = z if en is None else max(en, z)
+            return None if en is None else round(en, 4)
+
+        kk = 0
+        while kk < K:
+            if deger[kk]:
+                kk += 1
+                continue
+            j = kk
+            while j < K and not deger[j]:
+                j += 1
+            if j - kk < 3:
+                # Birkaç kutucukluk boşluk örnekleme artığıdır; gerçek
+                # girinti en az GIRINTI_EN_AZ_ORAN kadardır (~16 kutucuk).
+                kk = j
+                continue
+            a = e0 if kk == 0 else bas_kose(e0 + boyu * kk / K)
+            b = e1 if j >= K else son_kose(e0 + boyu * j / K)
+            der = max(zarf[kk:j])
+            en = b - a
+            # KÖŞE YUVARLAMASI GİRİNTİ DEĞİLDİR. Kenarın ucunda duran,
+            # eni boyuna yakın küçük bir boşluk R'dir ya da pahtır;
+            # ikisinin de ölçüsü resimde zaten var (R ölçüsü, "5 x 5"
+            # notu). İkinci kez konum vermek ISO 129-1'in "tekrarlanan
+            # öznitelik bir kez ölçülendirilir" kuralına aykırı olurdu.
+            # Ölçtük: 175 x 100 plakada dört köşe R6,5 dört ayrı
+            # girinti diye geliyordu.
+            ucta = (a - e0 <= tol) or (e1 - b <= tol)
+            kose = (ucta and der <= 0.15 * buyuk
+                    and abs(en - der) <= 0.40 * max(en, der))
+            if en >= en_az and der >= en_az and not kose:
+                out.append({"taraf": taraf, "yon": yon,
+                            "a": a, "b": b,
+                            "derinlik": der_tam(a, b) if not ucta else None,
+                            # İÇ çentik: iki ucu da kenara değiyor.
+                            # Kenarın ucuna dayanan basamağın derinliği
+                            # komşu kenarda ayrı bir girintinin KONUMU
+                            # olarak zaten çıkar (köşe kesiği iki kenarda
+                            # birden görünür); ikinci kez yazılmaz.
+                            "ic": not ucta})
+            kk = j
+    if len(out) > sinir:
+        return []
+    out.sort(key=lambda r: -((r["b"] - r["a"]) * (r["derinlik"] or 0.0)))
+    return out[:en_cok]
+
+
+def gorunus_ozellikleri(kenar, kutu_):
+    """Bir görünüşün girinti/çıkıntıları; kontur çıkarılamazsa boş.
+
+    Her parçanın doğru mu yay mı olduğu kaynağı olan HLR kenarından
+    anlaşılır: iki noktalı kenar doğrudur, çok noktalı kenar
+    kenar_tani'ye sorulur (HLR doğruları da B-spline verebiliyor)."""
+    dk = dis_kontur(kenar, kaynak=True)
+    if not dk:
+        return []
+    dis, kay = dk
+    sinif = {}
+    duz = []
+    for q in kay:
+        k = id(q)
+        if k not in sinif:
+            sinif[k] = (len(q) == 2 or kenar_tani(q)["tip"] == "dogru")
+        duz.append(sinif[k])
+    return kontur_ozellikleri(dis, kutu_, duz=duz)
+
+
+PENCERE_EN_COK = 4          # bir görünüşte konumu verilecek en çok iç pencere
+PENCERE_EN_COK_HALKA = 400  # bundan çok halkalı görünüşte pencere aranmaz
+
+
+def ic_pencereler(kenar, kutu_, en_az_oran=GIRINTI_EN_AZ_ORAN,
+                  en_cok=PENCERE_EN_COK):
+    """Görünüşün İÇİNDEKİ daire olmayan kapalı halkalar: yuva, pencere,
+    cep. Girintinin iç hâli - kenara açılmıyor ama o da yer ister.
+
+    Ölçtük: Dachplatte'de iki uzun yuva vardı, resimde yalnız "8x R1"
+    yazıyordu; yuvaların NEREDE olduğu hiçbir yerden okunmuyordu.
+
+    Pencere sayılan halka:
+      * iç yüzü boş kalan (içinde başka halka yok) - yoksa parçanın bir
+        yüzüdür, pencere değil (C profilin gövde yüzü delikleri içerir),
+      * görünüşün dış kutusuna DEĞMEYEN,
+      * hiçbir yönde görünüşün %60'ından büyük olmayan,
+      * DAİRE OLMAYAN - daireler delik olarak 3B'den ölçülüyor,
+      * dış hattın içinde kalan.
+
+    Döner: [{"kutu": (x0, y0, x1, y1), "alan"}] - büyükten küçüğe."""
+    if not kutu_:
+        return []
+    dis = dis_kontur(kenar)
+    if not dis:
+        return []
+    hl, kay = [], []
+    for q, k_ in halkalar(kenar, kaynak=True):
+        if _cokgen_alani(q) > 0:
+            hl.append(q)
+            kay.append(k_)
+    if len(hl) > PENCERE_EN_COK_HALKA:
+        return []
+    sinif = {}
+
+    def islenmis(kaynaklar):
+        """Halka yalnız DOĞRU ve YAYLARDAN mı oluşuyor? İşlenmiş ya da
+        kesilmiş bir pencere böyledir. Serbest eğrili halka dövme/döküm
+        yüzeyinin bir bölgesidir; ölçtük: Handhebel'de iç içe geçen iki
+        eğri bölge "pencere" diye 149,16 / 157,43 gibi rastgele konumlar
+        veriyordu."""
+        for q in kaynaklar:
+            k_ = id(q)
+            if k_ not in sinif:
+                sinif[k_] = (len(q) == 2
+                             or kenar_tani(q)["tip"] in ("dogru", "yay"))
+            if not sinif[k_]:
+                return False
+        return True
+    x0, y0, x1, y1 = kutu_
+    G, Y = x1 - x0, y1 - y0
+    buyuk = max(G, Y)
+    tol = max(0.05, 0.004 * buyuk)
+    en_az = en_az_oran * buyuk
+    kutular = [(min(q[0] for q in h), min(q[1] for q in h),
+                max(q[0] for q in h), max(q[1] for q in h)) for h in hl]
+    out = []
+    for i, (h, k) in enumerate(zip(hl, kutular)):
+        if (k[0] - x0 <= tol or k[1] - y0 <= tol
+                or x1 - k[2] <= tol or y1 - k[3] <= tol):
+            continue
+        en, boy_ = k[2] - k[0], k[3] - k[1]
+        if max(en, boy_) < en_az or en > 0.6 * G or boy_ > 0.6 * Y:
+            continue
+        # Kıl inceliğinde şerit pencere değil, iki çizgi arasındaki
+        # boşluktur (ölçtük: 12 mm'lik parçada 4 x 0,33).
+        if min(en, boy_) < 1.0 and min(en, boy_) < 0.1 * max(en, boy_):
+            continue
+        if not islenmis(kay[i]):
+            continue
+        # DAİRE Mİ? Yalnız köşelere bakmak YETMEZ: dikdörtgenin dört
+        # köşesi tam bir çemberin üstündedir, 20 x 10'luk pencere "delik"
+        # sayılıp atlanıyordu. Kenar ORTALARI da çembere yakın olmalı -
+        # gerçek dairenin örneklemesinde sehim 0,1 mm'yi geçmez.
+        c = _cember_uydur(h)
+        if c:
+            cx, cy, r, _s = c
+            m_ = len(h)
+            orta = [((h[t][0] + h[(t + 1) % m_][0]) / 2.0,
+                     (h[t][1] + h[(t + 1) % m_][1]) / 2.0) for t in range(m_)]
+            sap = max(abs(math.hypot(x - cx, y - cy) - r)
+                      for x, y in list(h) + orta)
+            if sap <= max(0.12, 0.01 * r):
+                continue               # daire: delik
+        if not _nokta_icinde(h[0], dis) and not _nokta_icinde(
+                ((k[0] + k[2]) / 2.0, (k[1] + k[3]) / 2.0), dis):
+            continue
+        # Yaprak mı: içinde başka bir halka var mı?
+        dolu = False
+        for j, (h2, k2) in enumerate(zip(hl, kutular)):
+            if j == i or k2[0] < k[0] - 1e-6 or k2[2] > k[2] + 1e-6 \
+                    or k2[1] < k[1] - 1e-6 or k2[3] > k[3] + 1e-6:
+                continue
+            if k2 == k and abs(_cokgen_alani(h2) - _cokgen_alani(h)) < 1e-6:
+                continue               # kendisinin kopyası
+            q = h2[len(h2) // 2]
+            if _nokta_icinde(q, h):
+                dolu = True
+                break
+        if dolu:
+            continue
+        # Aynı pencereyi iki kez sayma.
+        if any(abs(r["kutu"][0] - k[0]) < 1e-3 and abs(r["kutu"][1] - k[1]) < 1e-3
+               and abs(r["kutu"][2] - k[2]) < 1e-3 and abs(r["kutu"][3] - k[3]) < 1e-3
+               for r in out):
+            continue
+        out.append({"kutu": tuple(round(v, 4) for v in k),
+                    "alan": _cokgen_alani(h)})
+    # Birbirine BİNEN adaylar tek bir bölgenin parçalarıdır (aralarından
+    # bir teğet çizgisi geçiyor); hangisinin gerçek öznitelik olduğu
+    # bilinemez. Birleştirip tahmin etmek yerine hiçbiri ölçülmez.
+    # Ölçtük: Handhebel'de iki komşu yüz 141,7..151,6 ve 149,2..157,4.
+    temiz = []
+    for r in out:
+        k = r["kutu"]
+        if any(r2 is not r and k[0] < k2[2] and k2[0] < k[2]
+               and k[1] < k2[3] and k2[1] < k[3]
+               for r2 in out for k2 in (r2["kutu"],)):
+            continue
+        temiz.append(r)
+    temiz.sort(key=lambda r: -r["alan"])
+    return temiz[:en_cok]
+
+
 KESIM_EN_AZ_ORAN = 0.10   # görünüşün uzun kenarına göre en kısa anlamlı kesim
 KESIM_EN_COK = 6          # bir görünüşte konumu verilecek en çok kesim
 KESIM_SINIR = 8           # bundan fazlası kesim değil, eğri siluettir
@@ -1459,6 +2061,11 @@ def konum_plani(o, gorunusler, ham, h, kenarlar=None, tol=0.05):
     Döner: {gorunus: {"yatay": [...], "dusey": [...]}}
     Her kayıt: {"a","b","metin","seviye"}; HAM izdüşüm koordinatında."""
     plan = {}
+    # AYNA GÖRÜNÜŞLER (ÖN/ARKA, SAĞ/SOL, ÜST/ALT) aynı dış hattı iki
+    # yandan gösterir. Girinti birinde ölçülür; öbüründe tekrarı ISO
+    # 129-1'in "her öznitelik bir kez" kuralına aykırı olurdu. Ölçtük:
+    # TIRSAN rayında SAĞ ve SOL aynı 9 girintiyi ikişer kez yazıyordu.
+    ayna_verildi = set()
     for gad in gorunusler:
         kutu_ = ham.get(gad)
         if not kutu_:
@@ -1475,7 +2082,27 @@ def konum_plani(o, gorunusler, ham, h, kenarlar=None, tol=0.05):
         # girmez, onlar ok ucunda "5 x 5" diye verilir.)
         kesim = (kesim_uclari(kenarlar[gad], kutu_)
                  if kenarlar and gad in kenarlar else [])
-        if not nokta and not kesim:
+        # GİRİNTİ / ÇIKINTI: çentiğin başı ve sonu da konum ister -
+        # delikten farkı yok, atölye nereden nereye keseceğini bilmeli.
+        cift = AYNA_CIFT.get(gad)
+        ayna_bos = kenarlar and gad in kenarlar and cift not in ayna_verildi
+        ozel = gorunus_ozellikleri(kenarlar[gad], kutu_) if ayna_bos else []
+        # İÇ PENCERE (yuva, cep): kenarı değil bütün kutusu konum ister.
+        pencere = ic_pencereler(kenarlar[gad], kutu_) if ayna_bos else []
+        if ozel or pencere:
+            ayna_verildi.add(cift)
+        # YOĞUNLUK: bir görünüş, yazı boyuna göre ancak bu kadar girinti
+        # taşır. 12 mm'lik parçada yazı 2,5 mm - parçanın beşte biri;
+        # ilk sürüm oraya 25 ölçü ekledi, hiçbiri çakışmıyordu ama resim
+        # okunmuyordu. Kural: görünüşün uzun kenarının her 4 yazı boyuna
+        # bir girinti, en çok GIRINTI_EN_COK. Büyükler öncelikli (liste
+        # zaten alanına göre sıralı); tam liste olculer.csv'de.
+        if ozel or pencere:
+            buyuk_ = max(kutu_[2] - kutu_[0], kutu_[3] - kutu_[1])
+            sigar = max(1, int(buyuk_ / (4.0 * h)))
+            ozel = ozel[:min(GIRINTI_EN_COK, sigar)]
+            pencere = pencere[:min(PENCERE_EN_COK, sigar)]
+        if not nokta and not kesim and not ozel and not pencere:
             continue
         cikti = {}
         for ad, eksen, e0, e1 in (("yatay", 0, kutu_[0], kutu_[2]),
@@ -1492,6 +2119,20 @@ def konum_plani(o, gorunusler, ham, h, kenarlar=None, tol=0.05):
             dizi, tekil = [], set()
             for q in kesim:                # eğik kesimin uçları: tekil
                 tekil.add(round(q[eksen], 3))
+            for r in ozel:                 # girintinin başı ve sonu
+                if r["yon"] != ad:
+                    continue
+                for v in (r["a"], r["b"]):
+                    # Kenarın UCUNA dayanan girintinin o ucu gabarinin
+                    # kendisidir; konum diye bir daha yazılmaz. Ölçtük:
+                    # 483,04 / 125,48 / 112,52 gabarinin ikinci kopyası
+                    # olarak resme giriyordu.
+                    if min(abs(v - e0), abs(v - e1)) > 0.2:
+                        tekil.add(round(v, 3))
+            for r in pencere:              # pencerenin iki kenarı
+                k = r["kutu"]
+                tekil.add(round(k[eksen], 3))
+                tekil.add(round(k[eksen + 2], 3))
             for _k, v in obek.items():
                 v = sorted(set(round(x, 3) for x in v))
                 dz = _dizi(v)
@@ -1565,7 +2206,8 @@ def konum_plani(o, gorunusler, ham, h, kenarlar=None, tol=0.05):
             plan[gad] = {"yatay": cikti.get("yatay", []),
                          "dusey": cikti.get("dusey", []),
                          "yatay_simetrik": cikti.get("yatay_simetrik", False),
-                         "dusey_simetrik": cikti.get("dusey_simetrik", False)}
+                         "dusey_simetrik": cikti.get("dusey_simetrik", False),
+                         "ozellik": ozel}
     return plan
 
 
@@ -1684,6 +2326,163 @@ def _datum_ciz(msp, gk, yon, uc, harf, h):
                              mrk[1] - (ky[3] - ky[1]) / 2.0))
         return True
     return False
+
+
+def _gorunen_parcalar(msp, kutu_=None, katman=("GORUNEN",)):
+    """Resimdeki görünen çizgilerin DÜZ PARÇALARI; kutu verilirse
+    yalnız ona değenler.
+
+    Yazının "konturun üstünde" olup olmadığı SINIR KUTUSUYLA
+    anlaşılmaz: ince uzun bir çokgenin kutusu bütün görünüşü kaplar.
+    Sorulacak olan, yazının GERÇEK BİR ÇİZGİYE değip değmediğidir."""
+    out = []
+    for e in msp:
+        try:
+            if e.dxf.layer not in katman:
+                continue
+            t = e.dxftype()
+            if t == "LINE":
+                p = [(e.dxf.start.x, e.dxf.start.y),
+                     (e.dxf.end.x, e.dxf.end.y)]
+            elif t == "LWPOLYLINE":
+                p = [(x, y) for x, y in e.get_points("xy")]
+                if e.closed and len(p) > 2:
+                    p.append(p[0])
+            elif t in ("CIRCLE", "ARC"):
+                p = [(q.x, q.y) for q in e.flattening(0.2)]
+            else:
+                continue
+        except Exception:
+            continue
+        for a, b in zip(p, p[1:]):
+            if kutu_ and (max(a[0], b[0]) < kutu_[0] or
+                          min(a[0], b[0]) > kutu_[2] or
+                          max(a[1], b[1]) < kutu_[1] or
+                          min(a[1], b[1]) > kutu_[3]):
+                continue
+            out.append((a, b))
+    return out
+
+
+def _parca_kutuda(a, b, k):
+    """(a, b) doğru parçası k dikdörtgenine değiyor mu? (Liang-Barsky)"""
+    x0, y0 = a
+    dx, dy = b[0] - a[0], b[1] - a[1]
+    t0, t1 = 0.0, 1.0
+    for p, q in ((-dx, x0 - k[0]), (dx, k[2] - x0),
+                 (-dy, y0 - k[1]), (dy, k[3] - y0)):
+        if abs(p) < 1e-12:
+            if q < 0:
+                return False
+        else:
+            r = q / p
+            if p < 0:
+                if r > t1:
+                    return False
+                t0 = max(t0, r)
+            else:
+                if r < t0:
+                    return False
+                t1 = min(t1, r)
+    return t0 <= t1
+
+
+def girinti_olculeri(msp, plan, kaydir, gkutu, h, en_cok_oran=0.5):
+    """Girintinin DERİNLİĞİ - kenara dik.
+
+    Konumu (başı ve sonu) datumdan verildi; geriye ne kadar derin
+    olduğu kalıyor ve o, bu görünüşte başka yerden okunamaz.
+
+    Yalnız GERÇEKTEN çentik olanlar ölçülür: derinliği o yöndeki
+    görünüş boyunun yarısını geçen boşluk çentik değil, parçanın
+    biçiminin kendisidir (U profilin ağzı gibi) - onun ölçüsü karşı
+    görünüşten ya da gabariden okunur.
+
+    Yeri ÖLÇÜLEREK doğrulanır, iki soruyla: yazı başka bir yazıya
+    biniyor mu, yazı konturun bir ÇİZGİSİNE değiyor mu. İlk sürüm
+    yalnız birincisine bakıyordu; dar çentikte yazı çentiğin
+    duvarlarına biniyordu (ölçtük: 16 resimde 16 yazı). Önce çentiğin
+    içinde birkaç yer denenir, olmazsa yazı çentiğin DIŞINA, parçanın
+    kenarının ötesine alınır. Hiçbir yer tutmazsa derinlik yazılmaz -
+    çizgiyi kapatan bir ölçü, olmayan ölçüden kötüdür.
+
+    Döner: çizilen ölçü sayısı."""
+    sayi = 0
+    for gad, pl in plan.items():
+        gk = gkutu.get(gad)
+        if not gk:
+            continue
+        dx, dy = kaydir[gad]
+        G, Y = gk[2] - gk[0], gk[3] - gk[1]
+        dolu = _yazi_kutulari(msp)
+        pay_k = 6.0 * h
+        kont = _gorunen_parcalar(msp, (gk[0] - pay_k, gk[1] - pay_k,
+                                       gk[2] + pay_k, gk[3] + pay_k))
+        # Bu görünüşte ZATEN yazılı değerler. Derinlik bunlardan biriyse
+        # ikinci kez yazılmaz: ters T biçiminde kolun boyu, gövdenin
+        # datumdan konumuyla aynı sayıdır (ölçtük: 01.050.000.02'de "36"
+        # üç kez yazılıyordu).
+        yazili = {"yatay": {round(abs(q["b"] - q["a"]), 1)
+                            for q in pl.get("yatay") or []},
+                  "dusey": {round(abs(q["b"] - q["a"]), 1)
+                            for q in pl.get("dusey") or []}}
+        for r in pl.get("ozellik") or []:
+            yatay = r["yon"] == "yatay"
+            der = r["derinlik"]
+            # Yalnız İÇ çentik, yalnız TAM değer (bkz. kontur_ozellikleri).
+            if not r.get("ic") or der is None:
+                continue
+            if der > en_cok_oran * (Y if yatay else G):
+                continue
+            # Derinlik, girintinin konumuna DİK yöndedir.
+            dik = "dusey" if yatay else "yatay"
+            if round(der, 1) in yazili[dik]:
+                continue
+            kayd = dx if yatay else dy
+            a, b = r["a"] + kayd, r["b"] + kayd
+            if yatay:
+                t = gk[1] if r["taraf"] == "alt" else gk[3]
+                disa = -1.0 if r["taraf"] == "alt" else 1.0
+            else:
+                t = gk[0] if r["taraf"] == "sol" else gk[2]
+                disa = -1.0 if r["taraf"] == "sol" else 1.0
+            u = t - disa * der             # çentiğin dibi
+            adaylar = [(pay, None) for pay in (0.5, 0.3, 0.7)]
+            adaylar += [(pay, k) for k in (1.0, 2.0, 3.2)
+                        for pay in (0.5, 0.25, 0.75)]
+            for pay, dis_k in adaylar:
+                m = a + (b - a) * pay
+                if dis_k is None:
+                    yer = None
+                elif yatay:
+                    yer = (m + 0.9 * h, t + disa * dis_k * h)
+                else:
+                    yer = (t + disa * dis_k * h, m + 0.9 * h)
+                try:
+                    if yatay:
+                        dim = msp.add_linear_dim(
+                            base=(m, 0), p1=(m, t), p2=(m, u), angle=90,
+                            location=yer, text="<>", dimstyle=OLCU_STILI,
+                            dxfattribs={"layer": "OLCU"})
+                    else:
+                        dim = msp.add_linear_dim(
+                            base=(0, m), p1=(t, m), p2=(u, m),
+                            location=yer, text="<>", dimstyle=OLCU_STILI,
+                            dxfattribs={"layer": "OLCU"})
+                    dim.render()
+                except Exception:
+                    break
+                ky = _olcu_yazi_kutusu(dim)
+                if ky is None or not (
+                        _cakisiyor(ky, dolu, 0.2 * h)
+                        or any(_parca_kutuda(p, q, ky) for p, q in kont)):
+                    if ky:
+                        dolu.append(ky)
+                    yazili[dik].add(round(der, 1))
+                    sayi += 1
+                    break
+                _olcu_sil(msp, dim)
+    return sayi
 
 
 def konum_olculeri(msp, plan, kaydir, gkutu, h, en_cok_kademe=8):
@@ -4226,6 +5025,8 @@ def dxf_komponent(s, o, k, yol, P):
         simetri_isareti(msp, kplan, gkutu, h)
         # Ölçülerin hangi yüzeylerden gittiğini resimde göster.
         datum_isaretleri(msp, datum_cercevesi(L, W, T), gorunusler, gkutu, h)
+    if kplan:
+        girinti_olculeri(msp, kplan, kaydir, gkutu, h)
     if P.get("capraz", True):
         pah_notlari(msp, kenarlar, kaydir, gkutu, h)
     gabari_olculeri(msp, gkutu, sinir, h)
