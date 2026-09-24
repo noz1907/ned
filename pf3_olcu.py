@@ -576,6 +576,45 @@ def gorunus_isareti(msp, ad, kutu_):
     return e
 
 
+YAZI_STILI = "PI3D"
+YAZI_FONTU = "arial.ttf"
+YAZI_AILESI = "Arial"
+
+
+def yazi_stili(doc):
+    """Türkçe harfleri gösteren TrueType yazı stili.
+
+    DXF dosyasının kendisi UTF-8'dir; "Ğ" gerçekten iki bayt (C4 9E) olarak
+    yazılır. Ama AutoCAD/LibreCAD yazıyı STİLİN font dosyasıyla çizer ve
+    hazır "Standard" stili txt.shx kullanır. txt.shx bir SHX vektör
+    fontudur, içinde yalnızca ASCII vardır: Ğ Ş İ Ç Ö Ü karakterlerinin
+    glifi yoktur, o yüzden ekranda "?" ya da boş kutu görünür. Dosya bozuk
+    değildir, font eksiktir.
+
+    Çözüm, Unicode kapsayan bir TrueType font tanımlamaktır. "Standard"
+    stiline dokunmuyoruz: bu çizim başka bir dosyaya INSERT/XREF edilirse
+    hedef çizimin kendi Standard'ı bozulmasın. Kendi stilimizi kurup
+    yazılarda ve ölçülerde onu kullanıyoruz; kullanıcı isterse tek yerden
+    (STYLE komutu, "PI3D") fontu değiştirebilir."""
+    if YAZI_STILI in doc.styles:
+        st = doc.styles.get(YAZI_STILI)
+    else:
+        st = doc.styles.add(YAZI_STILI, font=YAZI_FONTU)
+    st.dxf.font = YAZI_FONTU
+    try:
+        # TrueType fontlar DXF'te iki yerden okunur: STYLE tablosundaki
+        # dosya adı ve XDATA'daki font ailesi adı. İkincisi yazılmazsa
+        # AutoCAD dosya adını SHX sanıp yine txt.shx'e düşebilir.
+        st.set_extended_font_data(family=YAZI_AILESI, italic=False, bold=False)
+    except Exception:
+        pass
+    try:
+        doc.header["$TEXTSTYLE"] = YAZI_STILI
+    except Exception:
+        pass
+    return YAZI_STILI
+
+
 def dxf_kur(doc=None):
     # setup=False ÖNEMLİ: ezdxf'in hazır kurulumu metre/santimetre için
     # tasarlanmış EZDXF, EZ_M_100_H25_CM gibi ölçü stilleri kurar ve
@@ -613,6 +652,7 @@ def dxf_kur(doc=None):
         doc.layers.get("EKSEN").dxf.linetype = "EKSENCIZGI"
     except Exception:
         pass
+    yazi_stili(doc)
     return doc
 
 
@@ -641,6 +681,11 @@ def olcu_stili(doc, h):
     st.dxf.dimtad = 1              # yazı ölçü çizgisinin üstünde
     st.dxf.dimtih = 0
     st.dxf.dimtoh = 0
+    # Ölçü yazısının fontu: Ø, ° ve Türkçe harfler için TrueType.
+    try:
+        st.dxf.dimtxsty = yazi_stili(doc)
+    except Exception:
+        pass
     try:
         st.dxf.dimclrt = 3
         st.dxf.dimclrd = 4
@@ -662,7 +707,9 @@ def olcu_stili(doc, h):
 
 
 def _yaz(msp, metin, x, y, h=4.0, kat="YAZI"):
-    e = msp.add_text(str(metin), dxfattribs={"layer": kat, "height": h})
+    stil = YAZI_STILI if YAZI_STILI in msp.doc.styles else "Standard"
+    e = msp.add_text(str(metin),
+                     dxfattribs={"layer": kat, "height": h, "style": stil})
     e.set_placement((x, y))
     return e
 

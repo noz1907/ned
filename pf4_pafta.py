@@ -75,7 +75,8 @@ IC_PAY = 12.0            # çerçevenin ve antet alanının resme uzaklığı
 # ölçeği bir kademe düşürebiliyor (A3'te 1:2 yerine 1:5), o yüzden dar
 # tutuluyor.
 BASLIK_YAZI, BASLIK_ALT_YAZI = 4.5, 3.0
-BASLIK_SERIT = 11.0
+BASLIK_SERIT = 11.7          # sag ust baslik seridi: 0,8 + 4,5lik satir + 1,6 + 3,0luk satir,
+                            # yaziların olculen tasmalariyla birlikte
 # Görünüşler arasındaki aralık. EN_AZ bir tercih değil, alt sınırdır:
 # yüksek tutmak bir kademe ölçek kaybettirebiliyor (A3'te 1:2 yerine
 # 1:5, yani resim yarı yarıya küçülüyor). 8 mm iki görünüşü ayırmaya
@@ -552,6 +553,97 @@ def _cok_pencere_ciz(pafta, plan, sol, alt):
     return say
 
 
+YAZI_STILI = "PI3D"
+YAZI_FONTU = "arial.ttf"
+YAZI_AILESI = "Arial"
+
+
+def yazi_stili(d):
+    """Pafta yazıları için Türkçe harf gösteren TrueType stil.
+
+    Hazır "Standard" stili txt.shx kullanır; o SHX fontunda Ğ Ş İ Ç Ö Ü
+    glifi yoktur ve AutoCAD bu harfleri "?" ya da boş kutu çizer. Dosya
+    UTF-8'dir, eksik olan fonttur. pf3_olcu'nun ürettiği çizimlerde bu stil
+    zaten vardır; dışarıdan gelen bir DXF'e pafta eklenirse burada kurulur."""
+    try:
+        if YAZI_STILI in d.styles:
+            st = d.styles.get(YAZI_STILI)
+        else:
+            st = d.styles.add(YAZI_STILI, font=YAZI_FONTU)
+        st.dxf.font = YAZI_FONTU
+        try:
+            st.set_extended_font_data(family=YAZI_AILESI,
+                                      italic=False, bold=False)
+        except Exception:
+            pass
+        return YAZI_STILI
+    except Exception:
+        return "Standard"
+
+
+def turkce_duzelt(d):
+    """Çizimdeki eski yazıları Türkçe gösteren stile taşır.
+
+    Sorunun kaynağı dosyanın kodlaması DEĞİLDİR: DXF R2010 UTF-8'dir ve
+    "Ğ" dosyaya gerçekten C4 9E olarak yazılır. AutoCAD yazıyı STİLİN font
+    dosyasıyla çizer; hazır "Standard" stili txt.shx'tir ve o SHX fontta
+    yalnızca ASCII glifleri vardır - Ğ Ş İ Ç Ö Ü yerine "?" ya da boş kutu
+    çıkar.
+
+    Yeni üretilen çizimler zaten PI3D stiliyle yazılıyor. Bu işlev, daha
+    önce üretilmiş dosyalar için: SHX fontlu stildeki yazıları PI3D'ye
+    çevirir, böylece STP'yi baştan okumaya gerek kalmaz. Yalnız yazı
+    stili değişir, metin ve konum ellenmez.
+
+    Döndürdüğü: değiştirilen varlık sayısı."""
+    stil = yazi_stili(d)
+    if stil != YAZI_STILI:
+        return 0
+
+    def _shx(ad):
+        """Bu yazı stili SHX (Türkçe harfsiz) mi?"""
+        try:
+            st = d.styles.get(ad)
+        except Exception:
+            return False
+        f = (st.dxf.font or "").strip().lower()
+        return not f.endswith(".ttf") and not f.endswith(".otf")
+
+    n = 0
+    for uzay in [d.modelspace()] + [d.layout(a) for a in d.layout_names()
+                                    if a != "Model"]:
+        for e in uzay:
+            t = e.dxftype()
+            if t in ("TEXT", "MTEXT", "ATTRIB", "ATTDEF"):
+                if _shx(e.dxf.get("style", "Standard")):
+                    e.dxf.style = stil
+                    n += 1
+            elif t == "DIMENSION":
+                # Ölçü yazısının fontu stilden değil, ölçü stilinden
+                # (dimtxsty) gelir; ölçü ayrıca çizildiği anda bloğa
+                # dönüştüğü için blok içindeki MTEXT de düzeltilir.
+                try:
+                    if _shx(e.dxf.get("dimtxsty", "Standard")):
+                        e.dxf.dimtxsty = stil
+                        n += 1
+                except Exception:
+                    pass
+    for blok in d.blocks:
+        for e in blok:
+            if (e.dxftype() in ("TEXT", "MTEXT", "ATTRIB", "ATTDEF")
+                    and _shx(e.dxf.get("style", "Standard"))):
+                e.dxf.style = stil
+                n += 1
+    for ds in d.dimstyles:
+        try:
+            if _shx(ds.dxf.get("dimtxsty", "Standard")):
+                ds.dxf.dimtxsty = stil
+                n += 1
+        except Exception:
+            pass
+    return n
+
+
 def _pafta_cerceve_ciz(pafta, kagit, resim_no="", resim_adi="", bilgi=""):
     """Standart pafta çerçevesini çizer.
 
@@ -582,9 +674,12 @@ def _pafta_cerceve_ciz(pafta, kagit, resim_no="", resim_adi="", bilgi=""):
         pafta.add_line((x0, y0), (x1, y1),
                        dxfattribs={"layer": kat, "lineweight": kalin})
 
+    stil = yazi_stili(pafta.doc)
+
     def yaz(x, y, m, h=3.5, kat=KAT_BOLGE):
         t = pafta.add_text(m, height=h, dxfattribs={"layer": kat,
-                                                    "lineweight": 13})
+                                                    "lineweight": 13,
+                                                    "style": stil})
         t.set_placement((x, y), align=ezdxf.enums.TextEntityAlignment.MIDDLE_CENTER)
         return t
 
@@ -619,28 +714,66 @@ def _pafta_cerceve_ciz(pafta, kagit, resim_no="", resim_adi="", bilgi=""):
     # Ölçek yazılmak ZORUNDA: model uzayı 1:1 olduğu için çizimin kendi
     # başlığında "olcek 1:1" yazar, kâğıtta ise 1:5 olabilir.
     sag = fx1 - 2.0
-    y = fy1 - BASLIK_YAZI - 1.5
-    if resim_no:
-        t = pafta.add_text(str(resim_no), height=BASLIK_YAZI,
-                           dxfattribs={"layer": KAT_BILGI, "lineweight": 35})
-        t.set_placement((sag, y),
+
+    def sagust_yaz(metin, h, kalin, ust):
+        """Yazıyı sağa dayar ve ÜST kenarı tam `ust` hizasına gelecek
+        şekilde koyar; kapladığı yerin ALT kenarını döndürür.
+
+        Hesapla değil ÖLÇEREK: "09_020_000_03" gibi bir resim no'sunda
+        alt çizgiler (_) taban çizgisinin ALTINA taşar, "Ğ" ve "Ö" ise
+        harf boyunun ÜSTÜNE. Taban çizgisini yazı yüksekliğinden
+        çıkararak yer ayırınca alt çizgiler bir alttaki satırın harfleri
+        arasına giriyordu ve resim no da çerçeve çizgisine değiyordu."""
+        t = pafta.add_text(str(metin), height=h,
+                           dxfattribs={"layer": KAT_BILGI,
+                                       "lineweight": kalin, "style": stil})
+        t.set_placement((sag, ust - h),
                         align=ezdxf.enums.TextEntityAlignment.BOTTOM_RIGHT)
-        y -= BASLIK_ALT_YAZI + 1.5
+        try:
+            k = ezdxf.bbox.extents([t], fast=False)
+            kayma = ust - k.extmax.y          # ölçülen üst kenarı hizaya al
+            if abs(kayma) > 1e-6:
+                t.set_placement((sag, ust - h + kayma),
+                                align=ezdxf.enums.TextEntityAlignment.BOTTOM_RIGHT)
+                k = ezdxf.bbox.extents([t], fast=False)
+            return float(k.extmin.y)
+        except Exception:
+            return ust - h
+
+    # Üstte çerçeve çizgisinin yarı kalınlığı kadar (0,5 mm çizgi) pay
+    # yeter; artan yer iki satır ARASINA verilir. Resim no'da alt çizgi
+    # (09_020_000_03) çok olur, alttaki satıra yakın durması okumayı
+    # zorlaştırıyordu. Toplam yükseklik değişmez: başlık şeridi yine
+    # çizimin kendi iç payına yazılır, ölçek düşmez.
+    y = fy1 - 0.8
+    if resim_no:
+        y = sagust_yaz(resim_no, BASLIK_YAZI, 35, y) - 1.6
     alt = "   ".join(x for x in (str(resim_adi or ""), bilgi) if x)
     if alt:
-        t = pafta.add_text(alt, height=BASLIK_ALT_YAZI,
-                           dxfattribs={"layer": KAT_BILGI, "lineweight": 13})
-        t.set_placement((sag, y),
-                        align=ezdxf.enums.TextEntityAlignment.BOTTOM_RIGHT)
+        sagust_yaz(alt, BASLIK_ALT_YAZI, 13, y)
 
 
-def pafta_kur(kaynak_dxf, cikti_dxf, kagit=VARSAYILAN_KAGIT, olcek=None,
+def pafta_kur(kaynak_dxf, cikti_dxf=None, kagit=VARSAYILAN_KAGIT, olcek=None,
               buyutme=False, pafta_adi="PAFTA", bilgi=True, cok=True,
               resim_no=None, resim_adi=None):
     """1:1 DXF'in KOPYASINA standart bir pafta ekler.
 
-    kaynak_dxf : 1:1 çizim. AÇILIR, OKUNUR, DEĞİŞTİRİLMEZ.
-    cikti_dxf  : yeni dosya. Kaynak dosyaya dokunulmaz.
+    kaynak_dxf : 1:1 çizim.
+    cikti_dxf  : None ise pafta ÇİZİMİN KENDİ İÇİNE eklenir (önerilen).
+                 Bir yol verilirse kopyaya eklenir, kaynak dosyaya
+                 dokunulmaz.
+
+                 NEDEN YERİNDE: pafta, model uzayına bir PENCEREDEN
+                 bakar. Aynı dosyanın içindeyse, model uzayına sonradan
+                 ölçü eklediğinizde ya da bir şey düzelttiğinizde pafta
+                 da o anda güncellenir. Kopya tutulursa iki dosya
+                 zamanla birbirinden ayrılır ve hangisinin doğru olduğu
+                 belli olmaz.
+
+                 MODEL UZAYI YİNE DEĞİŞMEZ: eklenen şey yalnız kâğıt
+                 uzayıdır (layout). Program her yazımda model uzayının
+                 varlık sayısını önce ve sonra karşılaştırır; bir tanesi
+                 bile oynarsa dosya yazılmaz.
     kagit      : "A4".."A0", her zaman yatay. Varsayılan A3.
     olcek      : 1.0 / 0.1 gibi. None ise sığan en büyük standart ölçek.
     cok        : görünüşleri ayrı pencerelere alıp kâğıda ortadan dışa
@@ -657,6 +790,9 @@ def pafta_kur(kaynak_dxf, cikti_dxf, kagit=VARSAYILAN_KAGIT, olcek=None,
     kg, ky = KAGIT[kagit]
 
     d = ezdxf.readfile(kaynak_dxf)
+    # Dosya nasılsa baştan yazılacak: eski çizimlerdeki SHX fontlu yazılar
+    # da bu arada Türkçe gösteren stile taşınır (bkz. turkce_duzelt).
+    duzeltilen = turkce_duzelt(d)
     msp = d.modelspace()
     once = len(list(msp))
 
@@ -759,6 +895,14 @@ def pafta_kur(kaynak_dxf, cikti_dxf, kagit=VARSAYILAN_KAGIT, olcek=None,
         d.layouts.delete(pafta_adi)
     except Exception:
         pass
+    # Aynı resme ikinci kez pafta eklenebilmeli: kullanıcı bir ölçü
+    # ekleyip "tekrar paftaya al" diyebilir. Eski pafta sekmesi silinir,
+    # yenisi kurulur; MODEL UZAYINA DOKUNULMAZ, çizim 1:1 kalır.
+    if pafta_adi in d.layout_names():
+        try:
+            d.layouts.delete(pafta_adi)
+        except Exception:
+            pass
     pafta = d.layouts.new(pafta_adi)
     pafta.page_setup(size=(round(kg), round(ky)), margins=(0, 0, 0, 0),
                      units="mm", scale=16)   # 16 = 1 kâğıt birimi : 1 mm
@@ -801,13 +945,22 @@ def pafta_kur(kaynak_dxf, cikti_dxf, kagit=VARSAYILAN_KAGIT, olcek=None,
         d.layouts.set_active_layout(pafta_adi)
     except Exception:
         pass
-    os.makedirs(os.path.dirname(os.path.abspath(cikti_dxf)) or ".",
-                exist_ok=True)
-    d.saveas(cikti_dxf)
+    hedef = cikti_dxf or kaynak_dxf
+    os.makedirs(os.path.dirname(os.path.abspath(hedef)) or ".", exist_ok=True)
+    if cikti_dxf:
+        d.saveas(cikti_dxf)
+    else:
+        # Yerine yazarken ÖNCE geçici dosyaya: yazma yarıda kalırsa
+        # (disk dolu, program kapandı) resim bozulmasın.
+        gec = hedef + ".yeni"
+        d.saveas(gec)
+        os.replace(gec, hedef)
     yz = en_kucuk_yazi(kaynak_dxf) * olcek
     return {"olcek": olcek, "olcek_metni": olcek_metni(olcek), "kagit": kagit,
             "yer": yer["yer"], "olcu": (gx, gy), "alan": (ag, ay),
-            "dosya": cikti_dxf, "yazi_mm": round(yz, 2),
+            "dosya": hedef, "yerinde": cikti_dxf is None,
+            "yazi_duzeltildi": duzeltilen,
+            "yazi_mm": round(yz, 2),
             "yazi_kucuk": 0 < yz < EN_AZ_YAZI_MM,
             "pencere": pencere, "dagitildi": bool(plan),
             "obek": (round(pg, 1), round(py, 1))}
@@ -914,20 +1067,22 @@ def kagit_plani(dosyalar, tercih=VARSAYILAN_KAGIT):
             "hata": hata, "kagit": tercih}
 
 
-def toplu_pafta(isler, cikti_klasor, resim_no=None, resim_adi=None):
+def toplu_pafta(isler, cikti_klasor=None, resim_no=None, resim_adi=None):
     """isler: [{"dosya":..., "kagit":"A3", "olcek": None}, ...]
 
-    Her biri için kaynağın KOPYASINA pafta eklenir. Kaynak dosyalara
-    dokunulmaz; çıktı ayrı klasöre yazılır."""
-    os.makedirs(cikti_klasor, exist_ok=True)
+    cikti_klasor None ise pafta ÇİZİMLERİN KENDİ İÇİNE eklenir; bir
+    klasör verilirse kopyalarına eklenir."""
+    if cikti_klasor:
+        os.makedirs(cikti_klasor, exist_ok=True)
     yapilan, hata = [], []
     for it in isler:
         y = it["dosya"]
         ad = os.path.splitext(os.path.basename(y))[0]
         kagit = it.get("kagit", VARSAYILAN_KAGIT)
         try:
-            r = pafta_kur(y, os.path.join(cikti_klasor, f"{ad}_{kagit}.dxf"),
-                          kagit, olcek=it.get("olcek"),
+            cik = (os.path.join(cikti_klasor, f"{ad}_{kagit}.dxf")
+                   if cikti_klasor else None)
+            r = pafta_kur(y, cik, kagit, olcek=it.get("olcek"),
                           resim_no=it.get("resim_no", resim_no),
                           resim_adi=it.get("resim_adi", resim_adi))
             r["kaynak"] = y
@@ -942,14 +1097,21 @@ def _cli():
     import argparse
     import glob as _glob
     a = argparse.ArgumentParser(
-        description="Pi3D – 1:1 DXF'leri standart A3 paftaya yerleştirir. "
-                    "Kaynak dosyalara dokunulmaz.")
+        description="Pi3D – 1:1 DXF'lere standart A3 pafta ekler. Pafta "
+                    "resmin KENDİ dosyasına yazılır (Model sekmesi 1:1 "
+                    "kalır); PDF istenirse PDF klasörüne ..._A3.pdf olarak "
+                    "basılır.")
     a.add_argument("dxf", nargs="+", help="1:1 DXF dosyaları (joker olur)")
     a.add_argument("--kagit", default=VARSAYILAN_KAGIT,
                    choices=list(KAGIT_SIRA), help="her zaman yatay")
     a.add_argument("--olcek", type=float, default=None,
                    help="1 / 0.1 gibi; verilmezse sığan en büyüğü")
-    a.add_argument("--cikti", default="PAFTA", help="çıktı klasörü")
+    a.add_argument("--kopya", metavar="KLASOR", default=None,
+                   help="paftayı dosyanın içine değil, bu klasördeki "
+                        "kopyaya ekle (önerilmez: kopya ile asıl resim "
+                        "zamanla ayrışır)")
+    a.add_argument("--pdf-klasor", default="PDF",
+                   help="--bas verildiğinde PDF'lerin yazılacağı klasör")
     a.add_argument("--plan", action="store_true",
                    help="hiçbir şey yazma, hangi ölçekte oturduğunu söyle")
     a.add_argument("--bas", action="store_true", help="PDF de üret")
@@ -991,14 +1153,19 @@ def _cli():
     if n.olcek:                       # ölçeği elle veren sığmayanları da dener
         isler += [{"dosya": s["dosya"], "kagit": n.kagit, "olcek": n.olcek}
                   for s in p["sigmayan"]]
-    r = toplu_pafta(isler, n.cikti, n.no, n.ad)
+    r = toplu_pafta(isler, n.kopya, n.no, n.ad)
     print()
+    if n.bas:
+        os.makedirs(n.pdf_klasor, exist_ok=True)
     for it in r["yapilan"]:
-        print(f"  yazıldı  {it['kagit']} {it['olcek_metni']}  "
+        nere = "yazıldı " if n.kopya else "içine eklendi"
+        print(f"  {nere}  {it['kagit']} {it['olcek_metni']}  "
               f"{os.path.basename(it['dosya'])}")
         if n.bas:
-            print("           ", bas(it["dosya"],
-                                     os.path.splitext(it["dosya"])[0] + ".pdf"))
+            ad = os.path.splitext(os.path.basename(it["dosya"]))[0]
+            print("           ",
+                  bas(it["dosya"],
+                      os.path.join(n.pdf_klasor, f"{ad}_{it['kagit']}.pdf")))
     for y, e in r["hata"]:
         print(f"  HATA  {os.path.basename(y)}: {e}")
 

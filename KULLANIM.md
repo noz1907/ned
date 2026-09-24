@@ -550,9 +550,27 @@ ediyordu. Ölçüm düzeltti.
 ### Adım 7 — PAFTA
 
 Buraya kadar çıkan resimler **1:1**'dir ve öyle kalır. Bu adım onları
-silmez, ölçeklerini değiştirmez, üzerlerine yazmaz. Yaptığı iş şudur:
-her resmin bir **kopyasına** standart bir çerçeve ekler ve kopyayı
-`PAFTA` alt klasörüne yazar.
+silmez, ölçeklerini değiştirmez, çizimin kendisine dokunmaz. Yaptığı iş
+şudur: **resmin kendi DXF dosyasına** `PAFTA` adında bir kâğıt sekmesi
+ekler. Model sekmesi olduğu gibi kalır.
+
+#### Neden kopya değil, dosyanın kendisi
+
+Önceki sürüm paftayı ayrı bir `PAFTA` klasöründeki kopyaya yazıyordu.
+Bunun pratikte bozulan yeri şu: resme sonradan bir ölçü eklerseniz ya
+da bir ölçüyü düzeltirseniz, paftayı yeniden üretmeniz gerekir; bir kez
+unutulunca elinizde **iki ayrı resim** olur — asıl DXF düzeltilmiş,
+paftalı kopya eski. Hangisinin atölyeye gittiğini kimse bilemez.
+
+Şimdi tek dosya var. Ölçüyü eklersiniz, aynı dosyanın `PAFTA` sekmesi
+o düzeltilmiş çizime bakar; ayrışacak bir kopya yoktur. Aynı resmi
+ikinci kez paftaya alırsanız eski pafta sekmesi silinip yenisi kurulur,
+**sekmeler birikmez ve model uzayına yine dokunulmaz.**
+
+Kâğıda basılan **PDF**'ler ayrıdır: çıktı klasörünün altındaki `PDF`
+klasörüne, kâğıt adı ekiyle yazılır — `P07_KONSOL_A3.pdf`. PDF bir
+çıktıdır, kaynak değil; dosya ismine bakıp hangi kâğıda basıldığını
+görürsünüz.
 
 Ölçek, paftanın **penceresine** aittir — çizime değil. "1:10 bastım"
 demek çizimi küçülttüm demek değildir; aynı 1:1 çizime uzaktan bakmak
@@ -651,9 +669,51 @@ seçebilirsiniz.
 #### Baskı
 
 **Kendiliğinden yapılmaz.** PDF istediğinizde üretilir: paftası hazır
-satırları seçip **"SEÇİLİ PAFTALARI BAS (PDF)"**. PDF'in sayfa ölçüsü
-kâğıdın birebir ölçüsüdür (A3 → 420×297 mm), çizgiler siyahtır.
-Yazıcıda **"sayfaya sığdır" demeyin**, %100 basın; yoksa ölçek bozulur.
+satırları seçip **"SEÇİLİ PAFTALARI BAS (PDF)"**. PDF'ler çıktı
+klasörünün altındaki **`PDF`** klasörüne, kâğıt adı ekiyle yazılır:
+
+```
+cikti/
+  P07_KONSOL.dxf          <- çizim + PAFTA sekmesi, ikisi bir arada
+  PDF/
+    P07_KONSOL_A3.pdf     <- baskı
+```
+
+PDF'in sayfa ölçüsü kâğıdın birebir ölçüsüdür (A3 → 420×297 mm),
+çizgiler siyahtır. Yazıcıda **"sayfaya sığdır" demeyin**, %100 basın;
+yoksa ölçek bozulur.
+
+---
+
+### Türkçe harfler (Ğ Ş İ Ç Ö Ü)
+
+DXF dosyasının kendisinde bir sorun yoktur: dosya UTF-8'dir ve "Ğ"
+içine gerçekten iki bayt (`C4 9E`) olarak yazılır. Harflerin "?" ya da
+boş kutu görünmesinin sebebi **fonttur**. AutoCAD yazıyı yazı stilinin
+gösterdiği font dosyasıyla çizer; DXF'in hazır `Standard` stili
+`txt.shx`'i gösterir ve o SHX fontun içinde yalnızca ASCII glifleri
+vardır — Ğ Ş İ Ç Ö Ü'nün çizimi yoktur.
+
+Program bu yüzden kendi yazı stilini kurar:
+
+| | |
+|---|---|
+| stil adı | `PI3D` |
+| font | `arial.ttf` (TrueType, Türkçe harfleri içerir) |
+| kullanan | bütün yazılar, başlıklar, büküm tablosu **ve ölçü rakamları** (`dimtxsty`) |
+
+Hazır `Standard` stiline **dokunulmaz**: bu çizimi başka bir dosyaya
+INSERT/XREF ederseniz oranın kendi yazıları bozulmasın diye.
+
+Başka bir font isterseniz AutoCAD'de `STYLE` komutuyla `PI3D` stilini
+tek yerden değiştirin, bütün yazılar birden değişir. ISOCPEUR gibi
+teknik resim fontları da Türkçe harf taşır.
+
+**Daha önce üretilmiş resimler:** o dosyalar `Standard`/`txt` ile
+yazılmıştı. Bunları paftaya aldığınızda program yazıları kendiliğinden
+`PI3D` stiline taşır ve satırda kaç yazının düzeltildiğini söyler —
+STEP'i baştan okumanıza gerek kalmaz. Metne ve konuma dokunulmaz,
+yalnız yazı stili değişir.
 
 ---
 
@@ -965,7 +1025,7 @@ anlamlı çıkmıyorsa o parçada kesit çizilmez, diğer görünüşler yine ç
 |-------|----------|
 | `pf3_olcu.py` | **ana motor** — STEP → BOM + detay resmi + montaj resmi |
 | `pf3_gui.py` | **ana arayüz** — yukarıdaki 7 adımlı pencere |
-| `pf4_pafta.py` | **pafta** — 1:1 resmin kopyasını standart A3 çerçeveye yerleştirir, PDF basar |
+| `pf4_pafta.py` | **pafta** — resmin kendi dosyasına standart A3 pafta sekmesi ekler (model 1:1 kalır), PDF'i `PDF` klasörüne basar, eski dosyaların yazılarını Türkçe stile taşır |
 | `logo_gom.py` | logoları koda gömer (`logo/` → `pi3d_logo.py`) |
 | `pf1_referans.py` | STEP'ten XYZ referans yönü ve 3 konumlandırma noktası önerir |
 | `pf_gui.py` | `pf1_referans` için 3B önizlemeli arayüz |

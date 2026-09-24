@@ -264,7 +264,7 @@ Pencere adım adım ilerler, bir adım bitmeden sonraki sekme açılmaz:
 | **4 ÖRNEK ONAY** | üretilen örnek resim pencerede gösterilir; beğenmezseniz *AYARA DÖN*, beğenirseniz **ONAYLA** |
 | **5 TÜM ÇİZİMLER** | onay sonrası bütün DXF'ler üretilir, listelenir, **ZIP OLUŞTUR** ile tek pakette toplanır |
 | **6 AÇINIM** | bükümlü sac parçaların kesim konturu + **büküm yöntemi** (abkant / rollform / silindir): kanat V kalıbın ağzını tutamayacak kadar kısaysa ya da iç yarıçap fazla küçükse "abkantta yapılamaz" der, ölçüsüyle: dış kontur, kenar kesikleri, delikler gerçek yerlerinde + büküm çizgileri ve büküm tablosu. K-faktörü ayarlanır ve saklanır. Hesap güvenilir değilse açınım **verilmez**, sebebi yazılır |
-| **7 PAFTA** | 1:1 resimlerin **kopyalarına** standart yatay A3 çerçevesi ekler: kenardan 15 mm pay, sağ alt köşede 150×100 mm boş antet alanı (oraya asla resim gelmez), kenarlarda bölge işaretleri. Ölçek standart merdivenden seçilir; **ölçü rakamları her zaman 1:1 kalır.** PDF kendiliğinden basılmaz, isteyince basılır |
+| **7 PAFTA** | 1:1 resimlerin **kendi dosyasına** standart yatay A3 pafta sekmesi ekler (kopya yok — kopya ile asıl resim zamanla ayrışıyordu): kenardan 15 mm pay, sağ alt köşede 150×100 mm boş antet alanı (oraya asla resim gelmez), kenarlarda bölge işaretleri. Model sekmesi 1:1 kalır. Ölçek standart merdivenden seçilir; **ölçü rakamları her zaman 1:1 kalır.** PDF kendiliğinden basılmaz; istendiğinde `PDF` klasörüne `..._A3.pdf` adıyla yazılır |
 
 Ağır işler arka planda çalışır: pencere kilitlenmez, günlük akar, ilerleme
 çubuğu dolar, **İptal** çalışan adım bitince işi bırakır. Listede/çizim

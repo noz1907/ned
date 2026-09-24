@@ -210,34 +210,59 @@ try:
     esit("pafta isi baslatildi", len(BEKLEYEN), 1)
     t, a = BEKLEYEN.pop(); t(*a)          # _pafta_is
     kuyrugu_bosalt()
-    yazilan = sorted(os.listdir(u._pafta_klasoru())) \
-        if os.path.isdir(u._pafta_klasoru()) else []
-    esit("yazilan pafta dosyasi", len(yazilan), 3)
+    # Pafta artik AYRI BIR KOPYAYA degil, resmin KENDI dosyasina yazilir.
+    dogru("ayri pafta klasoru acilmadi",
+          not os.path.isdir(os.path.join(cikti, "PAFTA")),
+          "PAFTA klasoru olusturulmus")
+    yazilan = sorted(v[0] for v in u.pf_agac.satir.values())
+    esit("paftalanan resim", len(u.pafta_dosya), 3)
     for s, v in u.pf_agac.satir.items():
         print(f"     {v[0]:16s} -> {v[4][:60]}")
         dogru(f"{v[0]} hatasiz", not v[4].startswith("HATA"), v[4][:70])
 
-    print("\n-- paftalarin icerigi")
-    for a in yazilan:
-        d = ezdxf.readfile(os.path.join(u._pafta_klasoru(), a))
+    print("\n-- paftalarin icerigi (resmin kendi dosyasinda)")
+    for s, (yol, kagit) in u.pafta_dosya.items():
+        a = os.path.basename(yol)
+        d = ezdxf.readfile(yol)
         pf = d.layout("PAFTA")
         vp = [e for e in pf if e.dxftype() == "VIEWPORT" and e.dxf.id != 1]
         dogru(f"{a}: pencere var", len(vp) >= 1, "pencere yok")
-        esit(f"{a}: kagit", P.pafta_olcusu(os.path.join(u._pafta_klasoru(), a)),
-             P.KAGIT["A3"])
+        esit(f"{a}: kagit", P.pafta_olcusu(yol), P.KAGIT["A3"])
         yz = " ".join(e.dxf.text for e in pf if e.dxftype() == "TEXT")
         dogru(f"{a}: resim no yazili", a.split("_")[0] in yz, yz[:70])
+        # Model uzayi 1:1 KALMALI: pafta onu ellememeli.
+        esit(f"{a}: pafta sekmesi tek",
+             sum(1 for t_ in d.layout_names() if t_ == "PAFTA"), 1)
+        # Turkce harfler: yazilar SHX degil TrueType stile bagli olmali.
+        st = d.styles.get(d.modelspace().query("TEXT").first.dxf.style) \
+            if d.modelspace().query("TEXT").first is not None else None
+        if st is not None:
+            dogru(f"{a}: yazi fontu TrueType",
+                  str(st.dxf.font).lower().endswith((".ttf", ".otf")),
+                  f"font={st.dxf.font}")
+
+    print("\n-- ayni dosyaya IKINCI kez pafta (olcu eklenmis gibi)")
+    u.pf_agac.selection_set(u.pf_agac.get_children())
+    u.pafta_uret()
+    t, a = BEKLEYEN.pop(); t(*a)
+    kuyrugu_bosalt()
+    for s, (yol, kagit) in u.pafta_dosya.items():
+        d = ezdxf.readfile(yol)
+        esit(f"{os.path.basename(yol)}: yine tek pafta",
+             sum(1 for t_ in d.layout_names() if t_ == "PAFTA"), 1)
 
     print("\n-- BAS (PDF)")
-    u.pafta_dosya = {s: os.path.join(u._pafta_klasoru(), v)
-                     for s, v in zip(u.pf_agac.get_children(), yazilan)}
     u.pf_agac.selection_set(u.pf_agac.get_children())
     u.pafta_bas()
     esit("baski isi baslatildi", len(BEKLEYEN), 1)
     t, a = BEKLEYEN.pop(); t(*a)          # _bas_is
     kuyrugu_bosalt()
-    pdf = [a for a in os.listdir(u._pafta_klasoru()) if a.endswith(".pdf")]
+    pk = u._pdf_klasoru()
+    pdf = sorted(a for a in os.listdir(pk)) if os.path.isdir(pk) else []
     esit("uretilen PDF", len(pdf), 3)
+    dogru("PDF adlarinda kagit eki var",
+          all(a.endswith("_A3.pdf") for a in pdf), str(pdf))
+    dogru("PDF ayri klasorde", os.path.basename(pk) == "PDF", pk)
 
     print("\n-- baska kagit boylari")
     for kagit in ("A4", "A2", "A1", "A0"):

@@ -665,14 +665,16 @@ class Uygulama(ttk.Frame):
                   style="Baslik.TLabel").pack(anchor="w", pady=(0, 4))
         ttk.Label(f, foreground="#555", justify="left", wraplength=1050, text=(
             "Buraya kadar çıkan resimler 1:1'dir ve ÖYLE KALIR: bu adım "
-            "onları silmez, ölçeklerini değiştirmez. Her resmin bir "
-            "KOPYASINA çerçeve ekleyip PAFTA klasörüne yazar. Ölçek "
-            "paftanın penceresine aittir; paftalı dosyayı açıp Model "
-            "sekmesine geçerseniz her ölçüyü yine birebir ölçersiniz.\n"
+            "onları silmez, ölçeklerini değiştirmez. Pafta KOPYAYA değil, "
+            "resmin KENDİ DOSYASINA eklenir: çizim Model sekmesinde yine "
+            "birebir durur, paftası yanında ayrı bir sekmedir. Böylece "
+            "sonradan bir ölçü ekler ya da düzeltirseniz pafta da aynı "
+            "dosyada güncel kalır; kopya ile asıl resim ayrışmaz.\n"
             "Pafta her zaman YATAY. Kâğıdın kenarından 15 mm pay bırakılır, "
             "sağ alt köşedeki 150 x 100 mm'lik kutu BOŞ kalır — oraya asla "
             "resim gelmez, kendi antetinizi oraya yapıştırırsınız. Baskı "
-            "kendiliğinden yapılmaz: PDF'i siz istediğinizde üretilir.")
+            "kendiliğinden yapılmaz: PDF'i siz istediğinizde, çıktı "
+            "klasöründeki PDF klasörüne ..._A3.pdf adıyla üretilir.")
                   ).pack(anchor="w", pady=(0, 8))
 
         sec = ttk.Frame(f); sec.pack(fill="x")
@@ -709,8 +711,8 @@ class Uygulama(ttk.Frame):
         ttk.Button(alt, text="Tümünü seç",
                    command=lambda: self.pf_agac.selection_set(
                        self.pf_agac.get_children())).pack(side="left")
-        ttk.Button(alt, text="PAFTA klasörünü aç",
-                   command=self.pafta_klasor_ac).pack(side="left", padx=6)
+        ttk.Button(alt, text="PDF klasörünü aç",
+                   command=self.pdf_klasor_ac).pack(side="left", padx=6)
         self.b_bas = ttk.Button(alt, text="SEÇİLİ PAFTALARI BAS (PDF)",
                                 command=self.pafta_bas, state="disabled")
         self.b_bas.pack(side="right", padx=4, ipadx=6, ipady=3)
@@ -719,15 +721,17 @@ class Uygulama(ttk.Frame):
                                   state="disabled")
         self.b_pafta.pack(side="right", padx=4, ipadx=10, ipady=3)
 
-    def _pafta_klasoru(self):
-        return os.path.join(self.v_out.get().strip() or ".", "PAFTA")
+    def _pdf_klasoru(self):
+        """Baskılar buraya gider. Paftanın kendisi resmin dosyasındadır,
+        ayrı bir pafta klasörü YOKTUR."""
+        return os.path.join(self.v_out.get().strip() or ".", "PDF")
 
-    def pafta_klasor_ac(self):
-        k = self._pafta_klasoru()
+    def pdf_klasor_ac(self):
+        k = self._pdf_klasoru()
         if os.path.isdir(k):
             klasor_ac(k)
         else:
-            messagebox.showinfo("PAFTA", "Henüz pafta üretilmedi.")
+            messagebox.showinfo("PDF", "Henüz PDF basılmadı.")
 
     def pafta_doldur(self):
         """Çıktı klasöründeki 1:1 DXF'leri listeler, hangi ölçekte
@@ -829,8 +833,7 @@ class Uygulama(ttk.Frame):
             isler.append(it)
             self.pf_agac.set(s, "durum", "paftaya alınıyor…")
         self._basla("pafta hazırlanıyor…")
-        threading.Thread(target=self._pafta_is,
-                         args=(isler, self._pafta_klasoru()),
+        threading.Thread(target=self._pafta_is, args=(isler,),
                          daemon=True).start()
 
     def _resim_kimligi(self, dosya):
@@ -853,7 +856,7 @@ class Uygulama(ttk.Frame):
                                  "   AÇINIM".strip()}
         return {"resim_no": no, "resim_adi": ""}
 
-    def _pafta_is(self, isler, klasor):
+    def _pafta_is(self, isler):
         try:
             import pf4_pafta as PF
             sonuc = {}
@@ -861,11 +864,12 @@ class Uygulama(ttk.Frame):
                 self.kuyruk.put(("ilerleme", (n, len(isler))))
                 ad = os.path.splitext(os.path.basename(it["dosya"]))[0]
                 try:
+                    # cikti_dxf=None: pafta resmin KENDİ dosyasına yazılır.
                     r = PF.pafta_kur(
-                        it["dosya"],
-                        os.path.join(klasor, f"{ad}_{it['kagit']}.dxf"),
+                        it["dosya"], None,
                         it["kagit"], resim_no=it.get("resim_no"),
                         resim_adi=it.get("resim_adi"))
+                    r["kagit_adi"] = it["kagit"]
                     sonuc[it["_satir"]] = ("ok", r)
                     self._yaz(f"  pafta  {it['kagit']} {r['olcek_metni']}  "
                               + os.path.basename(r["dosya"]))
@@ -891,12 +895,16 @@ class Uygulama(ttk.Frame):
             if tip == "ok":
                 iyi += 1
                 self.pf_agac.set(s, "olcek", v["olcek_metni"])
-                d = "pafta hazır: " + os.path.basename(v["dosya"])
+                d = ("pafta resmin kendi dosyasına eklendi: "
+                     + os.path.basename(v["dosya"]))
+                if v.get("yazi_duzeltildi"):
+                    d += f"  (+{v['yazi_duzeltildi']} yazı Türkçe stile alındı)"
                 if v.get("yazi_kucuk"):
                     d += (f"  –  DİKKAT: yazılar kâğıtta "
                           f"{v['yazi_mm']:.1f} mm")
                 self.pf_agac.set(s, "durum", d)
-                self.pafta_dosya[s] = v["dosya"]
+                self.pafta_dosya[s] = (v["dosya"], v.get("kagit_adi")
+                                       or v.get("kagit") or "A3")
             else:
                 self.pf_agac.set(s, "durum", "HATA: " + v.splitlines()[0])
         self.b_bas.configure(state="normal" if self.pafta_dosya else "disabled")
@@ -906,7 +914,10 @@ class Uygulama(ttk.Frame):
         yanlis = [v for t, v in sonuc.values() if t == "hata"]
         if iyi and not yanlis:
             messagebox.showinfo(
-                "Pafta", f"{iyi} pafta yazıldı:\n{self._pafta_klasoru()}")
+                "Pafta", f"{iyi} resmin kendi DXF dosyasına pafta eklendi.\n\n"
+                "Model sekmesi hâlâ 1:1'dir. PDF istiyorsanız satırları "
+                "seçip 'SEÇİLİ PAFTALARI BAS' deyin; PDF'ler "
+                f"{self._pdf_klasoru()} klasörüne yazılır.")
         elif yanlis:
             messagebox.showwarning(
                 "Pafta", f"{iyi} pafta yazıldı, {len(yanlis)} tanesi "
@@ -922,18 +933,24 @@ class Uygulama(ttk.Frame):
                                          "satırlardan seçin.")
             return
         self._basla("PDF üretiliyor…")
-        threading.Thread(target=self._bas_is,
-                         args=([(s, self.pafta_dosya[s]) for s in sec],),
-                         daemon=True).start()
+        threading.Thread(
+            target=self._bas_is,
+            args=([(s,) + tuple(self.pafta_dosya[s]) for s in sec],
+                  self._pdf_klasoru()),
+            daemon=True).start()
 
-    def _bas_is(self, isler):
+    def _bas_is(self, isler, klasor):
         try:
             import pf4_pafta as PF
+            os.makedirs(klasor, exist_ok=True)
             sonuc = {}
-            for n, (s, y) in enumerate(isler, 1):
+            for n, (s, y, kagit) in enumerate(isler, 1):
                 self.kuyruk.put(("ilerleme", (n, len(isler))))
                 try:
-                    p = PF.bas(y, os.path.splitext(y)[0] + ".pdf")
+                    # PDF asıl resmin yanına değil, PDF klasörüne ve
+                    # kâğıt adı ekiyle: ..._A3.pdf
+                    ad = os.path.splitext(os.path.basename(y))[0]
+                    p = PF.bas(y, os.path.join(klasor, f"{ad}_{kagit}.pdf"))
                     sonuc[s] = ("ok", p)
                     self._yaz("  PDF  " + os.path.basename(p))
                 except Exception as ex:
@@ -955,8 +972,9 @@ class Uygulama(ttk.Frame):
         self.v_durum.set(f"baskı: {iyi} PDF üretildi")
         if iyi:
             messagebox.showinfo(
-                "Baskı", f"{iyi} PDF üretildi. Kâğıt ölçüsü birebirdir; "
-                "yazıcıda 'sayfaya sığdır' DEMEYİN, %100 basın.")
+                "Baskı", f"{iyi} PDF üretildi:\n{self._pdf_klasoru()}\n\n"
+                "Kâğıt ölçüsü birebirdir; yazıcıda 'sayfaya sığdır' "
+                "DEMEYİN, %100 basın.")
 
     # ------------------------------------------------------------ kuyruk
     def _yaz(self, metin):

@@ -175,10 +175,15 @@ try:
     esit("antet boyu", ak[3] - ak[1], 100.0)
     a = P.cizim_alanlari("A3")
     # Alanlar çerçeveye ve antete dayanmaz: her yönde IC_PAY boşluk kalır.
+    # Üst kenarda ayrıca sağ üstteki başlık yazısı vardır; başlık bu iç
+    # payın İÇİNE yazılır, ayrı bir şerit açmaz. Yalnız başlığın ölçülen
+    # yüksekliği iç paydan biraz fazlaysa aradaki fark kadar (0,3 mm)
+    # alan kısalır.
+    ust_pay = max(P.IC_PAY, P.BASLIK_SERIT + 1.0)
     esit("üstteki boşluk", (a["ust"][2] - a["ust"][0], a["ust"][3] - a["ust"][1]),
-         (390.0 - 2 * P.IC_PAY, 167.0 - 2 * P.IC_PAY))
+         (390.0 - 2 * P.IC_PAY, 167.0 - P.IC_PAY - ust_pay))
     esit("soldaki boşluk", (a["sol"][2] - a["sol"][0], a["sol"][3] - a["sol"][1]),
-         (240.0 - 2 * P.IC_PAY, 267.0 - 2 * P.IC_PAY))
+         (240.0 - 2 * P.IC_PAY, 267.0 - P.IC_PAY - ust_pay))
     for ad, r in a.items():
         dogru(f"{ad} boşluğu antete girmiyor", not kesisir(r, ak), str(r))
 
@@ -413,11 +418,24 @@ try:
               f"{e.dxf.text[:20]!r} -> "
               f"({k2.extmin.x:.1f},{k2.extmin.y:.1f})-"
               f"({k2.extmax.x:.1f},{k2.extmax.y:.1f})")
-    # Başlık için ayrıca yer ayrılmamalı: ölçek düşmesin
-    esit("çizim alanı daralmadı",
-         (round(P.cizim_alanlari("A3")["ust"][3] - P.cizim_alanlari("A3")["ust"][1]),
-          round(P.cizim_alanlari("A3")["sol"][3] - P.cizim_alanlari("A3")["sol"][1])),
-         (143, 243))
+    # Başlık kendine ayrı bir şerit AÇMAMALI: çizimin zaten boş duran
+    # iç payının (IC_PAY = 12 mm) içine yazılır. Başlığın gerçekten
+    # kapladığı yer 11,7 mm olduğu için alan bundan 0,3 mm etkilenir -
+    # ölçek merdiveninde bir basamak 2 katıdır, yani ölçek düşmez.
+    ust = P.cizim_alanlari("A3")["ust"]
+    sol = P.cizim_alanlari("A3")["sol"]
+    esit("çizim alanı başlık yüzünden daralmadı",
+         (round(ust[3] - ust[1]), round(sol[3] - sol[1])),
+         (142, 242))
+    dogru("başlık için ayrılan yer iç paydan büyük değil",
+          P.BASLIK_SERIT + 1.0 <= P.IC_PAY + 0.8,
+          f"BASLIK_SERIT={P.BASLIK_SERIT} IC_PAY={P.IC_PAY}")
+    # Başlık yazıları çizim alanına sarkmamalı.
+    for e in bas2:
+        k2 = ezdxf.bbox.extents([e], fast=False)
+        dogru("başlık çizim alanının üstünde kalıyor",
+              k2.extmin.y >= ust[3] - 0.01,
+              f"{e.dxf.text[:20]!r} alt={k2.extmin.y:.2f} alan ust={ust[3]:.2f}")
 finally:
     shutil.rmtree(kl, ignore_errors=True)
 
