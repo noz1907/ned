@@ -83,27 +83,65 @@ def main():
     y = pl["UST"]["yatay"]
     print("     yatay zincir:",
           [(round(r["a"], 1), round(r["b"], 1), r["metin"]) for r in y])
+    # Sıra ÖLÇÜ BOYUNA göredir (kısa içeride); içeriğe göre aranır.
     esit("zincir üç parça", len(y), 3)
-    dogru("kenardan başlıyor", abs(y[0]["b"] - y[0]["a"] - 10.0) < 0.2,
-          f"{y[0]}")
-    esit("ortadaki dizi", y[1]["metin"], "10 x 20")
-    dogru("kenarda bitiyor", abs(y[2]["b"] - y[2]["a"] - 10.0) < 0.2,
-          f"{y[2]}")
+    diz = [r for r in y if r["metin"]]
+    kenar = sorted(r for r in (abs(r["b"] - r["a"]) for r in y))
+    esit("ortadaki dizi", [r["metin"] for r in diz], ["10 x 20"])
+    dogru("kenardan başlıyor",
+          any(abs(r["a"] - 0.0) < 0.2 and abs(r["b"] - 10.0) < 0.2 for r in y),
+          str([(round(r["a"], 1), round(r["b"], 1)) for r in y]))
+    dogru("kenarda bitiyor",
+          any(abs(r["b"] - 220.0) < 0.2 and abs(r["a"] - 210.0) < 0.2
+              for r in y),
+          str([(round(r["a"], 1), round(r["b"], 1)) for r in y]))
     dogru("hiçbir ölçü 20 diye tek tek yazılmamış",
           sum(1 for r in y if r["metin"] is None and
               abs((r["b"] - r["a"]) - 20.0) < 0.2) == 0,
           "adım tek tek yazılmış")
 
-    print("\n-- dağınık delikler tek tek ölçülüyor")
+    print("\n-- dağınık delikler DATUMDAN ölçülüyor (zincir DEĞİL)")
     sh2 = plaka(120.0, 80.0, 5.0, [(15.0, 20.0, 3.0), (47.0, 60.0, 3.0),
                                    (95.0, 35.0, 3.0)])
     s3, o2 = O.komponent_olcu(sh2, P)
     ham2 = {"UST": O._kenar_kutusu(O.hlr(s3, *O.GORUNUS["UST"], gizli=False))}
     pl2 = O.konum_plani(o2, ("UST",), ham2, 4.0)
-    esit("yatay zincirde 4 aralık", len(pl2["UST"]["yatay"]), 4)
-    esit("düşey zincirde 4 aralık", len(pl2["UST"]["dusey"]), 4)
+    yx = pl2["UST"]["yatay"]
+    print("     yatay:", [(round(r["a"], 1), round(r["b"], 1)) for r in yx])
+    # Delikler x = 15, 47, 95; plaka 0..120. Her ölçü AYNI kenardan
+    # (x=0) başlamalı - zincir kurulmamalı. Zincirde 15, 32, 48 diye
+    # ara farklar çıkardı ve 47'yi bulmak için toplamak gerekirdi.
+    esit("hepsi aynı datumdan", sorted({round(r["a"], 1) for r in yx}), [0.0])
+    esit("ölçülen konumlar",
+         sorted(round(r["b"], 1) for r in yx), [15.0, 47.0, 95.0])
     dogru("hiçbiri dizi sayılmadı",
-          all(r["metin"] is None for r in pl2["UST"]["yatay"]), "dizi bulundu")
+          all(r["metin"] is None for r in yx), "dizi bulundu")
+    dy = pl2["UST"]["dusey"]
+    esit("düşeyde de tek datum", sorted({round(r["a"], 1) for r in dy}), [0.0])
+
+    print("\n-- çapraz (pahlı) kenarlar")
+    # 45°'lik pah: köşesi kesilmiş plaka.
+    from OCP.BRepAlgoAPI import BRepAlgoAPI_Cut as _Cut
+    from OCP.BRepBuilderAPI import BRepBuilderAPI_MakePolygon, BRepBuilderAPI_MakeFace
+    from OCP.BRepPrimAPI import BRepPrimAPI_MakePrism
+    from OCP.gp import gp_Vec
+    pg = BRepBuilderAPI_MakePolygon(gp_Pnt(100, 80, -1), gp_Pnt(120, 80, -1),
+                                    gp_Pnt(120, 60, -1), True).Wire()
+    kama = BRepPrimAPI_MakePrism(BRepBuilderAPI_MakeFace(pg).Face(),
+                                 gp_Vec(0, 0, 7)).Shape()
+    pah = _Cut(plaka(120.0, 80.0, 5.0, []), kama).Shape()
+    ke = O.hlr(pah, *O.GORUNUS["UST"], gizli=False)
+    cp = O.capraz_kenarlar(ke)
+    print("     bulunan:", [(round(t["aci"], 1), round(t["uz"], 1)) for t in cp])
+    dogru("45 derecelik pah bulundu",
+          any(abs(t["aci"] - 135.0) < 1.0 or abs(t["aci"] - 45.0) < 1.0
+              for t in cp), str([round(t["aci"], 1) for t in cp]))
+    dogru("boyu doğru (20√2 = 28,3)",
+          any(abs(t["uz"] - 28.28) < 0.3 for t in cp),
+          str([round(t["uz"], 1) for t in cp]))
+    dogru("yatay ve düşey kenarlar çapraz sayılmadı",
+          all(min(abs(t["aci"]), abs(t["aci"] - 90), abs(t["aci"] - 180)) > 1.0
+              for t in cp), "eksene paralel kenar geldi")
 
     print("\n-- resim: gabari en dışarıda, çakışma yok")
     yol = os.path.join(kl, "P01_DENEME.dxf")
@@ -153,6 +191,24 @@ def main():
               r.stdout.strip().splitlines()[-1] if r.stdout else "?")
     else:
         dogru("çakışma yok", n == 0, str(n))
+
+    print("\n-- açı yazısı makul hassasiyette")
+    yol4 = os.path.join(kl, "P04_PAH.dxf")
+    s4, o4 = O.komponent_olcu(pah, P)
+    O.dxf_komponent(s4, o4, {"poz": 4, "kod": "PAH", "ad": "Pahlı plaka",
+                             "adet": 1, "malzeme_ad": "Celik"}, yol4, P)
+    d4 = ezdxf.readfile(yol4)
+    aci = [e.dxf.text for e in d4.modelspace()
+           if e.dxftype() == "TEXT" and "%%d" in (e.dxf.text or "")]
+    print("     açı yazıları:", aci)
+    dogru("açı resme girdi", bool(aci), "açı yazılmamış")
+    dogru("aşırı hassasiyet yok",
+          all(len(t.replace("%%d", "").split(".")[-1]) <= 1
+              for t in aci if "." in t), str(aci))
+    dogru("açı kılavuzla bağlı",
+          sum(1 for e in d4.modelspace()
+              if e.dxftype() == "LINE" and e.dxf.layer == "OLCU") >= len(aci),
+          "kılavuz çizgisi yok")
 
     print("\nSONUC: " + ("TUM DENETIMLER GECTI" if not HATA
                          else f"{len(HATA)} DENETIM KALDI: " + ", ".join(HATA)))

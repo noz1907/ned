@@ -878,9 +878,43 @@ son delikten öbür kenara:
 
 **Dizi tek ölçüye iner.** 124 deliğin her birine 20 mm yazmak resmi
 okunmaz yapar ve hiçbir şey eklemez; adımlar eşitse (%2 payla) dizi
-sayılır ve `123 x 20` diye tek ölçü konur. Dizi değilse ve delik sayısı
-azsa her biri tek tek ölçülür; ikisi de değilse yalnız uçlar verilir,
-tam liste `olculer.csv`'dedir.
+sayılır ve `123 x 20` diye tek ölçü konur. Bu ISO'nun kendi
+sadeleştirmesidir.
+
+**Dizi dışındaki her konum ÖLÇÜSÜ AYNI KENARDAN alınır** (datumdan
+ölçülendirme). Zincir (noktadan noktaya) ölçülendirme kullanılmaz,
+iki sebepten:
+
+1. **Tolerans birikir.** Zincirdeki her ölçünün toleransı bir
+   sonrakine eklenir; son deliğin yeri ilk deliğinkinden çok daha
+   belirsiz olur. ISO 129-1 bunu açıkça uyarır.
+2. **Okunmaz.** İlk sürümde zincir farklı delik grupları arasında
+   kuruluyordu: 175 mm'lik plakada `10 | 3,2 | 148,5 | 3,2 | 10`
+   çıkıyordu. Oradaki 3,2, Ø10,2 deliğiyle Ø8,1 deliği arasındaki
+   boşluktu — kimsenin işine yaramayan bir sayı — ve Ø8,1'in kenardan
+   yerini bulmak için toplama yapmak gerekiyordu. Datumdan ölçüde
+   `10 | 13,2 | 161,7 | 165 | 175` yazar, hepsi doğrudan okunur.
+
+Kısa ölçü içeride, uzun dışarıda durur; ölçü çizgileri kesişmez.
+
+#### Çapraz (pahlı) kenarlar ve açılar
+
+Eksenlere paralel olmayan her düz kenara **hizalı boy ölçüsü** ve
+**açı** konur: bir 45°'lik pah için okunan `7,1` ve `45°` budur. Açı
+kısa bir kılavuz çizgisiyle kendi kenarına bağlanır — bağlanmayan bir
+açı yazısı, yerini bulamayıp uzağa kaçtığında hangi kenara ait olduğu
+anlaşılmıyordu.
+
+Bunun için kenarlar **çiziminden geri tanınıyor**: HLR izdüşümü
+kenarları analitik korumuyor (ölçülen: bir görünüşte 8 doğru + 2 daire
+ama 18 B-spline), pahlar ve kesikler B-spline olarak geliyor. Her
+kenar örneklenip doğru / yay / eğri diye ayrılıyor.
+
+Açı **ölçülen** bir değerdir, tam sayı değil: izdüşümden 11,8674 gibi
+çıkabiliyor. Tam sayıya yakınsa tam sayı, değilse bir ondalık yazılır —
+o kadar hassas bir açı ne ölçülür ne tutturulur. Görünüş başına en çok
+4 çapraz kenar ölçülendirilir (en uzunlar); karmaşık bir dövme parçada
+onlarca küçük eğik kenar var, hepsi resmi okunmaz yapar.
 
 **Gabari en dışarıdadır.** Teknik resimde küçük ölçüler içeride, toplam
 ölçü en dışarıda durur; tersi olursa ölçü çizgileri kesişir. Bu yüzden
@@ -893,9 +927,12 @@ kaçıracağı ölçü stiline bağlıdır. Her ölçü çizilir, yazısının g
 sınırı ölçülür, çakışıyorsa silinip bir alt kademede yeniden denenir.
 Örnek montajın 16 resminde 435 yazıda sıfır çakışma.
 
-> **Henüz yok:** açısal ölçüler, çapraz (pahlı) kesimlerin ölçüsü ve
-> girinti/çıkıntı ölçüleri. Kesit düzlemi en çok deliği açan yerden
-> geçiyor ama bunun da iyileştirilmesi gerekiyor.
+> **Henüz yok:** girinti/çıkıntı (oyuk, pencere, oval yuva) ölçüleri
+> ve form/büküm başlangıç konumları. Bunlar için konturun kapalı
+> halkalara ayrılması gerekiyor; HLR kenarları düğüm noktalarında
+> birden çok kola ayrıldığı için uçtan uca birleştirme yetmiyor,
+> graf üzerinden yüz çıkarmak gerekiyor. Kesit düzlemi en çok deliği
+> açan yerden geçiyor ama onun da iyileştirilmesi gerekiyor.
 
 ---
 

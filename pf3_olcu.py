@@ -510,6 +510,206 @@ def kesit_yeri(yer, L, W, T, g, gorunusler):
     return (sag + g, 0.0)
 
 
+def _duz_mu(p, tol=0.02):
+    """Örneklenen noktalar bir DOĞRU üstünde mi? (en büyük sapma)"""
+    if len(p) < 3:
+        return True
+    x0, y0 = p[0]; x1, y1 = p[-1]
+    dx, dy = x1 - x0, y1 - y0
+    L = math.hypot(dx, dy)
+    if L < 1e-9:
+        return False
+    return max(abs(dy * x - dx * y + x1 * y0 - y1 * x0) / L
+               for x, y in p[1:-1]) <= tol
+
+
+def _cember_uydur(p):
+    """Noktalara en iyi oturan çember: (merkez_x, merkez_y, r, sapma).
+
+    En küçük kareler (Kasa yöntemi): çemberin denklemi
+    x^2+y^2 + D*x + E*y + F = 0 doğrusaldır, doğrudan çözülür."""
+    n = len(p)
+    if n < 4:
+        return None
+    sx = sy = sxx = syy = sxy = sz = szx = szy = 0.0
+    for x, y in p:
+        z = x * x + y * y
+        sx += x; sy += y; sxx += x * x; syy += y * y; sxy += x * y
+        sz += z; szx += z * x; szy += z * y
+    A = [[sxx, sxy, sx], [sxy, syy, sy], [sx, sy, float(n)]]
+    b = [-szx, -szy, -sz]
+    # 3x3 Gauss
+    for i in range(3):
+        pv = max(range(i, 3), key=lambda r: abs(A[r][i]))
+        if abs(A[pv][i]) < 1e-12:
+            return None
+        A[i], A[pv] = A[pv], A[i]; b[i], b[pv] = b[pv], b[i]
+        for r in range(i + 1, 3):
+            f = A[r][i] / A[i][i]
+            for c in range(i, 3):
+                A[r][c] -= f * A[i][c]
+            b[r] -= f * b[i]
+    x3 = [0.0] * 3
+    for i in (2, 1, 0):
+        x3[i] = (b[i] - sum(A[i][c] * x3[c] for c in range(i + 1, 3))) / A[i][i]
+    D, E, F = x3
+    cx, cy = -D / 2.0, -E / 2.0
+    k = cx * cx + cy * cy - F
+    if k <= 0:
+        return None
+    r = math.sqrt(k)
+    sapma = max(abs(math.hypot(x - cx, y - cy) - r) for x, y in p)
+    return (cx, cy, r, sapma)
+
+
+def kenar_tani(p, duz_tol=0.02, yay_tol=0.05):
+    """Örneklenmiş bir kenarı DOĞRU / YAY / EĞRİ diye ayırır.
+
+    Niçin gerek var: HLR izdüşümü kenarları analitik korumuyor. Aynı
+    görünüşte 8 doğru + 2 daire çıkarken pahlar ve kesikler B-spline
+    olarak geliyordu (ölçülen: 18 tane). Açı, çapraz kesim ve
+    girinti/çıkıntı ölçüleri doğrudan bu ayrıma dayandığı için kenarı
+    çiziminden geri tanımak gerekiyor.
+
+    Döner: {"tip": "dogru", "p0","p1","aci","uz"} ya da
+           {"tip": "yay", "merkez","r","p0","p1","aci"} ya da
+           {"tip": "egri", "p0","p1"}"""
+    if len(p) < 2:
+        return None
+    p0, p1 = p[0], p[-1]
+    if _duz_mu(p, duz_tol):
+        uz = math.dist(p0, p1)
+        if uz < 1e-9:
+            return None
+        return {"tip": "dogru", "p0": p0, "p1": p1, "uz": uz,
+                "aci": math.degrees(math.atan2(p1[1] - p0[1],
+                                               p1[0] - p0[0])) % 180.0}
+    c = _cember_uydur(p)
+    if c and c[3] <= max(yay_tol, 0.01 * c[2]):
+        cx, cy, r, _sp = c
+        a0 = math.degrees(math.atan2(p0[1] - cy, p0[0] - cx))
+        a1 = math.degrees(math.atan2(p1[1] - cy, p1[0] - cx))
+        ort = math.degrees(math.atan2(p[len(p) // 2][1] - cy,
+                                      p[len(p) // 2][0] - cx))
+        # Yayın gerçek açısı: orta noktadan geçen yön hangisiyse o.
+        d = (a1 - a0) % 360.0
+        if not ((a0 + 1e-9) % 360 <= ort % 360 <= (a0 + d) % 360
+                or d > 359.0):
+            d = d - 360.0
+        return {"tip": "yay", "merkez": (cx, cy), "r": r,
+                "p0": p0, "p1": p1, "aci": abs(d)}
+    return {"tip": "egri", "p0": p0, "p1": p1}
+
+
+def capraz_kenarlar(kenar, en_az_uz=3.0, aci_pay=1.5):
+    """Görünüşteki ÇAPRAZ (pahlı, eğik) düz kenarlar.
+
+    Eksenlere paralel olmayan her düz kenar. Bunların resimde ne boyu
+    ne açısı vardı: 45°'lik bir pah çizilip geçiliyordu, atölye nereden
+    nereye kesileceğini bilmiyordu.
+
+    En uzun olanlar önce verilir ve görünüş başına sayısı sınırlıdır:
+    karmaşık bir dövme parçada onlarca küçük eğik kenar var, hepsini
+    ölçülendirmek resmi okunmaz yapar. Tam liste olculer.csv'dedir.
+
+    Döner: [{"p0","p1","uz","aci"}] - HAM izdüşüm koordinatında."""
+    out = []
+    for p in kenar.get("GORUNEN", []):
+        t = kenar_tani(p)
+        if not t or t["tip"] != "dogru" or t["uz"] < en_az_uz:
+            continue
+        a = t["aci"]
+        if min(abs(a), abs(a - 90.0), abs(a - 180.0)) <= aci_pay:
+            continue                      # yatay ya da düşey: gabari verir
+        out.append(t)
+    # Aynı kenar birkaç kaynaktan gelebilir (VCompound +
+    # OutLineVCompound) ve parçanın ÜST ve ALT yüzündeki aynı pah
+    # izdüşümde üst üste düşer. Uç noktalarına göre ayıklamak bunları
+    # yakalamıyordu (uçlar mikron farkla ayrılıyor); ORTA NOKTA ve
+    # DOĞRULTU ile ayıklanır.
+    gor, tek = set(), []
+    for t in sorted(out, key=lambda t: -t["uz"]):
+        k = (round((t["p0"][0] + t["p1"][0]) / 2, 1),
+             round((t["p0"][1] + t["p1"][1]) / 2, 1),
+             round(t["aci"], 0), round(t["uz"], 1))
+        if k in gor:
+            continue
+        gor.add(k); tek.append(t)
+    return tek
+
+
+def capraz_olculeri(msp, kenarlar, kaydir, gkutu, h, en_cok=4):
+    """Çapraz kenarların BOYU ve AÇISI.
+
+    Boy hizalı ölçüyle (kenara paralel), açı yatayla yaptığı açı
+    olarak verilir: bir pah için okunan "7,1" ve "45°" budur.
+
+    Yer TAHMİN EDİLMEZ: ölçü çizilir, yazısının gerçek sınırı ölçülür,
+    çakışıyorsa silinip kenardan biraz daha uzağa konur."""
+    say = 0
+    for gad, kenar in kenarlar.items():
+        if gad not in gkutu:
+            continue
+        dx, dy = kaydir[gad]
+        gk = gkutu[gad]
+        mx, my = (gk[0] + gk[2]) / 2.0, (gk[1] + gk[3]) / 2.0
+        dolu = _varlik_kutulari(msp)
+        for t in capraz_kenarlar(kenar)[:en_cok]:
+            p0 = (t["p0"][0] + dx, t["p0"][1] + dy)
+            p1 = (t["p1"][0] + dx, t["p1"][1] + dy)
+            ox, oy = (p0[0] + p1[0]) / 2.0, (p0[1] + p1[1]) / 2.0
+            # Ölçü çizgisi kenarın DIŞ tarafına: görünüşün ortasından
+            # uzağa doğru.
+            nx, ny = -(p1[1] - p0[1]) / t["uz"], (p1[0] - p0[0]) / t["uz"]
+            if (ox - mx) * nx + (oy - my) * ny < 0:
+                nx, ny = -nx, -ny
+            for kat in range(1, 7):
+                d = 1.4 * kat * h
+                try:
+                    dim = msp.add_aligned_dim(
+                        p1=p0, p2=p1, distance=d * (1 if (nx * (p1[1] - p0[1])
+                                                          - ny * (p1[0] - p0[0])) <= 0 else -1),
+                        dimstyle=OLCU_STILI,
+                        override={"dimtoh": 1, "dimtih": 1, "dimtmove": 1},
+                        dxfattribs={"layer": "OLCU"})
+                    dim.render()
+                except Exception:
+                    break
+                ky = _olcu_yazi_kutusu(dim)
+                if ky is None or not _cakisiyor(ky, dolu, 0.25 * h):
+                    if ky:
+                        dolu.append(ky)
+                    say += 1
+                    break
+                _olcu_sil(msp, dim)
+            # Açı: yatayla yaptığı açı. KILAVUZ ÇİZGİSİYLE kenara
+            # bağlanır. Bağlanmayan bir "45°" yazısı, yerini bulamayıp
+            # uzağa kaçtığında hangi kenara ait olduğu anlaşılmıyordu -
+            # boşlukta duran bir sayı, olmayandan kötüdür.
+            aci = t["aci"]
+            aci = aci if aci <= 90.0 else 180.0 - aci
+            # Açı ÖLÇÜLEN bir değerdir, tam sayı değil: izdüşümden
+            # 11,8674 gibi çıkabiliyor. Resme olduğu gibi yazmak
+            # yanıltıcı - o kadar hassas bir açı ne ölçülür ne
+            # tutturulur. Tam sayıya yakınsa tam sayı, değilse bir
+            # ondalık.
+            aci = round(aci) if abs(aci - round(aci)) < 0.15 else round(aci, 1)
+            for kat in range(1, 8):
+                uz = (1.2 + 1.3 * kat) * h
+                yer = (ox + nx * uz, oy + ny * uz)
+                e = _yaz(msp, f"{aci:g}%%d", yer[0] + 0.3 * h,
+                         yer[1] - 0.45 * h, 0.9 * h)
+                kt = _yazi_siniri(e)
+                if kt is None or not _cakisiyor(kt, dolu, 0.25 * h):
+                    msp.add_line((ox, oy), yer,
+                                 dxfattribs={"layer": "OLCU"})
+                    if kt:
+                        dolu.append(kt)
+                    break
+                msp.delete_entity(e)
+    return say
+
+
 def hlr(sh, goz, xref, gizli=True):
     algo = HLRBRep_Algo(); algo.Add(sh)
     algo.Projector(HLRAlgo_Projector(gp_Ax2(gp_Pnt(0, 0, 0), gp_Dir(*goz), gp_Dir(*xref))))
@@ -1089,6 +1289,8 @@ def _seviyele(araliklar, h):
     alt alta kademelendirilir. Kademe sayısı sonra gabari ölçüsünü ne
     kadar dışarı iteceğimizi söyler."""
     kademe = []                       # her kademede dolu [x0, x1] aralıkları
+    # Datumdan ölçülerde hepsi aynı kenardan başlar ve iç içe geçer;
+    # kısa olan içeride durmalı. Sıra çağıran tarafta verilir.
     for r in araliklar:
         a, b = min(r["a"], r["b"]), max(r["a"], r["b"])
         orta = (a + b) / 2.0
@@ -1106,17 +1308,27 @@ def _seviyele(araliklar, h):
 def konum_plani(o, gorunusler, ham, h, tol=0.05):
     """Konum ölçülerinin planı - HİÇBİR ŞEY ÇİZMEDEN.
 
-    Önce plan çıkarılır, çünkü gabari ölçüsünün ne kadar dışarı
-    iteleneceği kaç kademe konum ölçüsü gireceğine bağlıdır: teknik
-    resimde küçük ölçüler içeride, gabari en dışarıda durur.
+    YÖNTEM: DATUMDAN ÖLÇÜLENDİRME (baseline / parallel dimensioning).
+    Her konum ölçüsü görünüşün AYNI kenarından başlar. Zincir
+    (point-to-point) ölçülendirme kullanılmaz; iki sebepten:
 
-    Zincir kuralı: kenardan ilk deliğe, sonra dizinin adımı
-    ("123 x 20"), sonra son delikten öbür kenara. 124 deliğin her
-    birine 20 mm yazmak resmi okunmaz yapar ve hiçbir şey eklemez.
+      1. Tolerans birikir. Zincirdeki her ölçünün toleransı bir
+         sonrakine eklenir, son deliğin yeri ilk deliğinkinden çok
+         daha belirsiz olur (ISO 129-1, "chain dimensioning" uyarısı).
+      2. Okunmaz. İlk denemede zincir FARKLI DELİK GRUPLARI arasında
+         kuruluyordu: 175 mm'lik plakada "10 | 3,2 | 148,5 | 3,2 | 10"
+         çıkıyordu. Oradaki 3,2, Ø10,2 deliğiyle Ø8,1 deliği
+         arasındaki boşluktu - kimsenin işine yaramayan bir sayı - ve
+         Ø8,1'in kenardan yerini (13,2) bulmak için toplama yapmak
+         gerekiyordu. Datumdan ölçüde 10 ve 13,2 doğrudan yazar.
 
-    Döner: {gorunus: {"yatay": [...], "dusey": [...],
-                      "kademe_x": n, "kademe_y": n}}
-    Aralıklar HAM izdüşüm koordinatındadır."""
+    TEK İSTİSNA - eşit adımlı dizi: kenardan ilk deliğe, sonra
+    "n x adım", sonra son delikten öbür kenara. Bu ISO'nun kendi
+    sadeleştirmesidir; 124 deliğin her birine ayrı ölçü koymak resmi
+    okunmaz yapar ve hiçbir şey eklemez.
+
+    Döner: {gorunus: {"yatay": [...], "dusey": [...]}}
+    Her kayıt: {"a","b","metin","seviye"}; HAM izdüşüm koordinatında."""
     plan = {}
     for gad in gorunusler:
         kutu_ = ham.get(gad)
@@ -1137,51 +1349,56 @@ def konum_plani(o, gorunusler, ham, h, tol=0.05):
             obek = defaultdict(list)
             for q in nokta:
                 obek[round(q[1 - eksen] / max(tol, 1e-9))].append(q[eksen])
-            kayit = []
+            dizi, tekil = [], set()
             for _k, v in obek.items():
                 v = sorted(set(round(x, 3) for x in v))
                 dz = _dizi(v)
                 if dz:
-                    kayit.append({"tip": "dizi", "bas": v[0], "son": v[-1],
-                                  "adet": dz[0], "adim": dz[1]})
+                    dizi.append({"bas": v[0], "son": v[-1],
+                                 "adet": dz[0], "adim": dz[1]})
                 elif len(v) <= KONUM_EN_COK:
-                    kayit += [{"tip": "tek", "bas": x, "son": x} for x in v]
+                    tekil.update(v)
                 else:
                     # Ne dizi ne az sayıda: yalnız uçlar verilir, tam
                     # liste olculer.csv'dedir. Aksi hâlde resim okunmaz.
-                    kayit += [{"tip": "tek", "bas": v[0], "son": v[0]},
-                              {"tip": "tek", "bas": v[-1], "son": v[-1]}]
-            # Aynı yeri iki kez ölçme.
-            gor, tek = set(), []
-            for r in sorted(kayit, key=lambda r: r["bas"]):
-                a = (round(r["bas"], 2), round(r["son"], 2))
-                if a not in gor:
-                    gor.add(a); tek.append(r)
-            # Zinciri kur: kenar -> delikler -> kenar
-            nok = [e0]
-            for r in tek:
-                nok.append(r["bas"])
-                if r["tip"] == "dizi":
-                    nok.append(r["son"])
-            nok.append(e1)
+                    tekil.update((v[0], v[-1]))
             ara = []
-            for i in range(len(nok) - 1):
-                a, b = nok[i], nok[i + 1]
-                if b - a < 0.2:
+            # 1) Diziler: kenardan ilk deliğe + "n x adım" + kenara
+            for r in dizi:
+                if r["bas"] - e0 > 0.2:
+                    ara.append({"a": e0, "b": r["bas"], "metin": None})
+                ara.append({"a": r["bas"], "b": r["son"],
+                            "metin": f"{r['adet'] - 1} x {r['adim']:g}"})
+                if e1 - r["son"] > 0.2:
+                    ara.append({"a": r["son"], "b": e1, "metin": None})
+            # 2) Tekil delikler: HEPSİ AYNI KENARDAN (datum)
+            for x in sorted(tekil):
+                # Dizinin içindeki bir deliği ikinci kez ölçme.
+                if any(r["bas"] - 0.2 <= x <= r["son"] + 0.2 for r in dizi):
                     continue
-                metin = None
-                for r in tek:
-                    if (r["tip"] == "dizi" and abs(r["bas"] - a) < 0.2
-                            and abs(r["son"] - b) < 0.2):
-                        metin = f"{r['adet'] - 1} x {r['adim']:g}"
-                ara.append({"a": a, "b": b, "metin": metin, "seviye": 1})
-            cikti[ad] = ara
-        kx = _seviyele(cikti.get("yatay", []), h)
-        ky = _seviyele(cikti.get("dusey", []), h)
+                # HEPSİ AYNI KENARDAN. En yakın kenarı seçmek ölçüyü
+                # kısaltır ama görünüşte İKİ AYRI DATUM oluşturur:
+                # okuyan hangi ölçünün nereden alındığını ayırt edemez.
+                # ISO 129-1 tek ortak referans ister.
+                if x - e0 > 0.2:
+                    ara.append({"a": e0, "b": x, "metin": None})
+            # Aynı ölçüyü iki kez yazma.
+            gor, temiz = set(), []
+            for r in ara:
+                k = (round(r["a"], 2), round(r["b"], 2))
+                if k not in gor:
+                    gor.add(k)
+                    r["seviye"] = 1
+                    temiz.append(r)
+            # Datumdan ölçüde KISA olan içeride durur (ISO 129-1):
+            # ölçü çizgileri kesişmesin.
+            temiz.sort(key=lambda r: abs(r["b"] - r["a"]))
+            cikti[ad] = temiz
+        _seviyele(cikti.get("yatay", []), h)
+        _seviyele(cikti.get("dusey", []), h)
         if cikti.get("yatay") or cikti.get("dusey"):
             plan[gad] = {"yatay": cikti.get("yatay", []),
-                         "dusey": cikti.get("dusey", []),
-                         "kademe_x": kx, "kademe_y": ky}
+                         "dusey": cikti.get("dusey", [])}
     return plan
 
 
@@ -3721,6 +3938,8 @@ def dxf_komponent(s, o, k, yol, P):
         gkutu[gad] = (ox, oy, ox + G, oy + Y)
     merkez_cizgileri(msp, o, yer, kaydir)
     sinir = konum_olculeri(msp, kplan, kaydir, gkutu, h) if kplan else {}
+    if P.get("capraz", True):
+        capraz_olculeri(msp, kenarlar, kaydir, gkutu, h)
     gabari_olculeri(msp, gkutu, sinir, h)
     ust, sag = cap_olculeri(msp, o, yer, kaydir, gkutu, h, ust)
     if P.get("kesit"):
