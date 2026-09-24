@@ -337,6 +337,11 @@ def delik_ve_radus(sh, en_az_cap=1.0, tam_oran=0.90):
         d = cyl.Position().Direction()
         eks = (abs(d.X()), abs(d.Y()), abs(d.Z()))
         e = max(range(3), key=lambda t: eks[t]) if max(eks) > 0.9 else -1
+        # Eksenin model ekseninden sapması (sin açı). 0,9 eşiği deliği bir
+        # eksene BAĞLAR ama konumu kesinleştirmez: 01.050.000.01'de 0,4°
+        # eğik duvardaki deliğin merkezi sacın bir yüzünden öbürüne 0,02
+        # mm kayıyor. Konum ölçüsü yalnız tam paralel deliklere verilir.
+        egim = math.sqrt(max(0.0, 1.0 - eks[e] ** 2)) if e >= 0 else 1.0
         try:
             aci = abs(ad.LastUParameter() - ad.FirstUParameter())
         except Exception:
@@ -357,11 +362,13 @@ def delik_ve_radus(sh, en_az_cap=1.0, tam_oran=0.90):
         if an in tek:
             tek[an]["aci"] += aci
             tek[an]["boy"] = max(tek[an]["boy"], boy)
+            tek[an]["egim"] = max(tek[an]["egim"], egim)
         else:
             m2 = list(merkez)
             if e >= 0:
                 m2[e] = c.Coord(e + 1)        # eksen yönünde yüzeyin orta noktası
-            tek[an] = {"r": r, "eksen": e, "aci": aci, "boy": boy, "merkez": tuple(m2)}
+            tek[an] = {"r": r, "eksen": e, "aci": aci, "boy": boy,
+                       "merkez": tuple(m2), "egim": egim}
 
     delik_g, radus_g = defaultdict(list), defaultdict(list)
     for h in tek.values():
@@ -375,7 +382,11 @@ def delik_ve_radus(sh, en_az_cap=1.0, tam_oran=0.90):
         delikler.append({"cap_mm": cap, "adet": len(lst),
                          "eksen": "XYZ"[eks] if eks >= 0 else "eğik",
                          "derinlik_mm": round(max(h["boy"] for h in lst), 2),
-                         "merkezler": [[round(v, 2) for v in h["merkez"]] for h in lst[:200]]})
+                         # 4 ondalık: 2 ondalığa yuvarlanan merkez (284,00)
+                         # yakındaki iki gerçek seviye arasında (283,987 /
+                         # 284,004) hangisi olduğu belirsiz kalıyordu.
+                         "merkezler": [[round(v, 4) for v in h["merkez"]] for h in lst[:200]],
+                         "egim": [round(h["egim"], 6) for h in lst[:200]]})
     radusler = []
     for (r, eks), lst in sorted(radus_g.items(), key=lambda t: (-len(t[1]), t[0][0])):
         radusler.append({"yaricap_mm": r, "adet": len(lst),
@@ -460,6 +471,9 @@ GOR_EKSEN = {
 }
 # Aynı dış hattı iki yandan gösteren görünüş çiftleri.
 AYNA_CIFT = {"ON": 0, "ARKA": 0, "SAG": 1, "SOL": 1, "UST": 2, "ALT": 2}
+# Delik ekseni model ekseninden bu kadar sapıyorsa (sin açı; ~0,06°)
+# konumu yazılmaz: sacın kalınlığı boyunca merkez 0,01 mm'den çok kayar.
+DELIK_EGIM_SINIR = 1e-3
 # Bir eksene paralel deliğin DAİRE göründüğü görünüşler (öncelik sırasıyla).
 DELIK_GOR = {"Y": ("ON", "ARKA"), "X": ("SAG", "SOL"), "Z": ("UST", "ALT")}
 
@@ -1607,7 +1621,8 @@ GIRINTI_SINIR = 12          # bundan fazlası girinti değil, biçimin kendisidi
 
 
 def kontur_ozellikleri(dis, kutu_, en_az_oran=GIRINTI_EN_AZ_ORAN,
-                       en_cok=GIRINTI_EN_COK, sinir=GIRINTI_SINIR, duz=None):
+                       en_cok=GIRINTI_EN_COK, sinir=GIRINTI_SINIR, duz=None,
+                       tip=None):
     """Dış konturun GİRİNTİ ve ÇIKINTILARI.
 
     Gabari ölçüsü parçanın o yöndeki en uç noktalarını verir; kenarın
@@ -1643,12 +1658,24 @@ def kontur_ozellikleri(dis, kutu_, en_az_oran=GIRINTI_EN_AZ_ORAN,
     köşe kesiği teğet noktalarında 41,09 / 22,51 çıkıyordu; kesik
     doğrusu uzatılınca 45,0 / 20,05 - yani 20 x 5'lik bir kesik.
     `duz[i]`, i. parçanın (dis[i] -> dis[i+1]) doğru bir kenardan gelip
-    gelmediğini söyler; verilmezse her parça doğru sayılır.
+    gelmediğini söyler; verilmezse her parça doğru sayılır. `tip[i]`
+    ("dogru" / "yay" / "egri") verilirse duz ondan çıkar.
+
+    SERBEST EĞRİ ÖLÇÜLMEZ. Girintinin ucuna giden yolda ya da en derin
+    yerinde doğru veya yay olmayan bir kenar varsa, o girinti dövme,
+    döküm ya da kabartma yüzeyinin bir parçasıdır; konumunun tasarımda
+    bir karşılığı yoktur. Doğrulama gerçek modellerde bunların çoğunun
+    yanlış çıktığını gösterdi; o girinti bütünüyle atlanır.
 
     Döner: [{"taraf", "yon", "a", "b", "derinlik", "ic"}]; a ile b,
     ölçünün alınacağı yöndeki HAM izdüşüm koordinatlarıdır."""
     if not dis or not kutu_:
         return []
+    if tip is not None:
+        duz = [t == "dogru" for t in tip]
+        egri = [t == "egri" for t in tip]
+    else:
+        egri = [False] * len(dis)
     x0, y0, x1, y1 = kutu_
     buyuk = max(x1 - x0, y1 - y0)
     if buyuk <= 0:
@@ -1718,7 +1745,8 @@ def kontur_ozellikleri(dis, kutu_, en_az_oran=GIRINTI_EN_AZ_ORAN,
 
         def sanal(i, ic_yon):
             """i. köşeden çentiğe doğru yürü; ilk DOĞRU parçayı kenara
-            uzat. ic_yon: çentik büyük boy tarafındaysa +1, değilse -1."""
+            uzat. ic_yon: çentik büyük boy tarafındaysa +1, değilse -1.
+            Yolda serbest eğri varsa None: bu uç güvenilir değil."""
             v0 = boy(dis[i])
             if duz is None:
                 return v0
@@ -1732,6 +1760,8 @@ def kontur_ozellikleri(dis, kutu_, en_az_oran=GIRINTI_EN_AZ_ORAN,
             k = i
             for _ in range(n):
                 sg = k if yuru == 1 else (k - 1) % n
+                if egri[sg]:
+                    return None
                 if duz[sg]:
                     if k == i:         # ilk parça zaten doğru: keskin köşe
                         return v0
@@ -1760,6 +1790,7 @@ def kontur_ozellikleri(dis, kutu_, en_az_oran=GIRINTI_EN_AZ_ORAN,
             i = bisect.bisect_left(degen_b, v - 1e-9)
             return sanal(degen[i][1], -1) if i < len(degen) else e1
 
+
         def der_tam(a, b):
             """Çentiğin TAM derinliği; bulunamazsa None.
 
@@ -1782,26 +1813,29 @@ def kontur_ozellikleri(dis, kutu_, en_az_oran=GIRINTI_EN_AZ_ORAN,
                     continue           # kenara dik parça: zarfa girmez
                 if max(bp, bq) < a - 1e-9 or min(bp, bq) > b + 1e-9:
                     continue
-                parca.append((bp, uzak(p), bq, uzak(q)))
+                parca.append((bp, uzak(p), bq, uzak(q), i))
             olay = sorted({a, b} | {boy(q) for q in dis
                                     if a - 1e-9 <= boy(q) <= b + 1e-9})
             if len(olay) * len(parca) > 2_000_000:
                 return None
             eps = 1e-7 * max(1.0, b - a)
-            en = None
+            en, en_sg = None, None
             for v in olay:
                 for x in (v - eps, v + eps):
                     if not a < x < b:
                         continue
-                    z = None
-                    for bp, dp, bq, dq in parca:
+                    z, z_sg = None, None
+                    for bp, dp, bq, dq, sg in parca:
                         if (bp - x) * (bq - x) > 0:
                             continue
                         w = dp + (dq - dp) * (x - bp) / (bq - bp)
-                        z = w if z is None else min(z, w)
-                    if z is not None:
-                        en = z if en is None else max(en, z)
-            return None if en is None else round(en, 4)
+                        if z is None or w < z:
+                            z, z_sg = w, sg
+                    if z is not None and (en is None or z > en):
+                        en, en_sg = z, z_sg
+            if en is None or egri[en_sg]:
+                return None            # dip serbest eğride: güvenilmez
+            return round(en, 4)
 
         kk = 0
         while kk < K:
@@ -1818,6 +1852,9 @@ def kontur_ozellikleri(dis, kutu_, en_az_oran=GIRINTI_EN_AZ_ORAN,
                 continue
             a = e0 if kk == 0 else bas_kose(e0 + boyu * kk / K)
             b = e1 if j >= K else son_kose(e0 + boyu * j / K)
+            if a is None or b is None:
+                kk = j                 # ucu serbest eğride: girinti atlanır
+                continue
             der = max(zarf[kk:j])
             en = b - a
             # KÖŞE YUVARLAMASI GİRİNTİ DEĞİLDİR. Kenarın ucunda duran,
@@ -1858,13 +1895,13 @@ def gorunus_ozellikleri(kenar, kutu_):
         return []
     dis, kay = dk
     sinif = {}
-    duz = []
+    tip = []
     for q in kay:
         k = id(q)
         if k not in sinif:
-            sinif[k] = (len(q) == 2 or kenar_tani(q)["tip"] == "dogru")
-        duz.append(sinif[k])
-    return kontur_ozellikleri(dis, kutu_, duz=duz)
+            sinif[k] = "dogru" if len(q) == 2 else kenar_tani(q)["tip"]
+        tip.append(sinif[k])
+    return kontur_ozellikleri(dis, kutu_, tip=tip)
 
 
 PENCERE_EN_COK = 4          # bir görünüşte konumu verilecek en çok iç pencere
@@ -2031,7 +2068,170 @@ def kesim_uclari(kenar, kutu_, log=None):
     return uc
 
 
-def konum_plani(o, gorunusler, ham, h, kenarlar=None, tol=0.05):
+# ------------------------------------------------ 3B tasarım seviyeleri
+# Görünüşten (2B) bulunan her konum, 3B modelde gerçek bir TASARIM
+# SEVİYESİNE denk gelmedikçe resme yazılmaz. İki bağımsız yöntem aynı
+# sonucu vermeli - açınımda kesit ile yüzey konturunun karşılaştırıldığı
+# gibi. Ölçtük (test/olcu_dogrulama.py, 4 gerçek model): bu denetim
+# olmadan girinti konumlarının %15'i, eğik kesim uçlarının %70'i tasarımda
+# karşılığı olmayan noktalara (teğet noktası, eğik yüzün köşesi, eğri
+# yüzeyin silüeti) veriliyordu.
+SEVIYE_TOL = 0.01          # mm
+
+
+def _yuz_ornekle(f, n=7):
+    ad = BRepAdaptor_Surface(TopoDS.Face_s(f))
+    u0, u1 = ad.FirstUParameter(), ad.LastUParameter()
+    v0, v1 = ad.FirstVParameter(), ad.LastVParameter()
+    if max(abs(u0), abs(u1), abs(v0), abs(v1)) > 1e7:
+        return []
+    out = []
+    for a in range(n):
+        for b in range(n):
+            p = ad.Value(u0 + (u1 - u0) * a / (n - 1),
+                         v0 + (v1 - v0) * b / (n - 1))
+            out.append((p.X(), p.Y(), p.Z()))
+    return out
+
+
+def _kenar_ornekle(e, n=9):
+    c = BRepAdaptor_Curve(TopoDS.Edge_s(e))
+    t0, t1 = c.FirstParameter(), c.LastParameter()
+    if max(abs(t0), abs(t1)) > 1e7:
+        return []
+    return [(q.X(), q.Y(), q.Z()) for q in
+            (c.Value(t0 + (t1 - t0) * k / (n - 1)) for k in range(n))]
+
+
+def tasarim_seviyeleri(s):
+    """Her model ekseni (0=X, 1=Y, 2=Z) için ölçü verilebilecek seviyeler.
+
+      1. o eksene DİK düz yüzey (çentik duvarı, basamak, kenar),
+      2. o eksene dik silindirin uçları (eksen ± r: yuva ucu, yuvarlak
+         dip); parçalarının toplam açısı yarım turu geçen silindirin
+         EKSENİ (delik, yuva ucu merkezi) - tek başına çeyrek olan
+         yuvarlatmanın ekseni sayılmaz, teğet noktası ölçü yeri değildir,
+      3. SANAL KÖŞE: o düzlemde eğik duran DOĞRU bir kenarın, öbür eksene
+         dik bir düz yüzey seviyesini kestiği yer.
+
+    Tip adına güvenilmez, geometriye bakılır: bu STEP'lerde eğik kenarlar
+    B-rep'te bile B-spline, delikler dört çeyrek yüzey olarak kayıtlı.
+
+    Döner: [sıralı liste] x 3"""
+    kb = kutu(s)
+    boy_ = max(kb[3] - kb[0], kb[4] - kb[1], kb[5] - kb[2], 1.0)
+    et = 1e-6 * boy_ + 1e-7
+    duz = [set() for _ in range(3)]
+    ek = [set() for _ in range(3)]
+    silindir = defaultdict(list)
+    ex = TopExp_Explorer(s, TopAbs_FACE)
+    while ex.More():
+        pts = _yuz_ornekle(ex.Current())
+        ex.Next()
+        if not pts:
+            continue
+        for i in range(3):
+            c = [q[i] for q in pts]
+            if max(c) - min(c) < 10 * et:
+                duz[i].add(round(sum(c) / len(c), 5))
+        for k in range(3):
+            i, j = [a for a in range(3) if a != k]
+            if max(q[k] for q in pts) - min(q[k] for q in pts) < 10 * et:
+                continue
+            cf = _cember_uydur([(q[i], q[j]) for q in pts])
+            if not cf:
+                continue
+            cx, cy, r, sap = cf
+            if sap > 1e-4 * r + 10 * et or r > 1e5:
+                continue
+            silindir[(k, round(cx, 3), round(cy, 3), round(r, 3))] += [
+                math.atan2(q[j] - cy, q[i] - cx) for q in pts]
+            for eks, mer in ((i, cx), (j, cy)):
+                ek[eks].add(round(mer - r, 5))
+                ek[eks].add(round(mer + r, 5))
+    for (k, cx, cy, r), aci in silindir.items():
+        ac = sorted(set(round(a, 6) for a in aci))
+        if len(ac) < 2:
+            continue
+        bos = max([ac[t + 1] - ac[t] for t in range(len(ac) - 1)]
+                  + [2 * math.pi - (ac[-1] - ac[0])])
+        if (2 * math.pi - bos) >= 0.99 * math.pi:
+            i, j = [a for a in range(3) if a != k]
+            ek[i].add(round(cx, 5))
+            ek[j].add(round(cy, 5))
+    ex = TopExp_Explorer(s, TopAbs_EDGE)
+    while ex.More():
+        pts = _kenar_ornekle(ex.Current())
+        ex.Next()
+        if len(pts) < 2:
+            continue
+        a, b = pts[0], pts[-1]
+        uz = math.dist(a, b)
+        if uz < 1e-6:
+            continue
+        D = [(b[k] - a[k]) / uz for k in range(3)]
+        sap = 0.0
+        for q in pts[1:-1]:
+            w = [q[k] - a[k] for k in range(3)]
+            t_ = sum(w[k] * D[k] for k in range(3))
+            sap = max(sap, math.sqrt(max(0.0, sum(x * x for x in w) - t_ * t_)))
+        if sap > 1e-5 * uz + 10 * et:
+            continue                   # doğru değil
+        for j in range(3):
+            if abs(D[j]) < 1e-7:
+                continue
+            for i in range(3):
+                if i == j or abs(D[i]) < 1e-7:
+                    continue
+                for bb in duz[j]:
+                    v = a[i] + (bb - a[j]) / D[j] * D[i]
+                    if kb[i] - SEVIYE_TOL <= v <= kb[i + 3] + SEVIYE_TOL:
+                        ek[i].add(round(v, 5))
+    return [sorted(duz[i] | ek[i]) for i in range(3)]
+
+
+def seviyede(liste, v, tol=SEVIYE_TOL):
+    """v, sıralı listedeki bir seviyenin tol kadar yakınında mı?"""
+    i = bisect.bisect_left(liste, v - tol)
+    return i < len(liste) and liste[i] <= v + tol
+
+
+def seviyeye_otur(liste, v, tol=SEVIYE_TOL):
+    """v'yi modeldeki TAM seviyeye oturtur; yoksa ya da BELİRSİZSE None.
+
+    Kapıdan geçen değer seviyeden 0,01 mm'ye kadar sapabilir; yuvarlama
+    sınırına denk gelirse yanlış basılır (15,05 yerine 15,041 -> "15").
+    Oturtulunca basılan sayı tasarım değerinin kendisidir. Pencerede
+    birbirinden AYRI iki seviye varsa hangisi olduğu bilinemez; yazılmaz."""
+    i = bisect.bisect_left(liste, v - tol)
+    aday = []
+    while i < len(liste) and liste[i] <= v + tol:
+        aday.append(liste[i])
+        i += 1
+    # 2 mikrondan yakın seviyeler AYNI seviyedir (CAD gürültüsü: C profilde
+    # 60,0008 / 60,0010); hiçbir tasarım ölçüsü bu kadar yakın değildir.
+    if not aday or aday[-1] - aday[0] > 0.002:
+        return None
+    return sum(aday) / len(aday)
+
+
+def model_ham(gad, yon, m):
+    """ham_model'in tersi: model koordinatı -> HAM izdüşüm koordinatı."""
+    i1, i2, tx, ty = GOR_EKSEN[gad]
+    ters = tx if yon == "yatay" else ty
+    return -m if ters else m
+
+
+def ham_model(gad, yon, v):
+    """HAM izdüşüm koordinatı -> (model ekseni, model koordinatı)."""
+    i1, i2, tx, ty = GOR_EKSEN[gad]
+    if yon == "yatay":
+        return i1, (-v if tx else v)
+    return i2, (-v if ty else v)
+
+
+def konum_plani(o, gorunusler, ham, h, kenarlar=None, tol=0.05,
+                seviye=None, rapor=None):
     """Konum ölçülerinin planı - HİÇBİR ŞEY ÇİZMEDEN.
 
     YÖNTEM: DATUMDAN ÖLÇÜLENDİRME (baseline / parallel dimensioning).
@@ -2061,6 +2261,7 @@ def konum_plani(o, gorunusler, ham, h, kenarlar=None, tol=0.05):
     Döner: {gorunus: {"yatay": [...], "dusey": [...]}}
     Her kayıt: {"a","b","metin","seviye"}; HAM izdüşüm koordinatında."""
     plan = {}
+    atlanan = Counter()      # 3B'de karşılığı olmadığı için yazılmayanlar
     # AYNA GÖRÜNÜŞLER (ÖN/ARKA, SAĞ/SOL, ÜST/ALT) aynı dış hattı iki
     # yandan gösterir. Girinti birinde ölçülür; öbüründe tekrarı ISO
     # 129-1'in "her öznitelik bir kez" kuralına aykırı olurdu. Ölçtük:
@@ -2072,16 +2273,31 @@ def konum_plani(o, gorunusler, ham, h, kenarlar=None, tol=0.05):
             continue
         nokta = []
         for d in (o or {}).get("delikler") or []:
-            if gad not in DELIK_GOR.get(d["eksen"], ()):
+            # Delik YALNIZ BİR görünüşte konumlanır - çapının yazıldığı
+            # görünüşte (cap_olculeri de ilk uygun görünüşü seçer). SAĞ
+            # ile SOL aynı delikleri gösterir; ikisinde birden ölçmek
+            # "her öznitelik bir kez" kuralına aykırı ve resmi kalabalık
+            # yapıyordu.
+            ilk = next((g for g in DELIK_GOR.get(d["eksen"], ())
+                        if g in gorunusler), None)
+            if gad != ilk:
                 continue
-            for c in d.get("merkezler") or []:
+            egim = d.get("egim") or [0.0] * len(d.get("merkezler") or [])
+            for c, eg in zip(d.get("merkezler") or [], egim):
+                if eg > DELIK_EGIM_SINIR:
+                    continue           # eğik eksen: konumu kesin değil
                 nokta.append(izdusum(c, gad))
         # EĞİK KESİMİN UÇLARI da konum ister: köşe kırma değil,
         # parçanın gerçek biçimidir; atölye nereden nereye keseceğini
         # ancak uçlarının kenarlardan yerinden bilir. (Pahlar buraya
         # girmez, onlar ok ucunda "5 x 5" diye verilir.)
-        kesim = (kesim_uclari(kenarlar[gad], kutu_)
-                 if kenarlar and gad in kenarlar else [])
+        # EĞİK KESİM UÇLARI KONUM ALMAZ. Doğrulama (test/olcu_dogrulama.py)
+        # dört gerçek modelde bu türün %70'inin tasarım koordinatına
+        # denk GELMEDİĞİNİ gösterdi: dövme ve eğri parçalarda eğik
+        # çizginin ucu çoğu zaman bir yuvarlatmanın teğet noktası. Kural:
+        # hata oranı %1'i aşan ölçü türü yazılmaz. Dış hattaki köşe
+        # kesikleri yine ölçülüyor - girinti olarak, sanal köşeden.
+        kesim = []
         # GİRİNTİ / ÇIKINTI: çentiğin başı ve sonu da konum ister -
         # delikten farkı yok, atölye nereden nereye keseceğini bilmeli.
         cift = AYNA_CIFT.get(gad)
@@ -2097,6 +2313,33 @@ def konum_plani(o, gorunusler, ham, h, kenarlar=None, tol=0.05):
         # okunmuyordu. Kural: görünüşün uzun kenarının her 4 yazı boyuna
         # bir girinti, en çok GIRINTI_EN_COK. Büyükler öncelikli (liste
         # zaten alanına göre sıralı); tam liste olculer.csv'de.
+        # Derinlik de 3B'de karşılığı olan bir seviyeye inmeli: çentiğin
+        # dibi. İnmiyorsa derinlik yazılmaz (konumlar yine denetlenir).
+        if seviye is not None:
+            for r in ozel:
+                if r.get("derinlik") is None:
+                    continue
+                if r["yon"] == "yatay":
+                    dik = "dusey"
+                    kenar = kutu_[1] if r["taraf"] == "alt" else kutu_[3]
+                    isaret = 1.0 if r["taraf"] == "alt" else -1.0
+                else:
+                    dik = "yatay"
+                    kenar = kutu_[0] if r["taraf"] == "sol" else kutu_[2]
+                    isaret = 1.0 if r["taraf"] == "sol" else -1.0
+                dip = kenar + isaret * r["derinlik"]
+                # Dip de kenar da modeldeki TAM seviyeye oturtulur;
+                # derinlik ikisinin tam farkıdır.
+                i_, m_ = ham_model(gad, dik, dip)
+                lv_dip = seviyeye_otur(seviye[i_], m_)
+                i_, m_ = ham_model(gad, dik, kenar)
+                lv_ken = seviyeye_otur(seviye[i_], m_)
+                if lv_dip is None or lv_ken is None:
+                    r["derinlik"] = None
+                    atlanan["derinlik"] += 1
+                    continue
+                r["derinlik"] = round(abs(model_ham(gad, dik, lv_dip)
+                                          - model_ham(gad, dik, lv_ken)), 4)
         if ozel or pencere:
             buyuk_ = max(kutu_[2] - kutu_[0], kutu_[3] - kutu_[1])
             sigar = max(1, int(buyuk_ / (4.0 * h)))
@@ -2112,13 +2355,57 @@ def konum_plani(o, gorunusler, ham, h, kenarlar=None, tol=0.05):
             # (ARKA, SOL, ALT) sıfır noktası izdüşümün ÖBÜR ucundadır.
             uc = datum_ucu(gad, ad)
             dat, oteki = (e1, e0) if uc else (e0, e1)
+            # Datum da bir TASARIM yüzeyi olmalı; yuvarlak bir kenarın ucu
+            # ya da eğik bir yüzün köşesi ise o yöndeki konumlar kesin bir
+            # yerden ölçülmüş olmaz - hiç verilmez.
+            if seviye is not None:
+                i_, m_ = ham_model(gad, ad, dat)
+                lv = seviyeye_otur(seviye[i_], m_)
+                if lv is None:
+                    atlanan["datum"] += 1
+                    cikti[ad] = []
+                    cikti[ad + "_simetrik"] = False
+                    continue
+                dat = model_ham(gad, ad, lv)       # tam seviye
+                i_, m_ = ham_model(gad, ad, oteki)
+                lv = seviyeye_otur(seviye[i_], m_)
+                if lv is not None:
+                    oteki = model_ham(gad, ad, lv)
+                if uc:
+                    e1, e0 = dat, oteki
+                else:
+                    e0, e1 = dat, oteki
             # Aynı sıradaki delikleri bir araya topla, dizi mi diye bak.
             obek = defaultdict(list)
             for q in nokta:
                 obek[round(q[1 - eksen] / max(tol, 1e-9))].append(q[eksen])
             dizi, tekil = [], set()
+            # Her konumun NEREDEN geldiği (delik, kesim, girinti, pencere):
+            # doğrulama hata oranını tür tür ölçer, sınırı aşan tür kapanır.
+            kaynak = defaultdict(set)
+
+            def otur(v):
+                """v'nin modeldeki TAM karşılığı (HAM koordinatta); 3B'de
+                karşılığı yoksa ya da belirsizse None."""
+                if seviye is None:
+                    return v
+                i_, m_ = ham_model(gad, ad, v)
+                lv = seviyeye_otur(seviye[i_], m_)
+                return None if lv is None else model_ham(gad, ad, lv)
+
+            def seviyeli(v):
+                return otur(v) is not None
+
+            def ekle(v, tur):
+                v = otur(v)
+                if v is None:
+                    atlanan[tur] += 1
+                    return
+                v = round(v, 4)
+                tekil.add(v)
+                kaynak[v].add(tur)
             for q in kesim:                # eğik kesimin uçları: tekil
-                tekil.add(round(q[eksen], 3))
+                ekle(q[eksen], "kesim")
             for r in ozel:                 # girintinin başı ve sonu
                 if r["yon"] != ad:
                     continue
@@ -2128,23 +2415,29 @@ def konum_plani(o, gorunusler, ham, h, kenarlar=None, tol=0.05):
                     # 483,04 / 125,48 / 112,52 gabarinin ikinci kopyası
                     # olarak resme giriyordu.
                     if min(abs(v - e0), abs(v - e1)) > 0.2:
-                        tekil.add(round(v, 3))
+                        ekle(v, "girinti")
             for r in pencere:              # pencerenin iki kenarı
                 k = r["kutu"]
-                tekil.add(round(k[eksen], 3))
-                tekil.add(round(k[eksen + 2], 3))
+                ekle(k[eksen], "pencere")
+                ekle(k[eksen + 2], "pencere")
             for _k, v in obek.items():
                 v = sorted(set(round(x, 3) for x in v))
                 dz = _dizi(v)
+                if dz and not all(seviyeli(v[0] + t * dz[1])
+                                  for t in range(dz[0])):
+                    atlanan["dizi"] += 1
+                    continue           # dizinin bir elemanı modelde yok
                 if dz:
-                    dizi.append({"bas": v[0], "son": v[-1],
+                    dizi.append({"bas": otur(v[0]), "son": otur(v[-1]),
                                  "adet": dz[0], "adim": dz[1]})
                 elif len(v) <= KONUM_EN_COK:
-                    tekil.update(v)
+                    for x in v:
+                        ekle(x, "delik")
                 else:
                     # Ne dizi ne az sayıda: yalnız uçlar verilir, tam
                     # liste olculer.csv'dedir. Aksi hâlde resim okunmaz.
-                    tekil.update((v[0], v[-1]))
+                    ekle(v[0], "delik")
+                    ekle(v[-1], "delik")
             # SİMETRİ: ayna görüntüsü olan konumları İKİ KEZ ölçme.
             # 175 mm'lik plakada delikler 10 / 13,2 / 161,8 / 165'te;
             # 10+165 = 13,2+161,8 = 175, yani parça ortadan simetrik.
@@ -2169,11 +2462,15 @@ def konum_plani(o, gorunusler, ham, h, kenarlar=None, tol=0.05):
                 else:
                     yakin, uzak = r["son"], r["bas"]
                 if abs(yakin - dat) > 0.2:
-                    ara.append({"a": dat, "b": yakin, "metin": None})
+                    ara.append({"a": dat, "b": yakin, "metin": None,
+                                "kaynak": ["dizi"]})
                 ara.append({"a": r["bas"], "b": r["son"],
-                            "metin": f"{r['adet'] - 1} x {r['adim']:g}"})
+                            "metin": f"{r['adet'] - 1} x {r['adim']:g}",
+                            "kaynak": ["dizi"], "adet": r["adet"],
+                            "adim": r["adim"]})
                 if abs(oteki - uzak) > 0.2:
-                    ara.append({"a": uzak, "b": oteki, "metin": None})
+                    ara.append({"a": uzak, "b": oteki, "metin": None,
+                                "kaynak": ["dizi"]})
             # 2) Tekil delikler: HEPSİ AYNI DATUMDAN
             for x in sorted(tekil):
                 # Dizinin içindeki bir deliği ikinci kez ölçme.
@@ -2184,7 +2481,8 @@ def konum_plani(o, gorunusler, ham, h, kenarlar=None, tol=0.05):
                 # okuyan hangi ölçünün nereden alındığını ayırt edemez.
                 # ISO 129-1 tek ortak referans ister.
                 if abs(x - dat) > 0.2:
-                    ara.append({"a": dat, "b": x, "metin": None})
+                    ara.append({"a": dat, "b": x, "metin": None,
+                                "kaynak": sorted(kaynak[x])})
             # Aynı ölçüyü iki kez yazma.
             gor, temiz = set(), []
             for r in ara:
@@ -2208,6 +2506,8 @@ def konum_plani(o, gorunusler, ham, h, kenarlar=None, tol=0.05):
                          "yatay_simetrik": cikti.get("yatay_simetrik", False),
                          "dusey_simetrik": cikti.get("dusey_simetrik", False),
                          "ozellik": ozel}
+    if rapor is not None:
+        rapor.update(atlanan)
     return plan
 
 
@@ -5007,7 +5307,15 @@ def dxf_komponent(s, o, k, yol, P):
     kenarlar = {gad: hlr(s, *GORUNUS[gad], gizli=P.get("gizli", True))
                 for gad in gorunusler}
     ham = {gad: _kenar_kutusu(k) for gad, k in kenarlar.items()}
-    kplan = (konum_plani(o, gorunusler, ham, h, kenarlar)
+    # 3B tasarım seviyeleri: görünüşten bulunan her konum modelde bir
+    # karşılığa denk gelmedikçe yazılmaz (bkz. tasarim_seviyeleri).
+    try:
+        seviye = tasarim_seviyeleri(s)
+    except Exception:
+        seviye = [[], [], []]      # ölçülemezse hiçbir konum geçmez
+    atlanan = Counter()
+    kplan = (konum_plani(o, gorunusler, ham, h, kenarlar, seviye=seviye,
+                         rapor=atlanan)
              if P.get("konum", True) else {})
     ust, kaydir, gkutu = {}, {}, {}
     for gad in gorunusler:

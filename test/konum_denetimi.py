@@ -527,14 +527,21 @@ def main():
     s6, o6 = O.komponent_olcu(sh6, P)
     ham6 = {g: O._kenar_kutusu(O.hlr(s6, *O.GORUNUS[g], gizli=False))
             for g in ("UST", "ALT")}
-    pl6 = O.konum_plani(o6, ("UST", "ALT"), ham6, 4.0)
+    # Her görünüş TEK BAŞINA kurulur: ikisi birlikteyken delik yalnız
+    # birinde ölçülür (aşağıda ayrıca sınanıyor).
     for g in ("UST", "ALT"):
+        pl6 = O.konum_plani(o6, (g,), {g: ham6[g]}, 4.0)
         boy = {yon: sorted(round(abs(r["b"] - r["a"]), 1)
                            for r in pl6[g][yon])
                for yon in ("yatay", "dusey")}
         print(f"     {g}: {boy}")
         esit(f"{g} yatay konum 30", boy["yatay"], [30.0])
         esit(f"{g} düşey konum 25", boy["dusey"], [25.0])
+
+    # İkisi birlikte: delik yalnız ilk görünüşte (çapının yazıldığı yerde).
+    pl6b = O.konum_plani(o6, ("UST", "ALT"), ham6, 4.0)
+    esit("delik konumu yalnız ÜST'te (ALT'ta tekrar yok)",
+         sorted(pl6b), ["UST"])
 
     print("\n-- datum simgeleri resimde bir kez")
     yol6 = os.path.join(kl, "P06_DATUM.dxf")
