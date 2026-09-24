@@ -1388,6 +1388,20 @@ def konum_plani(o, gorunusler, ham, h, kenarlar=None, tol=0.05):
                     # Ne dizi ne az sayıda: yalnız uçlar verilir, tam
                     # liste olculer.csv'dedir. Aksi hâlde resim okunmaz.
                     tekil.update((v[0], v[-1]))
+            # SİMETRİ: ayna görüntüsü olan konumları İKİ KEZ ölçme.
+            # 175 mm'lik plakada delikler 10 / 13,2 / 161,8 / 165'te;
+            # 10+165 = 13,2+161,8 = 175, yani parça ortadan simetrik.
+            # Dördünü de ölçmek gereksiz: ikisi yeter, gabari (175) ve
+            # simetri işareti öbür ikisini zaten verir. "Tekrarlanan
+            # öznitelik bir kez ölçülendirilir."
+            L = e1 - e0
+            orta = (e0 + e1) / 2.0
+            tekil_l = sorted(tekil)
+            simetrik = (len(tekil_l) >= 2 and L > 1e-9 and all(
+                any(abs((e0 + e1 - x) - y) <= max(0.05, 0.002 * L)
+                    for y in tekil_l) for x in tekil_l))
+            if simetrik:
+                tekil = {x for x in tekil_l if x <= orta + 0.05}
             ara = []
             # 1) Diziler: kenardan ilk deliğe + "n x adım" + kenara
             for r in dizi:
@@ -1420,13 +1434,53 @@ def konum_plani(o, gorunusler, ham, h, kenarlar=None, tol=0.05):
             # ölçü çizgileri kesişmesin.
             temiz.sort(key=lambda r: abs(r["b"] - r["a"]))
             cikti[ad] = temiz
+            cikti[ad + "_simetrik"] = simetrik and not dizi
         _seviyele(cikti.get("yatay", []), h)
         _seviyele(cikti.get("dusey", []), h)
         if cikti.get("yatay") or cikti.get("dusey"):
             plan[gad] = {"yatay": cikti.get("yatay", []),
-                         "dusey": cikti.get("dusey", [])}
+                         "dusey": cikti.get("dusey", []),
+                         "yatay_simetrik": cikti.get("yatay_simetrik", False),
+                         "dusey_simetrik": cikti.get("dusey_simetrik", False)}
     return plan
 
+
+def simetri_isareti(msp, plan, gkutu, h):
+    """Simetri ekseni ve işareti.
+
+    Simetrik konumların yalnız yarısı ölçülendiriliyor; bunun resimde
+    GÖRÜNMESİ şart. İşaret olmadan okuyan, öbür yarının nereye
+    geldiğini bilemez ve ölçü eksik sayılır.
+
+    İşaret (ISO 128): eksen çizgisinin her iki ucunda, eksene DİK iki
+    kısa paralel çizgi."""
+    for gad, pl in plan.items():
+        if gad not in gkutu:
+            continue
+        gk = gkutu[gad]
+        for yon in ("yatay", "dusey"):
+            if not pl.get(yon + "_simetrik"):
+                continue
+            c = 0.9 * h                    # işaret çizgilerinin yarı boyu
+            d = 0.45 * h                   # iki çizgi arası
+            if yon == "yatay":             # düşey eksen çizgisi
+                x = (gk[0] + gk[2]) / 2.0
+                y0, y1 = gk[1] - 1.6 * h, gk[3] + 1.6 * h
+                msp.add_line((x, y0), (x, y1), dxfattribs={"layer": "EKSEN"})
+                for y, yon_i in ((y0, 1), (y1, -1)):
+                    for k in (0, 1):
+                        yy = y + yon_i * k * d
+                        msp.add_line((x - c, yy), (x + c, yy),
+                                     dxfattribs={"layer": "EKSEN"})
+            else:                          # yatay eksen çizgisi
+                y = (gk[1] + gk[3]) / 2.0
+                x0, x1 = gk[0] - 1.6 * h, gk[2] + 1.6 * h
+                msp.add_line((x0, y), (x1, y), dxfattribs={"layer": "EKSEN"})
+                for x, yon_i in ((x0, 1), (x1, -1)):
+                    for k in (0, 1):
+                        xx = x + yon_i * k * d
+                        msp.add_line((xx, y - c), (xx, y + c),
+                                     dxfattribs={"layer": "EKSEN"})
 
 def konum_olculeri(msp, plan, kaydir, gkutu, h, en_cok_kademe=8):
     """Planı çizer ve YERİNİ ÖLÇEREK doğrular.
@@ -3964,6 +4018,8 @@ def dxf_komponent(s, o, k, yol, P):
         gkutu[gad] = (ox, oy, ox + G, oy + Y)
     merkez_cizgileri(msp, o, yer, kaydir)
     sinir = konum_olculeri(msp, kplan, kaydir, gkutu, h) if kplan else {}
+    if kplan:
+        simetri_isareti(msp, kplan, gkutu, h)
     if P.get("capraz", True):
         pah_notlari(msp, kenarlar, kaydir, gkutu, h)
     gabari_olculeri(msp, gkutu, sinir, h)

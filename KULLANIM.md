@@ -897,6 +897,18 @@ iki sebepten:
 
 Kısa ölçü içeride, uzun dışarıda durur; ölçü çizgileri kesişmez.
 
+**Ayna çiftleri iki kez ölçülmez.** 175 mm'lik plakada delikler 10 /
+13,2 / 161,8 / 165'te duruyorsa parça ortadan simetriktir
+(10+165 = 13,2+161,8 = 175). Dördünü de ölçmek gereksiz: **ikisi
+yeter**, gabari (175) ve simetri işareti öbür ikisini zaten verir —
+"tekrarlanan öznitelik bir kez ölçülendirilir". Simetri bulunduğunda
+resme **simetri ekseni ve işareti** (eksen çizgisinin uçlarında iki
+kısa paralel çizgi) konur; işaret olmadan okuyan öbür yarının nereye
+geldiğini bilemez.
+
+Simetri yalnız dağınık deliklerde aranır; eşit adımlı dizi zaten
+"n x adım" ile tek ölçüye inmiştir.
+
 #### Köşe pahı mı, eğik kesim mi
 
 Eksenlere paralel olmayan bir kenar resimde **iki ayrı şey** olabilir

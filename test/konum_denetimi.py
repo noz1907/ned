@@ -119,6 +119,37 @@ def main():
     dy = pl2["UST"]["dusey"]
     esit("düşeyde de tek datum", sorted({round(r["a"], 1) for r in dy}), [0.0])
 
+    print("\n-- simetri: ayna çiftleri iki kez ölçülmez")
+    # 175 x 100 plaka, delikler 10 / 13,2 / 161,8 / 165'te (ayna).
+    sim = plaka(175.0, 100.0, 5.0,
+                [(10.0, 15.0, 5.1), (10.0, 45.0, 5.1),
+                 (165.0, 15.0, 5.1), (165.0, 45.0, 5.1),
+                 (13.25, 90.0, 4.05), (161.75, 90.0, 4.05)])
+    s5, o5 = O.komponent_olcu(sim, P)
+    ham5 = {"UST": O._kenar_kutusu(O.hlr(s5, *O.GORUNUS["UST"], gizli=False))}
+    pl5 = O.konum_plani(o5, ("UST",), ham5, 4.0)
+    ux = sorted(round(r["b"] - r["a"], 2) for r in pl5["UST"]["yatay"])
+    print("     yatay ölçüler:", ux, " simetri:",
+          pl5["UST"]["yatay_simetrik"])
+    dogru("simetri bulundu", pl5["UST"]["yatay_simetrik"], "bulunamadı")
+    esit("yalnız iki delik konumu", ux, [10.0, 13.25])
+    dogru("161,8 ve 165 tekrar ölçülmedi",
+          not any(abs(v - 161.75) < 0.2 or abs(v - 165.0) < 0.2 for v in ux),
+          str(ux))
+    # Düşeyde simetri YOK (15 / 45 / 90): hepsi ölçülmeli.
+    dy5 = sorted(round(r["b"] - r["a"], 2) for r in pl5["UST"]["dusey"])
+    dogru("simetrik olmayan yön kısaltılmadı",
+          not pl5["UST"]["dusey_simetrik"] and len(dy5) >= 3, str(dy5))
+    # Simetri işareti resimde görünmeli.
+    yol5 = os.path.join(kl, "P05_SIM.dxf")
+    O.dxf_komponent(s5, o5, {"poz": 5, "kod": "SIM", "ad": "Simetrik plaka",
+                             "adet": 1, "malzeme_ad": "Celik"}, yol5, P)
+    d5 = ezdxf.readfile(yol5)
+    eks = [e for e in d5.modelspace()
+           if e.dxftype() == "LINE" and e.dxf.layer == "EKSEN"]
+    dogru("simetri ekseni ve işareti çizildi", len(eks) >= 5,
+          f"{len(eks)} eksen çizgisi")
+
     print("\n-- köşe pahı mı, eğik kesim mi")
     # 45°'lik pah: köşesi kesilmiş plaka.
     from OCP.BRepAlgoAPI import BRepAlgoAPI_Cut as _Cut
