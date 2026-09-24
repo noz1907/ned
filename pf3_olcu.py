@@ -475,6 +475,47 @@ def izdusum(p, gad):
     return (-p[i1] if tx else p[i1], -p[i2] if ty else p[i2])
 
 
+# ---------------------------------------------------------------- datum
+# ISO 5459 üç düzlemli datum çerçevesi. Parçanın kendi sınır kutusunun
+# en küçük köşesi sıfır noktası, o köşede buluşan üç yüzey A, B, C'dir.
+DATUM_HARF = ("A", "B", "C")
+
+
+def datum_cercevesi(L, W, T):
+    """Üç düzlemli datum çerçevesi; hangi eksene dik yüzey hangi harf?
+
+    STEP dosyasında datum/PMI bilgisi YOK - ölçtük: ornek/parca.stp'de
+    68 varlık tipi içinde tek bir DATUM, GEOMETRIC_TOLERANCE ya da
+    ANNOTATION geçmiyor, dosya saf geometri. Yani "ilk işlenen yüzey"
+    dosyadan türetilemez; program kendi çerçevesini kurar ve BÜTÜN
+    görünüşlerde ona sadık kalır. Önemli olan referansın hangi yüzey
+    olduğu değil, her ölçünün AYNI yerden gitmesidir.
+
+    Harf sırası alan büyüklüğüne göre: birincil datum (A) en geniş
+    yüzeydir, bağlamada üç nokta ona oturur. Bir eksene dik yüzeyin
+    alanı öbür iki ölçünün çarpımıdır, yani EN KÜÇÜK ölçüye dik yüzey
+    en geniştir. 175 x 80 x 5 plakada A, 175 x 80'lik yüzeydir.
+
+    Döner: {eksen indeksi (0=X, 1=Y, 2=Z): harf}"""
+    olc = (L, W, T)
+    sira = sorted(range(3), key=lambda i: (olc[i], i))
+    return {e: DATUM_HARF[n] for n, e in enumerate(sira)}
+
+
+def datum_ucu(gad, yon):
+    """Bu görünüşte datum, izdüşümün HANGİ ucundadır?
+
+    0 = düşük koordinatlı uç (sol / alt), 1 = yüksek uç (sağ / üst).
+
+    ÖN'de yatay eksen +X'tir, X'in sıfırı görünüşün solundadır. ARKA'ya
+    öbür taraftan bakılır, izdüşüm -X'tir: AYNI yüzey görünüşün SAĞINDA
+    çıkar. Datum yüzeyi değişmedi, yeri değişti. Bunu görmezden gelip
+    her görünüşte soldan ölçmek iki ayrı sıfır noktası demektir; ÖN'de
+    10 olan delik ARKA'da 165 çıkar ve resim kendi kendisiyle çelişir."""
+    _i1, _i2, tx, ty = GOR_EKSEN[gad]
+    return int(tx if yon == "yatay" else ty)
+
+
 def gorunus_olcusu(gad, L, W, T):
     """Görünüşün (genişlik, yükseklik) ölçüsü."""
     d = (L, W, T)
@@ -1089,6 +1130,34 @@ def _varlik_kutulari(msp):
         return []
 
 
+def _yazi_kutulari(msp):
+    """Resimdeki her YAZININ ölçülmüş sınırı; ölçü bloklarının içindeki
+    rakamlar da dâhil.
+
+    _varlik_kutulari yerine bunun gerektiği yer var: bir simge parçanın
+    KENDİ konturuna değecek şekilde konuyorsa (datum üçgeni yüzeyin
+    çizgisine oturur), varlık kutusuyla bakmak her yeri dolu gösterir -
+    görünüşün sınır kutusu bütün görünüştür. Sorulacak doğru soru,
+    simgenin bir YAZIYI kapatıp kapatmadığıdır."""
+    out = []
+    for e in msp:
+        t = e.dxftype()
+        if t in ("TEXT", "MTEXT"):
+            k = _yazi_siniri(e)
+            if k:
+                out.append(k)
+        elif t == "DIMENSION":
+            try:
+                for v in e.virtual_entities():
+                    if v.dxftype() in ("TEXT", "MTEXT"):
+                        k = _yazi_siniri(v)
+                        if k:
+                            out.append(k)
+            except Exception:
+                pass
+    return out
+
+
 def _olcu_yazi_kutusu(dim):
     """Çizilmiş bir ölçünün YAZISININ gerçek sınırı.
 
@@ -1320,12 +1389,57 @@ def _seviyele(araliklar, h):
     return len(kademe)
 
 
+KESIM_EN_AZ_ORAN = 0.10   # görünüşün uzun kenarına göre en kısa anlamlı kesim
+KESIM_EN_COK = 6          # bir görünüşte konumu verilecek en çok kesim
+KESIM_SINIR = 8           # bundan fazlası kesim değil, eğri siluettir
+
+
+def kesim_uclari(kenar, kutu_, log=None):
+    """Konumu verilecek EĞİK KESİMLERİN uçları.
+
+    Her eğik çizgi bir kesim değildir. Dövme ya da döküm bir parçanın
+    silueti HLR'den onlarca kısa eğik parçaya bölünmüş gelir; o bir
+    EĞRİdir, kesim değil. Ölçtük: 01.050.000.14'ün SOL görünüşünde 28
+    "eğik kenar" çıkıyor, 56 uç, 43 ayrı konum ölçüsü - resim okunmaz
+    olur ve o ölçülerin hiçbiri gerçek bir kesimi göstermez.
+
+    İki kapı:
+      1. Görünüşün uzun kenarının %10'undan kısa eğik gürültüdür.
+      2. Geriye KESIM_SINIR'dan fazlası kalıyorsa siluet eğridir;
+         program hangisinin gerçek kesim olduğunu ayırt EDEMEZ, o
+         yüzden hiçbirinin konumunu vermez. Yanlış ölçü vermektense
+         ölçü vermemek yeğdir - gabari, Ø ve delik konumları yerinde
+         kalır, kesim ölçüsü olculer.csv'den okunur.
+
+    Döner: [(x, y), ...] - konumu verilecek uç noktalar."""
+    if not kutu_:
+        return []
+    buyuk = max(kutu_[2] - kutu_[0], kutu_[3] - kutu_[1])
+    kes = [t for t in capraz_kenarlar(kenar)
+           if not t["pah"] and t["uz"] >= KESIM_EN_AZ_ORAN * buyuk]
+    if len(kes) > KESIM_SINIR:
+        if log:
+            log(f"    {len(kes)} eğik kenar: siluet eğri sayıldı, "
+                f"kesim konumu verilmedi")
+        return []
+    kes.sort(key=lambda t: -t["uz"])
+    uc = []
+    for t in kes[:KESIM_EN_COK]:
+        uc += [t["p0"], t["p1"]]
+    return uc
+
+
 def konum_plani(o, gorunusler, ham, h, kenarlar=None, tol=0.05):
     """Konum ölçülerinin planı - HİÇBİR ŞEY ÇİZMEDEN.
 
     YÖNTEM: DATUMDAN ÖLÇÜLENDİRME (baseline / parallel dimensioning).
-    Her konum ölçüsü görünüşün AYNI kenarından başlar. Zincir
-    (point-to-point) ölçülendirme kullanılmaz; iki sebepten:
+    Her konum ölçüsü AYNI sıfır noktasından başlar. Sıfır noktası
+    görünüşün sol/alt kenarı değil, PARÇANIN kendi XYZ çerçevesidir
+    (bkz. datum_cercevesi / datum_ucu): ekseni ters çevrilmiş bir
+    görünüşte aynı yüzey karşı kenarda çıkar, ölçü oradan gider.
+    Böylece ÖN'de 10 olan delik ÜST'te de 10'dur; resim iki ayrı
+    sıfır noktası taşımaz. Zincir (point-to-point) ölçülendirme
+    kullanılmaz; iki sebepten:
 
       1. Tolerans birikir. Zincirdeki her ölçünün toleransı bir
          sonrakine eklenir, son deliğin yeri ilk deliğinkinden çok
@@ -1359,16 +1473,18 @@ def konum_plani(o, gorunusler, ham, h, kenarlar=None, tol=0.05):
         # parçanın gerçek biçimidir; atölye nereden nereye keseceğini
         # ancak uçlarının kenarlardan yerinden bilir. (Pahlar buraya
         # girmez, onlar ok ucunda "5 x 5" diye verilir.)
-        kesim = []
-        if kenarlar and gad in kenarlar:
-            for t in capraz_kenarlar(kenarlar[gad]):
-                if not t["pah"]:
-                    kesim += [t["p0"], t["p1"]]
+        kesim = (kesim_uclari(kenarlar[gad], kutu_)
+                 if kenarlar and gad in kenarlar else [])
         if not nokta and not kesim:
             continue
         cikti = {}
         for ad, eksen, e0, e1 in (("yatay", 0, kutu_[0], kutu_[2]),
                                   ("dusey", 1, kutu_[1], kutu_[3])):
+            # DATUM parçanın kendi XYZ çerçevesinden gelir, görünüşün
+            # sol/alt kenarından değil. Ekseni ters çevrilmiş görünüşte
+            # (ARKA, SOL, ALT) sıfır noktası izdüşümün ÖBÜR ucundadır.
+            uc = datum_ucu(gad, ad)
+            dat, oteki = (e1, e0) if uc else (e0, e1)
             # Aynı sıradaki delikleri bir araya topla, dizi mi diye bak.
             obek = defaultdict(list)
             for q in nokta:
@@ -1401,17 +1517,23 @@ def konum_plani(o, gorunusler, ham, h, kenarlar=None, tol=0.05):
                 any(abs((e0 + e1 - x) - y) <= max(0.05, 0.002 * L)
                     for y in tekil_l) for x in tekil_l))
             if simetrik:
-                tekil = {x for x in tekil_l if x <= orta + 0.05}
+                # Ölçülen yarı, DATUMUN bulunduğu yarıdır.
+                tekil = {x for x in tekil_l
+                         if (x >= orta - 0.05 if uc else x <= orta + 0.05)}
             ara = []
-            # 1) Diziler: kenardan ilk deliğe + "n x adım" + kenara
+            # 1) Diziler: datumdan ilk deliğe + "n x adım" + öbür kenara
             for r in dizi:
-                if r["bas"] - e0 > 0.2:
-                    ara.append({"a": e0, "b": r["bas"], "metin": None})
+                if abs(r["bas"] - dat) <= abs(r["son"] - dat):
+                    yakin, uzak = r["bas"], r["son"]
+                else:
+                    yakin, uzak = r["son"], r["bas"]
+                if abs(yakin - dat) > 0.2:
+                    ara.append({"a": dat, "b": yakin, "metin": None})
                 ara.append({"a": r["bas"], "b": r["son"],
                             "metin": f"{r['adet'] - 1} x {r['adim']:g}"})
-                if e1 - r["son"] > 0.2:
-                    ara.append({"a": r["son"], "b": e1, "metin": None})
-            # 2) Tekil delikler: HEPSİ AYNI KENARDAN (datum)
+                if abs(oteki - uzak) > 0.2:
+                    ara.append({"a": uzak, "b": oteki, "metin": None})
+            # 2) Tekil delikler: HEPSİ AYNI DATUMDAN
             for x in sorted(tekil):
                 # Dizinin içindeki bir deliği ikinci kez ölçme.
                 if any(r["bas"] - 0.2 <= x <= r["son"] + 0.2 for r in dizi):
@@ -1420,11 +1542,13 @@ def konum_plani(o, gorunusler, ham, h, kenarlar=None, tol=0.05):
                 # kısaltır ama görünüşte İKİ AYRI DATUM oluşturur:
                 # okuyan hangi ölçünün nereden alındığını ayırt edemez.
                 # ISO 129-1 tek ortak referans ister.
-                if x - e0 > 0.2:
-                    ara.append({"a": e0, "b": x, "metin": None})
+                if abs(x - dat) > 0.2:
+                    ara.append({"a": dat, "b": x, "metin": None})
             # Aynı ölçüyü iki kez yazma.
             gor, temiz = set(), []
             for r in ara:
+                if r["a"] > r["b"]:   # çizim a<b bekler; ölçünün değeri aynı
+                    r["a"], r["b"] = r["b"], r["a"]
                 k = (round(r["a"], 2), round(r["b"], 2))
                 if k not in gor:
                     gor.add(k)
@@ -1481,6 +1605,86 @@ def simetri_isareti(msp, plan, gkutu, h):
                         xx = x + yon_i * k * d
                         msp.add_line((xx, y - c), (xx, y + c),
                                      dxfattribs={"layer": "EKSEN"})
+
+def datum_isaretleri(msp, harfler, gorunusler, gkutu, h):
+    """Datum yüzey simgeleri - ISO 5459.
+
+    Bütün konum ölçüleri artık parçanın kendi XYZ çerçevesinden
+    veriliyor. Okuyanın sıfırın NEREDE olduğunu görmesi gerekir; aksi
+    hâlde ölçülerin hepsinin aynı yerden gittiği bilgisi resimde
+    yazılı değil, yalnız bizim aklımızda kalır.
+
+    Simge: datum yüzeyinin çizgisine TABANI oturan içi dolu üçgen,
+    kısa bir kılavuz, kare çerçeve içinde harf.
+
+    Her datum BİR KEZ işaretlenir - göründüğü ilk görünüşte. Aynı
+    yüzeyi her görünüşte yeniden işaretlemek bilgi eklemez, kalabalık
+    yapar.
+
+    Döner: işaretlenen harfler kümesi."""
+    yazildi = set()
+    for gad in gorunusler:
+        gk = gkutu.get(gad)
+        if not gk:
+            continue
+        i1, i2, _tx, _ty = GOR_EKSEN[gad]
+        for eksen, yon in ((i1, "yatay"), (i2, "dusey")):
+            harf = harfler.get(eksen)
+            if not harf or harf in yazildi:
+                continue
+            if _datum_ciz(msp, gk, yon, datum_ucu(gad, yon), harf, h):
+                yazildi.add(harf)
+    return yazildi
+
+
+def _datum_ciz(msp, gk, yon, uc, harf, h):
+    """Tek datum simgesi.
+
+    Yeri TAHMİN EDİLMEZ: simgenin kaplayacağı yer hesaplanır, resimde
+    ölçülmüş olan her şeyle karşılaştırılır, çakışıyorsa kenar boyunca
+    kaydırılıp yeniden denenir. Ölçü çizgileri de aynı kenardan
+    çıkıyor - üstlerine basmasın."""
+    # Üçgenin TABANI datum yüzeyinin çizgisine oturur; varlık kutusuyla
+    # bakmak her yeri dolu gösterirdi. Bakılacak olan yazılardır.
+    dolu = _yazi_kutulari(msp)
+    t = 0.6 * h                        # üçgenin yarı tabanı = yüksekliği
+    d = 1.0 if uc else -1.0            # parçadan DIŞARI bakan yön
+    # Ölçü rakamları ölçünün ORTASINDA durur; simge kenarın uçlarına
+    # yakın dursun ki ilk denemede yerini bulsun.
+    for pay in (0.86, 0.14, 0.68, 0.32, 0.5):
+        if yon == "yatay":             # düşey kenar -> simge yanda
+            x = gk[2] if uc else gk[0]
+            y = gk[1] + pay * (gk[3] - gk[1])
+            taban = ((x, y - t), (x, y + t))
+            ucu = (x + d * 1.4 * t, y)
+            mrk = (ucu[0] + d * 1.9 * t, y)
+        else:                          # yatay kenar -> simge altta/üstte
+            y = gk[3] if uc else gk[1]
+            x = gk[0] + pay * (gk[2] - gk[0])
+            taban = ((x - t, y), (x + t, y))
+            ucu = (x, y + d * 1.4 * t)
+            mrk = (x, ucu[1] + d * 1.9 * t)
+        nokta = [taban[0], taban[1], ucu,
+                 (mrk[0] - t, mrk[1] - t), (mrk[0] + t, mrk[1] + t)]
+        kutu_ = (min(q[0] for q in nokta), min(q[1] for q in nokta),
+                 max(q[0] for q in nokta), max(q[1] for q in nokta))
+        if _cakisiyor(kutu_, dolu, 0.2 * h):
+            continue
+        msp.add_solid([taban[0], taban[1], ucu],
+                      dxfattribs={"layer": "OLCU"})
+        msp.add_line(ucu, mrk, dxfattribs={"layer": "OLCU"})
+        msp.add_lwpolyline(
+            [(mrk[0] - t, mrk[1] - t), (mrk[0] + t, mrk[1] - t),
+             (mrk[0] + t, mrk[1] + t), (mrk[0] - t, mrk[1] + t)],
+            close=True, dxfattribs={"layer": "OLCU"})
+        e = _yaz(msp, harf, mrk[0], mrk[1], 1.2 * t, kat="OLCU")
+        ky = _yazi_siniri(e)
+        if ky:                         # harf kutunun ortasına otursun
+            e.set_placement((mrk[0] - (ky[2] - ky[0]) / 2.0,
+                             mrk[1] - (ky[3] - ky[1]) / 2.0))
+        return True
+    return False
+
 
 def konum_olculeri(msp, plan, kaydir, gkutu, h, en_cok_kademe=8):
     """Planı çizer ve YERİNİ ÖLÇEREK doğrular.
@@ -4020,6 +4224,8 @@ def dxf_komponent(s, o, k, yol, P):
     sinir = konum_olculeri(msp, kplan, kaydir, gkutu, h) if kplan else {}
     if kplan:
         simetri_isareti(msp, kplan, gkutu, h)
+        # Ölçülerin hangi yüzeylerden gittiğini resimde göster.
+        datum_isaretleri(msp, datum_cercevesi(L, W, T), gorunusler, gkutu, h)
     if P.get("capraz", True):
         pah_notlari(msp, kenarlar, kaydir, gkutu, h)
     gabari_olculeri(msp, gkutu, sinir, h)

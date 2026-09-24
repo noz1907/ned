@@ -286,6 +286,81 @@ def main():
               if e.dxftype() == "LINE" and e.dxf.layer == "OLCU") >= len(pah),
           "kılavuz çizgisi yok")
 
+    print("\n-- eğri siluet: her eğik çizgi kesim değildir")
+    import math
+    # 20 kenarlı çokgen = aslında bir EĞRİ. Kenarlarının her birine
+    # konum ölçüsü vermek resmi okunmaz yapar ve hiçbiri gerçek bir
+    # kesimi göstermez; program ölçü vermemeyi seçmeli.
+    n, r = 20, 50.0
+    kose = [(r * math.cos(2 * math.pi * i / n),
+             r * math.sin(2 * math.pi * i / n)) for i in range(n)]
+    egri = {"GORUNEN": [[kose[i], kose[(i + 1) % n]] for i in range(n)],
+            "GIZLI": []}
+    kutu_egri = (-r, -r, r, r)
+    esit("eğri siluete kesim konumu verilmedi",
+         O.kesim_uclari(egri, kutu_egri), [])
+    # Denetim: üç uzun eğik kesim ölçülmeli.
+    uc = {"GORUNEN": [[(0.0, 0.0), (40.0, 40.0)],
+                      [(60.0, 0.0), (100.0, 35.0)],
+                      [(20.0, 90.0), (70.0, 60.0)]], "GIZLI": []}
+    esit("gerçek eğik kesimler ölçülüyor",
+         len(O.kesim_uclari(uc, (0.0, 0.0, 100.0, 100.0))), 6)
+    # Gürültü kapısı: görünüşün %10'undan kısa eğik sayılmaz.
+    kisa = {"GORUNEN": [[(0.0, 0.0), (3.0, 3.0)]], "GIZLI": []}
+    esit("kısa eğik gürültü sayıldı",
+         O.kesim_uclari(kisa, (0.0, 0.0, 100.0, 100.0)), [])
+
+    print("\n-- datum: parçanın kendi XYZ çerçevesi, her görünüşte AYNI")
+    # En geniş yüzey birincil datum (A) olmalı: 200 x 100 x 10'luk
+    # plakada Z'ye dik yüzey 200 x 100'dür, öbürleri daha küçük.
+    esit("A en geniş yüzeyde", O.datum_cercevesi(200.0, 100.0, 10.0)[2], "A")
+    esit("C en dar yüzeyde", O.datum_cercevesi(200.0, 100.0, 10.0)[0], "C")
+    # Ekseni ters çevrilen görünüşte sıfır KARŞI uçtadır.
+    esit("ÜST düşey datum alt uçta", O.datum_ucu("UST", "dusey"), 0)
+    esit("ALT düşey datum üst uçta", O.datum_ucu("ALT", "dusey"), 1)
+    esit("ÖN yatay datum sol uçta", O.datum_ucu("ON", "yatay"), 0)
+    esit("ARKA yatay datum sağ uçta", O.datum_ucu("ARKA", "yatay"), 1)
+
+    # ASIL SINAMA: aynı deliğin konumu ÜST'te ne yazıyorsa ALT'ta da
+    # onu yazmalı. ALT'a öbür taraftan bakılır, izdüşüm -Y'dir; datum
+    # görmezden gelinirse 25 yerine 75 çıkar ve resim kendiyle çelişir.
+    sh6 = plaka(200.0, 100.0, 10.0, [(30.0, 25.0, 5.0)])
+    s6, o6 = O.komponent_olcu(sh6, P)
+    ham6 = {g: O._kenar_kutusu(O.hlr(s6, *O.GORUNUS[g], gizli=False))
+            for g in ("UST", "ALT")}
+    pl6 = O.konum_plani(o6, ("UST", "ALT"), ham6, 4.0)
+    for g in ("UST", "ALT"):
+        boy = {yon: sorted(round(abs(r["b"] - r["a"]), 1)
+                           for r in pl6[g][yon])
+               for yon in ("yatay", "dusey")}
+        print(f"     {g}: {boy}")
+        esit(f"{g} yatay konum 30", boy["yatay"], [30.0])
+        esit(f"{g} düşey konum 25", boy["dusey"], [25.0])
+
+    print("\n-- datum simgeleri resimde bir kez")
+    yol6 = os.path.join(kl, "P06_DATUM.dxf")
+    P6 = dict(P); P6["gorunusler"] = ("ON", "SAG", "SOL", "UST")
+    O.dxf_komponent(s6, o6, {"poz": 6, "kod": "DATUM", "ad": "Datum plaka",
+                             "adet": 1, "malzeme_ad": "Celik"}, yol6, P6)
+    d6 = ezdxf.readfile(yol6)
+    harf = sorted(e.dxf.text for e in d6.modelspace()
+                  if e.dxftype() == "TEXT" and e.dxf.layer == "OLCU"
+                  and e.dxf.text in ("A", "B", "C"))
+    ucgen = sum(1 for e in d6.modelspace()
+                if e.dxftype() == "SOLID" and e.dxf.layer == "OLCU")
+    print("     datum harfleri:", harf, " üçgen:", ucgen)
+    esit("üç datum, her biri bir kez", harf, ["A", "B", "C"])
+    esit("her harfe bir üçgen", ucgen, 3)
+
+    import subprocess
+    r6 = subprocess.run([sys.executable,
+                         os.path.join(os.path.dirname(
+                             os.path.abspath(__file__)),
+                             "cizim_cakisma_denetimi.py"), yol6],
+                        capture_output=True, text=True)
+    dogru("datumlu resimde çakışma yok", "CAKISMA YOK" in r6.stdout,
+          r6.stdout.strip().splitlines()[-1] if r6.stdout else "?")
+
     print("\nSONUC: " + ("TUM DENETIMLER GECTI" if not HATA
                          else f"{len(HATA)} DENETIM KALDI: " + ", ".join(HATA)))
     return 1 if HATA else 0
