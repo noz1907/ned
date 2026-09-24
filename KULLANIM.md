@@ -924,10 +924,12 @@ aynı ölçüdekiler tek notta toplanır: `4x 5 x 5`.
 > İlk sürümde buna hipotenüs (`7,1`) ve açı (`45°`) veriliyordu.
 > İkisi de atölyenin işine yaramıyor, üstelik resmi kalabalıklaştırıyordu.
 
-**Eğik kesim.** Köşe kırma değil, parçanın gerçek biçimi. Bunun açısı
-değil, **uçlarının kenarlardan yeri** verilir — atölye nereden nereye
-keseceğini böyle bilir. Uçlar konum ölçüsü zincirine girer, yani
-onlar da datumdan ölçülür.
+**Eğik kesim.** Köşe kırma değil, parçanın gerçek biçimi. Dış hattaki
+eğik kesimler **girinti olarak**, uçlarının sanal keskin köşesinden
+ölçülür (aşağıda). İçerideki eğik çizgilerin uçlarına ayrıca konum
+verilmez: doğrulamada bu türün %70'inin bir yuvarlatmanın teğet
+noktasına, yani tasarımda karşılığı olmayan bir yere denk geldiği
+görüldü.
 
 Üç şart birden aranır, çünkü bir köşeden geçen **büyük** bir 45°
 kesim parçanın biçimidir, köşe kırma değil: 120 × 80 plakada 20 × 20
@@ -953,12 +955,77 @@ kaçıracağı ölçü stiline bağlıdır. Her ölçü çizilir, yazısının g
 sınırı ölçülür, çakışıyorsa silinip bir alt kademede yeniden denenir.
 Örnek montajın 16 resminde 435 yazıda sıfır çakışma.
 
-> **Henüz yok:** girinti/çıkıntı (oyuk, pencere, oval yuva) ölçüleri
-> ve form/büküm başlangıç konumları. Bunlar için konturun kapalı
-> halkalara ayrılması gerekiyor; HLR kenarları düğüm noktalarında
-> birden çok kola ayrıldığı için uçtan uca birleştirme yetmiyor,
-> graf üzerinden yüz çıkarmak gerekiyor. Kesit düzlemi en çok deliği
-> açan yerden geçiyor ama onun da iyileştirilmesi gerekiyor.
+#### Datum: parçanın kendi XYZ çerçevesi
+
+STEP dosyasında datum bilgisi yoktur (ölçüldü: örnek montajda tek bir
+DATUM ya da tolerans varlığı geçmiyor), "ilk işlenen yüzey" dosyadan
+bilinemez. Program kendi üç düzlemli çerçevesini kurar (ISO 5459):
+parçanın sınır kutusunun en küçük köşesi sıfır noktası, orada buluşan
+üç yüzey **A, B, C**. En geniş yüzey A'dır. Bütün görünüşler bu tek
+çerçeveden ölçülür; ekseni ters dönen görünüşte (ARKA, SOL, ALT) sıfır
+karşı kenardadır. Böylece ÜST'te 25 olan delik ALT'ta da 25'tir.
+A/B/C simgeleri (dolu üçgen + kare içinde harf) her biri bir kez,
+göründüğü ilk görünüşe konur.
+
+Bir delik yalnız **bir görünüşte** konumlanır — çapının yazıldığı
+görünüşte. SAĞ ile SOL aynı delikleri gösterir; ikisinde birden ölçmek
+tekrar olur.
+
+#### Girinti, çıkıntı ve iç pencere (yuva)
+
+Kenardan alınmış çentik, dışarı taşan kulak, köşe kesiği ve parçanın
+içindeki yuva / pencere de konumlanır:
+
+- **Girinti:** başı ve sonu datumdan; iç çentikse derinliği ayrıca.
+  Köşe kesiğine derinlik yazılmaz — iki bacağını iki konum verir.
+- **Çıkıntı:** ayrı bir tür değildir; dışarı taşan kulağın iki yanı
+  girinti olarak çıkar ve verilen ölçüler kulağın yerini verir.
+- **İç pencere (yuva, cep):** dört kenarı datumdan.
+
+**Sanal köşe.** Çentiğin ağzı yuvarlatılmışsa ölçü yayın teğet
+noktasına değil, doğru kenarın uzantısının kesiştiği **sanal keskin
+köşeye** verilir — tasarımın asıl ölçüsü odur. Örnek: Dachplatte'nin
+köşe kesiği teğet noktalarında 41,09 / 22,51 çıkıyordu; doğru ölçü
+45 / 20,05, yani 20 x 5'lik bir kesik.
+
+Kenarın ucundaki yuvarlatma girinti sayılmaz (R ölçüsü zaten var).
+Çok girintili bir kenar (dövme parçanın eğri hattı gibi) "düz kenar +
+çentik" değil biçimin kendisidir; ölçülmez.
+
+#### Hata oranı: her konum 3B modelle doğrulanır
+
+Kural: **hata olasılığı yüksek olan ölçü türü hiç yazılmaz.** Hedef
+%0,5–1'in altı.
+
+Program her konumu görünüşten (2B) bulur. Resme yazmadan önce aynı
+konumun 3B modelde gerçek bir **tasarım seviyesine** denk geldiğine
+bakar: o eksene dik düz yüzey, delik ekseni, silindirin ucu ya da eğik
+bir kenarın sanal köşesi. Denk gelmeyen ya da iki ayrı seviye arasında
+belirsiz kalan konum **yazılmaz**. Geçen değer modeldeki tam seviyeye
+oturtulur; basılan sayı tasarım ölçüsünün kendisidir.
+
+Ölçüldü (4 gerçek model, 183 parça): **1992 konum ölçüsünde 0 hata**
+— %95 güvenle oran %0,15'in altında. Bu denetim olmasa şasi montajında
+ölçülerin %6,4'ü yanlış olurdu (girintilerin %27'si).
+
+Bilerek yazılmayanlar:
+
+- Eksenlere tam paralel olmayan (0,06°'den fazla eğik) deliklerin
+  konumu — çapı yazılır. 0,4° eğik bir duvarda deliğin merkezi sacın
+  bir yüzünden öbürüne 0,02 mm kayıyordu.
+- Dövme, döküm ve eğri yüzeyli parçalarda karşılığı kesinleşmeyen
+  girinti ve konumlar.
+- Datumu gerçek bir yüzey olmayan yöndeki konumlar (yuvarlak bir
+  kenarın ucu, eğik bir yüzün köşesi).
+
+Kendi modelinizde denetlemek için:
+
+```
+python test/olcu_dogrulama.py model.stp            tür tür hata oranı
+python test/olcu_dogrulama.py --ayrinti model.stp  her hatayı yazar
+```
+
+> **Henüz yok:** form/büküm başlangıç konumları ve açısal ölçüler.
 
 ---
 
