@@ -29,11 +29,22 @@ import os
 
 from PyInstaller.utils.hooks import collect_all, collect_data_files
 
-# PI3D_LOGO=0 / yok / hayir  -> logosuz surum.
+# PI3D_LOGO=0 / yok / hayir  -> logosuz "FIRMA" surumu.
+#
+# Iki surum vardir ve birbirinin yerine gecer:
+#   1 = PI3D   Pi3D + PiVision logolari gomulu, FIRMA ANTETI YOK
+#   2 = FIRMA  Pi3D logolari yok, bunun yerine antet/ klasorundeki
+#              firma anteti pakete girer ve paftalarda kullanilir
+# Firmanin kendi anteti varken Pi3D'nin logosunu da basmak dogru
+# degildir: resim firmanindir.
 LOGOLU = os.environ.get("PI3D_LOGO", "1").strip().lower() not in (
     "0", "yok", "hayir", "hayır", "no", "false", "off")
-print(f"pi3d.spec: {'LOGOLU' if LOGOLU else 'LOGOSUZ'} surum derleniyor "
-      f"(PI3D_LOGO={os.environ.get('PI3D_LOGO', '1')})")
+ANTETLI = not LOGOLU
+if ANTETLI and not os.path.isdir("antet"):
+    ANTETLI = False
+    print("pi3d.spec: antet/ klasoru yok - program antetsiz calisacak.")
+print(f"pi3d.spec: {'PI3D (logolu, antetsiz)' if LOGOLU else 'FIRMA (antetli)'}"
+      f" surum derleniyor (PI3D_LOGO={os.environ.get('PI3D_LOGO', '1')})")
 
 # OCP (OpenCascade) saf .pyd + yanindaki DLL'lerdir; PyInstaller bunlari
 # kendiliginden bulamaz, hepsini acikca toplamak gerekir.
@@ -58,9 +69,10 @@ a = Analysis(
     # altinda ayni adla acilir), ama program once pi3d_logo icindeki
     # gomulu kopyayi kullanir.
     datas=ocp_data + ezdxf_data + collect_data_files("matplotlib")
-          + ([("logo/*", "logo")] if LOGOLU else []),
+          + ([("logo/*", "logo")] if LOGOLU else [])
+          + ([("antet/*", "antet")] if ANTETLI else []),
     hiddenimports=ocp_gizli + ezdxf_gizli + [
-        "pf3_olcu", "pf4_pafta", "pf1_referans",
+        "pf3_olcu", "pf4_pafta", "pf5_antet", "pf1_referans",
         "matplotlib.backends.backend_agg",
     ] + (["pi3d_logo"] if LOGOLU else []),
     hookspath=[],

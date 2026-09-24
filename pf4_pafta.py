@@ -429,15 +429,21 @@ def olcek_metni(o):
     return f"{round(o)}:1"
 
 
-def cerceve(kagit=VARSAYILAN_KAGIT):
-    """Çerçevenin köşeleri (x0, y0, x1, y1)."""
+def cerceve(kagit=VARSAYILAN_KAGIT, sablon=None):
+    """Çerçevenin köşeleri (x0, y0, x1, y1).
+
+    Firma anteti kullanılıyorsa çerçeve de ONUN çerçevesidir: antet ve
+    çerçeve aynı çizimden gelir, ikisini ayırmak resmin kenar paylarını
+    firmanınkinden farklı yapardı."""
     if kagit not in KAGIT:
         raise PaftaYok(f"Bilinmeyen kâğıt: {kagit}")
     g, y = KAGIT[kagit]
+    if sablon is not None:
+        return sablon.cerceve((g, y))
     return (KENAR, KENAR, g - KENAR, y - KENAR)
 
 
-def antet_kutusu(kagit=VARSAYILAN_KAGIT):
+def antet_kutusu(kagit=VARSAYILAN_KAGIT, sablon=None):
     """Sağ alt köşede BOŞ bırakılan alan (x0, y0, x1, y1).
 
     Buraya asla resim gelmez; firma kendi antetini oraya yapıştırır.
@@ -446,11 +452,13 @@ def antet_kutusu(kagit=VARSAYILAN_KAGIT):
 
     Ölçüsü kâğıttan kâğıda değişmez: antet A3'te ne kadarsa A1'de de
     o kadardır. Yazı boyları kâğıtla büyümez."""
+    if sablon is not None:
+        return sablon.antet_kutusu(KAGIT[kagit])
     x0, y0, x1, y1 = cerceve(kagit)
     return (max(x0, x1 - ANTET_EN), y0, x1, min(y1, y0 + ANTET_BOY))
 
 
-def cizim_alanlari(kagit=VARSAYILAN_KAGIT):
+def cizim_alanlari(kagit=VARSAYILAN_KAGIT, sablon=None):
     """Çizimin oturabileceği iki dikdörtgen.
 
     Antet kutusu sağ alt köşeyi yediği için kalan boşluk L biçimindedir.
@@ -462,13 +470,15 @@ def cizim_alanlari(kagit=VARSAYILAN_KAGIT):
     kadar (12 mm) boşluk bırakılır. Çerçeveye yapışmış bir resim hem
     kötü görünür hem de baskıda kenara taşma riski taşır. Çerçevenin
     üstünde ayrıca BASLIK_SERIT kadar yer resim no ve isim içindir."""
-    fx0, fy0, fx1, fy1 = cerceve(kagit)
-    ax0, _, _, ay1 = antet_kutusu(kagit)
+    fx0, fy0, fx1, fy1 = cerceve(kagit, sablon)
+    ax0, _, _, ay1 = antet_kutusu(kagit, sablon)
     p = IC_PAY
     # Resim no/isim, çerçevenin üstündeki İÇ PAYIN İÇİNE yazılır; o pay
     # zaten boştu. Ayrıca yer ayırmak gereksiz yere ölçek düşürüyordu -
     # A3'te 1:2 yerine 1:5, yani resim yarı yarıya küçülüyordu.
-    ust = fy1 - max(p, BASLIK_SERIT + 1.0)
+    # Firma anteti varsa resim no ve isim ANTETE yazılır; çerçevenin
+    # üstünde ayrıca başlık şeridine gerek yoktur.
+    ust = fy1 - (p if sablon is not None else max(p, BASLIK_SERIT + 1.0))
     return {"ust": (fx0 + p, ay1 + p, fx1 - p, ust),
             "sol": (fx0 + p, fy0 + p, ax0 - p, ust)}
 
@@ -493,7 +503,7 @@ def sigan_olcek(gx, gy, alan_g, alan_y, buyutme=False):
     return None
 
 
-def yerlesim(gx, gy, kagit=VARSAYILAN_KAGIT, buyutme=False):
+def yerlesim(gx, gy, kagit=VARSAYILAN_KAGIT, buyutme=False, sablon=None):
     """Çizim bu kâğıda nasıl oturur.
 
     Döner: {"olcek":, "yer": "ust"/"sol", "alan": (x0,y0,x1,y1),
@@ -503,21 +513,25 @@ def yerlesim(gx, gy, kagit=VARSAYILAN_KAGIT, buyutme=False):
     Yön ekiyle bir kâğıt verilirse ("A3-D") yalnız o yön denenir.
     Yönsüz verilirse ("A3") İKİ YÖN DE denenir ve daha büyük ölçek
     veren seçilir; eşitse yatay kalır (teknik resimde alışılmış olan
-    odur, ayrıca dosyalama kolaylığı)."""
-    adaylar = kagit_yonleri(kagit) if not dikey_mi(kagit) else (kagit,)
+    odur, ayrıca dosyalama kolaylığı).
+
+    Firma anteti kullanılıyorsa yön aranmaz: antet yatay çizilmiştir,
+    dikey karşılığı yoktur."""
+    adaylar = ((kagit_yonleri(kagit) if not dikey_mi(kagit) else (kagit,))
+               if sablon is None else (kagit_boyu(kagit),))
     en_iyi = None
     for kg in adaylar:
-        for yer, a in cizim_alanlari(kg).items():
+        for yer, a in cizim_alanlari(kg, sablon).items():
             o = sigan_olcek(gx, gy, a[2] - a[0], a[3] - a[1], buyutme)
             if o and (en_iyi is None or o > en_iyi["olcek"]):
                 en_iyi = {"olcek": o, "yer": yer, "alan": a, "kagit": kg}
     return en_iyi
 
 
-def kagit_sec(gx, gy, adaylar=KAGIT_BOY, en_az_olcek=1.0):
+def kagit_sec(gx, gy, adaylar=KAGIT_BOY, en_az_olcek=1.0, sablon=None):
     """Çizimi istenen ölçekte alan EN KÜÇÜK kâğıt (yön ekiyle). Yoksa None."""
     for k in adaylar:
-        y = yerlesim(gx, gy, k)
+        y = yerlesim(gx, gy, k, sablon=sablon)
         if y and y["olcek"] >= en_az_olcek - 1e-9:
             return y.get("kagit", k)
     return None
@@ -697,7 +711,8 @@ def turkce_duzelt(d):
     return n
 
 
-def _pafta_cerceve_ciz(pafta, kagit, resim_no="", resim_adi="", bilgi=""):
+def _pafta_cerceve_ciz(pafta, kagit, resim_no="", resim_adi="", bilgi="",
+                       sablon=None, antet_degerleri=None):
     """Standart pafta çerçevesini çizer.
 
         - kâğıdın kenarında ince dış çizgi
@@ -735,6 +750,13 @@ def _pafta_cerceve_ciz(pafta, kagit, resim_no="", resim_adi="", bilgi=""):
                                                     "style": stil})
         t.set_placement((x, y), align=ezdxf.enums.TextEntityAlignment.MIDDLE_CENTER)
         return t
+
+    if sablon is not None:
+        # Firma anteti: çerçeve, bölge işaretleri, antet ve logo hepsi
+        # firmanın kendi çiziminden gelir. Pi3D'nin sade çerçevesi
+        # çizilmez - ikisi üst üste binerdi.
+        sablon.ciz(pafta, (kg, ky), antet_degerleri or {}, stil=stil)
+        return
 
     dikdortgen(DIS_PAY, DIS_PAY, kg - DIS_PAY, ky - DIS_PAY, KAT_CERCEVE, 13)
     dikdortgen(fx0, fy0, fx1, fy1, KAT_CERCEVE, 50)
@@ -808,7 +830,7 @@ def _pafta_cerceve_ciz(pafta, kagit, resim_no="", resim_adi="", bilgi=""):
 
 def pafta_kur(kaynak_dxf, cikti_dxf=None, kagit=VARSAYILAN_KAGIT, olcek=None,
               buyutme=False, pafta_adi="PAFTA", bilgi=True, cok=True,
-              resim_no=None, resim_adi=None):
+              resim_no=None, resim_adi=None, sablon=None, antet=None):
     """1:1 DXF'in KOPYASINA standart bir pafta ekler.
 
     kaynak_dxf : 1:1 çizim.
@@ -834,8 +856,13 @@ def pafta_kur(kaynak_dxf, cikti_dxf=None, kagit=VARSAYILAN_KAGIT, olcek=None,
     cok        : görünüşleri ayrı pencerelere alıp kâğıda ortadan dışa
                  eşit aralıklarla dağıt. Resimde görünüş işareti yoksa
                  ya da bölünemiyorsa kendiliğinden tek pencereye düşer.
-    resim_no   : sağ üst köşeye yazılır; verilmezse dosya adı kullanılır
-    resim_adi  : resim no'nun altına yazılır (parçanın adı)
+    resim_no   : sağ üst köşeye (antetli paftada "Drawing No." kutusuna)
+                 yazılır; verilmezse dosya adı kullanılır
+    resim_adi  : resim no'nun altına (antetli paftada "Part Name")
+    sablon     : pf5_antet.Sablon - firma anteti. Verilirse çerçeve,
+                 bölge işaretleri ve antet firmanın çiziminden gelir.
+    antet      : antet kutularına yazılacak değerler
+                 {"malzeme":..., "kutle":..., "cizen":..., "tarih":...}
 
     Döner: {"olcek":, "olcek_metni":, "kagit":, "yer":, "olcu": (gx,gy),
             "alan": (g,y), "dosya":}
@@ -844,6 +871,7 @@ def pafta_kur(kaynak_dxf, cikti_dxf=None, kagit=VARSAYILAN_KAGIT, olcek=None,
         raise PaftaYok(f"Bilinmeyen kâğıt: {kagit}")
     istenen = kagit
 
+    hedef_adi = cikti_dxf or kaynak_dxf
     d = ezdxf.readfile(kaynak_dxf)
     # Dosya nasılsa baştan yazılacak: eski çizimlerdeki SHX fontlu yazılar
     # da bu arada Türkçe gösteren stile taşınır (bkz. turkce_duzelt).
@@ -858,13 +886,14 @@ def pafta_kur(kaynak_dxf, cikti_dxf=None, kagit=VARSAYILAN_KAGIT, olcek=None,
     # büyük ölçek veren kazanır. Uzun bir parça dik duruyorsa yatay
     # kâğıtta 1:50'ye düşüp okunmaz oluyordu; aynı parça dikey kâğıtta
     # 1:20 çıkıyor. Eşitlikte yatay kalır: adaylar sırası öyle.
-    adaylar = kagit_yonleri(istenen) if not dikey_mi(istenen) else (istenen,)
+    adaylar = ((kagit_yonleri(istenen) if not dikey_mi(istenen) else (istenen,))
+               if sablon is None else (kagit_boyu(istenen),))
 
     # --- görünüşleri kâğıda eşit dağıtan plan (varsa)
     plan, kagit = None, adaylar[0]
     if cok and olcek is None:
         for kg_ad in adaylar:
-            for ad, a in cizim_alanlari(kg_ad).items():
+            for ad, a in cizim_alanlari(kg_ad, sablon).items():
                 p = cok_pencere_plani(d, (x0, y0, x1, y1),
                                       a[2] - a[0], a[3] - a[1])
                 if p and (plan is None or p["olcek"] > plan["olcek"]):
@@ -875,7 +904,7 @@ def pafta_kur(kaynak_dxf, cikti_dxf=None, kagit=VARSAYILAN_KAGIT, olcek=None,
     if olcek is None:
         # Dağıtılmış plan tek pencereden daha büyük ölçek vermiyorsa
         # kullanılmaz: amaç resmi büyütmek.
-        tek = yerlesim(gx, gy, istenen, buyutme)
+        tek = yerlesim(gx, gy, istenen, buyutme, sablon)
         if plan and tek and tek["olcek"] > plan["olcek"]:
             plan = None
         if plan:
@@ -894,7 +923,7 @@ def pafta_kur(kaynak_dxf, cikti_dxf=None, kagit=VARSAYILAN_KAGIT, olcek=None,
     else:
         yer = None
         for kg_ad in adaylar:
-            for ad, a in cizim_alanlari(kg_ad).items():
+            for ad, a in cizim_alanlari(kg_ad, sablon).items():
                 if (gx * olcek <= a[2] - a[0] + 1e-6
                         and gy * olcek <= a[3] - a[1] + 1e-6):
                     yer, kagit = {"olcek": olcek, "yer": ad, "alan": a}, kg_ad
@@ -908,7 +937,7 @@ def pafta_kur(kaynak_dxf, cikti_dxf=None, kagit=VARSAYILAN_KAGIT, olcek=None,
                 f"{os.path.basename(kaynak_dxf)}: {gx:.0f}x{gy:.0f} mm çizim "
                 f"{olcek_metni(olcek)} ölçekte "
                 f"{gx * olcek:.0f}x{gy * olcek:.0f} mm yer ister; {kagit} "
-                f"paftada en büyük boşluk {_en_buyuk_alan_metni(kagit)}. "
+                f"paftada en büyük boşluk {_en_buyuk_alan_metni(kagit, sablon)}. "
                 "Ölçeği küçültün ya da kâğıdı büyütün.")
     alan = yer["alan"]
     ag, ay = alan[2] - alan[0], alan[3] - alan[1]
@@ -926,9 +955,9 @@ def pafta_kur(kaynak_dxf, cikti_dxf=None, kagit=VARSAYILAN_KAGIT, olcek=None,
     else:
         pg, py = max(gx * olcek, 1e-6), max(gy * olcek, 1e-6)
     pg, py = max(pg, 1e-6), max(py, 1e-6)
-    fx0, fy0, fx1, fy1 = cerceve(kagit)
+    fx0, fy0, fx1, fy1 = cerceve(kagit, sablon)
     ox, oy = (fx0 + fx1) / 2.0, (fy0 + fy1) / 2.0
-    kutu = antet_kutusu(kagit)
+    kutu = antet_kutusu(kagit, sablon)
 
     def _uygun(cx, cy):
         """Bu merkezde duran çizim çerçevenin içinde, kenarlardan ve
@@ -948,7 +977,7 @@ def pafta_kur(kaynak_dxf, cikti_dxf=None, kagit=VARSAYILAN_KAGIT, olcek=None,
         mx, my = ox, oy
     else:
         aday = []
-        for a in cizim_alanlari(kagit).values():
+        for a in cizim_alanlari(kagit, sablon).values():
             if pg > a[2] - a[0] + 1e-6 or py > a[3] - a[1] + 1e-6:
                 continue
             cx = _kis(ox, a[0] + pg / 2, a[2] - pg / 2)
@@ -993,7 +1022,17 @@ def pafta_kur(kaynak_dxf, cikti_dxf=None, kagit=VARSAYILAN_KAGIT, olcek=None,
     if resim_adi:
         sig = max(4, int(kg2 / (HARF_ORAN * BASLIK_ALT_YAZI)) - len(not_) - 3)
         resim_adi = str(resim_adi)[:sig]
-    _pafta_cerceve_ciz(pafta, kagit, no, resim_adi or "", not_)
+    deger = None
+    if sablon is not None:
+        # Antet kutularına ne yazılacak. Ölçek ve dosya adı burada
+        # bilinir; malzeme, kütle, çizen ve tarih çağırandan gelir.
+        deger = dict(antet or {})
+        deger.setdefault("olcek", olcek_metni(olcek))
+        deger.setdefault("resim_no", no)
+        deger.setdefault("parca_adi", resim_adi or "")
+        deger.setdefault("dosya", os.path.basename(hedef_adi))
+    _pafta_cerceve_ciz(pafta, kagit, no, resim_adi or "", not_,
+                       sablon=sablon, antet_degerleri=deger)
 
     # --- pencere(ler): 1:1 çizime buradan bakılır
     if plan:
@@ -1018,7 +1057,7 @@ def pafta_kur(kaynak_dxf, cikti_dxf=None, kagit=VARSAYILAN_KAGIT, olcek=None,
         d.layouts.set_active_layout(pafta_adi)
     except Exception:
         pass
-    hedef = cikti_dxf or kaynak_dxf
+    hedef = hedef_adi
     os.makedirs(os.path.dirname(os.path.abspath(hedef)) or ".", exist_ok=True)
     if cikti_dxf:
         d.saveas(cikti_dxf)
@@ -1039,8 +1078,8 @@ def pafta_kur(kaynak_dxf, cikti_dxf=None, kagit=VARSAYILAN_KAGIT, olcek=None,
             "obek": (round(pg, 1), round(py, 1))}
 
 
-def _en_buyuk_alan_metni(kagit):
-    a = cizim_alanlari(kagit)
+def _en_buyuk_alan_metni(kagit, sablon=None):
+    a = cizim_alanlari(kagit, sablon)
     return "  /  ".join(f"{(v[2] - v[0]):.0f}x{(v[3] - v[1]):.0f} mm"
                         for v in a.values())
 
@@ -1101,7 +1140,7 @@ def bas(dxf_yolu, cikti, pafta_adi="PAFTA", siyah=True, dpi=300):
 
 
 # --------------------------------------------------------------- toplu
-def kagit_plani(dosyalar, tercih=VARSAYILAN_KAGIT):
+def kagit_plani(dosyalar, tercih=VARSAYILAN_KAGIT, sablon=None):
     """Hangi çizim seçilen kâğıda hangi ölçekte oturur.
 
     Hiçbir dosya yazmaz, sadece bakar. Kullanıcı "hangisi 1:1 çıkıyor,
@@ -1116,27 +1155,30 @@ def kagit_plani(dosyalar, tercih=VARSAYILAN_KAGIT):
             continue
         # Yön ekli bir tercih gelmediyse iki yön de denenir; seçilen yön
         # kayda yazılır ki kullanıcı listede "A3 dikey" görsün.
-        ye = yerlesim(gx, gy, tercih)
+        ye = yerlesim(gx, gy, tercih, sablon=sablon)
         kayit = {"dosya": y, "olcu": (gx, gy),
                  "kagit": (ye or {}).get("kagit", tercih),
                  "olcek": ye["olcek"] if ye else None,
                  "yer": ye["yer"] if ye else None}
         if not ye:
-            kayit["birebir_kagit"] = kagit_sec(gx, gy)
-            kayit["secenek"] = [(yerlesim(gx, gy, k)["kagit"],
-                                 yerlesim(gx, gy, k)["olcek"])
-                                for k in KAGIT_BOY if yerlesim(gx, gy, k)]
+            kayit["birebir_kagit"] = kagit_sec(gx, gy, sablon=sablon)
+            kayit["secenek"] = [(yerlesim(gx, gy, k, sablon=sablon)["kagit"],
+                                 yerlesim(gx, gy, k, sablon=sablon)["olcek"])
+                                for k in KAGIT_BOY
+                                if yerlesim(gx, gy, k, sablon=sablon)]
             sigmayan.append(kayit)
         elif abs(ye["olcek"] - 1.0) < 1e-9:
             birebir.append(kayit)
         else:
-            kayit["birebir_kagit"] = kagit_sec(gx, gy)
+            kayit["birebir_kagit"] = kagit_sec(gx, gy, sablon=sablon)
             kayit["daha_iyi"] = next(
-                ((yerlesim(gx, gy, k)["kagit"], yerlesim(gx, gy, k)["olcek"])
+                ((yerlesim(gx, gy, k, sablon=sablon)["kagit"],
+                  yerlesim(gx, gy, k, sablon=sablon)["olcek"])
                  for k in KAGIT_BOY
                  if KAGIT[k][0] > KAGIT[kagit_boyu(tercih)][0]
-                 and yerlesim(gx, gy, k)
-                 and yerlesim(gx, gy, k)["olcek"] > ye["olcek"]), None)
+                 and yerlesim(gx, gy, k, sablon=sablon)
+                 and yerlesim(gx, gy, k, sablon=sablon)["olcek"] > ye["olcek"]),
+                None)
             olcekli.append(kayit)
         try:
             kayit["yazi_mm"] = round(en_kucuk_yazi(y) * (kayit["olcek"] or 1), 2)
@@ -1146,7 +1188,8 @@ def kagit_plani(dosyalar, tercih=VARSAYILAN_KAGIT):
             "hata": hata, "kagit": tercih}
 
 
-def toplu_pafta(isler, cikti_klasor=None, resim_no=None, resim_adi=None):
+def toplu_pafta(isler, cikti_klasor=None, resim_no=None, resim_adi=None,
+                sablon=None, antet=None):
     """isler: [{"dosya":..., "kagit":"A3", "olcek": None}, ...]
 
     cikti_klasor None ise pafta ÇİZİMLERİN KENDİ İÇİNE eklenir; bir
@@ -1164,7 +1207,9 @@ def toplu_pafta(isler, cikti_klasor=None, resim_no=None, resim_adi=None):
                    if cikti_klasor else None)
             r = pafta_kur(y, cik, kagit, olcek=it.get("olcek"),
                           resim_no=it.get("resim_no", resim_no),
-                          resim_adi=it.get("resim_adi", resim_adi))
+                          resim_adi=it.get("resim_adi", resim_adi),
+                          sablon=sablon,
+                          antet=dict(antet or {}, **it.get("antet", {})))
             r["kaynak"] = y
             yapilan.append(r)
         except Exception as e:

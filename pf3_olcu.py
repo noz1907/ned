@@ -2946,20 +2946,39 @@ def poz_numaralari(komp, poz_harita=None):
     return out
 
 
-def resim_dosyasi(poz, ad, acinim=False):
+def resim_dosyasi(poz, kod, ad=None, acinim=False):
     """Bir parçanın resim dosyası adı.
 
+    Poz + çizim no + parça adı: P05_01_050_000_01_U-Blech.dxf
+    Dosyadan parçayı tanımak için ikisi birlikte gerekir - çizim no
+    hangi resim olduğunu, parça adı ne olduğunu söyler. Parça adı
+    yoksa ya da çizim no'nun aynısıysa tekrar yazılmaz.
+
     Detay resmi ile açınımı AYNI ADI taşır, açınımın sonuna "_acinim"
-    eklenir: P05_01_050_000_01.dxf ve P05_01_050_000_01_acinim.dxf.
-    Eskiden açınım "A5_..." diye ayrı bir harfle başlıyordu; aynı
-    parçanın iki resmi klasörde yan yana durmuyor, poz numarası da
-    sıfırsız yazıldığı için sıralama bozuluyordu."""
-    sade = re.sub(r"[^\w\-]+", "_", str(ad or "?"))[:34]
+    eklenir. Eskiden açınım "A5_..." diye ayrı bir harfle başlıyordu;
+    aynı parçanın iki resmi klasörde yan yana durmuyor, poz numarası
+    da sıfırsız yazıldığı için sıralama bozuluyordu."""
+    def sade(v, n=34):
+        return re.sub(r"[^\w\-]+", "_", str(v or "")).strip("_")[:n]
+
+    # Çizim no yoksa parça adı onun yerine geçer; "?" gibi bir şey
+    # yazılmaz - Windows dosya adında "?" kullanılamaz.
+    k = sade(kod) or sade(ad) or "isimsiz"
+    a = sade(ad, 60)
+    # CAD'lerde parça adı çoğu zaman kodla BAŞLAR
+    # ("01.051.000.01 C-Profil-Runge XL-H"). Olduğu gibi eklersek dosya
+    # adında kod iki kez çıkar:
+    #   P01_01_051_000_01_01_051_000_01_C-Profil-Runge.dxf
+    # Baştaki tekrar atılır, kalan ad eklenir.
+    if a.lower().startswith(k.lower()):
+        a = a[len(k):].strip("_")
+    a = a[:28].strip("_")
     try:
         p = f"P{int(poz):02d}"
     except (TypeError, ValueError):
         p = "P00"
-    return f"{p}_{sade}" + ("_acinim" if acinim else "") + ".dxf"
+    return (f"{p}_{k}" + (f"_{a}" if a else "")
+            + ("_acinim" if acinim else "") + ".dxf")
 
 
 def sac_parcalari(kayit, komp, log=print):
@@ -3021,7 +3040,8 @@ def acilim_yaz(kayit, komp, P, klasor, kodlar=None, k_faktor=K_FAKTOR,
             log(f"  {ad}: hata - {type(e).__name__}: {e}")
             continue
         dosya = os.path.join(klasor,
-                             resim_dosyasi(poz or (i + 1), ad, acinim=True))
+                             resim_dosyasi(poz or (i + 1), ad,
+                                           k.get("ad"), acinim=True))
         dxf_acilim(r, dict(k, poz=poz), dosya, P)
         r["kod"] = ad
         r["ad"] = k.get("ad", "")
@@ -3741,7 +3761,7 @@ def calistir(step, on, kayit, komp, P, asama=(1, 2, 3), esl=None, agac=None,
         sat["kg_adet"] = o["kutle_kg"]
         sat["toplam_kg"] = round(o["kutle_kg"] * k["adet"], 4)
         if 2 in asama and id(k) in ciz_id:
-            dosya = resim_dosyasi(gercek_poz, k["kod"] or k["ad"])
+            dosya = resim_dosyasi(gercek_poz, k["kod"] or k["ad"], k["ad"])
             try:
                 dxf_komponent(s2, o, sat, os.path.join(on, dosya), P)
                 sat["dxf"] = dosya

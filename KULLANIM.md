@@ -676,8 +676,82 @@ döner, antet kutusu yine sağ alt köşededir:
 - Her biri ayrı katmandadır (`PAFTA_CERCEVE`, `PAFTA_ANTET_ALANI`,
   `PAFTA_BOLGE`, `PAFTA_BILGI`); istemediğinizi tek tıkla silersiniz.
 
-Program antet **çizmez**. Her firmanın anteti başka; programın
-uyduracağı bir şey değil. Kutuyu boş bırakır, gerisi sizin.
+Program kendiliğinden antet **çizmez**. Her firmanın anteti başka;
+programın uyduracağı bir şey değil. Kutuyu boş bırakır, gerisi sizin.
+
+#### Firma anteti (EXE_YAP.bat'ta 2. seçenek)
+
+Firmanızın kendi antetini kullanabilirsiniz. O zaman **çerçeve, bölge
+işaretleri, antet ve firma logosu firmanın kendi çiziminden gelir**;
+Pi3D yalnız kutuları doldurur:
+
+| kutu | nereden gelir |
+|------|---------------|
+| Scale | paftanın ölçeği |
+| Weight | BOM'daki kütle |
+| Material | BOM'daki malzeme |
+| Part Name | parçanın adı |
+| Drawing No. | parçanın kodu |
+| Drawn – Date / Name | **programda sorulur** (tarih, çizen) |
+| Checked – Date / Name | **programda sorulur** (tarih, onaylayan) |
+| FILE | dosya adı |
+
+Tarih, çizen ve onaylayan 7. adımda üç kutuya yazılır ve **saklanır**;
+bir daha girmeniz gerekmez. Değerler DXF'e yazıldığı için **PDF'te de
+çıkar** — baskı paftadan alınır.
+
+**Kâğıt boyu.** Şablon hangi kâğıt için çizildiyse (verilen antet A2,
+594 × 420 mm), başka bir kâğıda basılırken şablonun **tamamı tek bir
+oranla** ölçeklenir: A3'te 0,707, A1'de 1,416, A0'da 2,002. Bunlar
+ISO'nun kendi kâğıt basamağıdır; antet kâğıtla birlikte büyür küçülür,
+sayfadaki oranı hiç değişmez.
+
+**Yön.** Firma anteti yatay çizilmiştir, dikey karşılığı yoktur; bu
+yüzden antetli paftada kâğıt her zaman yatay kalır.
+
+**Sürüm seçimi.** `EXE_YAP.bat` iki sürüm sorar:
+
+```
+1 = PI3D    Pi3D ve PiVision logolari gomulu, FIRMA ANTETI YOK
+            (sag alt kosede 150x100 mm bos alan; kendi antetinizi
+             oraya yapistirirsiniz)
+2 = FIRMA   Pi3D logolari konmaz; antet klasorundeki FIRMA ANTETI
+            kullanilir, kutularini Pi3D doldurur
+```
+
+Firmanın kendi anteti varken Pi3D'nin logosunu da basmak doğru
+değildir: resim firmanındır.
+
+#### Kendi antetinizi şablona çevirmek
+
+`antet/` klasöründe iki dosya bulunur: `firma.dxf` (antet, tek blok
+hâlinde) ve `firma.json` (hangi kutuya ne yazılacağı). Başka bir antet
+için firmanın **çerçeve + antet DXF'ini** verip şablon üretirsiniz:
+
+```
+1)  Antetin sınırını CAD'de ölçün (sol alt ve sağ üst köşe).
+2)  Kutuları listeleyin:
+    python pf5_antet.py firma_cerceve.dxf --incele --antet 400.6,9.8,583.5,95.1
+3)  Çıkan listeden her alanın kutusunun ORTASINI
+    antet/firma_tanim.json içine yazın.
+4)  Şablonu üretin:
+    python pf5_antet.py firma_cerceve.dxf --tanim antet/firma_tanim.json \
+           --cikti antet/firma
+```
+
+Yazının nereye geleceği **tahmin edilmez, ölçülür**: kutudaki etiketin
+("Part Name :") kapladığı yer bulunur, değer onun sağından başlar.
+Değer kutuya sığmıyorsa önce küçültülür, 1,5 mm'ye inince kısaltılır —
+komşu kutuya asla taşmaz.
+
+Antetin yazıları çoğu zaman patlatılmış (kontur) gelir ve dosya çok
+büyük olur; şablon hazırlanırken konturlar 0,03 mm toleransla
+sadeleştirilir. Verilen antette dosya **11,5 MB'tan 0,55 MB'a** indi,
+görüntü değişmedi. Antet her resme bir **blok** olarak girer: blok
+tanımı dosyada bir kez durur, ölçek blok referansının üstündedir.
+
+**Antet zorunlu değildir.** `antet/` klasörü yoksa ya da 7. adımda
+kutucuğu kapatırsanız Pi3D kendi sade paftasını çizer.
 
 #### Görünüşler kâğıda nasıl dağılır
 

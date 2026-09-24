@@ -3,9 +3,18 @@ REM ==========================================================================
 REM  Pi3D'u calistirilabilir dosyaya (.exe) cevirir.
 REM
 REM  Once Pi3D_baslat.bat ile .venv kurulmus olmali.
-REM  Logolu / logosuz secimi sorulur. Sormasini istemiyorsaniz once
-REM  set PI3D_LOGO=1 (logolu) ya da set PI3D_LOGO=0 (logosuz) verin,
-REM  ya da EXE_YAP.bat 1   /   EXE_YAP.bat 0  diye calistirin.
+REM  Iki surum vardir, secim sorulur:
+REM    1 = PI3D  : Pi3D ve PiVision logolari gomulur, FIRMA ANTETI YOK
+REM                (paftanin sag alt kosesi bos kalir, yalniz cerceve
+REM                 cizgileri olur; kendi antetinizi oraya yapistirirsiniz)
+REM    2 = FIRMA : Pi3D logolari KONMAZ, bunun yerine antet klasorundeki
+REM                FIRMA ANTETI kullanilir - cerceve, bolge isaretleri,
+REM                antet ve firma logosu firmanin kendi ciziminden gelir,
+REM                kutulari (Part Name, Drawing No, Material, Weight,
+REM                Scale, Drawn/Checked, FILE) Pi3D doldurur.
+REM
+REM  Sormasini istemiyorsaniz once set PI3D_LOGO=1 / 0 verin, ya da
+REM  EXE_YAP.bat 1   /   EXE_YAP.bat 2  diye calistirin.
 REM
 REM  Cikti:  dist\Pi3D\Pi3D.exe
 REM
@@ -23,10 +32,18 @@ if not "%PI3D_LOGO%"=="" goto SECILDI
 echo.
 echo  Hangi surum derlensin?
 echo.
-echo    1 = LOGOLU    PiVision ve Pi3D logolari exe'nin ICINE gomulur;
-echo                  yanindaki klasorden silinemez, degistirilemez.
-echo    2 = LOGOSUZ   hic logo konmaz; baslikta yalniz "Pi3D" yazar,
-echo                  exe'nin kendi ikonu da olmaz.
+echo    1 = PI3D     PiVision ve Pi3D logolari exe'nin ICINE gomulur.
+echo                 Paftada FIRMA ANTETI YOKTUR: sag alt kosede
+echo                 150x100 mm'lik alan bos birakilir, kendi
+echo                 antetinizi oraya yapistirirsiniz.
+echo.
+echo    2 = FIRMA    Pi3D logolari konmaz; baslikta yalniz "Pi3D" yazar.
+echo                 Bunun yerine antet klasorundeki FIRMA ANTETI
+echo                 kullanilir: cerceve, bolge isaretleri, antet ve
+echo                 firma logosu firmanin kendi ciziminden gelir.
+echo                 Part Name, Drawing No, Material, Weight, Scale,
+echo                 Drawn/Checked ve FILE kutularini Pi3D doldurur;
+echo                 tarih, cizen ve onaylayan programda sorulur.
 echo.
 set "PI3D_LOGO="
 set "SECIM="
@@ -34,7 +51,19 @@ set /p SECIM=  Seciminiz [1]:
 if "%SECIM%"=="2" (set "PI3D_LOGO=0") else (set "PI3D_LOGO=1")
 
 :SECILDI
-if "%PI3D_LOGO%"=="0" (echo  LOGOSUZ surum derlenecek.) else (echo  LOGOLU surum derlenecek.)
+if "%PI3D_LOGO%"=="0" (
+  echo  FIRMA surumu derlenecek: Pi3D logosu yok, firma anteti var.
+  if not exist "antet\*.json" (
+    echo.
+    echo  DIKKAT: antet klasorunde hazir sablon yok.
+    echo  Program antetsiz calisir; antet eklemek icin firmanin
+    echo  cerceve+antet DXF'ini su komutla sablona cevirin:
+    echo      .venv\Scripts\python.exe pf5_antet.py --yardim
+    echo.
+  )
+) else (
+  echo  PI3D surumu derlenecek: logolar gomulu, firma anteti yok.
+)
 
 if not exist ".venv\Scripts\python.exe" goto ORTAM_YOK
 
@@ -61,7 +90,7 @@ echo.
 if errorlevel 1 goto OLMADI
 
 echo.
-if "%PI3D_LOGO%"=="0" (echo  Tamam - LOGOSUZ surum.) else (echo  Tamam - LOGOLU surum, logolar exe'nin icinde.)
+if "%PI3D_LOGO%"=="0" (echo  Tamam - FIRMA surumu: firma anteti kullanilir.) else (echo  Tamam - PI3D surumu, logolar exe'nin icinde, antet yok.)
 echo  Tamam:  dist\Pi3D\Pi3D.exe
 echo  Bu klasorun TAMAMINI kopyalayin, tek basina exe calismaz.
 echo.

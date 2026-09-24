@@ -155,6 +155,12 @@ try:
     u.gunluk = SahteWidget()
     u.b_pafta = SahteWidget(); u.b_bas = SahteWidget()
     u.b_incele = u.b_bom = u.b_ornek = u.b_onay = u.b_iptal = SahteWidget()
+    # SahteWidget.__getattr__ eksik her alani DOLU gosterir; antetle
+    # ilgili alanlari acikca bos birakmak gerekiyor, yoksa antetsiz
+    # senaryo bile anteti acik saniyor.
+    u.sablon = None
+    u.v_antet = None
+    u.acilim_sonuc = {}
     u.after = lambda *a, **k: None
     u._basla = lambda d: u.v_durum.set(d)
     u._bitir = lambda: None
@@ -178,8 +184,8 @@ try:
             elif tip == "baski":
                 u._baski_geldi(veri)
             elif tip == "hata":
-                hata.append("is parcacigi HATA verdi:\n" + str(veri)[:400])
-                print("  HATA  is parcacigi:", str(veri)[:300])
+                hata.append("is parcacigi HATA verdi:\n" + str(veri))
+                print("  HATA  is parcacigi:", str(veri))
 
     print("\n-- Listeyi tazele")
     # pafta_doldur kendi is parcacigini baslatir; burada onu beklemek
@@ -248,7 +254,11 @@ try:
         dogru(f"{a}: pencere var", len(vp) >= 1, "pencere yok")
         esit(f"{a}: kagit", P.pafta_olcusu(yol), P.KAGIT[kagit])
         yz = " ".join(e.dxf.text for e in pf if e.dxftype() == "TEXT")
-        dogru(f"{a}: resim no yazili", a.split("_")[0] in yz, yz[:70])
+        # Resim no artik poz degil, parcanin CIZIM NO'sudur: BOM'da
+        # varsa kodu, yoksa dosya adinin poz onekinden sonrasi.
+        bek = {"P01_KUCUK.dxf": "01.001", "P01_KUCUK_acinim.dxf": "01.001",
+               "P02_ORTA.dxf": "01.002"}.get(a, a.split("_", 1)[-1][:-4])
+        dogru(f"{a}: resim no yazili", bek in yz, f"{bek!r} yok: {yz[:80]}")
         # Model uzayi 1:1 KALMALI: pafta onu ellememeli.
         esit(f"{a}: pafta sekmesi tek",
              sum(1 for t_ in d.layout_names() if t_ == "PAFTA"), 1)

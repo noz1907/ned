@@ -230,6 +230,7 @@ class Uygulama(ttk.Frame):
         self.pack(fill="both", expand=True)
         self.M = None                    # pf3_olcu (ağır, arka planda yüklenir)
         self.kayit = self.komp = None
+        self.sablon = None                 # firma anteti; 7. adımda aranır
         self.satirlar = []               # hesaplanmış BOM satırları
         self.malzemeler = {}             # kod -> malzeme anahtarı (kullanıcı seçimi)
         self.ornek_dxf = None
@@ -772,6 +773,39 @@ class Uygulama(ttk.Frame):
             "görünüyorsa kâğıt o yöne çevrilir.")
                   ).pack(anchor="w", pady=(0, 8))
 
+        # --- firma anteti (varsa)
+        self.sablon = self._sablon_bul()
+        if self.sablon is not None:
+            an = ttk.Frame(f); an.pack(fill="x", pady=(0, 6))
+            self.v_antet = tk.BooleanVar(value=True)
+            ttk.Checkbutton(an, text="Firma anteti kullanılsın",
+                            variable=self.v_antet,
+                            command=self.pafta_doldur).pack(side="left")
+            ttk.Label(an, foreground="#555", text=(
+                f"  ({self.sablon.bilgi.get('ad', 'antet')} – çerçeve, "
+                "bölge işaretleri, antet ve logo firmanın çiziminden "
+                "gelir; kâğıtla birlikte ölçeklenir)")).pack(side="left")
+            gir = ttk.Frame(f); gir.pack(fill="x", pady=(0, 6))
+            ttk.Label(gir, text="Tarih:").pack(side="left")
+            self.v_tarih = tk.StringVar(
+                value=(self.M.ayar_oku().get("tarih") if self.M else "")
+                      or time.strftime("%d.%m.%Y"))
+            ttk.Entry(gir, textvariable=self.v_tarih, width=12).pack(
+                side="left", padx=(4, 12))
+            ttk.Label(gir, text="Çizen:").pack(side="left")
+            self.v_cizen = tk.StringVar(
+                value=(self.M.ayar_oku().get("cizen") if self.M else "") or "")
+            ttk.Entry(gir, textvariable=self.v_cizen, width=16).pack(
+                side="left", padx=(4, 12))
+            ttk.Label(gir, text="Onaylayan:").pack(side="left")
+            self.v_onay = tk.StringVar(
+                value=(self.M.ayar_oku().get("onaylayan") if self.M else "") or "")
+            ttk.Entry(gir, textvariable=self.v_onay, width=16).pack(
+                side="left", padx=4)
+            ttk.Label(gir, foreground="#555", text=(
+                "  antetteki Drawn / Checked satırlarına yazılır, "
+                "saklanır")).pack(side="left")
+
         sec = ttk.Frame(f); sec.pack(fill="x")
         ttk.Label(sec, text="Kâğıt:").pack(side="left")
         self.v_kagit = tk.StringVar(value="A3")
@@ -827,6 +861,39 @@ class Uygulama(ttk.Frame):
             return "montaj"
         return "detay"
 
+    def _sablon_bul(self):
+        """Firma antetini arar: program klasörü, çıktı klasörü, ev.
+
+        Antet ZORUNLU DEĞİLDİR. Bulunmazsa 7. adımda antet kutusu hiç
+        görünmez ve Pi3D kendi sade paftasını çizer (sağ alt köşe boş).
+        EXE_YAP.bat'ta 2 (logosuz) seçilerek derlenen sürümde antet
+        klasörü exe'nin yanına konur."""
+        try:
+            import pf5_antet as PA
+        except Exception:
+            return None
+        kok = os.path.dirname(os.path.abspath(
+            getattr(sys, "_MEIPASS", None) or __file__))
+        aday = [os.path.join(kok, "antet"),
+                os.path.join(os.path.dirname(sys.executable), "antet")]
+        try:                       # çıktı klasörü henüz seçilmemiş olabilir
+            on = (self.v_out.get() or "").strip()
+            if on:
+                aday.append(os.path.join(on, "antet"))
+        except Exception:
+            pass
+        try:
+            return PA.sablon_bul(*aday)
+        except Exception:
+            return None
+
+    def _antet_acik(self):
+        # getattr: sayfa 7 henüz kurulmamışsa (denetim betikleri sayfayı
+        # atlayabiliyor) antet yok sayılır, iş durmaz.
+        return (getattr(self, "sablon", None) is not None
+                and bool(getattr(self, "v_antet", None)
+                         and self.v_antet.get()))
+
     def _pdf_klasoru(self):
         """Baskılar buraya gider. Paftanın kendisi resmin dosyasındadır,
         ayrı bir pafta klasörü YOKTUR."""
@@ -860,13 +927,16 @@ class Uygulama(ttk.Frame):
             return
         kagit = self.v_kagit.get()
         self._basla(f"{kagit} yerleşimi hesaplanıyor…")
-        threading.Thread(target=self._plan_is, args=(dosyalar, kagit),
+        threading.Thread(target=self._plan_is,
+                         args=(dosyalar, kagit,
+                               self.sablon if self._antet_acik() else None),
                          daemon=True).start()
 
-    def _plan_is(self, dosyalar, kagit):
+    def _plan_is(self, dosyalar, kagit, sablon=None):
         try:
             import pf4_pafta as PF
-            self.kuyruk.put(("plan", (PF.kagit_plani(dosyalar, kagit), kagit)))
+            self.kuyruk.put(("plan", (PF.kagit_plani(dosyalar, kagit,
+                                                     sablon=sablon), kagit)))
         except Exception:
             self.kuyruk.put(("hata", "Yerleşim hesaplanırken hata:\n\n"
                              + traceback.format_exc()))
@@ -944,14 +1014,28 @@ class Uygulama(ttk.Frame):
                 self.M.ayar_yaz(kagit=self.v_kagit.get())
         except Exception:
             pass
+        sablon = self.sablon if self._antet_acik() else None
+        ortak = {}
+        if sablon is not None:
+            ortak = {"cizen": self.v_cizen.get().strip(),
+                     "onaylayan": self.v_onay.get().strip(),
+                     "cizen_tarih": self.v_tarih.get().strip(),
+                     "onay_tarih": self.v_tarih.get().strip()}
+            try:                       # bir daha yazmaya gerek kalmasın
+                self.M.ayar_yaz(tarih=ortak["cizen_tarih"],
+                                cizen=ortak["cizen"],
+                                onaylayan=ortak["onaylayan"])
+            except Exception:
+                pass
         isler = []
         for s in sec:
             it = dict(self.pf_satir[s]); it["_satir"] = s
             it.update(self._resim_kimligi(it["dosya"]))
+            it["antet"] = dict(ortak, **it.pop("antet_ek", {}))
             isler.append(it)
             self.pf_agac.set(s, "durum", "paftaya alınıyor…")
         self._basla("pafta hazırlanıyor…")
-        threading.Thread(target=self._pafta_is, args=(isler,),
+        threading.Thread(target=self._pafta_is, args=(isler, sablon),
                          daemon=True).start()
 
     def _resim_kimligi(self, dosya):
@@ -961,20 +1045,30 @@ class Uygulama(ttk.Frame):
         gelir. BOM'da yoksa dosya adı kullanılır."""
         ad = os.path.basename(dosya)
         kok = os.path.splitext(ad)[0]
-        no = kok.split("_")[0] if kok[:1] in ("P", "A") else kok
+        # Detay resmi ile açınımı aynı adı taşır; BOM'da yalnız detayın
+        # adı geçer, açınımı onun üstünden bulunur.
+        temel = kok[:-7] + ".dxf" if kok.endswith("_acinim") else ad
+        acinim = temel != ad
         for sat in self.satirlar or []:
-            if sat.get("dxf") == ad:
+            if sat.get("dxf") == temel:
+                no = sat.get("kod") or kok.split("_", 1)[-1]
                 return {"resim_no": no,
-                        "resim_adi": f"{sat.get('kod', '')}   "
-                                     f"{sat.get('ad', '')}".strip()}
+                        "resim_adi": (sat.get("ad") or "")
+                                     + ("   AÇINIM" if acinim else ""),
+                        "antet_ek": {
+                            "malzeme": (sat.get("malzeme_ad") or "").split(" (")[0]
+                                       if sat.get("malzeme_ad") else "",
+                            "kutle": (f"{sat['kg_adet']:.3f} kg".replace(".", ",")
+                                      if sat.get("kg_adet") else "")}}
         r = getattr(self, "acilim_sonuc", {}).get(ad)
         if r:
-            return {"resim_no": no,
-                    "resim_adi": f"{r.get('kod', '')}   {r.get('ad', '')}"
-                                 "   AÇINIM".strip()}
-        return {"resim_no": no, "resim_adi": ""}
+            return {"resim_no": r.get("kod") or kok,
+                    "resim_adi": f"{r.get('ad', '')}   AÇINIM".strip(),
+                    "antet_ek": {}}
+        no = kok.split("_", 1)[-1] if kok[:1] == "P" else kok
+        return {"resim_no": no, "resim_adi": "", "antet_ek": {}}
 
-    def _pafta_is(self, isler):
+    def _pafta_is(self, isler, sablon=None):
         try:
             import pf4_pafta as PF
             sonuc = {}
@@ -986,7 +1080,8 @@ class Uygulama(ttk.Frame):
                     r = PF.pafta_kur(
                         it["dosya"], None,
                         it["kagit"], resim_no=it.get("resim_no"),
-                        resim_adi=it.get("resim_adi"))
+                        resim_adi=it.get("resim_adi"),
+                        sablon=sablon, antet=it.get("antet"))
                     # pafta_kur hangi YÖNÜ seçtiyse onu kullan: listede
                     # yazan yönle basılan PDF'in adı ayrışmasın.
                     r["kagit_adi"] = r.get("kagit") or it["kagit"]

@@ -1,0 +1,19 @@
+{
+  "ad": "Firma anteti (A2 çizildi)",
+  "_aciklama": "Bu dosya, firmanın çerçeve+antet DXF'inden Pi3D şablonu üretmek için kullanılır. Ölçüler firmanın çiziminin KENDİ koordinatlarıdır (mm). Her alan için o kutunun ORTASINDAN bir nokta verilir; kutunun kendisi çizgi ızgarasından bulunur. Kutuların koordinatlarını görmek için: python pf5_antet.py <dxf> --incele --antet 400.58,9.82,583.46,95.08",
+  "kagit": [594.0, 420.0],
+  "cerceve": [20.0, 10.0, 583.46, 410.0],
+  "antet": [400.58, 9.82, 583.46, 95.08],
+  "alanlar": {
+    "olcek":       [512.0, 56.0],
+    "kutle":       [540.0, 56.0],
+    "malzeme":     [528.0, 48.0],
+    "parca_adi":   [540.0, 35.0],
+    "resim_no":    [535.0, 20.0],
+    "cizen_tarih": [475.0, 41.5],
+    "cizen":       [492.0, 41.5],
+    "onay_tarih":  [475.0, 37.3],
+    "onaylayan":   [492.0, 37.3],
+    "dosya":       [477.0, 12.0]
+  }
+}
