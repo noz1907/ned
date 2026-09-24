@@ -40,6 +40,7 @@ import os
 
 import ezdxf
 import ezdxf.bbox
+import ezdxf.enums          # ezdxf sürümüne göre kendiliğinden gelmeyebilir
 
 # ---------------------------------------------------------------- kâğıt
 # HER ZAMAN YATAY (landscape). Dikey pafta yok: antet kutusu sağ alt

@@ -191,6 +191,19 @@ try:
           all(u.pf_satir.get(s) for s in u.pf_agac.satir),
           "bazi satirlar yerlesemedi")
 
+    print("\n-- hicbir satir secilmemisken PAFTAYA AL")
+    # Kullanici listeyi tazeleyip dogrudan butona basarsa hicbir sey
+    # olmamamali degil - butun satirlar alinmali.
+    u.pf_agac.selection_set([])
+    mesaj.clear()
+    u.pafta_uret()
+    dogru("secim yokken de is baslatildi", len(BEKLEYEN) == 1,
+          f"{len(BEKLEYEN)} is, mesaj={mesaj}")
+    if BEKLEYEN:
+        t, a = BEKLEYEN.pop()
+        esit("butun satirlar alindi", len(a[0]), 3)
+    kuyrugu_bosalt()
+
     print("\n-- PAFTAYA AL")
     u.pf_agac.selection_set(u.pf_agac.get_children())
     u.pafta_uret()

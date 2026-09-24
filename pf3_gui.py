@@ -800,14 +800,28 @@ class Uygulama(ttk.Frame):
                          f"{len(p['sigmayan'])} resim sığmıyor")
 
     def pafta_uret(self):
+        # Hiçbir satır seçilmemişse HEPSİNİ al. Eskiden "seçim yok" deyip
+        # duruyordu; kullanıcı listeyi tazeleyip butona basınca hiçbir
+        # şey olmuyor gibi görünüyordu.
         sec = [s for s in self.pf_agac.selection()
                if getattr(self, "pf_satir", {}).get(s)]
         if not sec:
-            messagebox.showinfo("Pafta", "Paftaya alınacak resim seçilmedi. "
-                                         "(Kâğıda sığmayan satırlar "
-                                         "seçilse de üretilmez.)")
+            sec = [s for s in self.pf_agac.get_children()
+                   if getattr(self, "pf_satir", {}).get(s)]
+            if sec:
+                self.pf_agac.selection_set(sec)
+        if not sec:
+            messagebox.showinfo(
+                "Pafta", "Paftaya alınacak resim yok.\n\n"
+                "Listede satır varsa hiçbiri seçtiğiniz kâğıda sığmıyor "
+                "demektir; DURUM sütununda hangi kâğıdın gerektiği yazar. "
+                "Liste boşsa önce 'Listeyi tazele'ye basın.")
             return
-        self.M.ayar_yaz(kagit=self.v_kagit.get())
+        try:                              # ayar saklanamazsa iş durmasın
+            if self.M:
+                self.M.ayar_yaz(kagit=self.v_kagit.get())
+        except Exception:
+            pass
         isler = []
         for s in sec:
             it = dict(self.pf_satir[s]); it["_satir"] = s
@@ -858,6 +872,10 @@ class Uygulama(ttk.Frame):
                 except Exception as ex:
                     sonuc[it["_satir"]] = ("hata", str(ex))
                     self._yaz(f"  pafta HATA  {ad}: {ex}")
+                    if not isinstance(ex, PF.PaftaYok):
+                        # Beklenmeyen hata: tam izini günlüğe yaz, yoksa
+                        # "üretilmiyor" deyip nedenini bilemeyiz.
+                        self._yaz(traceback.format_exc())
             self.kuyruk.put(("pafta", sonuc))
         except Exception:
             self.kuyruk.put(("hata", "Pafta hazırlanırken hata:\n\n"
@@ -884,6 +902,16 @@ class Uygulama(ttk.Frame):
         self.b_bas.configure(state="normal" if self.pafta_dosya else "disabled")
         self.v_durum.set(f"pafta: {iyi} resim paftaya alındı"
                          + (f", {len(sonuc) - iyi} hata" if iyi < len(sonuc) else ""))
+        # Sonucu HER ZAMAN söyle: sessizce bitmesin.
+        yanlis = [v for t, v in sonuc.values() if t == "hata"]
+        if iyi and not yanlis:
+            messagebox.showinfo(
+                "Pafta", f"{iyi} pafta yazıldı:\n{self._pafta_klasoru()}")
+        elif yanlis:
+            messagebox.showwarning(
+                "Pafta", f"{iyi} pafta yazıldı, {len(yanlis)} tanesi "
+                f"yapılamadı.\n\nİlk sebep:\n{yanlis[0][:300]}\n\n"
+                "Ayrıntı için alttaki Günlük penceresine bakın.")
 
     # ---- baskı (kendiliğinden çalışmaz, kullanıcı ister)
     def pafta_bas(self):
