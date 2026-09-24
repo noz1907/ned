@@ -601,32 +601,71 @@ def kenar_tani(p, duz_tol=0.02, yay_tol=0.05):
     return {"tip": "egri", "p0": p0, "p1": p1}
 
 
-def capraz_kenarlar(kenar, en_az_uz=3.0, aci_pay=1.5):
-    """Görünüşteki ÇAPRAZ (pahlı, eğik) düz kenarlar.
+def _sayi(v):
+    """Ölçü yazısı: tam sayıya yakınsa tam sayı, değilse bir ondalık."""
+    return f"{round(v):g}" if abs(v - round(v)) < 0.05 else f"{v:.1f}"
 
-    Eksenlere paralel olmayan her düz kenar. Bunların resimde ne boyu
-    ne açısı vardı: 45°'lik bir pah çizilip geçiliyordu, atölye nereden
-    nereye kesileceğini bilmiyordu.
 
-    En uzun olanlar önce verilir ve görünüş başına sayısı sınırlıdır:
-    karmaşık bir dövme parçada onlarca küçük eğik kenar var, hepsini
-    ölçülendirmek resmi okunmaz yapar. Tam liste olculer.csv'dedir.
+def capraz_kenarlar(kenar, en_az_uz=3.0, aci_pay=1.5, komsu_pay=0.15,
+                    bacak_pay=0.10, en_cok_oran=0.20):
+    """Görünüşteki ÇAPRAZ (eksenlere paralel olmayan) düz kenarlar.
 
-    Döner: [{"p0","p1","uz","aci"}] - HAM izdüşüm koordinatında."""
+    İkiye ayrılır, çünkü resimde iki ayrı şeydir:
+
+    PAH (köşe kırma): üç şartı birden tutar -
+      (1) iki ucu da birbirine DİK ve eksene paralel iki kenara
+          değiyor, yani bir köşeyi kesiyor;
+      (2) bacakları eşit (45°);
+      (3) görünüşe göre KÜÇÜK (en çok %20).
+      Bunun açısı ölçü konusu değildir; keskin köşe kalmasın diye
+      kırılmıştır. Resimde ok (kılavuz) ucunda "5 x 5" diye yazılır.
+      Üç şart birden aranır: bir köşeden geçen BÜYÜK bir 45° kesim
+      parçanın biçimidir, köşe kırma değil.
+
+    EĞİK KESİM: köşe kırma değil, parçanın gerçek biçimi. Bunun
+      açısını değil, uçlarının KENARLARDAN yerini vermek gerekir -
+      atölye nereden nereye keseceğini böyle bilir.
+
+    Döner: [{"p0","p1","uz","aci","pah","bacak"}]"""
+    tanili = [t for t in (kenar_tani(p) for p in kenar.get("GORUNEN", []))
+              if t and t["tip"] == "dogru"]
+
+    # Görünüşün gabarisi: "küçük" ne demek, ona göre ölçülür.
+    xs = [q[0] for e in tanili for q in (e["p0"], e["p1"])]
+    ys = [q[1] for e in tanili for q in (e["p0"], e["p1"])]
+    kutu_ = (min(xs), min(ys), max(xs), max(ys)) if xs else (0, 0, 1, 1)
+
+    def eksene_paralel(e):
+        a = e["aci"]
+        return min(abs(a), abs(a - 90.0), abs(a - 180.0)) <= aci_pay
+
     out = []
-    for p in kenar.get("GORUNEN", []):
-        t = kenar_tani(p)
-        if not t or t["tip"] != "dogru" or t["uz"] < en_az_uz:
+    for t in tanili:
+        if t["uz"] < en_az_uz or eksene_paralel(t):
             continue
-        a = t["aci"]
-        if min(abs(a), abs(a - 90.0), abs(a - 180.0)) <= aci_pay:
-            continue                      # yatay ya da düşey: gabari verir
+        # Uçlarına değen, eksene paralel kenarların doğrultuları
+        yon = set()
+        for e in tanili:
+            if e is t or not eksene_paralel(e):
+                continue
+            for a in (t["p0"], t["p1"]):
+                if min(math.dist(a, e["p0"]), math.dist(a, e["p1"])) <= komsu_pay:
+                    yon.add(0 if min(abs(e["aci"]), abs(e["aci"] - 180.0))
+                            <= aci_pay else 90)
+        t = dict(t)
+        ba, bb = (abs(t["p1"][0] - t["p0"][0]),
+                  abs(t["p1"][1] - t["p0"][1]))
+        t["bacak"] = (ba, bb)
+        esit = abs(ba - bb) <= bacak_pay * max(ba, bb, 1e-9)
+        kucuk = (ba <= en_cok_oran * max(kutu_[2] - kutu_[0], 1e-9)
+                 and bb <= en_cok_oran * max(kutu_[3] - kutu_[1], 1e-9))
+        t["pah"] = (0 in yon and 90 in yon) and esit and kucuk
         out.append(t)
-    # Aynı kenar birkaç kaynaktan gelebilir (VCompound +
-    # OutLineVCompound) ve parçanın ÜST ve ALT yüzündeki aynı pah
-    # izdüşümde üst üste düşer. Uç noktalarına göre ayıklamak bunları
-    # yakalamıyordu (uçlar mikron farkla ayrılıyor); ORTA NOKTA ve
-    # DOĞRULTU ile ayıklanır.
+
+    # Aynı kenar birkaç kaynaktan gelebilir (VCompound + OutLine...) ve
+    # parçanın üst/alt yüzündeki aynı pah izdüşümde üst üste düşer.
+    # Uç noktalarına göre ayıklamak yakalamıyordu (uçlar mikron farkla
+    # ayrılıyor); ORTA NOKTA ve DOĞRULTU ile ayıklanır.
     gor, tek = set(), []
     for t in sorted(out, key=lambda t: -t["uz"]):
         k = (round((t["p0"][0] + t["p1"][0]) / 2, 1),
@@ -638,14 +677,13 @@ def capraz_kenarlar(kenar, en_az_uz=3.0, aci_pay=1.5):
     return tek
 
 
-def capraz_olculeri(msp, kenarlar, kaydir, gkutu, h, en_cok=4):
-    """Çapraz kenarların BOYU ve AÇISI.
+def pah_notlari(msp, kenarlar, kaydir, gkutu, h, en_cok=8):
+    """Köşe pahlarını OK (kılavuz) ucunda "5 x 5" diye yazar.
 
-    Boy hizalı ölçüyle (kenara paralel), açı yatayla yaptığı açı
-    olarak verilir: bir pah için okunan "7,1" ve "45°" budur.
-
-    Yer TAHMİN EDİLMEZ: ölçü çizilir, yazısının gerçek sınırı ölçülür,
-    çakışıyorsa silinip kenardan biraz daha uzağa konur."""
+    Pahın açısı ve hipotenüsü ölçülendirilmez: keskin köşe kalmasın
+    diye kırılmış bir köşenin ölçüsü iki bacağıdır. İlk sürümde
+    hipotenüs (7,1) ve açı (45°) veriliyordu - ikisi de atölyenin
+    işine yaramayan, üstelik resmi kalabalıklaştıran sayılardı."""
     say = 0
     for gad, kenar in kenarlar.items():
         if gad not in gkutu:
@@ -654,57 +692,34 @@ def capraz_olculeri(msp, kenarlar, kaydir, gkutu, h, en_cok=4):
         gk = gkutu[gad]
         mx, my = (gk[0] + gk[2]) / 2.0, (gk[1] + gk[3]) / 2.0
         dolu = _varlik_kutulari(msp)
-        for t in capraz_kenarlar(kenar)[:en_cok]:
-            p0 = (t["p0"][0] + dx, t["p0"][1] + dy)
-            p1 = (t["p1"][0] + dx, t["p1"][1] + dy)
-            ox, oy = (p0[0] + p1[0]) / 2.0, (p0[1] + p1[1]) / 2.0
-            # Ölçü çizgisi kenarın DIŞ tarafına: görünüşün ortasından
-            # uzağa doğru.
-            nx, ny = -(p1[1] - p0[1]) / t["uz"], (p1[0] - p0[0]) / t["uz"]
-            if (ox - mx) * nx + (oy - my) * ny < 0:
-                nx, ny = -nx, -ny
-            for kat in range(1, 7):
-                d = 1.4 * kat * h
-                try:
-                    dim = msp.add_aligned_dim(
-                        p1=p0, p2=p1, distance=d * (1 if (nx * (p1[1] - p0[1])
-                                                          - ny * (p1[0] - p0[0])) <= 0 else -1),
-                        dimstyle=OLCU_STILI,
-                        override={"dimtoh": 1, "dimtih": 1, "dimtmove": 1},
-                        dxfattribs={"layer": "OLCU"})
-                    dim.render()
-                except Exception:
-                    break
-                ky = _olcu_yazi_kutusu(dim)
-                if ky is None or not _cakisiyor(ky, dolu, 0.25 * h):
-                    if ky:
-                        dolu.append(ky)
-                    say += 1
-                    break
-                _olcu_sil(msp, dim)
-            # Açı: yatayla yaptığı açı. KILAVUZ ÇİZGİSİYLE kenara
-            # bağlanır. Bağlanmayan bir "45°" yazısı, yerini bulamayıp
-            # uzağa kaçtığında hangi kenara ait olduğu anlaşılmıyordu -
-            # boşlukta duran bir sayı, olmayandan kötüdür.
-            aci = t["aci"]
-            aci = aci if aci <= 90.0 else 180.0 - aci
-            # Açı ÖLÇÜLEN bir değerdir, tam sayı değil: izdüşümden
-            # 11,8674 gibi çıkabiliyor. Resme olduğu gibi yazmak
-            # yanıltıcı - o kadar hassas bir açı ne ölçülür ne
-            # tutturulur. Tam sayıya yakınsa tam sayı, değilse bir
-            # ondalık.
-            aci = round(aci) if abs(aci - round(aci)) < 0.15 else round(aci, 1)
-            for kat in range(1, 8):
-                uz = (1.2 + 1.3 * kat) * h
+        pahlar = [t for t in capraz_kenarlar(kenar) if t["pah"]]
+        # Aynı ölçüdeki pahlar tek notla verilir: "4x 5 x 5".
+        kova = defaultdict(list)
+        for t in pahlar:
+            kova[(round(t["bacak"][0], 1), round(t["bacak"][1], 1))].append(t)
+        for (ba, bb), lst in sorted(kova.items(), key=lambda kv: -kv[0][0])[:en_cok]:
+            # Görünüşün ortasına en uzak pah: ok dışarı çıksın.
+            t = max(lst, key=lambda t: ((t["p0"][0] + t["p1"][0]) / 2 + dx - mx) ** 2
+                    + ((t["p0"][1] + t["p1"][1]) / 2 + dy - my) ** 2)
+            ox = (t["p0"][0] + t["p1"][0]) / 2.0 + dx
+            oy = (t["p0"][1] + t["p1"][1]) / 2.0 + dy
+            nx, ny = ox - mx, oy - my
+            L = math.hypot(nx, ny) or 1.0
+            nx, ny = nx / L, ny / L
+            onek = f"{len(lst)}x " if len(lst) > 1 else ""
+            metin = f"{onek}{_sayi(ba)} x {_sayi(bb)}"
+            for kat in range(1, 9):
+                uz = (1.2 + 1.4 * kat) * h
                 yer = (ox + nx * uz, oy + ny * uz)
-                e = _yaz(msp, f"{aci:g}%%d", yer[0] + 0.3 * h,
+                e = _yaz(msp, metin, yer[0] + (0.3 * h if nx >= 0 else
+                                               -0.3 * h - len(metin) * 0.62 * h),
                          yer[1] - 0.45 * h, 0.9 * h)
                 kt = _yazi_siniri(e)
                 if kt is None or not _cakisiyor(kt, dolu, 0.25 * h):
-                    msp.add_line((ox, oy), yer,
-                                 dxfattribs={"layer": "OLCU"})
+                    msp.add_line((ox, oy), yer, dxfattribs={"layer": "OLCU"})
                     if kt:
                         dolu.append(kt)
+                    say += 1
                     break
                 msp.delete_entity(e)
     return say
@@ -1305,7 +1320,7 @@ def _seviyele(araliklar, h):
     return len(kademe)
 
 
-def konum_plani(o, gorunusler, ham, h, tol=0.05):
+def konum_plani(o, gorunusler, ham, h, kenarlar=None, tol=0.05):
     """Konum ölçülerinin planı - HİÇBİR ŞEY ÇİZMEDEN.
 
     YÖNTEM: DATUMDAN ÖLÇÜLENDİRME (baseline / parallel dimensioning).
@@ -1340,7 +1355,16 @@ def konum_plani(o, gorunusler, ham, h, tol=0.05):
                 continue
             for c in d.get("merkezler") or []:
                 nokta.append(izdusum(c, gad))
-        if not nokta:
+        # EĞİK KESİMİN UÇLARI da konum ister: köşe kırma değil,
+        # parçanın gerçek biçimidir; atölye nereden nereye keseceğini
+        # ancak uçlarının kenarlardan yerinden bilir. (Pahlar buraya
+        # girmez, onlar ok ucunda "5 x 5" diye verilir.)
+        kesim = []
+        if kenarlar and gad in kenarlar:
+            for t in capraz_kenarlar(kenarlar[gad]):
+                if not t["pah"]:
+                    kesim += [t["p0"], t["p1"]]
+        if not nokta and not kesim:
             continue
         cikti = {}
         for ad, eksen, e0, e1 in (("yatay", 0, kutu_[0], kutu_[2]),
@@ -1350,6 +1374,8 @@ def konum_plani(o, gorunusler, ham, h, tol=0.05):
             for q in nokta:
                 obek[round(q[1 - eksen] / max(tol, 1e-9))].append(q[eksen])
             dizi, tekil = [], set()
+            for q in kesim:                # eğik kesimin uçları: tekil
+                tekil.add(round(q[eksen], 3))
             for _k, v in obek.items():
                 v = sorted(set(round(x, 3) for x in v))
                 dz = _dizi(v)
@@ -3924,7 +3950,7 @@ def dxf_komponent(s, o, k, yol, P):
     kenarlar = {gad: hlr(s, *GORUNUS[gad], gizli=P.get("gizli", True))
                 for gad in gorunusler}
     ham = {gad: _kenar_kutusu(k) for gad, k in kenarlar.items()}
-    kplan = (konum_plani(o, gorunusler, ham, h)
+    kplan = (konum_plani(o, gorunusler, ham, h, kenarlar)
              if P.get("konum", True) else {})
     ust, kaydir, gkutu = {}, {}, {}
     for gad in gorunusler:
@@ -3939,7 +3965,7 @@ def dxf_komponent(s, o, k, yol, P):
     merkez_cizgileri(msp, o, yer, kaydir)
     sinir = konum_olculeri(msp, kplan, kaydir, gkutu, h) if kplan else {}
     if P.get("capraz", True):
-        capraz_olculeri(msp, kenarlar, kaydir, gkutu, h)
+        pah_notlari(msp, kenarlar, kaydir, gkutu, h)
     gabari_olculeri(msp, gkutu, sinir, h)
     ust, sag = cap_olculeri(msp, o, yer, kaydir, gkutu, h, ust)
     if P.get("kesit"):

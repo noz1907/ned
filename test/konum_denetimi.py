@@ -119,14 +119,16 @@ def main():
     dy = pl2["UST"]["dusey"]
     esit("düşeyde de tek datum", sorted({round(r["a"], 1) for r in dy}), [0.0])
 
-    print("\n-- çapraz (pahlı) kenarlar")
+    print("\n-- köşe pahı mı, eğik kesim mi")
     # 45°'lik pah: köşesi kesilmiş plaka.
     from OCP.BRepAlgoAPI import BRepAlgoAPI_Cut as _Cut
     from OCP.BRepBuilderAPI import BRepBuilderAPI_MakePolygon, BRepBuilderAPI_MakeFace
     from OCP.BRepPrimAPI import BRepPrimAPI_MakePrism
     from OCP.gp import gp_Vec
-    pg = BRepBuilderAPI_MakePolygon(gp_Pnt(100, 80, -1), gp_Pnt(120, 80, -1),
-                                    gp_Pnt(120, 60, -1), True).Wire()
+    # 5 x 5 köşe kırma - gerçek parçalardaki ölçü (175x100 plakada da
+    # 5x5). Plakaya göre küçük olması pahın tanımının parçasıdır.
+    pg = BRepBuilderAPI_MakePolygon(gp_Pnt(115, 80, -1), gp_Pnt(120, 80, -1),
+                                    gp_Pnt(120, 75, -1), True).Wire()
     kama = BRepPrimAPI_MakePrism(BRepBuilderAPI_MakeFace(pg).Face(),
                                  gp_Vec(0, 0, 7)).Shape()
     pah = _Cut(plaka(120.0, 80.0, 5.0, []), kama).Shape()
@@ -136,9 +138,49 @@ def main():
     dogru("45 derecelik pah bulundu",
           any(abs(t["aci"] - 135.0) < 1.0 or abs(t["aci"] - 45.0) < 1.0
               for t in cp), str([round(t["aci"], 1) for t in cp]))
-    dogru("boyu doğru (20√2 = 28,3)",
-          any(abs(t["uz"] - 28.28) < 0.3 for t in cp),
+    dogru("boyu doğru (5√2 = 7,07)",
+          any(abs(t["uz"] - 7.07) < 0.2 for t in cp),
           str([round(t["uz"], 1) for t in cp]))
+    # Köşeyi kesiyor ve iki ucu da dik iki kenara dayanıyor: PAHTIR.
+    dogru("köşe kırma diye tanındı", all(t["pah"] for t in cp),
+          str([(round(t["aci"], 1), t["pah"]) for t in cp]))
+    dogru("bacakları 5 x 5",
+          any(abs(t["bacak"][0] - 5.0) < 0.2 and abs(t["bacak"][1] - 5.0) < 0.2
+              for t in cp), str([t["bacak"] for t in cp]))
+
+    # Köşe kırma OLMAYAN eğik kesim: bir ucu serbest.
+    # Bacakları EŞİT DEĞİL (50 x 25): köşeden geçse de köşe kırma değil,
+    # parçanın biçimidir.
+    pg2 = BRepBuilderAPI_MakePolygon(gp_Pnt(40, 80, -1), gp_Pnt(90, 80, -1),
+                                     gp_Pnt(40, 55, -1), True).Wire()
+    kama2 = BRepPrimAPI_MakePrism(BRepBuilderAPI_MakeFace(pg2).Face(),
+                                  gp_Vec(0, 0, 7)).Shape()
+    egik = _Cut(plaka(120.0, 80.0, 5.0, []), kama2).Shape()
+    cp2 = O.capraz_kenarlar(O.hlr(egik, *O.GORUNUS["UST"], gizli=False))
+    print("     eğik kesim:", [(round(t["aci"], 1), t["pah"]) for t in cp2])
+    dogru("eğik kesim pah sayılmadı",
+          cp2 and not any(t["pah"] for t in cp2),
+          str([(round(t["aci"], 1), t["pah"]) for t in cp2]))
+    ham3 = {"UST": O._kenar_kutusu(O.hlr(egik, *O.GORUNUS["UST"], gizli=False))}
+    pl3 = O.konum_plani(o2, ("UST",), ham3, 4.0,
+                        {"UST": O.hlr(egik, *O.GORUNUS["UST"], gizli=False)})
+    ux = sorted(round(r["b"], 1) for r in pl3["UST"]["yatay"])
+    print("     eğik kesimin uçları (yatay):", ux)
+    dogru("eğik kesimin uçları kenardan ölçülüyor",
+          any(abs(v - 40.0) < 0.5 for v in ux)
+          and any(abs(v - 90.0) < 0.5 for v in ux), str(ux))
+    # Büyük 45'lik bir kesim de pah sayılmamalı.
+    pg3 = BRepBuilderAPI_MakePolygon(gp_Pnt(60, 80, -1), gp_Pnt(120, 80, -1),
+                                     gp_Pnt(120, 20, -1), True).Wire()
+    buyuk = _Cut(plaka(120.0, 80.0, 5.0, []),
+                 BRepPrimAPI_MakePrism(BRepBuilderAPI_MakeFace(pg3).Face(),
+                                       gp_Vec(0, 0, 7)).Shape()).Shape()
+    cp3 = O.capraz_kenarlar(O.hlr(buyuk, *O.GORUNUS["UST"], gizli=False))
+    print("     büyük 45 kesim:", [(round(t["aci"], 1), t["bacak"], t["pah"])
+                                   for t in cp3])
+    dogru("büyük 45 kesim pah sayılmadı",
+          cp3 and not any(t["pah"] for t in cp3),
+          str([(round(t["aci"], 1), t["pah"]) for t in cp3]))
     dogru("yatay ve düşey kenarlar çapraz sayılmadı",
           all(min(abs(t["aci"]), abs(t["aci"] - 90), abs(t["aci"] - 180)) > 1.0
               for t in cp), "eksene paralel kenar geldi")
@@ -192,22 +234,25 @@ def main():
     else:
         dogru("çakışma yok", n == 0, str(n))
 
-    print("\n-- açı yazısı makul hassasiyette")
+    print("\n-- pah notu: ok ucunda \"5 x 5\", açı YOK")
     yol4 = os.path.join(kl, "P04_PAH.dxf")
     s4, o4 = O.komponent_olcu(pah, P)
     O.dxf_komponent(s4, o4, {"poz": 4, "kod": "PAH", "ad": "Pahlı plaka",
                              "adet": 1, "malzeme_ad": "Celik"}, yol4, P)
     d4 = ezdxf.readfile(yol4)
-    aci = [e.dxf.text for e in d4.modelspace()
-           if e.dxftype() == "TEXT" and "%%d" in (e.dxf.text or "")]
-    print("     açı yazıları:", aci)
-    dogru("açı resme girdi", bool(aci), "açı yazılmamış")
-    dogru("aşırı hassasiyet yok",
-          all(len(t.replace("%%d", "").split(".")[-1]) <= 1
-              for t in aci if "." in t), str(aci))
-    dogru("açı kılavuzla bağlı",
+    yazi = [e.dxf.text for e in d4.modelspace() if e.dxftype() == "TEXT"]
+    pah = [t for t in yazi if " x " in t and "KALINLIK" not in t]
+    print("     pah notu:", pah)
+    dogru("pah notu resme girdi", bool(pah), str(yazi))
+    dogru("bacak ölçüsü yazıyor (5 x 5)",
+          any("5 x 5" in t for t in pah), str(pah))
+    # Pahın AÇISI ve hipotenüsü verilmez: keskin köşe kalmasın diye
+    # kırılmış bir köşenin ölçüsü iki bacağıdır.
+    dogru("pahın açısı yazılmadı",
+          not any("%%d" in t for t in yazi), str(yazi))
+    dogru("pah notu kılavuzla bağlı",
           sum(1 for e in d4.modelspace()
-              if e.dxftype() == "LINE" and e.dxf.layer == "OLCU") >= len(aci),
+              if e.dxftype() == "LINE" and e.dxf.layer == "OLCU") >= len(pah),
           "kılavuz çizgisi yok")
 
     print("\nSONUC: " + ("TUM DENETIMLER GECTI" if not HATA

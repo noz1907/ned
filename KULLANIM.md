@@ -897,24 +897,38 @@ iki sebepten:
 
 Kısa ölçü içeride, uzun dışarıda durur; ölçü çizgileri kesişmez.
 
-#### Çapraz (pahlı) kenarlar ve açılar
+#### Köşe pahı mı, eğik kesim mi
 
-Eksenlere paralel olmayan her düz kenara **hizalı boy ölçüsü** ve
-**açı** konur: bir 45°'lik pah için okunan `7,1` ve `45°` budur. Açı
-kısa bir kılavuz çizgisiyle kendi kenarına bağlanır — bağlanmayan bir
-açı yazısı, yerini bulamayıp uzağa kaçtığında hangi kenara ait olduğu
-anlaşılmıyordu.
+Eksenlere paralel olmayan bir kenar resimde **iki ayrı şey** olabilir
+ve ikisi başka türlü ölçülendirilir:
+
+**Köşe pahı (pah kırma).** Üç şartı birden tutar: (1) iki ucu da
+birbirine dik, eksene paralel iki kenara değiyor — yani bir köşeyi
+kesiyor, (2) bacakları eşit (45°), (3) görünüşe göre küçük (en çok
+%20). Böyle bir kenarın **açısı ölçü konusu değildir**: keskin köşe
+kalmasın diye kırılmıştır. Ok (kılavuz) ucunda `5 x 5` diye yazılır,
+aynı ölçüdekiler tek notta toplanır: `4x 5 x 5`.
+
+> İlk sürümde buna hipotenüs (`7,1`) ve açı (`45°`) veriliyordu.
+> İkisi de atölyenin işine yaramıyor, üstelik resmi kalabalıklaştırıyordu.
+
+**Eğik kesim.** Köşe kırma değil, parçanın gerçek biçimi. Bunun açısı
+değil, **uçlarının kenarlardan yeri** verilir — atölye nereden nereye
+keseceğini böyle bilir. Uçlar konum ölçüsü zincirine girer, yani
+onlar da datumdan ölçülür.
+
+Üç şart birden aranır, çünkü bir köşeden geçen **büyük** bir 45°
+kesim parçanın biçimidir, köşe kırma değil: 120 × 80 plakada 20 × 20
+bir kesim pah sayılmaz, 5 × 5 sayılır.
 
 Bunun için kenarlar **çiziminden geri tanınıyor**: HLR izdüşümü
 kenarları analitik korumuyor (ölçülen: bir görünüşte 8 doğru + 2 daire
 ama 18 B-spline), pahlar ve kesikler B-spline olarak geliyor. Her
 kenar örneklenip doğru / yay / eğri diye ayrılıyor.
 
-Açı **ölçülen** bir değerdir, tam sayı değil: izdüşümden 11,8674 gibi
-çıkabiliyor. Tam sayıya yakınsa tam sayı, değilse bir ondalık yazılır —
-o kadar hassas bir açı ne ölçülür ne tutturulur. Görünüş başına en çok
-4 çapraz kenar ölçülendirilir (en uzunlar); karmaşık bir dövme parçada
-onlarca küçük eğik kenar var, hepsi resmi okunmaz yapar.
+Ölçü yazıları makul hassasiyette: izdüşümden 11,8674 gibi değerler
+çıkabiliyor, tam sayıya yakınsa tam sayı yazılır — o kadar hassas bir
+ölçü ne ölçülür ne tutturulur.
 
 **Gabari en dışarıdadır.** Teknik resimde küçük ölçüler içeride, toplam
 ölçü en dışarıda durur; tersi olursa ölçü çizgileri kesişir. Bu yüzden
