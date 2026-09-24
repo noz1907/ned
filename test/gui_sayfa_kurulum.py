@@ -83,14 +83,52 @@ class SahteAgac:
         i = self.sut.index(c)
         if v is None: return self.satir[s][i]
         self.satir[s][i] = v
-    def selection(self): return list(self.satir)
+    def selection(self): return list(self.secili or self.satir)
+    def selection_set(self, s): self.secili = list(s) if isinstance(s, (list, tuple)) else [s]
+    def see(self, s): pass
+    def exists(self, s): return s in self.satir
     def focus(self): return ""
+SahteAgac.secili = None
 u.ac_agac = SahteAgac(); u.b_acilim = SahteWidget()
+
+# Sac taramasi arka planda calisir; testte SIRAYLA calissin diye
+# is parcacigi yakalanir.
+BEKLEYEN = []
+class SahteIplik:
+    def __init__(self, target=None, args=(), **k): BEKLEYEN.append((target, args))
+    def start(self): pass
+_eski_thread = G.threading.Thread
+G.threading.Thread = SahteIplik
+
+# Taramaya gercek kati verilsin: biri bukumlu sac, oburu kalin blok.
+from OCP.BRepPrimAPI import BRepPrimAPI_MakeBox
+from OCP.gp import gp_Pnt
+sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__))))
+from sac_tarama_denetimi import bukumlu_sac
+u.komp[0]["indeks"] = [0]; u.komp[3]["indeks"] = [1]
+u.kayit = [(None, BRepPrimAPI_MakeBox(gp_Pnt(0, 0, 0), 60.0, 50.0, 40.0).Shape()),
+           (None, bukumlu_sac())]
+u.iptal_istendi = False
+u.kuyruk = _q.Queue()
+u.v_durum = SahteVar("")
 u._acilim_doldur()
 print("acinim listesi:")
 for s, v in u.ac_agac.satir.items(): print("   ", v)
+
+print("\ntarama (program kendisi buluyor):")
+assert BEKLEYEN, "tarama isi baslatilmadi"
+t, a = BEKLEYEN.pop(); t(*a)                    # _tarama_is
+tip, veri = u.kuyruk.get_nowait()
+assert tip == "tarama", tip
+u._tarama_geldi(veri)
+for s, v in u.ac_agac.satir.items(): print("   ", v)
+secili = [u.ac_agac.satir[s][1] for s in (u.ac_agac.secili or [])]
+print("    kendiliginden secilen:", secili)
+if secili != ["01.051.000.01"]:
+    hata.append(("sac taramasi", f"secilen {secili}, beklenen ['01.051.000.01']"))
+G.threading.Thread = _eski_thread
 u._bitir = lambda: None
-u.v_durum = SahteVar(""); u.v_out = SahteVar("/tmp")
+u.v_out = SahteVar("/tmp")
 u._acilim_geldi([{"kod": "01.051.000.01", "kalinlik_mm": 2.5,
                   "acinim_genislik_mm": 233.9, "acinim_boy_mm": 2480.0,
                   "bukum_sayisi": 4, "dxf": "A1_x_acinim.dxf"}],

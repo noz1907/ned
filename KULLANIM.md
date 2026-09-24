@@ -358,14 +358,46 @@ Bükümlü bir sac parçanın **düz haldeki blank ölçüsünü** ve büküm
 çizgilerinin yerlerini çıkarır. BOM'u beklemez: komponentler okunur
 okunmaz bu sayfa açılır.
 
-1. Listeden **açınımını istediğiniz parçaları seçin** – Ctrl ile tek tek,
-   Shift ile aralık, ya da **Tümünü seç**. Parçanın kaç bükümü olduğu
-   fark etmez.
+1. Sayfa açılınca program **bükümlü sac parçaları kendisi bulur** ve
+   işaretler; listeden seçim yapmanız gerekmez. İsterseniz seçimi
+   değiştirebilir, listeye elle parça ekleyebilirsiniz.
 2. Gerekirse **K-faktörünü** değiştirin (ilk kurulumda 0,40).
    0,10 – 0,60 arası her değeri girebilirsiniz – 0,32 de olur;
    ondalık ayracı virgül ya da nokta olabilir. **Verdiğiniz
    değer saklanır**, bir daha girmeniz gerekmez.
-3. **SEÇİLENLERİN AÇINIMINI ÜRET** deyin.
+3. **İŞARETLİ PARÇALARIN AÇINIMINI ÜRET** deyin.
+
+#### Bükümlü parçalar nasıl bulunuyor
+
+Kullanıcıya "hangileri sac?" diye sormak yanlış: bunu modelin ölçüsü
+söyler. Program **silindirik yüzeylere** bakar. Bir bükümün iç ve dış
+silindiri aynı eksendedir ve aralarındaki fark sac kalınlığıdır;
+deliğin böyle bir eşi yoktur, köşe yuvarlatmasının ekseni ise sac
+yüzüne dik durur ve boyu sac kalınlığı kadardır. Bu üçünü ayırmak
+bükümü bulmaya yeter.
+
+Tarama **açınım hesabı yapmaz**, o yüzden ucuzdur: parça başına ~20 ms,
+açınım hesabıysa 15–30 saniye. 300 komponentli bir montajda hepsini
+denemek saatler sürerdi; tarama saniyeler alır.
+
+Listede her parça için ne bulunduğu yazar:
+
+| DURUM | anlamı |
+|-------|--------|
+| `N büküm bulundu – açınımı çıkarılacak` | bükümlü sac; işaretlenir |
+| `… (büküm eksenleri paralel değil, çıkmayabilir)` | bükümlüdür ama bükümler farklı yönlere; denenir, çıkmazsa sebebi yazılır |
+| `düz sac, bükümü yok – açınımı kendisidir` | plaka; açınımı zaten parçanın kendisidir |
+| `bükümlü sac değil` | freze/tornalama parçası, profil, blok |
+
+Örnek montajda ölçüldü: 16 parçanın 7'si "bükümlü" çıktı ve açınımı
+gerçekten olan **5 parçanın hepsi** bu 7'nin içindeydi — hiçbiri
+kaçmadı. Kalan 2'si zaten "eksenler paralel değil" diye önceden
+işaretliydi ve denemeleri saniyenin altında sürdü.
+
+Tarama bir **ön elemedir, söz değildir.** "Bükümlü sac" çıkan bir
+parçanın açınımı yine de verilemeyebilir; gerçek kararı hesap verir ve
+sebebini yazar. Tarama ters yönde hata yapmamaya çalışır: bükümlü bir
+parçayı elemek, onun listede hiç görünmemesi demektir.
 
 Her parça için `A<poz>_<kod>_acinim.dxf` ve hepsi için `ACINIM.csv`
 yazılır. Açınımı çıkarılamayan parçaların **nedeni** hem listede hem

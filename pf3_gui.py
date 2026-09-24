@@ -514,8 +514,10 @@ class Uygulama(ttk.Frame):
         ttk.Label(f, text="Bükümlü sac parçaların açınımı",
                   style="Baslik.TLabel").pack(anchor="w", pady=(0, 4))
         ttk.Label(f, foreground="#555", justify="left", wraplength=1000, text=(
-            "Açınımı istediğiniz parçaları listeden seçin (Ctrl ve Shift ile "
-            "çoklu seçim). Kaç bükümü olduğu fark etmez. Üretilen resim KESİM "
+            "Bükümlü sac parçaları program KENDİSİ bulur ve işaretler; "
+            "listeye elle bir şey eklemeniz gerekmez. Gerekirse seçimi "
+            "değiştirebilirsiniz (Ctrl ve Shift ile çoklu seçim). "
+            "Kaç bükümü olduğu fark etmez. Üretilen resim KESİM "
             "KONTURUDUR: dış kontur, kenar kesikleri ve delikler gerçek "
             "yerlerindedir; üstüne büküm çizgileri ve büküm tablosu işlenir. "
             "Hesap güvenilir değilse açınım hiç verilmez, sebebi yazılır. "
@@ -555,12 +557,13 @@ class Uygulama(ttk.Frame):
                    command=lambda: self.ac_agac.selection_set(
                        self.ac_agac.get_children())).pack(side="right", padx=4)
         self.b_acilim = ttk.Button(
-            alt, text="SEÇİLENLERİN AÇINIMINI ÜRET  ▸", style="Bas.TButton",
+            alt, text="İŞARETLİ PARÇALARIN AÇINIMINI ÜRET  ▸",
+            style="Bas.TButton",
             command=self.acilim_uret, state="disabled")
         self.b_acilim.pack(side="right", padx=4, ipadx=10, ipady=3)
 
     def _acilim_doldur(self):
-        """Parça listesini açınım sayfasına yazar."""
+        """Parça listesini açınım sayfasına yazar ve TARAMAYI başlatır."""
         if not hasattr(self, "ac_agac"):
             return
         self.ac_agac.delete(*self.ac_agac.get_children())
@@ -571,14 +574,79 @@ class Uygulama(ttk.Frame):
                 continue        # standart eleman ve kaynak dikişi sac değil
             s = self.ac_agac.insert("", "end", values=(
                 pozlar[i], k.get("kod", ""), (k.get("ad") or "")[:60],
-                "", "", "", "seçilirse denenecek"))
+                "", "", "", "taranıyor…"))
             self.ac_satir[s] = i
         self.b_acilim.configure(state="normal" if self.ac_satir else "disabled")
+        if self.ac_satir:
+            # Hangi parçanın bükümü var - açınım hesabı YAPMADAN. Tarama
+            # parça başına ~20 ms sürer (açınım 15-30 s), yine de arka
+            # planda çalışır: 300 komponentli bir montajda arayüz
+            # donmasın.
+            threading.Thread(target=self._tarama_is,
+                             args=(dict(self.ac_satir),), daemon=True).start()
+
+    def _tarama_is(self, satirlar):
+        try:
+            out = {}
+            for n, (s, i) in enumerate(satirlar.items(), 1):
+                if self.iptal_istendi:
+                    break
+                try:
+                    sh = self.kayit[self.komp[i]["indeks"][0]][1]
+                    out[s] = self.M.sac_taramasi(sh)
+                except Exception as ex:
+                    out[s] = {"sac": False, "tip": "sac degil",
+                              "kalinlik_mm": None, "bukum_sayisi": 0,
+                              "eksen_paralel": None,
+                              "neden": f"taranamadı: {type(ex).__name__}"}
+                if n % 25 == 0:
+                    self.kuyruk.put(("ilerleme", (n, len(satirlar))))
+            self.kuyruk.put(("tarama", out))
+        except Exception:
+            self.kuyruk.put(("hata", "Sac taraması sırasında hata:\n\n"
+                             + traceback.format_exc()))
+
+    def _tarama_geldi(self, out):
+        """Tarama bitti: bükümlüleri işaretle ve KENDİLİĞİNDEN seç."""
+        self.tarama = out
+        sec = []
+        for s, r in out.items():
+            if not self.ac_agac.exists(s):
+                continue
+            if r["kalinlik_mm"]:
+                self.ac_agac.set(s, "kalinlik", f"{r['kalinlik_mm']} mm")
+            if r["tip"] == "bukumlu sac":
+                sec.append(s)
+                d = f"{r['bukum_sayisi']} büküm bulundu – açınımı çıkarılacak"
+                if r.get("eksen_paralel") is False:
+                    # Söz vermiyoruz: eksenler paralel değilse açınım
+                    # çıkmayabilir. Yine de seçili kalsın, denemesi
+                    # saniyenin altında sürer ve sebebini o zaman yazar.
+                    d += "  (büküm eksenleri paralel değil, çıkmayabilir)"
+                self.ac_agac.set(s, "durum", d)
+            elif r["tip"] == "duz sac":
+                self.ac_agac.set(s, "durum",
+                                 "düz sac, bükümü yok – açınımı kendisidir")
+            else:
+                self.ac_agac.set(s, "durum", "bükümlü sac değil")
+        if sec:
+            self.ac_agac.selection_set(sec)
+            self.ac_agac.see(sec[0])
+        self.v_durum.set(
+            f"açınım taraması: {len(sec)} bükümlü sac parça bulundu ve "
+            f"seçildi ({len(out)} parça tarandı) – ÜRET deyin"
+            if sec else
+            f"açınım taraması: {len(out)} parçanın hiçbirinde büküm yok")
 
     def acilim_uret(self):
         sec = self.ac_agac.selection()
         if not sec:
-            messagebox.showinfo("Açınım", "Önce listeden parça seçin.")
+            messagebox.showinfo(
+                "Açınım", "Seçili parça yok.\n\n"
+                "Program bükümlü sac parçaları tarayıp kendiliğinden "
+                "seçer; hiçbiri seçilmediyse bu montajda bükümlü sac "
+                "parça bulunamamış demektir. İsterseniz listeden elle "
+                "seçip yine de deneyebilirsiniz.")
             return
         try:
             kf = float(self.v_kfaktor.get().replace(",", "."))
@@ -1004,6 +1072,8 @@ class Uygulama(ttk.Frame):
                     self._ornek_geldi(veri)
                 elif tip == "tumu":
                     self._tumu_geldi(veri)
+                elif tip == "tarama":
+                    self._tarama_geldi(veri)
                 elif tip == "acilim":
                     self._acilim_geldi(*veri)
                 elif tip == "plan":

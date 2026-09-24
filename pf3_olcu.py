@@ -1337,6 +1337,76 @@ def bukum_ciftleri(bukumler, en_az_kalinlik=0.2, en_cok_kalinlik=25.0):
     return [x for x in ham if abs(x["t"] - ortanca) <= pay]
 
 
+def sac_taramasi(sh, kb=None):
+    """Parça bükümlü sac mı — AÇINIM HESABI YAPMADAN söyler.
+
+    Niçin ayrı bir tarama: açınım hesabı parçayı döndürüp kesit alır,
+    parça başına 15-30 saniye sürer. Bir montajda 300 komponent olabilir;
+    hepsine açınım denemek saatler alır. Oysa "bu parça bükümlü sac mı"
+    sorusunun cevabı çok daha ucuza bulunur: SİLİNDİRİK YÜZEYLERE bakmak
+    yeter. Bükümün iç ve dış silindiri aynı eksen üzerindedir ve
+    aralarındaki fark sac kalınlığıdır; delikte böyle bir çift yoktur,
+    köşe yuvarlatmasının ekseni ise sac yüzüne diktir (bkz.
+    bukum_ciftleri). Böylece kullanıcı listeden parça seçmek zorunda
+    kalmaz, program bükümlüleri kendisi bulur.
+
+    Bu bir ÖN ELEMEDİR, açınım sözü değildir: burada "bükümlü sac" çıkan
+    bir parçanın açınımı yine de verilemeyebilir (büküm eksenleri
+    paralel değilse, boydan boya delik varsa...). Gerçek karar
+    sac_acilim'indir ve sebebini o yazar. Ters yönde hata yapmamaya
+    çalışılır: bükümlü bir parçayı "sac değil" diye elemek, listede
+    görünmemesi demektir.
+
+    Döndürdüğü:
+      {"sac": bool, "tip": "bukumlu sac" / "duz sac" / "sac degil",
+       "kalinlik_mm": float|None, "bukum_sayisi": int,
+       "eksen_paralel": bool|None, "neden": str}
+    """
+    bos = {"sac": False, "tip": "sac degil", "kalinlik_mm": None,
+           "bukum_sayisi": 0, "eksen_paralel": None, "neden": ""}
+    try:
+        kb = kb or kutu(sh)
+    except Exception:
+        return dict(bos, neden="parçanın gabarisi okunamadı")
+    olc = sorted([kb[3] - kb[0], kb[4] - kb[1], kb[5] - kb[2]])
+    if olc[0] < 1e-9:
+        return dict(bos, neden="parçanın kalınlığı sıfır")
+
+    try:
+        ciftler = bukum_ciftleri(bukum_yuzeyleri(sh))
+    except Exception as e:
+        ciftler = []
+        bos["neden"] = f"büküm taraması yapılamadı: {type(e).__name__}"
+
+    if ciftler:
+        t = sorted(c["t"] for c in ciftler)[len(ciftler) // 2]
+        # Sac, KENDİ KALINLIĞINDAN çok daha büyük bir parçadır. Kalın bir
+        # blokta da radüs vardır; oran bakılmazsa freze parçası "sac"
+        # sayılır.
+        if olc[2] < 4.0 * t:
+            return dict(bos, kalinlik_mm=round(t, 2),
+                        neden=f"gabari kalınlığa göre küçük "
+                              f"({olc[2]:.0f} mm / t={t:.1f} mm): sac değil")
+        try:
+            bukum_ekseni(ciftler)
+            paralel = True
+        except AcilimYok:
+            paralel = False
+        return {"sac": True, "tip": "bukumlu sac", "kalinlik_mm": round(t, 2),
+                "bukum_sayisi": len(ciftler), "eksen_paralel": paralel,
+                "neden": ("" if paralel else
+                          "büküm eksenleri paralel değil; açınım "
+                          "denenecek ama çıkmayabilir")}
+
+    t = sac_kalinligi(sh, kb)
+    if t:
+        # Bükümü yok: açınımı parçanın kendisidir, ayrıca hesaplanmaz.
+        return {"sac": True, "tip": "duz sac", "kalinlik_mm": t,
+                "bukum_sayisi": 0, "eksen_paralel": None,
+                "neden": "büküm yok: düz sac, açınımı kendisidir"}
+    return dict(bos, neden=bos["neden"] or "bükümü ve sac kesiti yok")
+
+
 def bukum_ekseni(ciftler):
     """Bütün büküm eksenleri paralel mi? Değilse açınım çıkarılamaz.
     Geriye eksenlerin ORTALAMASI döner: eksenler tasarımda tam tam
@@ -2876,6 +2946,36 @@ def poz_numaralari(komp, poz_harita=None):
     return out
 
 
+def sac_parcalari(kayit, komp, log=print):
+    """Montajdaki BÜKÜMLÜ SAC parçaları bulur; kod kümesi döndürür.
+
+    Kullanıcının listeden parça seçmesine gerek kalmasın diye. Açınım
+    hesabı yapmaz, yalnız sac_taramasi'nı çağırır: parça başına ~20 ms,
+    açınım hesabıysa 15-30 saniye. Örnek montajda 16 parçanın 7'si
+    bükümlü çıktı, açınımı gerçekten olan 5 parçanın hepsi bu 7'nin
+    içindeydi (hiçbiri kaçmadı); kalan 2'si "büküm eksenleri paralel
+    değil" diye zaten önceden işaretli ve denemesi saniyenin altında
+    sürüyor."""
+    kod, duz, degil = set(), 0, 0
+    for k in komp:
+        if k.get("sinif") != "parca":
+            continue            # standart eleman ve kaynak dikişi sac değil
+        try:
+            r = sac_taramasi(kayit[k["indeks"][0]][1])
+        except Exception:
+            degil += 1
+            continue
+        if r["tip"] == "bukumlu sac":
+            kod.add(k.get("kod") or k.get("ad"))
+        elif r["tip"] == "duz sac":
+            duz += 1
+        else:
+            degil += 1
+    log(f"sac taraması: {len(kod)} bükümlü sac parça bulundu "
+        f"({duz} düz sac, {degil} sac değil)")
+    return kod
+
+
 def acilim_yaz(kayit, komp, P, klasor, kodlar=None, k_faktor=K_FAKTOR,
                log=print, ilerleme=None, iptal=None):
     """Seçilen parçaların açınımını hesaplar, DXF ve tablo yazar.
@@ -3714,9 +3814,11 @@ def main():
                     help="çizilecek görünüşler, en çok 4: ON,ARKA,SAG,SOL,UST,ALT")
     ap.add_argument("--kesit", action="store_true",
                     help="parçanın ortasından A-A tam kesit görünüşü ekle")
-    ap.add_argument("--acinim", default="",
-                    help="bükümlü sacların açınımı: kod listesi (virgülle) "
-                         "ya da HEPSI")
+    ap.add_argument("--acinim", default="OTO",
+                    help="bükümlü sacların açınımı. OTO (varsayılan): "
+                         "bükümlü sac parçaları program kendisi bulur. "
+                         "Ayrıca kod listesi (virgülle), HEPSI ya da "
+                         "YOK yazılabilir")
     ap.add_argument("--k-faktor", type=float, default=None,
                     help=f"büküm payı K-faktörü, 0.10 - 0.60 arası "
                          f"(saklanan değer; ilk kurulumda {K_FAKTOR})")
@@ -3780,17 +3882,28 @@ def main():
         print("  --malzeme <ad> | --malzeme-dosya <csv> | --malzeme-sor ile değiştirin.")
         print(f"  Şablon yazıldı: {sab}  (doldurup --malzeme-dosya ile verin)")
 
-    if a.acinim:
-        kodlar = None if a.acinim.strip().upper() in ("HEPSI", "HEPSİ", "*") \
-            else {t.strip() for t in a.acinim.replace(";", ",").split(",") if t.strip()}
+    istek = (a.acinim or "").strip()
+    if istek.upper() in ("YOK", "HAYIR", "KAPALI"):
+        istek = ""
+    if istek:
         kf = a.k_faktor if a.k_faktor is not None else k_faktor_ayari()
         if not 0.1 <= kf <= 0.6:
             print(f"hata: K-faktörü 0.10 - 0.60 arasında olmalı ({kf} verildi)")
             return
         if a.k_faktor is not None:
             ayar_yaz(k_faktor=kf)          # bir daha yazmaya gerek kalmasın
-        print(f"açınım (K-faktörü {kf}):")
-        acilim_yaz(kayit, komp, P, on, kodlar=kodlar, k_faktor=kf)
+        if istek.upper() in ("HEPSI", "HEPSİ", "*"):
+            kodlar = None                  # hepsini dene, tarama yok
+        elif istek.upper() in ("OTO", "OTOMATIK", "OTOMATİK"):
+            kodlar = sac_parcalari(kayit, komp)
+        else:
+            kodlar = {t.strip() for t in istek.replace(";", ",").split(",")
+                      if t.strip()}
+        if kodlar is not None and not kodlar:
+            print("açınım: bükümlü sac parça bulunamadı")
+        else:
+            print(f"açınım (K-faktörü {kf}):")
+            acilim_yaz(kayit, komp, P, on, kodlar=kodlar, k_faktor=kf)
     calistir(a.step, on, kayit, komp, P, asama=asama, esl=esl, agac=agac, genel=genel,
              yogunluk=a.yogunluk, en_az_hacim=a.en_az_hacim, tek=a.tek,
              en_cok=a.en_cok, log=lambda t: print(f"{t}  [{time.time()-t0:.0f}s]"))
