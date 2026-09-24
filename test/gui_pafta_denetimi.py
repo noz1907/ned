@@ -27,9 +27,23 @@ class SahteVar:
 class SahteWidget:
     def __init__(self, *a, **k): pass
     def __call__(self, *a, **k): return SahteWidget()
-    def __getattr__(self, ad): return SahteWidget()
+    def __getattr__(self, ad):
+        # DUNDER'LARI KARSILAMA. Karsilanirsa "for x in <eksik alan>"
+        # sonsuz donguye giriyor: __iter__ bir SahteWidget veriyor,
+        # __next__ de her seferinde yenisini. Bir testi 100 saniye
+        # asilmis gibi gosteren hatayi bu cikardi.
+        if ad.startswith("__") and ad.endswith("__"):
+            raise AttributeError(ad)
+        return SahteWidget()
     def __setitem__(self, k, v): pass
-    def __getitem__(self, k): return SahteWidget()
+    def __getitem__(self, k):
+        # Sayi anahtarinda IndexError SART: __iter__ yokken Python eski
+        # usul yinelemeye duser ve __getitem__(0), (1), (2)... diye
+        # sonsuza kadar sorar. Her seferinde SahteWidget donunce
+        # "*widget.get_children()" acilimi hic bitmiyordu.
+        if isinstance(k, int):
+            raise IndexError(k)
+        return SahteWidget()
 
 
 mesaj = []
@@ -164,6 +178,8 @@ try:
     u.sablon = None
     u.v_antet = None
     u.acilim_sonuc = {}
+    u.tarama = {}
+    u.tarama_kod = {}
     u.iptal_istendi = False
     u.calisiyor = False
     u.after = lambda *a, **k: None

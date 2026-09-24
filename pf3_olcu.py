@@ -2816,6 +2816,107 @@ def acilim_konturu(sh, zincir, t, k_faktor):
     return dis, ic
 
 
+def duz_sac_konturu(sh, en_cok_sapma=0.03):
+    """Bükümü olmayan sac parçanın KESİM KONTURU.
+
+    Bükümlü parçanın konturunu açınım hesabı verir (acilim_kesim).
+    Düz bir plakanın açınımı yoktur: kesim konturu parçanın kendi
+    yüzüdür. Yine de "yüzü al, bitti" denmez - parça gerçekten plaka
+    mı, önce ölçülür.
+
+    Yöntem: en büyük düzlem yüz bulunur, normali Z'ye döndürülür,
+    yüzün dış ve iç halkaları düzlem çokgeni olarak alınır. Sonuç
+    BAĞIMSIZ bir ölçüyle denetlenir: alan x kalınlık = hacim. Cepli,
+    çıkıntılı ya da kademeli bir parçada bu tutmaz ve kontur
+    verilmez - lazerde hurda çıkarmaktansa hiç vermemek gerekir.
+
+    Döner: {"kontur_dis", "kontur_delik", "kalinlik_mm", "olcu"}
+    """
+    v = hacim(sh)
+    if v <= 0:
+        raise AcilimYok("Parçanın hacmi okunamadı.")
+    # En büyük düzlem yüz: plakanın yüzü. (Silindirik ya da eğri
+    # yüzeyler burada aranmaz; onlar zaten plaka değildir.)
+    en_iyi = None
+    ex = TopExp_Explorer(sh, TopAbs_FACE)
+    while ex.More():
+        f = TopoDS.Face_s(ex.Current())
+        ex.Next()
+        ad = BRepAdaptor_Surface(f, True)
+        if ad.GetType() != GeomAbs_Plane:
+            continue
+        g = GProp_GProps(); BRepGProp.SurfaceProperties_s(f, g)
+        if en_iyi is None or g.Mass() > en_iyi[0]:
+            d = ad.Plane().Axis().Direction()
+            en_iyi = (g.Mass(), f, (d.X(), d.Y(), d.Z()))
+    if en_iyi is None:
+        raise AcilimYok("Parçada düzlem yüz yok: sac plaka değil.")
+    alan, yuz, normal = en_iyi
+
+    t = v / alan
+    kb = kutu(sh)
+    ince = min(kb[3] - kb[0], kb[4] - kb[1], kb[5] - kb[2])
+    if t <= 0 or t > 25.0:
+        raise AcilimYok(f"Sac kalınlığı makul değil: {t:.2f} mm.")
+    # Gabarinin en ince yönü ile hacimden çıkan kalınlık tutmalı.
+    # Tutmuyorsa parça düz bir plaka değildir (cep, çıkıntı, kademe).
+    if abs(ince - t) > max(0.05, en_cok_sapma * t):
+        raise AcilimYok(
+            f"Parça düz plaka değil: gabarinin en ince yönü {ince:.2f} mm, "
+            f"hacim/alan {t:.2f} mm veriyor. Cebi, çıkıntısı ya da "
+            f"kademesi olan bir parçanın kesim konturu tek düzlemden "
+            f"çıkarılamaz; kontur verilmiyor.")
+
+    d = _dis_halkalar(_eksene_dondur(yuz, normal))
+    dis, ic = d
+    if not dis:
+        raise AcilimYok("Plakanın sınırı çıkarılamadı.")
+    if len(dis) != 1:
+        raise AcilimYok(
+            f"Plaka düzlemde {len(dis)} ayrı parça çıktı; tek parça "
+            "olmayan bir kontur lazerde işe yaramaz.")
+    xs = [p[0] for w in dis + ic for p in w]
+    ys = [p[1] for w in dis + ic for p in w]
+    dx, dy = -min(xs), -min(ys)
+    kay = lambda w: [(x + dx, y + dy) for x, y in w]
+    return {"kontur_dis": [kay(w) for w in dis],
+            "kontur_delik": [kay(w) for w in ic],
+            "kalinlik_mm": round(t, 2),
+            "olcu": (round(max(xs) - min(xs), 2), round(max(ys) - min(ys), 2))}
+
+
+LAZER_KATMAN = "KESIM"
+
+
+def dxf_lazer(kontur_dis, kontur_delik, yol, P=None):
+    """Lazer/CNC kesim resmi: YALNIZ kontur, 1:1.
+
+    Bilerek çıplaktır. Ne büküm çizgisi, ne büküm tablosu, ne ölçü, ne
+    başlık, ne çerçeve - ve PAFTAYA DA ALINMAZ. Sebebi şu: bu dosya
+    okunmak için değil, KESİLMEK için üretilir. CAM yazılımı dosyadaki
+    her çizgiyi kesim yolu sayabilir; resmin üstündeki bir yazı ya da
+    ölçü çizgisi sacın üstüne kesilir. Parçanın kimliği dosya
+    ADINDADIR (..._Lzr.dxf).
+
+    Bütün konturlar tek katmandadır (KESIM) ve kapalı çokgendir:
+    dıştaki dış kontur, içtekiler delik."""
+    doc = dxf_kur(); msp = doc.modelspace()
+    if LAZER_KATMAN not in doc.layers:
+        doc.layers.add(LAZER_KATMAN, color=7)
+    doc.layers.get(LAZER_KATMAN).dxf.lineweight = CIZGI_KAL
+    n = 0
+    for w in list(kontur_dis) + list(kontur_delik):
+        if len(w) < 3:
+            continue
+        msp.add_lwpolyline(w, close=True, dxfattribs={"layer": LAZER_KATMAN})
+        n += 1
+    if not n:
+        raise AcilimYok("Kesilecek kontur yok.")
+    os.makedirs(os.path.dirname(os.path.abspath(yol)) or ".", exist_ok=True)
+    doc.saveas(yol)
+    return yol
+
+
 def dxf_acilim(r, k, yol, P=None):
     """Açınım resmi: kesim konturu, delikler ve büküm çizgileri.
 
@@ -2946,7 +3047,7 @@ def poz_numaralari(komp, poz_harita=None):
     return out
 
 
-def resim_dosyasi(poz, kod, ad=None, acinim=False):
+def resim_dosyasi(poz, kod, ad=None, acinim=False, lazer=False):
     """Bir parçanın resim dosyası adı.
 
     Poz + çizim no + parça adı: P05_01_050_000_01_U-Blech.dxf
@@ -2978,7 +3079,8 @@ def resim_dosyasi(poz, kod, ad=None, acinim=False):
     except (TypeError, ValueError):
         p = "P00"
     return (f"{p}_{k}" + (f"_{a}" if a else "")
-            + ("_acinim" if acinim else "") + ".dxf")
+            + ("_acinim" if acinim else "") + ("_Lzr" if lazer else "")
+            + ".dxf")
 
 
 def sac_parcalari(kayit, komp, log=print):
@@ -3018,6 +3120,7 @@ def acilim_yaz(kayit, komp, P, klasor, kodlar=None, k_faktor=K_FAKTOR,
     kodlar None ise bütün komponentler denenir. Geriye (sonuclar, hatalar)
     döner; hata listesi kullanıcıya OLDUĞU GİBİ gösterilmelidir, çünkü
     hangi parçanın neden açılamadığını tek tek söyler."""
+    os.makedirs(klasor, exist_ok=True)
     sonuc, hata = [], []
     pozlar = poz_numaralari(komp)
     secili = [(pozlar[i], k) for i, k in enumerate(komp)
@@ -3084,6 +3187,91 @@ def acilim_yaz(kayit, komp, P, klasor, kodlar=None, k_faktor=K_FAKTOR,
             for ad, m in hata:
                 f.write(f"{ad}\n    " + m.replace("\n", "\n    ") + "\n\n")
         log(f"  ACINIM_yapilamayanlar.txt  ({len(hata)} parça)")
+    return sonuc, hata
+
+
+def lazer_yaz(kayit, komp, klasor, kodlar=None, k_faktor=K_FAKTOR,
+              acilim=None, log=print, ilerleme=None, iptal=None):
+    """Seçilen sac parçalar için LAZER KESİM resimleri (..._Lzr.dxf).
+
+    Kontur nereden gelir:
+      bükümlü sac -> açınımın kesim konturu (varsa hazırı kullanılır,
+                     yoksa açınım burada hesaplanır)
+      düz sac     -> parçanın kendi yüzü (duz_sac_konturu)
+
+    `acilim`: daha önce hesaplanmış açınım sonuçları. Verilirse aynı
+    parça ikinci kez açılmaz - açınım parça başına 15-30 saniye sürer.
+
+    Geriye (sonuclar, hatalar) döner."""
+    os.makedirs(klasor, exist_ok=True)
+    sonuc, hata = [], []
+    pozlar = poz_numaralari(komp)
+    haz = {a.get("kod"): a for a in (acilim or []) if a.get("kontur_dis")}
+    secili = [(pozlar[i], k) for i, k in enumerate(komp)
+              if k.get("sinif") == "parca"
+              and (kodlar is None or (k.get("kod") or k.get("ad")) in kodlar)]
+    for i, (poz, k) in enumerate(secili):
+        if iptal and iptal():
+            log("! iptal edildi")
+            break
+        ad = k.get("kod") or k.get("ad") or "?"
+        if ilerleme:
+            ilerleme(i, len(secili), ad)
+        try:
+            sh = kayit[k["indeks"][0]][1]
+            r = haz.get(ad)
+            if r:
+                dis, ic = r["kontur_dis"], r["kontur_delik"]
+                t, nere = r["kalinlik_mm"], "açınım"
+            elif sac_taramasi(sh)["tip"] == "bukumlu sac":
+                a = sac_acilim(sh, k, k_faktor=k_faktor)
+                if not a.get("kontur_dis"):
+                    raise AcilimYok(
+                        "Açınım çıktı ama kesim konturu çıkarılamadı; "
+                        "lazer resmi verilemez.")
+                dis, ic = a["kontur_dis"], a["kontur_delik"]
+                t, nere = a["kalinlik_mm"], "açınım"
+            else:
+                c = duz_sac_konturu(sh)
+                dis, ic = c["kontur_dis"], c["kontur_delik"]
+                t, nere = c["kalinlik_mm"], "düz sac"
+        except AcilimYok as e:
+            hata.append((ad, str(e)))
+            log(f"  {ad}: lazer resmi yok - {str(e).splitlines()[0]}")
+            continue
+        except Exception as e:
+            hata.append((ad, f"beklenmeyen hata: {type(e).__name__}: {e}"))
+            log(f"  {ad}: hata - {type(e).__name__}: {e}")
+            continue
+        dosya = resim_dosyasi(poz or (i + 1), ad, k.get("ad"), lazer=True)
+        dxf_lazer(dis, ic, os.path.join(klasor, dosya))
+        xs = [q[0] for w in dis for q in w]
+        ys = [q[1] for w in dis for q in w]
+        kayd = {"poz": poz, "kod": ad, "ad": k.get("ad", ""),
+                "adet": k.get("adet", 1), "kalinlik_mm": t,
+                "boy_mm": round(max(ys) - min(ys), 2),
+                "en_mm": round(max(xs) - min(xs), 2),
+                "delik_adedi": len(ic), "kaynak": nere, "dxf": dosya}
+        sonuc.append(kayd)
+        log(f"  {dosya}  {kayd['en_mm']} x {kayd['boy_mm']} mm, "
+            f"t={t}, {len(ic)} delik  ({nere})")
+    if sonuc:
+        yol = os.path.join(klasor, "LAZER.csv")
+        with open(yol, "w", newline="", encoding="utf-8-sig") as f:
+            w = csv.writer(f, delimiter=";")
+            w.writerow(["poz", "kod", "ad", "adet", "kalinlik_mm", "en_mm",
+                        "boy_mm", "delik_adedi", "kaynak", "dxf"])
+            for r in sonuc:
+                w.writerow([r[c] for c in ("poz", "kod", "ad", "adet",
+                                           "kalinlik_mm", "en_mm", "boy_mm",
+                                           "delik_adedi", "kaynak", "dxf")])
+        log(f"  LAZER.csv  ({len(sonuc)} parça)")
+    if hata:
+        yol = os.path.join(klasor, "LAZER_yapilamayanlar.txt")
+        with open(yol, "w", encoding="utf-8") as f:
+            for ad, m in hata:
+                f.write(f"{ad}\n    " + m.replace("\n", "\n    ") + "\n\n")
+        log(f"  LAZER_yapilamayanlar.txt  ({len(hata)} parça)")
     return sonuc, hata
 
 

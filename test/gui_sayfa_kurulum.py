@@ -15,9 +15,22 @@ class SahteWidget:
     """Her cagriyi yutan, her niteligi yine kendisi olan sahte pencere ogesi."""
     def __init__(self, *a, **k): pass
     def __call__(self, *a, **k): return SahteWidget()
-    def __getattr__(self, ad): return SahteWidget()
+    def __getattr__(self, ad):
+        # DUNDER'LARI KARSILAMA. Karsilanirsa "for x in <eksik alan>"
+        # sonsuz donguye giriyor: __iter__ bir SahteWidget veriyor,
+        # __next__ de her seferinde yenisini.
+        if ad.startswith("__") and ad.endswith("__"):
+            raise AttributeError(ad)
+        return SahteWidget()
     def __setitem__(self, k, v): pass
-    def __getitem__(self, k): return SahteWidget()
+    def __getitem__(self, k):
+        # Sayi anahtarinda IndexError SART: __iter__ yokken Python eski
+        # usul yinelemeye duser ve __getitem__(0), (1), (2)... diye
+        # sonsuza kadar sorar. Her seferinde SahteWidget donunce
+        # "*widget.get_children()" acilimi hic bitmiyordu.
+        if isinstance(k, int):
+            raise IndexError(k)
+        return SahteWidget()
 
 for ad in ("Tk", "Frame", "Canvas", "Text", "Listbox", "Menu", "Toplevel",
            "PhotoImage", "Label", "Button", "Entry"):
@@ -86,7 +99,8 @@ u.M = M
 u.komp = [{"kod": "01.050.000.01", "ad": "U-Blech", "sinif": "parca", "adet": 2},
           {"kod": "M8", "ad": "M8 Somun", "sinif": "standart", "adet": 4},
           {"kod": "", "ad": "Kehlnaht", "sinif": "kaynak", "adet": 1},
-          {"kod": "01.051.000.01", "ad": "C-Profil", "sinif": "parca", "adet": 1}]
+          {"kod": "01.051.000.01", "ad": "C-Profil", "sinif": "parca", "adet": 1},
+          {"kod": "09.020.000.03", "ad": "Plaka", "sinif": "parca", "adet": 1}]
 print("\npoz numaralari:", M.poz_numaralari(u.komp))
 class SahteAgac:
     """Sutun listesi arayuzden okunur: sutun eklenince test kirilmasin."""
@@ -113,6 +127,13 @@ class SahteAgac:
     def focus(self): return ""
 SahteAgac.secili = None
 u.ac_agac = SahteAgac(); u.b_acilim = SahteWidget()
+# 8. adim (LAZER) listesi de gercek bir sahte agac olsun ki
+# lazer_doldur'un mantigi denetlensin.
+u.lz_agac = SahteAgac(("poz", "kod", "ad", "tip", "kalinlik", "olcu", "durum"))
+u.b_lazer = SahteWidget(); u.v_lz_ozet = SahteVar("")
+u.acilim_liste = []
+u.tarama = {}
+u.tarama_kod = {}
 
 # Sac taramasi arka planda calisir; testte SIRAYLA calissin diye
 # is parcacigi yakalanir.
@@ -128,9 +149,11 @@ from OCP.BRepPrimAPI import BRepPrimAPI_MakeBox
 from OCP.gp import gp_Pnt
 sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__))))
 from sac_tarama_denetimi import bukumlu_sac
-u.komp[0]["indeks"] = [0]; u.komp[3]["indeks"] = [1]
+# 0 = kalin blok (sac degil), 3 = bukumlu sac, 4 = duz plaka
+u.komp[0]["indeks"] = [0]; u.komp[3]["indeks"] = [1]; u.komp[4]["indeks"] = [2]
 u.kayit = [(None, BRepPrimAPI_MakeBox(gp_Pnt(0, 0, 0), 60.0, 50.0, 40.0).Shape()),
-           (None, bukumlu_sac())]
+           (None, bukumlu_sac()),
+           (None, BRepPrimAPI_MakeBox(gp_Pnt(0, 0, 0), 200.0, 100.0, 5.0).Shape())]
 u.iptal_istendi = False
 u.kuyruk = _q.Queue()
 u.v_durum = SahteVar("")
@@ -166,5 +189,27 @@ u._acilim_geldi([{"kod": "01.051.000.01", "kalinlik_mm": 2.5,
                 "/tmp")
 print("sonuc yazildiktan sonra:")
 for s, v in u.ac_agac.satir.items(): print("   ", v)
+# --- 8. adim: acinimi cikan parca SECILI, oburu listede ama secisiz
+print("\nlazer listesi (acinim sonrasi):")
+u.acilim_liste = [{"kod": "01.051.000.01", "kontur_dis": [[(0, 0)]],
+                   "kontur_delik": [], "kalinlik_mm": 2.5}]
+u.lazer_doldur()
+for v in u.lz_agac.satir.values():
+    print("   ", v)
+print("    ozet:", u.v_lz_ozet.get())
+kalan = [v[1] for v in u.lz_agac.satir.values()]
+secili = [u.lz_agac.satir[s][1] for s in (u.lz_agac.secili or [])
+          if s in u.lz_agac.satir]
+# Acinimi cikan USTTE ve SECILI; duz plaka listede ama SECISIZ;
+# kalin blok (sac degil) listeye HIC girmemeli.
+if secili != ["01.051.000.01"]:
+    hata.append(("lazer secimi", f"secilen {secili}, beklenen ['01.051.000.01']"))
+if "09.020.000.03" not in kalan:
+    hata.append(("lazer listesi", f"duz plaka listede yok: {kalan}"))
+if "01.050.000.01" in kalan:
+    hata.append(("lazer elemesi", f"sac olmayan parca listede: {kalan}"))
+if kalan and kalan[0] != "01.051.000.01":
+    hata.append(("lazer sirasi", f"acinimi cikan ustte degil: {kalan}"))
+
 print("\nSONUC:", "HATA VAR" if hata else "tum sayfalar kuruldu")
 sys.exit(1 if hata else 0)

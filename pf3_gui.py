@@ -108,7 +108,8 @@ Elle yapmak isterseniz, program klasorunde komut penceresi acip:
     python pf3_gui.py
 """
 ADIM = ["1  VERİ", "2  BOM ve MALZEME", "3  GÖRÜNÜŞ ve KESİT",
-        "4  ÖRNEK ONAY", "5  TÜM ÇİZİMLER", "6  AÇINIM", "7  PAFTA"]
+        "4  ÖRNEK ONAY", "5  TÜM ÇİZİMLER", "6  AÇINIM", "7  PAFTA",
+        "8  LAZER"]
 
 
 # =============================================================== yardımcılar
@@ -231,6 +232,9 @@ class Uygulama(ttk.Frame):
         self.M = None                    # pf3_olcu (ağır, arka planda yüklenir)
         self.kayit = self.komp = None
         self.sablon = None                 # firma anteti; 7. adımda aranır
+        self.acilim_liste = []             # 8. adım açınım konturunu kullanır
+        self.tarama = {}                   # sac taraması: satır -> sonuç
+        self.tarama_kod = {}               # aynısı: parça kodu -> sonuç
         self.satirlar = []               # hesaplanmış BOM satırları
         self.malzemeler = {}             # kod -> malzeme anahtarı (kullanıcı seçimi)
         self.ornek_dxf = None
@@ -636,6 +640,16 @@ class Uygulama(ttk.Frame):
         kullanıcıyı boş yere seçim yapmaya zorluyordu. Kalanlar seçili
         gelir; istenmeyen varsa seçimden çıkarılır."""
         self.tarama = out
+        # Tarama sonucunu KODA göre de sakla. Aşağıda bükümlü olmayan
+        # satırlar listeden siliniyor; 8. adım (lazer) bu sonuçları
+        # kullanıyor ve satır anahtarları silinince "taranmadı"
+        # sanıyordu - düz sac parçalar tipsiz, sac olmayanlar da
+        # gereksiz yere listeye giriyordu.
+        for s_, r_ in out.items():
+            i_ = getattr(self, "ac_satir", {}).get(s_)
+            if i_ is not None:
+                self.tarama_kod[self.komp[i_].get("kod")
+                                or self.komp[i_].get("ad")] = r_
         sec, duz, degil = [], 0, 0
         for s, r in out.items():
             if not self.ac_agac.exists(s):
@@ -674,6 +688,7 @@ class Uygulama(ttk.Frame):
             f"seçildi ({len(out)} parça tarandı) – ÜRET deyin"
             if sec else
             f"açınım taraması: {len(out)} parçanın hiçbirinde büküm yok")
+        self.lazer_doldur()      # 8. adım da taramanın sonucunu kullanır
 
     def acilim_uret(self):
         sec = self.ac_agac.selection()
@@ -729,6 +744,11 @@ class Uygulama(ttk.Frame):
         self.acilim_sonuc = getattr(self, "acilim_sonuc", {})
         for r in sonuc:                    # pafta, antet alanları için kullanır
             self.acilim_sonuc[r["dxf"]] = r
+        # Lazer adımı açınımın KONTURUNU yeniden kullanır: aynı parçayı
+        # ikinci kez açmak parça başına 15-30 saniye ederdi.
+        eski = {r["kod"]: r for r in (getattr(self, "acilim_liste", None) or [])}
+        eski.update({r["kod"]: r for r in sonuc})
+        self.acilim_liste = list(eski.values())
         for s, i in getattr(self, "ac_satir", {}).items():
             ad = self.komp[i].get("kod") or self.komp[i].get("ad")
             if ad in olan:
@@ -747,6 +767,7 @@ class Uygulama(ttk.Frame):
                                  "açınım yok: " + neden[ad].splitlines()[0])
         self.v_durum.set(f"açınım: {len(sonuc)} parça üretildi, "
                          f"{len(hata)} parça yapılamadı")
+        self.lazer_doldur()                # açınımı çıkanlar seçili gelsin
         if hata and not sonuc:
             messagebox.showinfo(
                 "Açınım yapılamadı",
@@ -891,6 +912,175 @@ class Uygulama(ttk.Frame):
             return "montaj"
         return "detay"
 
+    # ---------------------------------------------------------- 8 LAZER
+    def _sayfa8(self):
+        f = self.sayfa[7]
+        ttk.Label(f, text="Lazer kesim resimleri  (…_Lzr.dxf)",
+                  style="Baslik.TLabel").pack(anchor="w", pady=(0, 4))
+        ttk.Label(f, foreground="#555", justify="left", wraplength=1050, text=(
+            "Bu resimler OKUNMAK için değil, KESİLMEK için üretilir. "
+            "İçinde yalnız kesim konturu vardır: dış kontur ve delikler, "
+            "1:1, tek katmanda (KESIM). Büküm çizgisi, büküm tablosu, "
+            "ölçü, yazı, çerçeve ve antet YOKTUR — CAM yazılımı "
+            "dosyadaki her çizgiyi kesim yolu sayabilir, resmin "
+            "üstündeki bir yazı sacın üstüne kesilir. Parçanın kimliği "
+            "dosya ADINDADIR.\n"
+            "Bu dosyalar PAFTAYA ALINMAZ ve PDF'i BASILMAZ; 7. adımın "
+            "listesinde görünmezler.\n"
+            "Açınımı çıkan parçalar üstte ve SEÇİLİ gelir; altta "
+            "montajdaki diğer sac parçalar durur, onları siz seçersiniz."
+                  )).pack(anchor="w", pady=(0, 8))
+
+        orta = ttk.Frame(f); orta.pack(fill="both", expand=True)
+        sut = ("poz", "kod", "ad", "tip", "kalinlik", "olcu", "durum")
+        basl = {"poz": ("POZ", 50), "kod": ("KOD", 150), "ad": ("AD", 240),
+                "tip": ("TİP", 110), "kalinlik": ("SAC KALINLIK", 100),
+                "olcu": ("EN x BOY  mm", 130), "durum": ("DURUM", 330)}
+        self.lz_agac = ttk.Treeview(orta, columns=sut, show="headings",
+                                    selectmode="extended", height=14)
+        for c in sut:
+            self.lz_agac.heading(c, text=basl[c][0])
+            self.lz_agac.column(c, width=basl[c][1],
+                                anchor="w" if c in ("kod", "ad", "durum")
+                                else "center")
+        kd = ttk.Scrollbar(orta, orient="vertical", command=self.lz_agac.yview)
+        self.lz_agac.configure(yscrollcommand=kd.set)
+        self.lz_agac.pack(side="left", fill="both", expand=True)
+        kd.pack(side="right", fill="y")
+
+        self.v_lz_ozet = tk.StringVar(value="")
+        ttk.Label(f, textvariable=self.v_lz_ozet, foreground="#555",
+                  justify="left").pack(anchor="w", pady=(6, 0))
+
+        alt = ttk.Frame(f); alt.pack(fill="x", pady=(8, 0))
+        ttk.Button(alt, text="Listeyi tazele",
+                   command=self.lazer_doldur).pack(side="left")
+        ttk.Button(alt, text="Tümünü seç",
+                   command=lambda: self.lz_agac.selection_set(
+                       self.lz_agac.get_children())).pack(side="left", padx=6)
+        self.b_lazer = ttk.Button(
+            alt, text="SEÇİLİ PARÇALARIN LAZER RESMİNİ ÜRET  ▸",
+            style="Bas.TButton", command=self.lazer_uret, state="disabled")
+        self.b_lazer.pack(side="right", padx=4, ipadx=10, ipady=3)
+
+    def lazer_doldur(self):
+        """Sac parçaları listeler: açınımı çıkanlar üstte ve seçili.
+
+        Tarama 6. adımda zaten yapıldıysa yeniden yapılmaz."""
+        if not hasattr(self, "lz_agac") or not self.komp:
+            return
+        self.lz_agac.delete(*self.lz_agac.get_children())
+        self.lz_satir, sec = {}, []
+        pozlar = self.M.poz_numaralari(self.komp)
+        acilan = {r.get("kod") for r in (getattr(self, "acilim_liste", None)
+                                         or [])}
+        kod_tip = {a: r["tip"] for a, r in self.tarama_kod.items()}
+        sira = []
+        for i, k in enumerate(self.komp):
+            if k.get("sinif") != "parca":
+                continue
+            ad = k.get("kod") or k.get("ad")
+            tip = kod_tip.get(ad)
+            if ad in acilan:
+                sira.append((0, i, "açınımı çıktı", True))
+            elif tip == "bukumlu sac":
+                sira.append((1, i, "bükümlü sac", False))
+            elif tip == "duz sac":
+                sira.append((1, i, "düz sac", False))
+            elif tip is None:
+                # Henüz taranmamış: 6. adıma hiç uğranmamış olabilir.
+                # Listeye alınır ama seçilmez - lazer resmi denenince
+                # sac olup olmadığı zaten anlaşılır.
+                sira.append((2, i, "taranmadı", False))
+            # "sac degil" çıkanlar listeye HİÇ alınmaz: freze/torna
+            # parçasının lazer kesim konturu diye bir şey yoktur.
+        sira.sort(key=lambda t: (t[0], t[1]))
+        for _, i, tip, secili in sira:
+            k = self.komp[i]
+            s = self.lz_agac.insert("", "end", values=(
+                pozlar[i], k.get("kod", ""), (k.get("ad") or "")[:55],
+                tip, "", "",
+                "seçili – üretilecek" if secili else "isterseniz seçin"))
+            self.lz_satir[s] = i
+            if secili:
+                sec.append(s)
+        if sec:
+            self.lz_agac.selection_set(sec)
+        self.b_lazer.configure(state="normal" if self.lz_satir else "disabled")
+        self.v_lz_ozet.set(
+            f"{len(sec)} parçanın açınımı çıkmış, seçili geldi. "
+            f"Listede toplam {len(self.lz_satir)} parça var; "
+            "diğerlerini de seçebilirsiniz."
+            if sec else
+            f"Listede {len(self.lz_satir)} parça var. Açınım çıkarılmamış; "
+            "istediklerinizi seçin.")
+
+    def lazer_uret(self):
+        sec = [s for s in self.lz_agac.selection()
+               if getattr(self, "lz_satir", {}).get(s) is not None]
+        if not sec:
+            messagebox.showinfo("Lazer", "Önce listeden parça seçin.")
+            return
+        on = self.v_out.get().strip()
+        if not on:
+            messagebox.showwarning("Klasör", "Önce çıktı klasörünü seçin.")
+            return
+        os.makedirs(on, exist_ok=True)
+        try:
+            kf = float(self.v_kfaktor.get().replace(",", "."))
+        except Exception:
+            kf = 0.40
+        kodlar = {self.komp[self.lz_satir[s]].get("kod")
+                  or self.komp[self.lz_satir[s]].get("ad") for s in sec}
+        for s in sec:
+            self.lz_agac.set(s, "durum", "hesaplanıyor…")
+        self._basla("lazer resimleri hazırlanıyor…")
+        threading.Thread(target=self._lazer_is,
+                         args=(on, kodlar, kf, dict(self.lz_satir)),
+                         daemon=True).start()
+
+    def _lazer_is(self, on, kodlar, kf, satirlar):
+        try:
+            sonuc, hata = self.M.lazer_yaz(
+                self.kayit, self.komp, on, kodlar=kodlar, k_faktor=kf,
+                acilim=getattr(self, "acilim_liste", None),
+                log=self._yaz,
+                ilerleme=lambda y, t, ad: self.kuyruk.put(("ilerleme", (y, t))),
+                iptal=lambda: self.iptal_istendi)
+            self.kuyruk.put(("lazer", (sonuc, hata, satirlar)))
+        except Exception:
+            self.kuyruk.put(("hata", "Lazer resmi üretilirken hata:\n\n"
+                             + traceback.format_exc()))
+
+    def _lazer_geldi(self, sonuc, hata, satirlar):
+        self._bitir()
+        olan = {r["kod"]: r for r in sonuc}
+        neden = dict(hata)
+        for s, i in satirlar.items():
+            if not self.lz_agac.exists(s):
+                continue
+            ad = self.komp[i].get("kod") or self.komp[i].get("ad")
+            if ad in olan:
+                r = olan[ad]
+                self.lz_agac.set(s, "kalinlik", f"{r['kalinlik_mm']} mm")
+                self.lz_agac.set(s, "olcu", f"{r['en_mm']} x {r['boy_mm']}")
+                self.lz_agac.set(s, "durum",
+                                 f"{r['delik_adedi']} delik  –  {r['dxf']}")
+            elif ad in neden:
+                self.lz_agac.set(s, "durum",
+                                 "lazer resmi yok: " + neden[ad].splitlines()[0])
+        self.v_durum.set(f"lazer: {len(sonuc)} resim üretildi, "
+                         f"{len(hata)} parça yapılamadı")
+        if sonuc:
+            messagebox.showinfo(
+                "Lazer", f"{len(sonuc)} lazer resmi yazıldı (…_Lzr.dxf) ve "
+                f"LAZER.csv.\n\nBu dosyalar paftaya alınmaz, PDF'i "
+                "basılmaz: içlerinde yalnız kesim konturu vardır.")
+        elif hata:
+            messagebox.showwarning(
+                "Lazer", "Hiçbir parçanın lazer resmi çıkarılamadı.\n\n"
+                + "\n\n".join(f"{a}:\n{m}" for a, m in hata[:3]))
+
     def _sablon_bul(self):
         """Firma antetini arar: program klasörü, çıktı klasörü, ev.
 
@@ -966,7 +1156,10 @@ class Uygulama(ttk.Frame):
                                          "resimleri üretin.")
             return
         import glob
-        dosyalar = sorted(glob.glob(os.path.join(on, "*.dxf")))
+        # ..._Lzr.dxf LAZER KESİM dosyasıdır: içinde yalnız kontur
+        # vardır, paftası çıkmaz, PDF'i basılmaz. Listeye alınmaz.
+        dosyalar = sorted(y for y in glob.glob(os.path.join(on, "*.dxf"))
+                          if not os.path.basename(y).endswith("_Lzr.dxf"))
         self.pf_agac.delete(*self.pf_agac.get_children())
         self.pf_satir = {}
         if not dosyalar:
@@ -1283,6 +1476,8 @@ class Uygulama(ttk.Frame):
                     self._tumu_geldi(veri)
                 elif tip == "tarama":
                     self._tarama_geldi(veri)
+                elif tip == "lazer":
+                    self._lazer_geldi(*veri)
                 elif tip == "acilim":
                     self._acilim_geldi(*veri)
                 elif tip == "plan":
@@ -1511,9 +1706,12 @@ class Uygulama(ttk.Frame):
                             f"{d} parçanın malzemesi data'dan okundu, "
                             f"{n - d} parçaya malzeme vermeniz gerekiyor")
         self._acilim_doldur()
+        self.acilim_liste = []
+        self.lazer_doldur()
         self._adim_ac(1)
         self._adim_ac(5, gecis=False)     # açınım BOM'u beklemez
         self._adim_ac(6, gecis=False)     # pafta da
+        self._adim_ac(7, gecis=False)     # lazer de
         self.v_durum.set("komponentler hazır – malzemeyi verip BOM ÇIKART deyin")
 
     # ------------------------------------------------------------ 2 BOM

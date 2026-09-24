@@ -865,6 +865,54 @@ yalnız yazı stili değişir.
 
 ---
 
+### Adım 8 — LAZER (kesim resimleri)
+
+Bu resimler **okunmak için değil, kesilmek için** üretilir. İçlerinde
+yalnız **kesim konturu** vardır: dış kontur ve delikler, **1:1**, tek
+katmanda (`KESIM`), hepsi kapalı çokgen.
+
+Bilerek çıplaktırlar. Ne büküm çizgisi, ne büküm tablosu, ne ölçü, ne
+yazı, ne çerçeve, ne antet — ve **paftaya alınmazlar, PDF'leri
+basılmaz**; 7. adımın listesinde hiç görünmezler.
+
+Sebebi tek cümlede: CAM yazılımı dosyadaki her çizgiyi kesim yolu
+sayabilir. Resmin üstündeki bir yazı ya da ölçü çizgisi sacın üstüne
+kesilir. Parçanın kimliği **dosya adındadır**:
+
+```
+P05_01_050_000_01_U-Blech.dxf          detay resmi (ölçülü, paftalı)
+P05_01_050_000_01_U-Blech_acinim.dxf   açınım (büküm çizgileri, tablo)
+P05_01_050_000_01_U-Blech_Lzr.dxf      LAZER: yalnız kontur
+```
+
+#### Listede kimler var
+
+| grup | ne | seçim |
+|------|----|-------|
+| üstte | 6. adımda **açınımı çıkan** parçalar | **seçili gelir** |
+| altta | montajdaki diğer **sac** parçalar (bükümlü ve düz) | siz seçersiniz |
+| — | sac olmayanlar (freze, torna, profil) | listeye hiç alınmaz |
+
+Kontur nereden gelir:
+
+- **bükümlü sac** → açınımın kesim konturu. 6. adımda hesaplanmışsa
+  yeniden hesaplanmaz; açınım parça başına 15–30 saniye sürer.
+- **düz sac** → parçanın kendi yüzü. En büyük düzlem yüz bulunur,
+  normali Z'ye döndürülür, dış ve iç halkaları alınır.
+
+Düz sacta sonuç **bağımsız bir ölçüyle** denetlenir: gabarinin en ince
+yönü ile hacim/alan tutmak zorundadır. Cepli, çıkıntılı ya da kademeli
+bir parçada tutmaz ve **kontur verilmez** — lazerde hurda çıkarmaktansa
+hiç vermemek gerekir. Örnek montajda 10 sac parçanın 6'sının konturu
+çıktı, 4'ünün sebebi yazıldı (rollform rayın kesim konturu yok; üç
+parçanın büküm eksenleri paralel değil).
+
+Ayrıca **LAZER.csv** yazılır: poz, kod, ad, adet, kalınlık, en × boy,
+delik sayısı ve konturun nereden geldiği. Nesting için doğrudan
+kullanılır.
+
+---
+
 ## 2b. Hangi dosya biçimleri okunur
 
 | biçim | okunur mu | notu |
