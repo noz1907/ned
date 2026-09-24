@@ -135,6 +135,11 @@ try:
     cizim(os.path.join(cikti, "P01_KUCUK.dxf"), 200.0, 120.0, "P01")
     cizim(os.path.join(cikti, "P02_ORTA.dxf"), 350.0, 200.0, "P02")
     cizim(os.path.join(cikti, "P03_UZUN.dxf"), 1800.0, 240.0, "P03")
+    # DIK duran uzun parca: yatay kagitta bir kademe kucuk kalir,
+    # program dikey kagidi secmeli.
+    cizim(os.path.join(cikti, "P04_DIK.dxf"), 230.0, 1800.0, "P04")
+    # Acinim resmi: detay resmiyle AYNI adi tasir, sonuna _acinim gelir.
+    cizim(os.path.join(cikti, "P01_KUCUK_acinim.dxf"), 260.0, 150.0, "P01")
 
     u = G.Uygulama.__new__(G.Uygulama)
     u.M = M
@@ -154,7 +159,7 @@ try:
     u._basla = lambda d: u.v_durum.set(d)
     u._bitir = lambda: None
     u._yaz = lambda m: None
-    sut = ("dosya", "olcu", "kagit", "olcek", "durum")
+    sut = ("dosya", "tip", "olcu", "kagit", "olcek", "durum")
     u.pf_agac = SahteAgac(sut)
 
     def kuyrugu_bosalt():
@@ -184,12 +189,26 @@ try:
     esit("bir is baslatildi", len(BEKLEYEN), 1)
     t, a = BEKLEYEN.pop(); t(*a)          # _plan_is
     kuyrugu_bosalt()
-    esit("listelenen resim", len(u.pf_agac.satir), 3)
+    esit("listelenen resim", len(u.pf_agac.satir), 5)
     for s, v in u.pf_agac.satir.items():
-        print(f"     {v[0]:16s} {v[1]:>14s}  {v[2]}  {v[3]:6s}  {v[4][:44]}")
+        print(f"     {v[0]:24s} {v[1]:7s} {v[2]:>14s}  {v[3]:9s} {v[4]:6s}  {v[5][:36]}")
     dogru("hepsi yerlesebiliyor",
           all(u.pf_satir.get(s) for s in u.pf_agac.satir),
           "bazi satirlar yerlesemedi")
+
+    # Detay resmi de acinim da listede ve HEPSI SECILI gelmeli: ikisinin
+    # de paftasi ve PDF'i cikacak.
+    tipler = {v[0]: v[1] for v in u.pf_agac.satir.values()}
+    esit("acinim tipi taniniyor", tipler.get("P01_KUCUK_acinim.dxf"), "açınım")
+    esit("detay tipi taniniyor", tipler.get("P01_KUCUK.dxf"), "detay")
+    esit("hepsi secili geldi",
+         len(u.pf_agac.selection()), len(u.pf_agac.satir))
+
+    # Yon parcaya gore secilmeli.
+    yonler = {v[0]: v[3] for v in u.pf_agac.satir.values()}
+    print("     yonler:", yonler)
+    esit("dik duran parca dikey kagida", yonler.get("P04_DIK.dxf"), "A3 dikey")
+    esit("yatik duran parca yatay kagida", yonler.get("P03_UZUN.dxf"), "A3 yatay")
 
     print("\n-- hicbir satir secilmemisken PAFTAYA AL")
     # Kullanici listeyi tazeleyip dogrudan butona basarsa hicbir sey
@@ -201,7 +220,7 @@ try:
           f"{len(BEKLEYEN)} is, mesaj={mesaj}")
     if BEKLEYEN:
         t, a = BEKLEYEN.pop()
-        esit("butun satirlar alindi", len(a[0]), 3)
+        esit("butun satirlar alindi", len(a[0]), 5)
     kuyrugu_bosalt()
 
     print("\n-- PAFTAYA AL")
@@ -215,7 +234,7 @@ try:
           not os.path.isdir(os.path.join(cikti, "PAFTA")),
           "PAFTA klasoru olusturulmus")
     yazilan = sorted(v[0] for v in u.pf_agac.satir.values())
-    esit("paftalanan resim", len(u.pafta_dosya), 3)
+    esit("paftalanan resim", len(u.pafta_dosya), 5)
     for s, v in u.pf_agac.satir.items():
         print(f"     {v[0]:16s} -> {v[4][:60]}")
         dogru(f"{v[0]} hatasiz", not v[4].startswith("HATA"), v[4][:70])
@@ -227,7 +246,7 @@ try:
         pf = d.layout("PAFTA")
         vp = [e for e in pf if e.dxftype() == "VIEWPORT" and e.dxf.id != 1]
         dogru(f"{a}: pencere var", len(vp) >= 1, "pencere yok")
-        esit(f"{a}: kagit", P.pafta_olcusu(yol), P.KAGIT["A3"])
+        esit(f"{a}: kagit", P.pafta_olcusu(yol), P.KAGIT[kagit])
         yz = " ".join(e.dxf.text for e in pf if e.dxftype() == "TEXT")
         dogru(f"{a}: resim no yazili", a.split("_")[0] in yz, yz[:70])
         # Model uzayi 1:1 KALMALI: pafta onu ellememeli.
@@ -259,9 +278,13 @@ try:
     kuyrugu_bosalt()
     pk = u._pdf_klasoru()
     pdf = sorted(a for a in os.listdir(pk)) if os.path.isdir(pk) else []
-    esit("uretilen PDF", len(pdf), 3)
+    esit("uretilen PDF", len(pdf), 5)
     dogru("PDF adlarinda kagit eki var",
-          all(a.endswith("_A3.pdf") for a in pdf), str(pdf))
+          all(a.endswith("_A3.pdf") or a.endswith("_A3D.pdf") for a in pdf),
+          str(pdf))
+    dogru("acinimin da PDF'i cikti",
+          "P01_KUCUK_acinim_A3.pdf" in pdf, str(pdf))
+    dogru("dik parca dikey basildi", "P04_DIK_A3D.pdf" in pdf, str(pdf))
     dogru("PDF ayri klasorde", os.path.basename(pk) == "PDF", pk)
 
     print("\n-- baska kagit boylari")

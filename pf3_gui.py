@@ -514,10 +514,11 @@ class Uygulama(ttk.Frame):
         ttk.Label(f, text="Bükümlü sac parçaların açınımı",
                   style="Baslik.TLabel").pack(anchor="w", pady=(0, 4))
         ttk.Label(f, foreground="#555", justify="left", wraplength=1000, text=(
-            "Bükümlü sac parçaları program KENDİSİ bulur ve işaretler; "
-            "listeye elle bir şey eklemeniz gerekmez. Gerekirse seçimi "
-            "değiştirebilirsiniz (Ctrl ve Shift ile çoklu seçim). "
-            "Kaç bükümü olduğu fark etmez. Üretilen resim KESİM "
+            "Program bükümlü sac parçaları KENDİSİ bulur; listede "
+            "yalnız onlar kalır ve hepsi seçili gelir. İstemediğiniz "
+            "varsa seçimden çıkarın (Ctrl ile tıklayın), sonra ÜRET "
+            "deyin. Düz sac ve sac olmayan parçalar listeye hiç "
+            "alınmaz. Üretilen resim KESİM "
             "KONTURUDUR: dış kontur, kenar kesikleri ve delikler gerçek "
             "yerlerindedir; üstüne büküm çizgileri ve büküm tablosu işlenir. "
             "Hesap güvenilir değilse açınım hiç verilmez, sebebi yazılır. "
@@ -543,6 +544,10 @@ class Uygulama(ttk.Frame):
         self.ac_agac.pack(side="left", fill="both", expand=True)
         kd.pack(side="right", fill="y")
         self.ac_agac.bind("<Double-1>", self.acilim_onizle)
+
+        self.v_ac_ozet = tk.StringVar(value="")
+        ttk.Label(f, textvariable=self.v_ac_ozet, foreground="#555",
+                  justify="left").pack(anchor="w", pady=(6, 0))
 
         alt = ttk.Frame(f); alt.pack(fill="x", pady=(8, 0))
         ttk.Label(alt, text="K-faktörü:").pack(side="left")
@@ -607,31 +612,46 @@ class Uygulama(ttk.Frame):
                              + traceback.format_exc()))
 
     def _tarama_geldi(self, out):
-        """Tarama bitti: bükümlüleri işaretle ve KENDİLİĞİNDEN seç."""
+        """Tarama bitti: listede YALNIZ bükümlü sac parçalar kalır.
+
+        Düz sac ve sac olmayan parçaların açınımı diye bir şey yok -
+        düz sacın açınımı zaten kendisidir. Onları listede tutmak
+        kullanıcıyı boş yere seçim yapmaya zorluyordu. Kalanlar seçili
+        gelir; istenmeyen varsa seçimden çıkarılır."""
         self.tarama = out
-        sec = []
+        sec, duz, degil = [], 0, 0
         for s, r in out.items():
             if not self.ac_agac.exists(s):
                 continue
-            if r["kalinlik_mm"]:
-                self.ac_agac.set(s, "kalinlik", f"{r['kalinlik_mm']} mm")
             if r["tip"] == "bukumlu sac":
                 sec.append(s)
+                if r["kalinlik_mm"]:
+                    self.ac_agac.set(s, "kalinlik", f"{r['kalinlik_mm']} mm")
                 d = f"{r['bukum_sayisi']} büküm bulundu – açınımı çıkarılacak"
                 if r.get("eksen_paralel") is False:
                     # Söz vermiyoruz: eksenler paralel değilse açınım
-                    # çıkmayabilir. Yine de seçili kalsın, denemesi
+                    # çıkmayabilir. Yine de listede kalsın, denemesi
                     # saniyenin altında sürer ve sebebini o zaman yazar.
                     d += "  (büküm eksenleri paralel değil, çıkmayabilir)"
                 self.ac_agac.set(s, "durum", d)
-            elif r["tip"] == "duz sac":
-                self.ac_agac.set(s, "durum",
-                                 "düz sac, bükümü yok – açınımı kendisidir")
             else:
-                self.ac_agac.set(s, "durum", "bükümlü sac değil")
+                if r["tip"] == "duz sac":
+                    duz += 1
+                else:
+                    degil += 1
+                self.ac_agac.delete(s)          # listeden çıkar
+                self.ac_satir.pop(s, None)
         if sec:
             self.ac_agac.selection_set(sec)
             self.ac_agac.see(sec[0])
+        self.b_acilim.configure(state="normal" if sec else "disabled")
+        elendi = (f"  Listeye alınmayan {duz + degil} parça: "
+                  f"{duz} düz sac (açınımı kendisidir), "
+                  f"{degil} bükümlü sac değil.") if (duz or degil) else ""
+        self.v_ac_ozet.set(
+            (f"{len(sec)} bükümlü sac parça bulundu, hepsi seçili."
+             if sec else "Bu montajda bükümlü sac parça bulunamadı.")
+            + elendi)
         self.v_durum.set(
             f"açınım taraması: {len(sec)} bükümlü sac parça bulundu ve "
             f"seçildi ({len(out)} parça tarandı) – ÜRET deyin"
@@ -738,11 +758,18 @@ class Uygulama(ttk.Frame):
             "birebir durur, paftası yanında ayrı bir sekmedir. Böylece "
             "sonradan bir ölçü ekler ya da düzeltirseniz pafta da aynı "
             "dosyada güncel kalır; kopya ile asıl resim ayrışmaz.\n"
-            "Pafta her zaman YATAY. Kâğıdın kenarından 15 mm pay bırakılır, "
+            "Kâğıdın YÖNÜNÜ program seçer: parça hangi yönde daha büyük "
+            "görünüyorsa kâğıt o yöne çevrilir (dik duran 3 m'lik bir "
+            "parça yatay A3'te 1:50'ye düşüp okunmaz oluyordu). "
+            "Kâğıdın kenarından 15 mm pay bırakılır, "
             "sağ alt köşedeki 150 x 100 mm'lik kutu BOŞ kalır — oraya asla "
             "resim gelmez, kendi antetinizi oraya yapıştırırsınız. Baskı "
             "kendiliğinden yapılmaz: PDF'i siz istediğinizde, çıktı "
-            "klasöründeki PDF klasörüne ..._A3.pdf adıyla üretilir.")
+            "klasöründeki PDF klasörüne ..._A3.pdf adıyla üretilir.\n"
+            "Listede HEM detay resimleri HEM açınımlar vardır ve hepsi "
+            "seçili gelir; ikisinin de paftası ve PDF'i çıkar. Kâğıdın "
+            "YÖNÜNÜ program seçer: parça hangi yönde daha büyük "
+            "görünüyorsa kâğıt o yöne çevrilir.")
                   ).pack(anchor="w", pady=(0, 8))
 
         sec = ttk.Frame(f); sec.pack(fill="x")
@@ -753,17 +780,18 @@ class Uygulama(ttk.Frame):
         kb.pack(side="left", padx=4)
         kb.bind("<<ComboboxSelected>>", lambda _e: self.pafta_doldur())
         ttk.Label(sec, foreground="#555", text=(
-            "seçilen kâğıda sığan en büyük standart ölçek kullanılır "
-            "(1:1, 1:2, 1:5, 1:10 …). Sığmazsa o resim üretilmez, "
+            "boyu siz seçin, YÖNÜ (yatay/dikey) program seçer: hangisi "
+            "daha büyük ölçek veriyorsa o. Sığmazsa o resim üretilmez, "
             "hangi kâğıt gerektiği satırda yazar.")).pack(side="left")
         ttk.Button(sec, text="Listeyi tazele",
                    command=self.pafta_doldur).pack(side="right", padx=4)
 
         orta = ttk.Frame(f); orta.pack(fill="both", expand=True, pady=(8, 0))
-        sut = ("dosya", "olcu", "kagit", "olcek", "durum")
-        basl = {"dosya": ("RESİM", 300), "olcu": ("ÖLÇÜ  mm", 130),
-                "kagit": ("KÂĞIT", 70), "olcek": ("ÖLÇEK", 80),
-                "durum": ("DURUM", 440)}
+        sut = ("dosya", "tip", "olcu", "kagit", "olcek", "durum")
+        basl = {"dosya": ("RESİM", 280), "tip": ("TİP", 70),
+                "olcu": ("ÖLÇÜ  mm", 130),
+                "kagit": ("KÂĞIT", 95), "olcek": ("ÖLÇEK", 80),
+                "durum": ("DURUM", 400)}
         self.pf_agac = ttk.Treeview(orta, columns=sut, show="headings",
                                     selectmode="extended", height=13)
         for c in sut:
@@ -788,6 +816,16 @@ class Uygulama(ttk.Frame):
                                   style="Bas.TButton", command=self.pafta_uret,
                                   state="disabled")
         self.b_pafta.pack(side="right", padx=4, ipadx=10, ipady=3)
+
+    @staticmethod
+    def _resim_tipi(yol):
+        """Listede görünen tip: açınım mı, detay resmi mi, montaj mı."""
+        ad = os.path.basename(yol).lower()
+        if ad.endswith("_acinim.dxf"):
+            return "açınım"
+        if "montaj" in ad:
+            return "montaj"
+        return "detay"
 
     def _pdf_klasoru(self):
         """Baskılar buraya gider. Paftanın kendisi resmin dosyasındadır,
@@ -842,33 +880,45 @@ class Uygulama(ttk.Frame):
                 d = f"{PF.olcek_metni(s['olcek'])} çizilecek"
                 di = s.get("daha_iyi")
                 if di:
-                    d += (f"  ({di[0]} kâğıtta "
+                    d += (f"  ({PF.kagit_adi(di[0])} kâğıtta "
                           f"{PF.olcek_metni(di[1])} olurdu)")
             if 0 < s.get("yazi_mm", 0) < PF.EN_AZ_YAZI_MM:
                 d += f"  –  DİKKAT: yazılar kâğıtta {s['yazi_mm']:.1f} mm kalıyor"
             i = self.pf_agac.insert("", "end", values=(
-                os.path.basename(s["dosya"]),
+                os.path.basename(s["dosya"]), self._resim_tipi(s["dosya"]),
                 f"{s['olcu'][0]:.0f} x {s['olcu'][1]:.0f}",
-                kagit, PF.olcek_metni(s["olcek"]), d))
-            self.pf_satir[i] = {"dosya": s["dosya"], "kagit": kagit}
+                PF.kagit_adi(s.get("kagit") or kagit),
+                PF.olcek_metni(s["olcek"]), d))
+            # Yönü de birlikte saklıyoruz: üretimde aynı yön kullanılsın,
+            # yeniden hesaplanıp listedekinden farklı çıkmasın.
+            self.pf_satir[i] = {"dosya": s["dosya"],
+                                "kagit": s.get("kagit") or kagit}
         for s in p["sigmayan"]:
-            sec = ", ".join(f"{k} {PF.olcek_metni(o)}"
+            sec = ", ".join(f"{PF.kagit_adi(k)} {PF.olcek_metni(o)}"
                             for k, o in s["secenek"][:4])
             i = self.pf_agac.insert("", "end", values=(
-                os.path.basename(s["dosya"]),
+                os.path.basename(s["dosya"]), self._resim_tipi(s["dosya"]),
                 f"{s['olcu'][0]:.0f} x {s['olcu'][1]:.0f}", kagit, "-",
                 f"{kagit} kâğıda sığmıyor  –  " + (sec or "hiçbir kâğıda sığmıyor")))
             self.pf_satir[i] = None
         for y, e in p["hata"]:
             i = self.pf_agac.insert("", "end", values=(
-                os.path.basename(y), "-", "-", "-", "okunamadı: " + e))
+                os.path.basename(y), self._resim_tipi(y), "-", "-", "-",
+                "okunamadı: " + e))
             self.pf_satir[i] = None
+        # Hepsi seçili gelsin: detay resmi de açınımı da paftalanacak.
+        hepsi = [i for i in self.pf_agac.get_children() if self.pf_satir.get(i)]
+        if hepsi:
+            self.pf_agac.selection_set(hepsi)
         self.b_pafta.configure(state="normal")
         self.b_bas.configure(state="disabled")
         self.pafta_dosya = {}
         n = len(p["birebir"]) + len(p["olcekli"])
+        ac = sum(1 for s in p["birebir"] + p["olcekli"]
+                 if self._resim_tipi(s["dosya"]) == "açınım")
         self.v_durum.set(f"{kagit}: {n} resim yerleşiyor "
-                         f"({len(p['birebir'])} tanesi 1:1), "
+                         f"({ac} açınım, {n - ac} detay/montaj; "
+                         f"{len(p['birebir'])} tanesi 1:1), "
                          f"{len(p['sigmayan'])} resim sığmıyor")
 
     def pafta_uret(self):
@@ -937,7 +987,9 @@ class Uygulama(ttk.Frame):
                         it["dosya"], None,
                         it["kagit"], resim_no=it.get("resim_no"),
                         resim_adi=it.get("resim_adi"))
-                    r["kagit_adi"] = it["kagit"]
+                    # pafta_kur hangi YÖNÜ seçtiyse onu kullan: listede
+                    # yazan yönle basılan PDF'in adı ayrışmasın.
+                    r["kagit_adi"] = r.get("kagit") or it["kagit"]
                     sonuc[it["_satir"]] = ("ok", r)
                     self._yaz(f"  pafta  {it['kagit']} {r['olcek_metni']}  "
                               + os.path.basename(r["dosya"]))
@@ -962,7 +1014,10 @@ class Uygulama(ttk.Frame):
                 continue
             if tip == "ok":
                 iyi += 1
+                import pf4_pafta as PF
                 self.pf_agac.set(s, "olcek", v["olcek_metni"])
+                self.pf_agac.set(s, "kagit",
+                                 PF.kagit_adi(v.get("kagit_adi") or "A3"))
                 d = ("pafta resmin kendi dosyasına eklendi: "
                      + os.path.basename(v["dosya"]))
                 if v.get("yazi_duzeltildi"):
@@ -971,8 +1026,8 @@ class Uygulama(ttk.Frame):
                     d += (f"  –  DİKKAT: yazılar kâğıtta "
                           f"{v['yazi_mm']:.1f} mm")
                 self.pf_agac.set(s, "durum", d)
-                self.pafta_dosya[s] = (v["dosya"], v.get("kagit_adi")
-                                       or v.get("kagit") or "A3")
+                self.pafta_dosya[s] = (v["dosya"],
+                                       v.get("kagit_adi") or "A3")
             else:
                 self.pf_agac.set(s, "durum", "HATA: " + v.splitlines()[0])
         self.b_bas.configure(state="normal" if self.pafta_dosya else "disabled")
@@ -1018,7 +1073,10 @@ class Uygulama(ttk.Frame):
                     # PDF asıl resmin yanına değil, PDF klasörüne ve
                     # kâğıt adı ekiyle: ..._A3.pdf
                     ad = os.path.splitext(os.path.basename(y))[0]
-                    p = PF.bas(y, os.path.join(klasor, f"{ad}_{kagit}.pdf"))
+                    # Kâğıt eki dosya adına: A3 yatay -> _A3,
+                    # A3 dikey -> _A3D. Hangi kâğıda basıldığı ada baksın.
+                    ek = str(kagit).replace("-", "")
+                    p = PF.bas(y, os.path.join(klasor, f"{ad}_{ek}.pdf"))
                     sonuc[s] = ("ok", p)
                     self._yaz("  PDF  " + os.path.basename(p))
                 except Exception as ex:

@@ -12,7 +12,7 @@
   3. Çizim MÜMKÜN OLDUĞUNCA kâğıdın ortasındadır: 1 mm daha ortaya
      kaydırmak ya çerçeveyi aşar ya anteti ezer.
 
-Kalanı: kenar payı, ölçek merdiveni, kâğıdın her zaman yatay olması,
+Kalanı: kenar payı, ölçek merdiveni, kâğıt yönünün parçaya göre seçilmesi,
 sığmayanın reddedilmesi ve baskı.
 """
 import hashlib
@@ -161,11 +161,37 @@ def ortada_mi(p, kagit, adim=1.0):
 
 kl = tempfile.mkdtemp(prefix="pafta_denetim_")
 try:
-    print("\n-- kâğıt her zaman yatay")
-    for k, (g, y) in P.KAGIT.items():
+    print("\n-- kâğıt yönü")
+    for k in P.KAGIT_BOY:
+        g, y = P.KAGIT[k]
         dogru(f"{k} yatay", g > y, f"{g}x{y}")
+        gd, yd = P.KAGIT[k + P.YON_EKI]
+        dogru(f"{k} dikey karşılığı", (gd, yd) == (y, g), f"{gd}x{yd}")
     esit("A3 ölçüsü", P.KAGIT["A3"], (420.0, 297.0))
+    esit("A3 dikey ölçüsü", P.KAGIT["A3-D"], (297.0, 420.0))
     esit("varsayılan kâğıt", P.VARSAYILAN_KAGIT, "A3")
+    esit("kâğıt adı", P.kagit_adi("A3-D"), "A3 dikey")
+    esit("yön eki atılıyor", P.kagit_boyu("A2-D"), "A2")
+
+    # Yön parçaya göre seçilir: dik duran uzun bir parça yatay kâğıtta
+    # bir kademe daha küçülüyordu (3000 mm'lik parça A3'te 1:20 yerine
+    # 1:50'ye kadar düşüp okunmaz hâle geliyordu).
+    print("\n-- yön parçaya göre seçiliyor")
+    dik = P.yerlesim(230.0, 3000.0, "A3")
+    yat = P.yerlesim(3000.0, 230.0, "A3")
+    esit("dik duran uzun parça dikey kâğıda", dik["kagit"], "A3-D")
+    esit("yatık duran uzun parça yatay kâğıda", yat["kagit"], "A3")
+    esit("ikisinin ölçeği de aynı", dik["olcek"], yat["olcek"])
+    # Yalnız yatay zorlansaydı ne olurdu:
+    zor = max((P.sigan_olcek(230.0, 3000.0, a[2] - a[0], a[3] - a[1])
+               for a in P.cizim_alanlari("A3").values()
+               if P.sigan_olcek(230.0, 3000.0, a[2] - a[0], a[3] - a[1])),
+              default=0)
+    dogru("dikey seçmek ölçeği büyüttü", dik["olcek"] > zor,
+          f"dikey {dik['olcek']} vs yatay {zor}")
+    esit("eşitlikte yatay kalıyor", P.yerlesim(300.0, 300.0, "A3")["kagit"], "A3")
+    esit("yön eki verilirse ona uyuluyor",
+         P.yerlesim(3000.0, 230.0, "A3-D")["kagit"], "A3-D")
 
     print("\n-- çerçeve ve antet alanı")
     esit("A3 çerçevesi", P.cerceve("A3"), (15.0, 15.0, 405.0, 282.0))

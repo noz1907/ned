@@ -359,8 +359,10 @@ Bükümlü bir sac parçanın **düz haldeki blank ölçüsünü** ve büküm
 okunmaz bu sayfa açılır.
 
 1. Sayfa açılınca program **bükümlü sac parçaları kendisi bulur** ve
-   işaretler; listeden seçim yapmanız gerekmez. İsterseniz seçimi
-   değiştirebilir, listeye elle parça ekleyebilirsiniz.
+   **listede yalnız onlar kalır**; hepsi seçili gelir. Düz sac ve sac
+   olmayan parçalar listeye hiç alınmaz — düz sacın açınımı zaten
+   kendisidir, sac olmayanın açınımı diye bir şey yoktur. İstemediğiniz
+   varsa seçimden çıkarın.
 2. Gerekirse **K-faktörünü** değiştirin (ilk kurulumda 0,40).
    0,10 – 0,60 arası her değeri girebilirsiniz – 0,32 de olur;
    ondalık ayracı virgül ya da nokta olabilir. **Verdiğiniz
@@ -399,8 +401,20 @@ parçanın açınımı yine de verilemeyebilir; gerçek kararı hesap verir ve
 sebebini yazar. Tarama ters yönde hata yapmamaya çalışır: bükümlü bir
 parçayı elemek, onun listede hiç görünmemesi demektir.
 
-Her parça için `A<poz>_<kod>_acinim.dxf` ve hepsi için `ACINIM.csv`
-yazılır. Açınımı çıkarılamayan parçaların **nedeni** hem listede hem
+Her parça için `P<poz>_<kod>_acinim.dxf` ve hepsi için `ACINIM.csv`
+yazılır. **Açınım, detay resmiyle aynı adı taşır**, yalnız sonuna
+`_acinim` eklenir:
+
+```
+P05_01_050_000_01.dxf          <- detay resmi
+P05_01_050_000_01_acinim.dxf   <- açınımı
+PDF/P05_01_050_000_01_A3.pdf
+PDF/P05_01_050_000_01_acinim_A3.pdf
+```
+
+Eskiden açınım `A5_...` diye ayrı bir harfle başlıyordu; aynı parçanın
+iki resmi klasörde yan yana durmuyordu. 7. adımda ikisi de listelenir
+ve ikisinin de paftası ve PDF'i çıkar. Açınımı çıkarılamayan parçaların **nedeni** hem listede hem
 `ACINIM_yapilamayanlar.txt` dosyasında yazar.
 
 **Hesap.** Açınım genişliği, düz duvarların uzunlukları ile her bükümün
@@ -613,7 +627,23 @@ yazılmaz, hata verir.
 
 #### Paftanın yapısı
 
-Kâğıt **her zaman yatay**. A3 için (420 × 297 mm):
+**Kâğıdın yönünü program seçer.** Boyu siz verirsiniz (A3), yönü
+parçaya bakılarak belirlenir: yatay ve dikey ikisi de denenir, hangisi
+daha büyük ölçek veriyorsa o kullanılır; eşitse yatay kalır.
+
+Bu, önceki sürümün "her zaman yatay" kuralının düzeltilmesidir. Dik
+duran uzun bir parça — 3 m boyunda bir profilin ön görünüşü — yatay
+A3'te 1:20'ye, montajda 1:50'ye kadar düşüyor ve resim neredeyse
+görünmüyordu. Aynı parça dikey kâğıtta bir kademe büyük çıkıyor:
+ölçülen örnekte 230 × 3000 mm'lik bir çizim yatayda 1:20, dikeyde
+1:10. Kâğıdı parçaya uydurmak, parçayı kâğıda kurban etmekten iyidir.
+
+Listede ve paftanın sağ üst köşesinde hangi yön kullanıldığı yazar
+("A3 dikey"), PDF adına da girer: `P04_KONSOL_A3D.pdf`. Yönü kendiniz
+dayatmak isterseniz komut satırında `--kagit A3-D` diyebilirsiniz.
+
+Aşağıdaki şema yatay A3'tir (420 × 297 mm); dikeyde aynı yapı 90°
+döner, antet kutusu yine sağ alt köşededir:
 
 ```
  +----------------------------------------------------+
@@ -912,7 +942,7 @@ python pf4_pafta.py --kagit A2 --cikti cikti/PAFTA cikti/*.dxf
 
 | seçenek | ne yapar |
 |---------|----------|
-| `--kagit A4..A0` | kâğıt, her zaman yatay (varsayılan A3) |
+| `--kagit A4..A0` | kâğıt boyu (varsayılan A3); yönü program seçer. `A3-D` denirse yalnız dikey kullanılır |
 | `--olcek 0.1` | ölçeği elle verir; kâğıda sığmıyorsa pafta yazılmaz |
 | `--cikti KLASÖR` | paftaların yazılacağı klasör (varsayılan `PAFTA`) |
 | `--plan` | hiçbir şey yazmaz, yalnız ölçek raporu verir |

@@ -75,7 +75,11 @@ class SahteAgac:
         self.satir = {}; self.n = 0
         self.sut = list(sut or ("poz", "kod", "ad", "kalinlik",
                                 "acinim", "yontem", "durum"))
-    def delete(self, *a): self.satir.clear()
+    def delete(self, *a):
+        if a:                       # tek satir silme (tarama elemesi)
+            for s in a: self.satir.pop(s, None)
+        else:
+            self.satir.clear()
     def get_children(self): return list(self.satir)
     def insert(self, p, k, values=()):
         self.n += 1; s = f"I{self.n}"; self.satir[s] = list(values); return s
@@ -117,15 +121,22 @@ for s, v in u.ac_agac.satir.items(): print("   ", v)
 
 print("\ntarama (program kendisi buluyor):")
 assert BEKLEYEN, "tarama isi baslatilmadi"
+u.v_ac_ozet = SahteVar("")
 t, a = BEKLEYEN.pop(); t(*a)                    # _tarama_is
 tip, veri = u.kuyruk.get_nowait()
 assert tip == "tarama", tip
 u._tarama_geldi(veri)
 for s, v in u.ac_agac.satir.items(): print("   ", v)
-secili = [u.ac_agac.satir[s][1] for s in (u.ac_agac.secili or [])]
-print("    kendiliginden secilen:", secili)
+print("    ozet:", u.v_ac_ozet.get())
+kalan = [v[1] for v in u.ac_agac.satir.values()]
+secili = [u.ac_agac.satir[s][1] for s in (u.ac_agac.secili or [])
+          if s in u.ac_agac.satir]
+print("    listede kalan:", kalan, " secili:", secili)
+# Listede YALNIZ bukumlu sac kalmali; kalin blok elenmeli.
+if kalan != ["01.051.000.01"]:
+    hata.append(("sac taramasi", f"listede {kalan}, beklenen ['01.051.000.01']"))
 if secili != ["01.051.000.01"]:
-    hata.append(("sac taramasi", f"secilen {secili}, beklenen ['01.051.000.01']"))
+    hata.append(("sac secimi", f"secilen {secili}, beklenen ['01.051.000.01']"))
 G.threading.Thread = _eski_thread
 u._bitir = lambda: None
 u.v_out = SahteVar("/tmp")

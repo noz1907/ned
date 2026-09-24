@@ -43,18 +43,60 @@ import ezdxf.bbox
 import ezdxf.enums          # ezdxf sürümüne göre kendiliğinden gelmeyebilir
 
 # ---------------------------------------------------------------- kâğıt
-# HER ZAMAN YATAY (landscape). Dikey pafta yok: antet kutusu sağ alt
-# köşede sabittir ve uzun parçalar - sac açınımları hep uzundur - yatay
-# kâğıda sığar. Aşağıdaki ölçüler yatay ölçülerdir, döndürülmez.
-KAGIT = {
+# Kâğıt YATAY ya da DİKEY olabilir; hangisi daha büyük ölçek veriyorsa o
+# kullanılır. Önce yalnız yatay vardı: gerekçe, sac açınımlarının hep
+# uzun olması ve antet kutusunun sağ alt köşede sabit durmasıydı. Ama
+# uzun bir parça DİK duruyorsa (3000 mm boyunda bir profilin ön
+# görünüşü) yatay kâğıtta 1:50'ye düşüyor ve resim neredeyse
+# görünmüyordu; aynı parça dikey kâğıtta 1:20 çıkıyor. Kâğıdı parçaya
+# uydurmak, parçayı kâğıda kurban etmekten iyidir.
+#
+# Dikey karşılıkların adı "-D" ekiyle yazılır: "A3" yatay, "A3-D"
+# dikey. Böylece kâğıda bakan bütün işlevler (cerceve, antet_kutusu,
+# cizim_alanlari, BOLGE...) tek bir sözlükten okumaya devam eder.
+YON_EKI = "-D"
+
+def _yon_ekle(d):
+    """Her yatay kâğıdın dikey karşılığını da sözlüğe koyar."""
+    for ad, (g, y) in list(d.items()):
+        d[ad + YON_EKI] = (y, g)
+    return d
+
+
+KAGIT = _yon_ekle({
     "A4": (297.0, 210.0),
     "A3": (420.0, 297.0),
     "A2": (594.0, 420.0),
     "A1": (841.0, 594.0),
     "A0": (1189.0, 841.0),
-}
-KAGIT_SIRA = ("A4", "A3", "A2", "A1", "A0")
+})
+KAGIT_BOY = ("A4", "A3", "A2", "A1", "A0")     # yalnız boylar, yönsüz
+KAGIT_SIRA = tuple(k for b in KAGIT_BOY for k in (b, b + YON_EKI))
 VARSAYILAN_KAGIT = "A3"
+
+
+def kagit_boyu(kagit):
+    """Yön ekini atar: "A3-D" -> "A3"."""
+    return kagit[:-len(YON_EKI)] if kagit.endswith(YON_EKI) else kagit
+
+
+def dikey_mi(kagit):
+    return kagit.endswith(YON_EKI)
+
+
+def kagit_yonleri(kagit):
+    """Bu boyun iki yönü: (yatay, dikey). Yön eki verilse de aynı."""
+    b = kagit_boyu(kagit)
+    return (b, b + YON_EKI)
+
+
+def yon_adi(kagit):
+    return "dikey" if dikey_mi(kagit) else "yatay"
+
+
+def kagit_adi(kagit):
+    """Kullanıcıya gösterilecek ad: "A3 yatay" / "A3 dikey"."""
+    return f"{kagit_boyu(kagit)} {yon_adi(kagit)}"
 
 KENAR = 15.0                 # çerçeve kâğıdın kenarından bu kadar içeride
 DIS_PAY = 5.0                # ince dış çizgi kâğıdın kenarından
@@ -64,6 +106,9 @@ ANTET_EN, ANTET_BOY = 150.0, 100.0     # sağ alt köşede boş bırakılan kutu
 # aşağıya. "B3'teki delik" demek için. Sütun ve satır sayısı çifttir.
 BOLGE = {"A4": (6, 4), "A3": (8, 4), "A2": (12, 6),
          "A1": (16, 8), "A0": (24, 12)}
+# Dikey kâğıtta sütun ve satır sayısı yer değiştirir: bölge kareleri
+# yine kareye yakın kalsın.
+BOLGE.update({a + YON_EKI: (y, x) for a, (x, y) in list(BOLGE.items())})
 BOLGE_HARF = "ABCDEFGHIJKL"
 
 GORUNUS_KATMAN = "PI3D_GORUNUS_ALANI"   # motorun bıraktığı görünüş yerleri
@@ -451,22 +496,30 @@ def sigan_olcek(gx, gy, alan_g, alan_y, buyutme=False):
 def yerlesim(gx, gy, kagit=VARSAYILAN_KAGIT, buyutme=False):
     """Çizim bu kâğıda nasıl oturur.
 
-    Döner: {"olcek":, "yer": "ust"/"sol", "alan": (x0,y0,x1,y1)}
-    Sığmıyorsa None."""
+    Döner: {"olcek":, "yer": "ust"/"sol", "alan": (x0,y0,x1,y1),
+            "kagit": kullanılan kâğıt (yön ekiyle)}
+    Sığmıyorsa None.
+
+    Yön ekiyle bir kâğıt verilirse ("A3-D") yalnız o yön denenir.
+    Yönsüz verilirse ("A3") İKİ YÖN DE denenir ve daha büyük ölçek
+    veren seçilir; eşitse yatay kalır (teknik resimde alışılmış olan
+    odur, ayrıca dosyalama kolaylığı)."""
+    adaylar = kagit_yonleri(kagit) if not dikey_mi(kagit) else (kagit,)
     en_iyi = None
-    for yer, a in cizim_alanlari(kagit).items():
-        o = sigan_olcek(gx, gy, a[2] - a[0], a[3] - a[1], buyutme)
-        if o and (en_iyi is None or o > en_iyi["olcek"]):
-            en_iyi = {"olcek": o, "yer": yer, "alan": a}
+    for kg in adaylar:
+        for yer, a in cizim_alanlari(kg).items():
+            o = sigan_olcek(gx, gy, a[2] - a[0], a[3] - a[1], buyutme)
+            if o and (en_iyi is None or o > en_iyi["olcek"]):
+                en_iyi = {"olcek": o, "yer": yer, "alan": a, "kagit": kg}
     return en_iyi
 
 
-def kagit_sec(gx, gy, adaylar=KAGIT_SIRA, en_az_olcek=1.0):
-    """Çizimi istenen ölçekte alan EN KÜÇÜK kâğıt. Yoksa None."""
+def kagit_sec(gx, gy, adaylar=KAGIT_BOY, en_az_olcek=1.0):
+    """Çizimi istenen ölçekte alan EN KÜÇÜK kâğıt (yön ekiyle). Yoksa None."""
     for k in adaylar:
         y = yerlesim(gx, gy, k)
         if y and y["olcek"] >= en_az_olcek - 1e-9:
-            return k
+            return y.get("kagit", k)
     return None
 
 
@@ -774,7 +827,9 @@ def pafta_kur(kaynak_dxf, cikti_dxf=None, kagit=VARSAYILAN_KAGIT, olcek=None,
                  uzayıdır (layout). Program her yazımda model uzayının
                  varlık sayısını önce ve sonra karşılaştırır; bir tanesi
                  bile oynarsa dosya yazılmaz.
-    kagit      : "A4".."A0", her zaman yatay. Varsayılan A3.
+    kagit      : "A4".."A0". Yön eki verilmezse ("A3") YATAY ve DİKEY
+                 ikisi de denenir, daha büyük ölçek veren seçilir;
+                 "A3-D" denirse yalnız dikey kullanılır.
     olcek      : 1.0 / 0.1 gibi. None ise sığan en büyük standart ölçek.
     cok        : görünüşleri ayrı pencerelere alıp kâğıda ortadan dışa
                  eşit aralıklarla dağıt. Resimde görünüş işareti yoksa
@@ -787,7 +842,7 @@ def pafta_kur(kaynak_dxf, cikti_dxf=None, kagit=VARSAYILAN_KAGIT, olcek=None,
     """
     if kagit not in KAGIT:
         raise PaftaYok(f"Bilinmeyen kâğıt: {kagit}")
-    kg, ky = KAGIT[kagit]
+    istenen = kagit
 
     d = ezdxf.readfile(kaynak_dxf)
     # Dosya nasılsa baştan yazılacak: eski çizimlerdeki SHX fontlu yazılar
@@ -799,35 +854,52 @@ def pafta_kur(kaynak_dxf, cikti_dxf=None, kagit=VARSAYILAN_KAGIT, olcek=None,
     x0, y0, x1, y1 = cizim_kutusu(kaynak_dxf)
     gx, gy = max(x1 - x0, 1e-9), max(y1 - y0, 1e-9)
 
+    # --- hangi YÖN? Yön eki verilmediyse ikisi de denenir ve daha
+    # büyük ölçek veren kazanır. Uzun bir parça dik duruyorsa yatay
+    # kâğıtta 1:50'ye düşüp okunmaz oluyordu; aynı parça dikey kâğıtta
+    # 1:20 çıkıyor. Eşitlikte yatay kalır: adaylar sırası öyle.
+    adaylar = kagit_yonleri(istenen) if not dikey_mi(istenen) else (istenen,)
+
     # --- görünüşleri kâğıda eşit dağıtan plan (varsa)
-    plan = None
+    plan, kagit = None, adaylar[0]
     if cok and olcek is None:
-        for ad, a in cizim_alanlari(kagit).items():
-            p = cok_pencere_plani(d, (x0, y0, x1, y1),
-                                  a[2] - a[0], a[3] - a[1])
-            if p and (plan is None or p["olcek"] > plan["olcek"]):
-                p["yer"], p["alan"] = ad, a
-                plan = p
+        for kg_ad in adaylar:
+            for ad, a in cizim_alanlari(kg_ad).items():
+                p = cok_pencere_plani(d, (x0, y0, x1, y1),
+                                      a[2] - a[0], a[3] - a[1])
+                if p and (plan is None or p["olcek"] > plan["olcek"]):
+                    p["yer"], p["alan"] = ad, a
+                    plan, kagit = p, kg_ad
 
     # --- ölçek ve hangi boşluğa oturacağı
-    if plan:
-        olcek = plan["olcek"]
-        yer = {"olcek": olcek, "yer": plan["yer"], "alan": plan["alan"]}
-    elif olcek is None:
-        yer = yerlesim(gx, gy, kagit, buyutme)
-        if not yer:
-            raise PaftaYok(
-                f"{os.path.basename(kaynak_dxf)}: {gx:.0f}x{gy:.0f} mm çizim "
-                f"{kagit} paftaya standart bir ölçekle sığmıyor "
-                f"(en büyük boşluk {_en_buyuk_alan_metni(kagit)}). "
-                "Daha büyük kâğıt seçin.")
-        olcek = yer["olcek"]
+    if olcek is None:
+        # Dağıtılmış plan tek pencereden daha büyük ölçek vermiyorsa
+        # kullanılmaz: amaç resmi büyütmek.
+        tek = yerlesim(gx, gy, istenen, buyutme)
+        if plan and tek and tek["olcek"] > plan["olcek"]:
+            plan = None
+        if plan:
+            olcek = plan["olcek"]
+            yer = {"olcek": olcek, "yer": plan["yer"], "alan": plan["alan"]}
+        else:
+            yer = tek
+            if not yer:
+                raise PaftaYok(
+                    f"{os.path.basename(kaynak_dxf)}: {gx:.0f}x{gy:.0f} mm "
+                    f"çizim {kagit_boyu(istenen)} paftaya (yatay ya da "
+                    f"dikey) standart bir ölçekle sığmıyor. "
+                    "Daha büyük kâğıt seçin.")
+            kagit = yer.get("kagit", adaylar[0])
+            olcek = yer["olcek"]
     else:
         yer = None
-        for ad, a in cizim_alanlari(kagit).items():
-            if (gx * olcek <= a[2] - a[0] + 1e-6
-                    and gy * olcek <= a[3] - a[1] + 1e-6):
-                yer = {"olcek": olcek, "yer": ad, "alan": a}
+        for kg_ad in adaylar:
+            for ad, a in cizim_alanlari(kg_ad).items():
+                if (gx * olcek <= a[2] - a[0] + 1e-6
+                        and gy * olcek <= a[3] - a[1] + 1e-6):
+                    yer, kagit = {"olcek": olcek, "yer": ad, "alan": a}, kg_ad
+                    break
+            if yer:
                 break
         if not yer:
             # Ölçeği kullanıcı verdiyse de kâğıda sığmayan pafta yazılmaz:
@@ -904,12 +976,13 @@ def pafta_kur(kaynak_dxf, cikti_dxf=None, kagit=VARSAYILAN_KAGIT, olcek=None,
         except Exception:
             pass
     pafta = d.layouts.new(pafta_adi)
+    kg, ky = KAGIT[kagit]              # seçilen yönün ölçüleri
     pafta.page_setup(size=(round(kg), round(ky)), margins=(0, 0, 0, 0),
                      units="mm", scale=16)   # 16 = 1 kâğıt birimi : 1 mm
 
     not_ = ""
     if bilgi:
-        not_ = (f"{kagit}  ÖLÇEK {olcek_metni(olcek)}"
+        not_ = (f"{kagit_adi(kagit)}  ÖLÇEK {olcek_metni(olcek)}"
                 + ("  (model 1:1)" if abs(olcek - 1) > 1e-9 else ""))
     no = resim_no if resim_no is not None else os.path.splitext(
         os.path.basename(kaynak_dxf))[0]
@@ -1041,22 +1114,28 @@ def kagit_plani(dosyalar, tercih=VARSAYILAN_KAGIT):
         except Exception as e:
             hata.append((y, str(e)))
             continue
+        # Yön ekli bir tercih gelmediyse iki yön de denenir; seçilen yön
+        # kayda yazılır ki kullanıcı listede "A3 dikey" görsün.
         ye = yerlesim(gx, gy, tercih)
-        kayit = {"dosya": y, "olcu": (gx, gy), "kagit": tercih,
+        kayit = {"dosya": y, "olcu": (gx, gy),
+                 "kagit": (ye or {}).get("kagit", tercih),
                  "olcek": ye["olcek"] if ye else None,
                  "yer": ye["yer"] if ye else None}
         if not ye:
             kayit["birebir_kagit"] = kagit_sec(gx, gy)
-            kayit["secenek"] = [(k, yerlesim(gx, gy, k)["olcek"])
-                                for k in KAGIT_SIRA if yerlesim(gx, gy, k)]
+            kayit["secenek"] = [(yerlesim(gx, gy, k)["kagit"],
+                                 yerlesim(gx, gy, k)["olcek"])
+                                for k in KAGIT_BOY if yerlesim(gx, gy, k)]
             sigmayan.append(kayit)
         elif abs(ye["olcek"] - 1.0) < 1e-9:
             birebir.append(kayit)
         else:
             kayit["birebir_kagit"] = kagit_sec(gx, gy)
             kayit["daha_iyi"] = next(
-                ((k, yerlesim(gx, gy, k)["olcek"]) for k in KAGIT_SIRA
-                 if KAGIT[k][0] > KAGIT[tercih][0] and yerlesim(gx, gy, k)
+                ((yerlesim(gx, gy, k)["kagit"], yerlesim(gx, gy, k)["olcek"])
+                 for k in KAGIT_BOY
+                 if KAGIT[k][0] > KAGIT[kagit_boyu(tercih)][0]
+                 and yerlesim(gx, gy, k)
                  and yerlesim(gx, gy, k)["olcek"] > ye["olcek"]), None)
             olcekli.append(kayit)
         try:
@@ -1080,7 +1159,8 @@ def toplu_pafta(isler, cikti_klasor=None, resim_no=None, resim_adi=None):
         ad = os.path.splitext(os.path.basename(y))[0]
         kagit = it.get("kagit", VARSAYILAN_KAGIT)
         try:
-            cik = (os.path.join(cikti_klasor, f"{ad}_{kagit}.dxf")
+            cik = (os.path.join(cikti_klasor,
+                                f"{ad}_{kagit.replace('-', '')}.dxf")
                    if cikti_klasor else None)
             r = pafta_kur(y, cik, kagit, olcek=it.get("olcek"),
                           resim_no=it.get("resim_no", resim_no),
@@ -1103,7 +1183,9 @@ def _cli():
                     "basılır.")
     a.add_argument("dxf", nargs="+", help="1:1 DXF dosyaları (joker olur)")
     a.add_argument("--kagit", default=VARSAYILAN_KAGIT,
-                   choices=list(KAGIT_SIRA), help="her zaman yatay")
+                   choices=list(KAGIT_SIRA),
+                   help="yön verilmezse (A3) yatay ve dikey denenir, "
+                        "daha büyük ölçek veren seçilir; A3-D yalnız dikey")
     a.add_argument("--olcek", type=float, default=None,
                    help="1 / 0.1 gibi; verilmezse sığan en büyüğü")
     a.add_argument("--kopya", metavar="KLASOR", default=None,
@@ -1163,9 +1245,10 @@ def _cli():
               f"{os.path.basename(it['dosya'])}")
         if n.bas:
             ad = os.path.splitext(os.path.basename(it["dosya"]))[0]
+            ek = str(it["kagit"]).replace("-", "")   # A3 yatay -> A3, dikey -> A3D
             print("           ",
                   bas(it["dosya"],
-                      os.path.join(n.pdf_klasor, f"{ad}_{it['kagit']}.pdf")))
+                      os.path.join(n.pdf_klasor, f"{ad}_{ek}.pdf")))
     for y, e in r["hata"]:
         print(f"  HATA  {os.path.basename(y)}: {e}")
 
