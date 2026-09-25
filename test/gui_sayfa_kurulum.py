@@ -67,6 +67,20 @@ sayfalar = sorted((a for a in dir(G.Uygulama)
                    if re.fullmatch(r"_sayfa\d+", a)),
                   key=lambda a: int(a[6:]))
 assert sayfalar, "hic sayfa kurulum islevi bulunamadi"
+# Her sayfa islevi programda GERCEKTEN cagriliyor mu? Bu test islevleri
+# kendisi cagirdigi icin, programin cagirmayi unuttugu sayfa burada
+# kurulur ve gozden kacardi: 8. adim (LAZER) tanimliydi ama hic
+# cagrilmiyordu, sekme bos aciliyordu.
+_kaynak = open(G.__file__, encoding="utf-8").read()
+_cagri = set(re.findall(r"self\.(_sayfa\d+)\(\)", _kaynak))
+eksik = [fn for fn in sayfalar if fn not in _cagri]
+print("programda cagrilan sayfalar:", sorted(_cagri, key=lambda a: int(a[6:])))
+if eksik:
+    print("  HATA: tanimli ama hic cagrilmiyor:", eksik)
+    hata.append(("cagri", f"cagrilmayan sayfa: {eksik}"))
+if len(sayfalar) != len(G.ADIM):
+    print(f"  HATA: {len(G.ADIM)} sekme var, {len(sayfalar)} sayfa islevi var")
+    hata.append(("sayfa sayisi", f"{len(G.ADIM)} sekme, {len(sayfalar)} islev"))
 for i, fn in enumerate(sayfalar, 1):
     try:
         getattr(u, fn)()

@@ -273,6 +273,7 @@ class Uygulama(ttk.Frame):
         self._durum_cubugu()
         self._sayfa1(); self._sayfa2(); self._sayfa3()
         self._sayfa4(); self._sayfa5(); self._sayfa6(); self._sayfa7()
+        self._sayfa8()
         gf = ttk.LabelFrame(self, text=" Günlük ", padding=4)
         gf.pack(fill="both")
         self.gunluk = tk.Text(gf, height=7, wrap="none", font=("Consolas", 9))
