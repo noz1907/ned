@@ -1,0 +1,385 @@
+Pi3D  –  3B modelden parça listesi ve teknik resim
+
+Sürüm   : malzeme-sihirbazi  (26.09.2026)
+Kaynak  : github.com/noz1907/ned   dal: claude/fikstur-parca-stp-57hwc1
+
+KURULUM
+  Windows'ta  Pi3D_baslat.bat  dosyasına çift tıklayın. İlk açılışta
+  .venv ortamını kurar (birkaç dakika), sonra programı açar.
+  Ayrıntı ve elle kurulum: KULLANIM.md
+
+BU SÜRÜMDE NE VAR
+  1 VERİ            STEP / IGES / BREP okur
+  2 BOM ve MALZEME  hiyerarşik parça listesi, malzeme ve kütle
+  3 GÖRÜNÜŞ/KESİT   ÖN/ARKA/SAĞ/SOL/ÜST/ALT, kesit, gizli çizgi
+  4 ÖRNEK ONAY      bir resmi görüp onaylama
+  5 TÜM ÇİZİMLER    bütün detay resimleri + montaj resmi
+  6 AÇINIM          BÜKÜMLÜ SAC PARÇALARI PROGRAM KENDİSİ BULUR ve
+                    işaretler - listeden seçim yapmanız gerekmez.
+                    KESİM KONTURU (dış kontur, kenar kesikleri ve
+                    delikler gerçek yerinde), büküm tablosu,
+                    K-faktörü ayarlı; ayrıca parçanın ABKANT mı
+                    ROLLFORM mu olduğunu söyler
+  8 LAZER           kesim resimleri (..._Lzr.dxf): YALNIZ kesim
+                    konturu, 1:1, tek katman. Buküm cizgisi, tablo,
+                    olcu, yazi, cerceve ve antet YOK; paftaya
+                    alinmaz, PDF'i basilmaz. Acinimi cikanlar secili
+                    gelir, obur sac parcalari kullanici secer.
+  7 PAFTA           Resmin KENDİ dosyasına standart A3 (A4..A0) pafta
+                    sekmesi ekler - ayrı kopya YOK. KÂĞIDIN YÖNÜNÜ
+                    program seçer: parça hangi yönde daha büyük
+                    görünüyorsa yatay ya da dikey. Detay resimleri ve
+                    açınımlar birlikte listelenir, ikisinin de paftası
+                    ve PDF'i çıkar. PDF'ler çıktı klasörünün altındaki
+                    PDF klasörüne ..._A3.pdf / ..._A3D.pdf yazılır.
+
+  Ölçüler HER ZAMAN 1:1'dir: ölçek paftanın penceresine aittir,
+  rakama değil. 1:1 çizimler silinmez, değiştirilmez.
+
+DENETİM BETİKLERİ (test/)
+  Hepsini çalıştırmak için:
+    python test/test_gizli_cizgi.py
+    python test/yontem_denetimi.py
+    python test/pafta_denetimi.py
+    python test/logo_denetimi.py
+    python test/gui_sayfa_kurulum.py
+    python test/gui_pafta_denetimi.py
+    python test/gui_cagri_denetimi.py
+    python test/turkce_denetimi.py
+    python test/sac_tarama_denetimi.py
+    python test/antet_denetimi.py
+    python test/paket_denetimi.py
+    python test/lazer_denetimi.py
+    python test/konum_denetimi.py
+    python test/cizim_cakisma_denetimi.py --kendini-dene
+  Ölçülerin hata oranı (uzun sürer, ~1 dk):
+    python test/olcu_dogrulama.py ornek/parca.stp
+  Malzeme okuma ve sihirbaz:
+    python test/malzeme_denetimi.py
+    python test/gui_malzeme_sihirbazi.py      (tkinter + ekran ister)
+  Üretilmiş resimleri denetlemek için:
+    python test/cizim_cakisma_denetimi.py cikti
+  Ayrıntı: test/OKU.md
+
+ÖRNEKLER (ornek/olcu/)
+  ORNEK_09_020_000_03      detay resmi
+  ORNEK_GIRINTI_09_020_000_01  köşe kesiği, yuva, datum A/B/C
+  ORNEK_ACINIM_...         açınım (kesim konturu)
+  ORNEK_KESIT_09_025_000_02  kesitli detay resmi
+  ORNEK_SERIT_TIRSAN_RAY   rollform profil, şerit genişliği
+  ORNEK_00_MONTAJ          montaj resmi + BOM tablosu
+  Bütün ORNEK_*.dxf dosyalarında PAFTA sekmesi vardır (Model
+  sekmesi 1:1'dir); basılmış hâlleri ornek/olcu/PDF/ içindedir.
+  BOM.csv / BOM_AGAC.csv   parça listeleri
+  ORNEK_PAFTA_A3_*.png     paftanın görüntüsü
+
+BU SÜRÜMDE DEĞİŞEN
+
+  YARDIM MENÜSÜ VE "MALZEMEYİ CAD'DEN AL" SİHİRBAZI
+    Pencerenin üstünde Yardım menüsü: Malzemeyi CAD'den al (adım adım),
+    Tanınan malzemeler, Kullanım kılavuzu (F1), Hakkında. 2. adımda da
+    aynı sihirbazın düğmesi var. Dört adım:
+      1 STEP'te ne var   kaç parçanın malzemesi STEP'ten geldi / adından
+                         tanındı / bilinmiyor
+      2 CAD sistemi      SolidWorks, CATIA V5, NX, Creo, Inventor, Solid
+                         Edge, Parasolid ve diğerleri
+      3 Parça listesi    o CAD'de malzeme sütunlu listeyi almanın adımları;
+                         SolidWorks (VBA .bas) ve CATIA (.CATScript) makrosu
+      4 Dosya            seçilen dosya ÖNİZLENİR: hangi parça hangi
+                         malzemeyi alacak, hangisi dosyada yok, hangi ad
+                         tanınmadı - ancak UYGULA ile işlenir
+    Parasolid'i Pi3D doğrudan açamaz (OpenCascade Parasolid çekirdeğini
+    içermez); sihirbaz STEP + parça listesi yolunu gösterir.
+    SolidWorks makrosu SolidWorks olmadan yazıldı, denenemedi: ilk
+    kullanımda 4. adımdaki önizlemeyi kontrol edin.
+
+  DÜZELTME: STEP'TEKİ MALZEME HİÇ OKUNMUYORDU
+    Okuyucu malzemeyi yanlış etiketten soruyordu ve malzeme aracını da
+    belgenin yanlış yerinde kuruyordu: 'AISI 304', 7,93 yazılı bir STEP'ten
+    hiçbir şey çıkmıyordu. Artık ad ve yoğunluk okunuyor. (Elimizdeki dört
+    gerçek modelin hiçbiri STEP'e malzeme yazmamış - CATIA varsayılanla
+    yazmaz; o yüzden sihirbaz parça listesi yolunu öne koyuyor.)
+
+  MALZEME DOSYASI OKUMA
+    - Excel .xlsx okunuyor (ek paket gerekmez). Eski .xls anlaşılır bir
+      iletiyle reddediliyor.
+    - Windows Türkçe (cp1254) ve UTF-16 dosyalar: CATIA makrosunun yazdığı
+      "Çelik" artık "?elik" olmuyor.
+    - Tırnaklı CSV ("Steel, AISI 1020") doğru ayrılıyor.
+    - Yoğunluk sütunu KULLANILIYOR (eskiden okunup atılıyordu); kg/m3,
+      g/cm3, kg/mm3, lb/in3 ya da birimsiz. Adı tanınmayan malzeme artık
+      ÇELİĞE DÜŞMÜYOR: CAD'in yoğunluğuyla ayrı malzeme olarak alınıyor.
+    - Inventor listesinde ilk sütun "Item" (1, 2, 3): eskiden parça kodu
+      yerine sıra numarası seçilirdi.
+    - Tanınan adlar genişledi: C45, 42CrMo4, AISI/SAE 10xx, 1.0xxx/1.1xxx,
+      Hardox; SolidWorks, NX, Creo, Inventor, Solid Edge ve Almanca
+      başlıklar.
+
+  DÜZELTME: ARAYÜZ
+    - Açınım taraması arka planda bitince 2. adımın yönlendirmesini
+      ("malzemeyi verip BOM ÇIKART deyin") siliyor, yerine 6. adımın
+      "ÜRET deyin"ini yazıyordu. Artık yanına ekleniyor.
+    - Hesap motoru yüklenmeden İNCELE'ye basılırsa program çöküyordu.
+    - Bu hataları yakalayan test (gui_dongu_denetimi) tkinter olmayan
+      ortamda hep "atlandı" diyordu; gerçek pencereyle çalıştırıldı.
+
+  DÜZELTME: 8. ADIM (LAZER) BOŞ AÇILIYORDU
+    Sekme vardı ama içi hiç kurulmuyordu: sayfayı kuran işlev
+    tanımlıydı, açılışta çağrılmıyordu. Artık liste, açıklama ve
+    ÜRET düğmesi geliyor; açınım/tarama bitince liste kendiliğinden
+    doluyor. test/gui_sayfa_kurulum.py artık her sayfanın programda
+    gerçekten çağrıldığını da denetliyor - bu hata bir daha kaçmaz.
+
+  ÖLÇÜLER 3B MODELLE DOĞRULANIYOR - HATA ORANI ÖLÇÜLDÜ
+    Kural: hata olasılığı yüksek olan ölçü türü hiç yazılmaz; hedef
+    %0,5-1'in altı. Program her konumu görünüşten (2B) bulur, resme
+    yazmadan önce aynı konumun 3B modelde gerçek bir TASARIM SEVİYESİNE
+    denk geldiğine bakar: eksene dik düz yüzey, delik ekseni, silindirin
+    ucu, eğik kenarın sanal köşesi. Denk gelmeyen ya da belirsiz kalan
+    yazılmaz; geçen değer modeldeki tam seviyeye oturtulur.
+
+    Ölçüldü - 4 gerçek model, 183 parça:
+      1992 konum ölçüsü, 0 hata (%95 güvenle < %0,15)
+      bu denetim olmasa şasi montajında %6,4 hata (girintilerin %27'si)
+
+    Bilerek yazılmayanlar:
+      - içerideki eğik çizgilerin uçları (%70'i yuvarlatmanın teğet
+        noktasına denk geliyordu)
+      - 0,06°'den fazla eğik eksenli deliğin konumu (çapı yazılır)
+      - dövme/döküm/eğri yüzeyde karşılığı kesinleşmeyen konumlar
+    Denetim: python test/olcu_dogrulama.py model.stp
+
+  DATUM: PARÇANIN KENDİ XYZ ÇERÇEVESİ (A / B / C)
+    STEP'te datum bilgisi yok; program kendi üç düzlemli çerçevesini
+    kurar, bütün görünüşler ondan ölçülür. Ekseni ters dönen görünüşte
+    (ARKA, SOL, ALT) sıfır karşı kenardadır: ÜST'te 25 olan delik
+    ALT'ta da 25. En geniş yüzey A. Simgeler her biri bir kez konur.
+    Delik yalnız çapının yazıldığı görünüşte konumlanır (SAĞ/SOL
+    tekrarı yok).
+
+  GİRİNTİ, ÇIKINTI, İÇ PENCERE (YUVA)
+    Kenardan alınmış çentik, dışarı taşan kulak, köşe kesiği ve iç
+    yuva artık konumlanıyor; iç çentiğin derinliği de yazılıyor.
+    Ağzı yuvarlatılmış çentikte ölçü teğet noktasına değil SANAL
+    KESKİN KÖŞEYE verilir: Dachplatte'nin köşe kesiği 45 / 20,05
+    (20 x 5), iki yuvası 7,5..42,5 x 31..38.
+    Örnek: ornek/olcu/ORNEK_GIRINTI_09_020_000_01
+
+  EĞRİ SİLÜET KALABALIĞI KALKTI
+    Dövme parçanın eğri hattı onlarca kısa eğik çizgi olarak geliyor,
+    her ucuna ölçü konuyordu: bir resimde 156 ölçü. Artık 25.
+
+ÖNCEKİ DEĞİŞİKLİKLER
+
+  PAFTA artık resmin KENDİ dosyasına yazılıyor
+    Önceden pafta, PAFTA klasöründeki bir kopyaya ekleniyordu. Resme
+    sonradan bir ölçü eklendiğinde pafta yeniden üretilmezse elde iki
+    ayrı resim kalıyordu - asıl DXF düzeltilmiş, paftalı kopya eski.
+    Artık tek dosya var: Model sekmesi 1:1 çizim, yanındaki PAFTA
+    sekmesi kâğıt. Aynı resim ikinci kez paftaya alınırsa eski sekme
+    silinip yenisi kurulur, sekmeler birikmez, model uzayına
+    dokunulmaz. PDF'ler ayrı: <çıktı>/PDF/<ad>_A3.pdf
+
+  TÜRKÇE HARFLER (Ğ Ş İ Ç Ö Ü)
+    Sorun kodlamada değildi: DXF dosyası UTF-8'dir ve "Ğ" içine
+    gerçekten iki bayt olarak yazılıyordu. Kusur fonttaydı - hazır
+    "Standard" yazı stili txt.shx'i gösterir ve o SHX fontun içinde
+    yalnızca ASCII glifleri vardır. Program artık kendi TrueType
+    stilini (PI3D / arial.ttf) kuruyor; bütün yazılar ve ölçü
+    rakamları onu kullanıyor. Hazır "Standard" stiline dokunulmuyor.
+    Daha önce üretilmiş resimler paftaya alınırken yazıları
+    kendiliğinden bu stile taşınıyor - STEP'i baştan okumak gerekmez.
+
+  Sağ üstteki resim no ve isim artık ÖLÇÜLEREK yerleştiriliyor:
+    resim no'sundaki alt çizgiler (09_020_000_03) alttaki satıra
+    değmiyor, yazılar çerçeve çizgisine binmiyor.
+
+  AÇINIM ARTIK KENDİLİĞİNDEN BELİRLENİYOR
+    Eskiden listeden parça seçmeniz gerekiyordu. Artık program
+    silindirik yüzeylere bakıp bükümlü sac parçaları kendisi buluyor
+    ve işaretliyor; gerekirse seçimi siz değiştirebilirsiniz.
+    Bükümün iç ve dış silindiri aynı eksendedir, aralarındaki fark
+    sac kalınlığıdır; deliğin eşi yoktur, köşe yuvarlatmasının ekseni
+    sac yüzüne diktir - bu üçünü ayırmak bükümü bulmaya yetiyor.
+    Tarama açınım hesabı yapmaz: parça başına ~20 ms (açınım 15-30 s).
+    Örnek montajda 16 parçanın 7'si bükümlü çıktı; açınımı gerçekten
+    olan 5 parçanın hepsi bu 7'nin içindeydi, hiçbiri kaçmadı.
+    Komut satırında da varsayılan artık otomatiktir:
+      python pf3_olcu.py montaj.stp -o cikti          (kendisi bulur)
+      python pf3_olcu.py montaj.stp --acinim YOK      (hiç yapma)
+      python pf3_olcu.py montaj.stp --acinim HEPSI    (hepsini dene)
+
+  KÂĞIT YÖNÜ ARTIK PARÇAYA GÖRE
+    Pafta "her zaman yatay" değil. Dik duran uzun bir parça - 3 m
+    boyunda bir profilin ön görünüşü - yatay A3'te 1:20'ye, montajda
+    1:50'ye kadar düşüyor ve neredeyse görünmüyordu. Artık yatay ve
+    dikey ikisi de deneniyor, hangisi daha büyük ölçek veriyorsa o
+    kullanılıyor; eşitse yatay kalıyor. Ölçülen örnek: 230 x 3000 mm
+    çizim yatayda 1:20, dikeyde 1:10. Kullanılan yön paftada ve PDF
+    adında yazıyor (A3 dikey -> ..._A3D.pdf). Yönü dayatmak için
+    --kagit A3-D.
+
+  AÇINIM VE DETAY RESMİ AYNI ADI TAŞIYOR
+    P05_01_050_000_01.dxf  ve  P05_01_050_000_01_acinim.dxf
+    Eskiden açınım "A5_..." diye ayrı bir harfle başlıyordu, aynı
+    parçanın iki resmi klasörde yan yana durmuyordu. 7. adımda ikisi
+    de listeleniyor, hepsi seçili geliyor, ikisinin de PDF'i çıkıyor.
+
+  AÇINIM LİSTESİNDE YALNIZ BÜKÜMLÜ SACLAR
+    Düz sac ve sac olmayan parçalar listeye hiç alınmıyor - düz sacın
+    açınımı zaten kendisidir. Kalanlar seçili geliyor; istemediğiniz
+    varsa seçimden çıkarıp ÜRET diyorsunuz.
+
+  FIRMA ANTETI  (EXE_YAP.bat -> 2)
+    Firmanin kendi anteti kullanilabilir. O zaman cerceve, bolge
+    isaretleri, antet ve firma logosu firmanin kendi DXF'inden gelir;
+    Pi3D kutulari doldurur: Scale, Weight, Material, Part Name,
+    Drawing No, FILE. Tarih, cizen ve onaylayan 7. adimda sorulur ve
+    saklanir. Degerler DXF'e yazildigi icin PDF'te de cikar.
+
+    Kagit: sablon hangi kagit icin cizildiyse (verilen antet A2),
+    baska kagida basilirken TAMAMI tek oranla olceklenir - A3'te
+    0,707, A1'de 1,416, A0'da 2,002 (ISO kagit basamagi). Antet
+    kagitla birlikte buyuyup kuculur.
+
+    Antet zorunlu degildir: antet/ klasoru yoksa ya da 7. adimda
+    kutucuk kapatilirsa Pi3D kendi sade paftasini cizer.
+
+    Baska bir antet icin:
+      python pf5_antet.py firma.dxf --incele --antet x0,y0,x1,y1
+      python pf5_antet.py firma.dxf --tanim tanim.json --cikti antet/firma
+    Yazinin yeri tahmin edilmez, olculur: kutudaki etiketin
+    ("Part Name :") kapladigi yer bulunur, deger onun sagindan baslar.
+    Sigmayan deger once kuculur, sonra kisaltilir; komsu kutuya
+    tasmaz.
+
+  EXE_YAP.bat SECENEKLERI DEGISTI
+    1 = PI3D   Pi3D + PiVision logolari gomulu, FIRMA ANTETI YOK
+    2 = FIRMA  Pi3D logolari konmaz, firma anteti kullanilir
+    Firmanin kendi anteti varken Pi3D'nin logosunu da basmak dogru
+    degildir: resim firmanindir.
+
+  DOSYA ADINDA PART NAME DE VAR
+    P05_01_050_000_01_U-Blech.dxf   (poz + cizim no + parca adi)
+    Parca adi cizim no ile basliyorsa tekrar yazilmaz.
+
+  DERLENMIS SURUMDE UC DUZELTME
+    Bunlarin ucu de yalniz exe'de goruluyordu, kaynaktan calisirken
+    hicbiri belli olmuyordu:
+
+    - PDF basilamiyordu: "No module named
+      'matplotlib.backends.backend_pdf'". matplotlib arka ucunu ADIYLA,
+      calisma aninda yukler; PyInstaller statik tarama yaptigi icin
+      goremiyordu. spec'e eklendi. (Qt/GTK/wx arka uclari BILEREK
+      toplanmiyor: PyQt surukler, paketi sisirirler.)
+
+    - Tarih / cizen / onaylayan kutulari hic acilmiyordu: gomulu antet
+      sys._MEIPASS altindadir, kod onun BIR USTUNE bakiyordu. Artik
+      once exe'nin yanina, sonra gomulu klasore bakilir - anteti
+      degistirmek icin yeniden derlemek gerekmez. Antet bulunamazsa
+      7. adimda NEREYE BAKILDIGI yazar, sessizce yok olmaz.
+
+    - "Iptal ile durdurabilirsiniz" yazisi 90 saniye sonra cikiyordu
+      ama Iptal dugmesi yalniz 5. sayfadaydi. Dugme ortak durum
+      cubuguna alindi (her sayfadan gorunur) ve acinim, pafta, baski
+      ile kagit plani isleri de iptali dinliyor.
+
+  8. ADIM: LAZER KESIM RESIMLERI
+    Bu resimler OKUNMAK icin degil KESILMEK icin uretilir. Icinde
+    yalniz kesim konturu vardir: dis kontur ve delikler, 1:1, tek
+    katmanda (KESIM), hepsi kapali cokgen.
+
+    Bilerek ciplaktir: ne bukum cizgisi, ne bukum tablosu, ne olcu, ne
+    yazi, ne cerceve, ne antet - ve PAFTAYA ALINMAZ, PDF'i BASILMAZ.
+    Sebebi: CAM yazilimi dosyadaki her cizgiyi kesim yolu sayabilir,
+    resmin ustundeki bir yazi sacin ustune kesilir. Parcanin kimligi
+    dosya ADINDADIR:
+      P05_01_050_000_01_U-Blech.dxf          detay resmi
+      P05_01_050_000_01_U-Blech_acinim.dxf   acinim
+      P05_01_050_000_01_U-Blech_Lzr.dxf      LAZER
+
+    Listede: ustte acinimi cikan parcalar (SECILI gelir), altta
+    montajdaki obur SAC parcalar (kullanici secer). Sac olmayanlar
+    listeye hic alinmaz.
+
+    Kontur nereden gelir: bukumlu sacta acinimin kesim konturundan
+    (6. adimda hesaplandiysa yeniden hesaplanmaz), duz sacta parcanin
+    kendi yuzunden. Duz sacta sonuc bagimsiz olcuyle denetlenir -
+    gabarinin en ince yonu ile hacim/alan tutmali; cepli, cikintili
+    ya da kademeli parcada tutmaz ve KONTUR VERILMEZ.
+
+    LAZER.csv: poz, kod, ad, adet, kalinlik, en x boy, delik sayisi.
+
+  KONUM OLCULERI (deliklerin kenardan yeri)
+    Resimde onceden YALNIZ gabari olcusu vardi (gorunus basina 2) ve
+    Ø/R boyutlari; deligin nerede oldugunu soyleyen tek bir olcu
+    yoktu. Artik zincir kuruluyor:
+
+      |--10--|------------ 123 x 20 ------------|--10--|
+      |----------------------- 2480 -------------------|
+
+    Dizi tek olcuye iner: adimlar esitse (%2 payla) "123 x 20" diye
+    tek olcu konur, 124 deligin her birine 20 mm yazilmaz. Dizi
+    degilse ve delik sayisi azsa her biri tek tek olculur.
+
+    Gabari EN DISARIDADIR: konum olculerinden sonra, onlarin OLCULEN
+    sinirinin disina cizilir. Tersi olursa olcu cizgileri kesisir.
+
+    Yer tahmin edilmez, olculur: dar bir aralikta yazi olcunun icine
+    sigmaz, CAD onu disari kacirir ve nereye kacracagi olcu stiline
+    baglidir. Her olcu cizilir, yazisinin gercek siniri olculur,
+    cakisiyorsa silinip alt kademede yeniden denenir. Ornek montajin
+    16 resminde 435 yazida SIFIR cakisma.
+
+    (Girinti/cikinti ve pah olculeri sonraki surumlerde geldi, bkz.
+    yukarisi.)
+
+  KONUM OLCULERI ARTIK DATUMDAN (zincir degil)
+    Ilk surumde zincir kuruluyordu ve zincir FARKLI DELIK GRUPLARI
+    arasindaydi: 175 mm'lik plakada "10 | 3,2 | 148,5 | 3,2 | 10".
+    Oradaki 3,2, Ø10,2 deligiyle Ø8,1 deligi arasindaki bosluktu ve
+    Ø8,1'in kenardan yerini bulmak icin toplama yapmak gerekiyordu.
+    Artik her olcu AYNI KENARDAN: 10 | 13,2 | 161,7 | 165 | 175.
+    Zincir olculendirme tolerans biriktirir (ISO 129-1 uyarisi) ve
+    okunmaz. Esit adimli dizi tek istisnadir: "123 x 20".
+
+  KOSE PAHI MI, EGIK KESIM MI
+    Eksenlere paralel olmayan her duz kenara hizali boy olcusu ve aci
+    konuyor: 45'lik bir pah icin "7,1" ve "45°". Aci kisa bir kilavuz
+    cizgisiyle kendi kenarina bagli.
+    Bunun icin kenarlar cizimden geri taniniyor: HLR izdusumu
+    kenarlari analitik korumuyor (bir goruuste 8 dogru + 2 daire ama
+    18 B-spline), pahlar B-spline olarak geliyordu. Her kenar
+    orneklenip dogru / yay / egri diye ayriliyor.
+    Aci olculen bir degerdir: izdusumden 11,8674 gibi cikabiliyor,
+    tam sayiya yakinsa tam sayi yazilir.
+
+    (Girinti/cikinti/yuva bu surumde geldi; form/bukum baslangic
+    konumlari henuz yok.)
+
+  DUZELTME: pahin ACISI verilmiyor
+    Eksenlere paralel olmayan kenara once hipotenus (7,1) ve aci (45°)
+    veriliyordu. Yanlisti: bir KOSE KIRMA'nin acisi olcu konusu
+    degildir, keskin kose kalmasin diye kirilmistir. Artik ok
+    (kilavuz) ucunda "5 x 5" yaziliyor, ayni olcudekiler tek notta:
+    "4x 5 x 5".
+
+    Kose pahi uc sarti birden tutar: (1) iki ucu da birbirine dik,
+    eksene paralel iki kenara degiyor, (2) bacaklari esit, (3)
+    goruuse gore kucuk (en cok %20). Ucu birden aranir cunku bir
+    koseden gecen BUYUK bir 45 kesim parcanin bicimidir: 120x80
+    plakada 20x20 kesim pah degildir, 5x5 pahtir.
+
+    EGIK KESIM (kose kirma olmayan): dis hattakiler girinti olarak,
+    sanal koseden olculur. Icerideki egik cizgilerin uclarina bu
+    surumde konum verilmiyor (dogrulamada %70'i yanlisti).
+
+  SIMETRI: ayna ciftleri iki kez olculmez
+    175 mm'lik plakada delikler 10 / 13,2 / 161,8 / 165'te; parca
+    ortadan simetrik (10+165 = 13,2+161,8 = 175). Dordunu de olcmek
+    gereksizdi - alt sira kalabaliktı. Artik ikisi olculuyor, gabari
+    ve SIMETRI ISARETI (eksen cizgisinin uclarinda iki kisa paralel
+    cizgi) oburlerini veriyor. Isaret olmadan okuyan obur yarinin
+    nereye geldigini bilemez.
+    Simetri yalniz dagilmis deliklerde aranir; esit adimli dizi zaten
+    "n x adim" ile tek olcuye iniyor.

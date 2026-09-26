@@ -274,6 +274,7 @@ class Uygulama(ttk.Frame):
         self._sayfa1(); self._sayfa2(); self._sayfa3()
         self._sayfa4(); self._sayfa5(); self._sayfa6(); self._sayfa7()
         self._sayfa8()
+        self._menu()
         gf = ttk.LabelFrame(self, text=" Günlük ", padding=4)
         gf.pack(fill="both")
         self.gunluk = tk.Text(gf, height=7, wrap="none", font=("Consolas", 9))
@@ -429,10 +430,15 @@ class Uygulama(ttk.Frame):
                    command=self.malzeme_dosya).grid(row=0, column=2, sticky="ew", padx=(6, 0))
         ttk.Button(mf, text="malzeme.csv yaz…",
                    command=self.malzeme_sablon).grid(row=1, column=2, sticky="ew", padx=(6, 0), pady=(3, 0))
+        ttk.Button(mf, text="Malzemeyi CAD'den al  (adım adım)…",
+                   command=self.malzeme_sihirbazi).grid(
+            row=2, column=1, columnspan=2, sticky="ew", pady=(3, 0))
         ttk.Label(mf, foreground="#555", justify="left", text=(
             "KAYNAK sütunu malzemenin nereden geldiğini söyler: data'dan (STEP'te ya da\n"
-            "parça adında tanımlı), seçim (sizin verdiğiniz), varsayılan (hiçbiri yoksa).")
-        ).grid(row=0, column=3, rowspan=2, sticky="w", padx=12)
+            "parça adında tanımlı), seçim (sizin verdiğiniz), varsayılan (hiçbiri yoksa).\n"
+            "STEP malzeme taşımıyorsa: SolidWorks, CATIA, NX, Creo, Inventor... parça\n"
+            "listesinden almak için soldaki düğme ya da Yardım menüsü.")
+        ).grid(row=0, column=3, rowspan=3, sticky="w", padx=12)
         mf.columnconfigure(3, weight=1)
 
         af = ttk.Frame(f); af.pack(fill="x", pady=(8, 0))
@@ -684,11 +690,16 @@ class Uygulama(ttk.Frame):
             (f"{len(sec)} bükümlü sac parça bulundu, hepsi seçili."
              if sec else "Bu montajda bükümlü sac parça bulunamadı.")
             + elendi)
-        self.v_durum.set(
-            f"açınım taraması: {len(sec)} bükümlü sac parça bulundu ve "
-            f"seçildi ({len(out)} parça tarandı) – ÜRET deyin"
-            if sec else
-            f"açınım taraması: {len(out)} parçanın hiçbirinde büküm yok")
+        # Tarama ARKA PLANDA biter, kullanıcı o sırada genellikle 2.
+        # adımdadır. Sonucu durum çubuğuna tek başına yazmak 2. adımın
+        # yönlendirmesini ("malzemeyi verip BOM ÇIKART deyin") siliyor ve
+        # yerine 6. adımın "ÜRET deyin"ini koyuyordu. Yönlendirme kalır,
+        # tarama sonucu yanına eklenir; ayrıntısı günlüktedir.
+        ozet = (f"6. adım: {len(sec)} bükümlü sac bulundu, seçili"
+                if sec else f"bükümlü sac yok ({len(out)} parça tarandı)")
+        self._yaz("açınım taraması: " + ozet)
+        ipucu = getattr(self, "_durum_ipucu", "")
+        self.v_durum.set(f"{ipucu}   ·   {ozet}" if ipucu else ozet)
         self.lazer_doldur()      # 8. adım da taramanın sonucunu kullanır
 
     def acilim_uret(self):
@@ -1542,7 +1553,10 @@ class Uygulama(ttk.Frame):
             self._yaz(f"  ({g:.1f} saniye sürdü)")
         self.calisiyor = False
         self.ilerleme.stop(); self.ilerleme.configure(mode="determinate")
-        self.b_incele.configure(state="normal" if self.v_step.get() else "disabled")
+        # Motor (OpenCascade) yüklenmeden İNCELE açılmaz: yüklenmemişken
+        # basılırsa self.M None'dır ve program çöküyordu.
+        self.b_incele.configure(state="normal" if (self.v_step.get() and self.M)
+                                else "disabled")
         self.b_bom.configure(state="normal" if self.komp else "disabled")
         self.b_ornek.configure(state="normal" if self.satirlar else "disabled")
         self.b_onay.configure(state="normal" if self.ornek_dxf else "disabled")
@@ -1590,11 +1604,98 @@ class Uygulama(ttk.Frame):
         except Exception:
             pass
 
-    def _motor_geldi(self, M):
-        self.M = M
+    # ------------------------------------------------------------ yardım
+    def _menu(self):
+        """Pencerenin üstündeki Yardım menüsü (F1: kullanım kılavuzu)."""
+        try:
+            cubuk = tk.Menu(self.master, tearoff=0)
+            y = tk.Menu(cubuk, tearoff=0)
+            y.add_command(label="Malzemeyi CAD'den al  (adım adım)…",
+                          command=self.malzeme_sihirbazi)
+            y.add_command(label="Tanınan malzemeler…",
+                          command=self.malzeme_listesi_goster)
+            y.add_separator()
+            y.add_command(label="Kullanım kılavuzu", accelerator="F1",
+                          command=self.kilavuz_ac)
+            y.add_command(label="Hakkında", command=self.hakkinda)
+            cubuk.add_cascade(label="Yardım", menu=y)
+            self.master.config(menu=cubuk)
+            self.master.bind("<F1>", lambda _e: self.kilavuz_ac())
+        except Exception:
+            pass                       # menü olmadan da çalışır
+
+    def malzeme_sihirbazi(self):
+        if self.M is None:
+            messagebox.showinfo("Pi3D", "Hesap motoru henüz yükleniyor; "
+                                "günlükte 'motor hazır' yazınca tekrar deneyin.")
+            return
+        self.sihirbaz = MalzemeSihirbazi(self)
+
+    def malzeme_listesi_goster(self):
+        if self.M is None:
+            return
+        w = tk.Toplevel(self.master)
+        w.title("Tanınan malzemeler")
+        w.geometry("640x520")
+        t = tk.Text(w, wrap="word", font=("Consolas", 10), padx=8, pady=6)
+        t.pack(fill="both", expand=True)
+        sat = ["Pi3D'nin malzeme tablosu (kütle = hacim x yoğunluk):", ""]
+        for k, (ad, r) in self.M.MALZEME.items():
+            sat.append(f"  {k:22s} {r:6.2f} g/cm3   {ad}")
+        sat += ["", "Parça listelerinde tanınan adlar (Türkçe, İngilizce, "
+                "Almanca, Fransızca), örnek:",
+                "  Steel, Stahl, S235, S355, St37, C45, 42CrMo4, AISI 1020, "
+                "1.0038, Hardox",
+                "  Stainless steel, AISI 304, 1.4301, Inox, rostfrei",
+                "  Aluminium, AlMg3, 6060, 6082, 5754",
+                "  Brass/Messing, Bronze/CuSn8, Copper/Kupfer, Titanium, "
+                "PA6, POM, PE, PP, PVC ...", "",
+                "Tanınmayan bir ad YOĞUNLUĞUYLA verilirse (Density / Dichte /",
+                "Yoğunluk sütunu), CAD'in yoğunluğuyla ayrı bir malzeme olarak",
+                "alınır - çeliğe düşmez."]
+        t.insert("1.0", "\n".join(sat))
+        t.configure(state="disabled")
+
+    def kilavuz_ac(self):
+        for kl in (os.path.dirname(os.path.abspath(sys.argv[0] or ".")),
+                   os.path.dirname(os.path.abspath(__file__)),
+                   getattr(sys, "_MEIPASS", "")):
+            y = os.path.join(kl, "KULLANIM.md") if kl else ""
+            if y and os.path.isfile(y):
+                klasor_ac(y)
+                return
+        messagebox.showinfo("Kılavuz", "KULLANIM.md bulunamadı; programın "
+                            "klasöründe olmalı.")
+
+    def hakkinda(self):
+        surum = ""
+        for kl in (os.path.dirname(os.path.abspath(sys.argv[0] or ".")),
+                   os.path.dirname(os.path.abspath(__file__)),
+                   getattr(sys, "_MEIPASS", "")):
+            y = os.path.join(kl, "SURUM.txt") if kl else ""
+            if y and os.path.isfile(y):
+                try:
+                    with open(y, encoding="utf-8") as f:
+                        surum = "".join(f.readlines()[:4])
+                except Exception:
+                    pass
+                break
+        messagebox.showinfo("Hakkında", (surum or BASLIK) +
+                            "\n\nPiVision - Industrial Smart Vision System")
+
+    def _malzeme_listesi_tazele(self):
+        """Malzeme kutusunu MALZEME tablosundan yeniden doldurur - CAD'den
+        gelen özel malzemeler ("cad:...") de listede görünsün."""
+        M = self.M
         adlar = [f"{k} – {t} ({r} g/cm³)" for k, (t, r) in M.MALZEME.items()]
         self.cb_mal.configure(values=adlar)
-        self.v_mal.set(next(a for a in adlar if a.startswith(M.VARSAYILAN_MALZEME + " ")))
+        if not self.v_mal.get():
+            self.v_mal.set(next(a for a in adlar
+                                if a.startswith(M.VARSAYILAN_MALZEME + " ")))
+
+    def _motor_geldi(self, M):
+        self.M = M
+        self._malzeme_listesi_tazele()
         self._kfaktoru_tazele()
         self._pafta_ayari_tazele()
         self.v_durum.set("hazır – STEP dosyasını seçin")
@@ -1671,6 +1772,11 @@ class Uygulama(ttk.Frame):
             messagebox.showinfo("Klasör", "Çıktı klasörü henüz yok.")
 
     def incele(self):
+        if self.M is None:
+            messagebox.showinfo("Pi3D", "Hesap motoru henüz yükleniyor "
+                                "(ilk açılışta birkaç saniye sürer). "
+                                "Günlükte 'motor hazır' yazınca tekrar deneyin.")
+            return
         yol = self.v_step.get().strip()
         if not os.path.isfile(yol):
             messagebox.showwarning("Dosya", "Geçerli bir dosya seçin."); return
@@ -1701,8 +1807,10 @@ class Uygulama(ttk.Frame):
         self._bitir()
         self._agac_doldur()
         n = sum(1 for k in komp if k["sinif"] == "parca")
+        # malzeme_ata ile AYNI kural: STEP'te ad + yoğunluk varsa ikisi
+        # birlikte çözülür (adı tanınmasa da yoğunluğu yeter).
         d = sum(1 for k in komp if k["sinif"] == "parca"
-                and self.M.malzeme_tahmin(k.get("malzeme_data"), k["ad"]))
+                and self.M.malzeme_ata(k, {}, None)[1] == "data")
         self.v_bom_ozet.set(f"{len(komp)} komponent, {n} parça – "
                             f"{d} parçanın malzemesi data'dan okundu, "
                             f"{n - d} parçaya malzeme vermeniz gerekiyor")
@@ -1713,7 +1821,8 @@ class Uygulama(ttk.Frame):
         self._adim_ac(5, gecis=False)     # açınım BOM'u beklemez
         self._adim_ac(6, gecis=False)     # pafta da
         self._adim_ac(7, gecis=False)     # lazer de
-        self.v_durum.set("komponentler hazır – malzemeyi verip BOM ÇIKART deyin")
+        self._durum_ipucu = "komponentler hazır – malzemeyi verip BOM ÇIKART deyin"
+        self.v_durum.set(self._durum_ipucu)
 
     # ------------------------------------------------------------ 2 BOM
     def _malzeme_onizle(self, k):
@@ -1808,7 +1917,7 @@ class Uygulama(ttk.Frame):
             return
         y = filedialog.askopenfilename(
             title="Malzeme listesi  (kendi şablonumuz ya da CAD'in parça listesi)",
-            filetypes=[("Malzeme listesi", "*.csv *.txt *.tsv *.json"),
+            filetypes=[("Malzeme listesi", "*.csv *.txt *.tsv *.xlsx *.json"),
                        ("Tümü", "*.*")])
         if not y:
             return
@@ -1826,14 +1935,18 @@ class Uygulama(ttk.Frame):
                 n += 1
         self.satirlar = []
         self._agac_doldur()
+        self._malzeme_listesi_tazele()
         self._yaz(f"{os.path.basename(y)}: {len(esl)} kayıt okundu, {n} parça eşleşti")
         if bilinmeyen:
             self._yaz("! tanınmayan malzeme adı: " + ", ".join(bilinmeyen[:8]))
             messagebox.showwarning(
                 "Tanınmayan malzeme",
-                "Dosyadaki şu malzeme adları tanınmadı, bu parçalar varsayılan "
-                "malzemede kalır:\n\n" + "\n".join(bilinmeyen[:15])
-                + "\n\nTanınan adlar için malzeme kutusundaki listeye bakın.")
+                "Dosyadaki şu malzeme adları tanınmadı ve dosyada yoğunlukları "
+                "da yok; bu parçalar varsayılan malzemede kalır:\n\n"
+                + "\n".join(bilinmeyen[:15])
+                + "\n\nÇözüm: dosyaya bir YOĞUNLUK sütunu ekleyin (ör. 7850 "
+                "kg/m3 ya da 7,85 g/cm3) ya da adı tanınan bir adla değiştirin. "
+                "Adım adım: Yardım > Malzemeyi CAD'den al.")
 
     def malzeme_sablon(self):
         if not (self.M and self.komp):
@@ -1869,7 +1982,8 @@ class Uygulama(ttk.Frame):
         if p:
             self.v_ornek.set(f"{p[0]['poz']}  {p[0]['kod']}  {p[0]['ad'][:40]}")
         self._adim_ac(2)
-        self.v_durum.set("BOM hazır – görünüş ve kesit ayarını yapın")
+        self._durum_ipucu = "BOM hazır – görünüş ve kesit ayarını yapın"
+        self.v_durum.set(self._durum_ipucu)
 
     # ------------------------------------------------------------ 3 AYAR
     def gorunus_degisti(self, k):
@@ -1920,7 +2034,8 @@ class Uygulama(ttk.Frame):
                                + (" + A-A KESİT" if kesit else "")
                                + f" – {os.path.basename(yol)}")
         self._adim_ac(3)
-        self.v_durum.set("örnek hazır – inceleyip onaylayın")
+        self._durum_ipucu = "örnek hazır – inceleyip onaylayın"
+        self.v_durum.set(self._durum_ipucu)
         threading.Thread(target=self._onizle_is, args=(yol,), daemon=True).start()
 
     def ornek_ac(self):
@@ -1958,7 +2073,8 @@ class Uygulama(ttk.Frame):
         kg = sum((r.get("toplam_kg") or 0.0) for r in sonuc["bom"])
         self.v_sonuc.set(f"{len(d)} DXF, {len(sonuc['bom'])} poz, toplam {kg:.3f} kg\n{on}")
         self.b_zip.configure(state="normal")
-        self.v_durum.set("bitti – ZIP oluşturabilirsiniz")
+        self._durum_ipucu = "bitti – ZIP oluşturabilirsiniz"
+        self.v_durum.set(self._durum_ipucu)
 
     def zip_olustur(self):
         try:
@@ -2005,6 +2121,297 @@ class Uygulama(ttk.Frame):
             self.tuval.create_image(gw // 2, gh // 2, image=self.onizleme_resmi)
         except Exception as ex:
             self.v_durum.set(f"önizleme çizilemedi: {ex}")
+
+
+class MalzemeSihirbazi:
+    """Malzemeyi CAD'den almak - dört adım.
+
+      1 STEP'te ne var   açık modelde kaç parçanın malzemesi STEP'ten geldi
+      2 CAD sistemi      SolidWorks, CATIA, NX, Creo, Inventor, Solid Edge...
+      3 Parça listesi    o CAD'de malzeme sütunlu listeyi alma adımları;
+                         varsa makroyu kaydetme
+      4 Dosya            seçilen dosya ÖNİZLENİR (hangi parça hangi
+                         malzemeyi alacak, hangisi eşleşmedi, hangi ad
+                         tanınmadı), ancak sonra UYGULA ile işlenir.
+
+    Metinler ve eşleştirme pf6_malzeme'dedir; burada yalnız pencere var."""
+    ADIMLAR = ("1  STEP'te ne var", "2  CAD sistemi",
+               "3  Parça listesini alın", "4  Dosyayı yükleyin")
+
+    def __init__(self, u):
+        import pf6_malzeme as S6
+        self.u, self.S6 = u, S6
+        self.adim = 0
+        self.rapor = None
+        self.w = w = tk.Toplevel(u.master)
+        w.title("Malzemeyi CAD'den al")
+        w.geometry("1000x660")
+        w.minsize(860, 560)
+        try:
+            w.transient(u.master)
+        except Exception:
+            pass
+        self.v_sis = tk.StringVar(value="solidworks")
+        sol = ttk.Frame(w, padding=(12, 12, 6, 12))
+        sol.pack(side="left", fill="y")
+        ttk.Label(sol, text="Adımlar", style="Baslik.TLabel").pack(anchor="w",
+                                                                    pady=(0, 8))
+        self.adim_et = []
+        for a in self.ADIMLAR:
+            e = ttk.Label(sol, text=a, foreground="#777")
+            e.pack(anchor="w", pady=3)
+            self.adim_et.append(e)
+        sag = ttk.Frame(w, padding=(6, 12, 12, 12))
+        sag.pack(side="left", fill="both", expand=True)
+        self.govde = ttk.Frame(sag)
+        self.govde.pack(fill="both", expand=True)
+        alt = ttk.Frame(sag)
+        alt.pack(fill="x", pady=(10, 0))
+        ttk.Button(alt, text="Kapat", command=w.destroy).pack(side="right")
+        self.b_uygula = ttk.Button(alt, text="UYGULA  ✓", style="Bas.TButton",
+                                   command=self.uygula, state="disabled")
+        self.b_uygula.pack(side="right", padx=8, ipadx=10)
+        self.b_ileri = ttk.Button(alt, text="İleri  ▸", command=self.ileri)
+        self.b_ileri.pack(side="right", padx=4)
+        self.b_geri = ttk.Button(alt, text="◂  Geri", command=self.geri)
+        self.b_geri.pack(side="right", padx=4)
+        self.goster()
+
+    # ------------------------------------------------------------ gezinme
+    def ileri(self):
+        if self.adim < len(self.ADIMLAR) - 1:
+            self.adim += 1
+            self.goster()
+
+    def geri(self):
+        if self.adim > 0:
+            self.adim -= 1
+            self.goster()
+
+    def goster(self):
+        for c in self.govde.winfo_children():
+            c.destroy()
+        for i, e in enumerate(self.adim_et):
+            e.configure(foreground="#000" if i == self.adim else "#777",
+                        font=("Segoe UI", 10, "bold") if i == self.adim
+                        else ("Segoe UI", 10))
+        self.b_geri.configure(state="normal" if self.adim else "disabled")
+        self.b_ileri.configure(state="normal" if self.adim < 3 else "disabled")
+        self.b_uygula.configure(state="normal" if (
+            self.adim == 3 and self.rapor and self.rapor["eslesen"]) else "disabled")
+        (self._adim1, self._adim2, self._adim3, self._adim4)[self.adim]()
+
+    def _baslik(self, t, aciklama=""):
+        ttk.Label(self.govde, text=t, style="Baslik.TLabel").pack(anchor="w")
+        if aciklama:
+            ttk.Label(self.govde, text=aciklama, foreground="#555",
+                      wraplength=720, justify="left").pack(anchor="w",
+                                                           pady=(2, 8))
+
+    def _metin(self, icerik, yukseklik=18):
+        cer = ttk.Frame(self.govde)
+        cer.pack(fill="both", expand=True)
+        t = tk.Text(cer, wrap="word", height=yukseklik, font=("Segoe UI", 10),
+                    relief="flat", padx=8, pady=6)
+        k = ttk.Scrollbar(cer, orient="vertical", command=t.yview)
+        t.configure(yscrollcommand=k.set)
+        t.insert("1.0", icerik)
+        t.configure(state="disabled")
+        t.pack(side="left", fill="both", expand=True)
+        k.pack(side="right", fill="y")
+        return t
+
+    # ------------------------------------------------------------- adımlar
+    def _adim1(self):
+        u = self.u
+        self._baslik("1 - STEP dosyasında malzeme var mı?",
+                     "STEP malzeme adını ve yoğunluğunu taşıyabilir ama "
+                     "CAD'lerin çoğu varsayılan ayarla yazmaz. Malzemesi "
+                     "bilinmeyen parça ÇELİK sayılır ve kütlesi yanlış çıkar.")
+        if not (u.M and u.komp):
+            self._metin("Henüz model incelenmedi.\n\n1. adımda STEP dosyasını "
+                        "seçip İNCELE deyin; bu sayfa o zaman kaç parçanın "
+                        "malzemesinin STEP'ten geldiğini gösterir.\n\n"
+                        "Yine de 'İleri' ile CAD sisteminizin adımlarını "
+                        "okuyabilirsiniz.", 10)
+            return
+        r = self.S6.step_raporu(u.M, u.komp)
+        sat = [f"Montajdaki parça sayısı:           {r['parca']}",
+               f"Malzemesi STEP'ten gelen:          {len(r['stepten'])}",
+               f"Malzemesi parça ADINDAN tanınan:   {r['ad_ipucu']}"
+               "   (ör. adında 'S235', 'AlMg3' geçiyor)",
+               f"Malzemesi BİLİNMEYEN:              {r['eksik']}"
+               "   (varsayılan malzeme sayılır)", ""]
+        if r["stepten"]:
+            sat.append("STEP'ten gelenler (ilk 15):")
+            for kod, ad, y in r["stepten"][:15]:
+                sat.append(f"   {kod[:34]:34s}  {ad[:30]:30s}"
+                           + (f"  {y:g}" if y else ""))
+            sat.append("")
+        if r["eksik"] == 0:
+            sat.append("Bütün parçaların malzemesi belli - bu sihirbaza gerek "
+                       "yok.")
+        else:
+            sat.append(f"{r['eksik']} parçanın malzemesini CAD'inizin parça "
+                       "listesinden almak için 'İleri'.")
+        self._metin("\n".join(sat), 14)
+
+    def _adim2(self):
+        self._baslik("2 - Model hangi CAD'den geldi?",
+                     "Seçtiğiniz sistem için bir sonraki sayfada adım adım "
+                     "talimat çıkar.")
+        cer = ttk.Frame(self.govde)
+        cer.pack(anchor="w", pady=4)
+        for s in self.S6.SISTEM:
+            ttk.Radiobutton(cer, text=s["ad"], value=s["anahtar"],
+                            variable=self.v_sis).pack(anchor="w", pady=3)
+
+    def _adim3(self):
+        s = self.S6.sistem(self.v_sis.get())
+        self._baslik(f"3 - {s['ad']}: malzeme sütunlu parça listesini alın",
+                     "Amaç her CAD'de aynı: 'parça no' ve 'malzeme' "
+                     "(isteğe bağlı 'yoğunluk') sütunlu bir tablo - CSV, TXT "
+                     "ya da Excel (.xlsx).")
+        metin = self.S6.talimat_metni(s["anahtar"])
+        self._metin(metin, 16)
+        dugme = ttk.Frame(self.govde)
+        dugme.pack(fill="x", pady=(8, 0))
+        ttk.Button(dugme, text="Metni panoya kopyala",
+                   command=lambda: (self.w.clipboard_clear(),
+                                    self.w.clipboard_append(metin))
+                   ).pack(side="left")
+        if s.get("makro"):
+            ttk.Button(dugme, text=f"Makroyu kaydet…  ({s['makro']})",
+                       command=self.makro_kaydet).pack(side="left", padx=8)
+
+    def makro_kaydet(self):
+        kl = filedialog.askdirectory(title="Makronun kaydedileceği klasör",
+                                     parent=self.w)
+        if not kl:
+            return
+        y = self.S6.makro_yaz(self.v_sis.get(), kl)
+        if y:
+            self.u._yaz(f"makro kaydedildi: {y}")
+            messagebox.showinfo("Makro", f"Kaydedildi:\n{y}\n\nNasıl "
+                                "çalıştırılacağı bu sayfadaki talimatta.",
+                                parent=self.w)
+        else:
+            messagebox.showwarning("Makro", "Makro dosyası bulunamadı "
+                                   "(kurulum eksik olabilir).", parent=self.w)
+
+    def _adim4(self):
+        u = self.u
+        self._baslik("4 - Dosyayı seçin, önizleyin, uygulayın",
+                     "Dosya seçilince hiçbir şey değişmez: önce hangi parçanın "
+                     "hangi malzemeyi alacağı gösterilir. Doğruysa UYGULA.")
+        ust = ttk.Frame(self.govde)
+        ust.pack(fill="x")
+        ttk.Button(ust, text="Dosya seç…", command=self.dosya_sec).pack(
+            side="left")
+        self.v_ozet = tk.StringVar(value="" if self.rapor else
+                                   "Henüz dosya seçilmedi.")
+        ttk.Label(ust, textvariable=self.v_ozet, foreground="#333",
+                  justify="left", wraplength=620).pack(side="left", padx=10)
+        cer = ttk.Frame(self.govde)
+        cer.pack(fill="both", expand=True, pady=(8, 0))
+        sut = ("kod", "dosya", "yog", "pi3d", "durum")
+        basl = {"kod": ("PARÇA NO", 130), "dosya": ("DOSYADA", 140),
+                "yog": ("g/cm³", 60), "pi3d": ("PI3D MALZEMESİ", 210),
+                "durum": ("DURUM", 200)}
+        self.ag = ttk.Treeview(cer, columns=sut, show="headings", height=14)
+        for c in sut:
+            self.ag.heading(c, text=basl[c][0])
+            # Toplam ~740 px: sihirbazın sağ bölmesine sığar; pencere
+            # büyütülürse DURUM ve PI3D sütunları genişler.
+            self.ag.column(c, width=basl[c][1], minwidth=50,
+                           stretch=c in ("pi3d", "durum"),
+                           anchor="center" if c == "yog" else "w")
+        k = ttk.Scrollbar(cer, orient="vertical", command=self.ag.yview)
+        self.ag.configure(yscrollcommand=k.set)
+        self.ag.pack(side="left", fill="both", expand=True)
+        k.pack(side="right", fill="y")
+        self.ag.tag_configure("yok", foreground="#b00")
+        self.ag.tag_configure("bos", foreground="#888")
+        self.ag.tag_configure("cad", foreground="#036")
+        if self.rapor:
+            self._rapor_goster()
+        if not (u.M and u.komp):
+            self.v_ozet.set("Önce 1. adımda STEP'i inceleyin: eşleştirme "
+                            "montajdaki parçalarla yapılır.")
+
+    def dosya_sec(self):
+        u = self.u
+        if not (u.M and u.komp):
+            messagebox.showinfo("Malzeme", "Önce STEP dosyasını inceleyin.",
+                                parent=self.w)
+            return
+        y = filedialog.askopenfilename(
+            title="CAD'in parça listesi", parent=self.w,
+            filetypes=[("Parça listesi", "*.csv *.txt *.tsv *.xlsx *.json"),
+                       ("Tümü", "*.*")])
+        if not y:
+            return
+        self.dosya_yukle(y)
+
+    def dosya_yukle(self, y):
+        try:
+            self.rapor = self.S6.dosya_raporu(self.u.M, y, self.u.komp)
+        except Exception as ex:
+            self.rapor = None
+            messagebox.showerror("Malzeme dosyası", str(ex), parent=self.w)
+            return
+        self.rapor["yol"] = y
+        self._rapor_goster()
+        self.b_uygula.configure(state="normal" if self.rapor["eslesen"]
+                                else "disabled")
+
+    def _rapor_goster(self):
+        M, r = self.u.M, self.rapor
+        self.ag.delete(*self.ag.get_children())
+        kullanilmayan = {id(x) for x in r["kullanilmayan"]}
+        for s in r["satir"]:
+            if not s["anahtar"]:
+                durum, etiket = "ad tanınmadı, yoğunluk yok", "yok"
+            elif id(s) in kullanilmayan:
+                durum, etiket = "montajda karşılığı yok", "bos"
+            elif s["durum"] == "CAD yoğunluğuyla":
+                durum, etiket = "eşleşti (CAD yoğunluğu)", "cad"
+            else:
+                durum, etiket = "eşleşti", ""
+            pi3d = M.MALZEME[s["anahtar"]][0] if s["anahtar"] else "-"
+            self.ag.insert("", "end", tags=(etiket,), values=(
+                s["kod"], s["malzeme"] or "-",
+                f"{s['yogunluk']:.3f}".rstrip("0").rstrip(".")
+                if s["yogunluk"] else "-", pi3d, durum))
+        n_parca = (len(r["eslesen"]) + len(r["eslesmeyen"])
+                   + len(r["adi_taninmayan"]))
+        t = (f"{os.path.basename(r['yol'])}: {len(r['satir'])} satır.  "
+             f"Montajdaki {n_parca} parçanın {len(r['eslesen'])}'i eşleşti")
+        if r["eslesmeyen"]:
+            t += (f"; {len(r['eslesmeyen'])} parça dosyada yok (malzemesi "
+                  "değişmez)")
+        if r["adi_taninmayan"]:
+            t += (f"; {len(r['adi_taninmayan'])} parçanın malzeme adı "
+                  "tanınmadı ve yoğunluğu yok - dosyaya yoğunluk sütunu "
+                  "ekleyin ya da adı düzeltin")
+        self.v_ozet.set(t + ".")
+
+    def uygula(self):
+        u, r = self.u, self.rapor
+        if not r or not r["eslesen"]:
+            return
+        for k, m in r["eslesen"]:
+            u.malzemeler[k["kod"]] = m
+        u.satirlar = []
+        u._agac_doldur()
+        u._malzeme_listesi_tazele()
+        u._yaz(f"malzeme ({os.path.basename(r['yol'])}): "
+               f"{len(r['eslesen'])} parçaya uygulandı"
+               + (f", {len(r['eslesmeyen'])} parça dosyada yok"
+                  if r["eslesmeyen"] else ""))
+        u.v_durum.set(f"malzeme: {len(r['eslesen'])} parçaya uygulandı - "
+                      "BOM ÇIKART deyin")
+        self.w.destroy()
 
 
 def main():

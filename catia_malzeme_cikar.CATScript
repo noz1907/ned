@@ -1,5 +1,5 @@
 ' ==========================================================================
-'  PiFikstur - CATIA V5 malzeme cikarma makrosu
+'  Pi3D - CATIA V5 malzeme cikarma makrosu
 '
 '  Acik olan .CATProduct'in agacini gezer, her parcanin malzemesini okur ve
 '  urun dosyasinin yanina "malzeme.csv" yazar:
@@ -7,7 +7,7 @@
 '      kod;malzeme;ad
 '      01.050.000.01;Steel;U-Blech-Mechanismus
 '
-'  Bu dosyayi PiFikstur'de 2. adimda "malzeme.csv yukle..." ile verin.
+'  Bu dosyayi Pi3D'de: Yardim > Malzemeyi CAD'den al > 4. adim ile verin.
 '
 '  Calistirmak: Tools > Macro > Macros... > Select an external file >
 '               bu dosyayi secip Run.
@@ -25,7 +25,7 @@ Sub CATMain()
     Dim oDoc
     Set oDoc = CATIA.ActiveDocument
     If InStr(1, TypeName(oDoc), "Product", 1) = 0 Then
-        MsgBox "Once bir .CATProduct acin.", vbExclamation, "PiFikstur"
+        MsgBox "Once bir .CATProduct acin.", vbExclamation, "Pi3D"
         Exit Sub
     End If
 
@@ -45,8 +45,8 @@ Sub CATMain()
     MsgBox "Yazildi:" & vbCrLf & yol & vbCrLf & vbCrLf & _
            sayac & " parca gezildi, " & bulunan & " tanesinde malzeme bulundu." & _
            vbCrLf & vbCrLf & _
-           "Bu dosyayi PiFikstur'de 2. adimda 'malzeme.csv yukle...' ile verin.", _
-           vbInformation, "PiFikstur"
+           "Bu dosyayi Pi3D'de: Yardim > Malzemeyi CAD'den al > 4. adim", _
+           vbInformation, "Pi3D"
 
 End Sub
 

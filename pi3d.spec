@@ -70,7 +70,13 @@ a = Analysis(
     # gomulu kopyayi kullanir.
     datas=ocp_data + ezdxf_data + collect_data_files("matplotlib")
           + ([("logo/*", "logo")] if LOGOLU else [])
-          + ([("antet/*", "antet")] if ANTETLI else []),
+          + ([("antet/*", "antet")] if ANTETLI else [])
+          # Yardim menusu ve malzeme sihirbazi bunlari arar: CATIA makrosu
+          # (sihirbaz "Makroyu kaydet" ile kullaniciya verir), kullanim
+          # kilavuzu (F1) ve surum notu (Hakkinda).
+          + [(d, ".") for d in ("catia_malzeme_cikar.CATScript",
+                                "KULLANIM.md", "SURUM.txt")
+             if os.path.isfile(d)],
     # matplotlib arka uclarini ADIYLA yukler (fig.savefig bir .pdf
     # gorunce backend_pdf'i calisma aninda import eder), bu yuzden
     # PyInstaller onlari kendiliginden bulamaz. Yalniz backend_agg
@@ -83,7 +89,7 @@ a = Analysis(
     # suruklemeye calisir. Programin kullandigi UC tanesi yeter -
     # ekrana Agg, PDF'e backend_pdf, PNG'ye yine Agg.
     hiddenimports=ocp_gizli + ezdxf_gizli + [
-        "pf3_olcu", "pf4_pafta", "pf5_antet", "pf1_referans",
+        "pf3_olcu", "pf4_pafta", "pf5_antet", "pf6_malzeme", "pf1_referans",
         "matplotlib.backends.backend_agg",
         "matplotlib.backends.backend_pdf",
         "matplotlib.backends.backend_svg",

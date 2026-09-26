@@ -56,6 +56,16 @@ def main():
     import matplotlib.backends.backend_pdf              # noqa: F401
     dogru("backend_pdf bu ortamda var", True)
 
+    print("\n-- malzeme sihirbazı exe'de çalışır mı")
+    # pf6_malzeme yalnız bir yöntemin İÇİNDE import ediliyor; spec'te
+    # adıyla yazılı olmalı. Sihirbazın "Makroyu kaydet"i CATIA makrosunu,
+    # Yardım > Kullanım kılavuzu KULLANIM.md'yi exe'nin içinde arar.
+    dogru("pf6_malzeme spec'te yazılı", '"pf6_malzeme"' in spec)
+    for d in ("catia_malzeme_cikar.CATScript", "KULLANIM.md", "SURUM.txt"):
+        dogru(f"{d} pakete giriyor", f'"{d}"' in spec
+              and os.path.isfile(os.path.join(KOK, d)),
+              "spec'te yok ya da dosya depoda yok")
+
     # Gerçekten PDF basılabiliyor mu: DXF -> pafta -> PDF
     import tempfile
     import pf3_olcu as O

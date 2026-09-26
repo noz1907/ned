@@ -98,8 +98,13 @@ def izle():
     d = u.v_durum.get()
     if not durumlar or durumlar[-1] != d:
         durumlar.append(d)
-    if "komponentler hazır" in d:
+    # Sonuç ekrana geldi mi: durum çubuğunda 2. adımın yönlendirmesi
+    # görünüyor ve parça listesi dolu.
+    if not bitti and "komponentler hazır" in d and u.komp:
         bitti.append(time.time() - t0)
+    # Arka plandaki açınım taraması da bitsin: yönlendirmeyi SİLMEMELİ,
+    # yanına eklemeli (silindiği bir hata vardı).
+    if bitti and "bükümlü sac" in d:
         kok.destroy()
         return
     if time.time() - t0 > UYKU + 12:
@@ -114,6 +119,11 @@ kok.after(200, izle)
 kok.mainloop()
 
 gunluk = "\n".join(durumlar)
+# Tarama bittikten sonra da yönlendirme durum çubuğunda kalmalı.
+if bitti and not any("komponentler hazır" in d for d in durumlar[-1:]):
+    print("HATA   2. adımın yönlendirmesi durum çubuğundan silindi:")
+    print("         " + durumlar[-1])
+    sys.exit(1)
 if bitti:
     print(f"TAMAM  sonuc {bitti[0]:.1f} saniyede ekrana geldi "
           f"(sahte is {UYKU:.0f} s)")

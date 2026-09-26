@@ -58,20 +58,90 @@ def _ad(lab):
     return None
 
 
-def _malzeme(mt, lab):
-    """XCAF'te tanımlıysa parçanın malzeme adını döndürür, yoksa None."""
+class MalzemeAdi(str):
+    """STEP'te okunan malzeme adı; varsa YOĞUNLUĞU da taşır (.yogunluk,
+    dosyada yazdığı birimle - g/cm3 ya da kg/m3, çağıran çözer).
+
+    str'dir: adı kullanan her yer (desenle tanıma, rapor, JSON) aynen
+    çalışır; yoğunluğu isteyen getattr(ad, "yogunluk", None) ile alır."""
+    yogunluk = None
+
+
+def _malzeme_tablosu(mt):
+    """Belgedeki bütün malzemeler: {yoğunluk: [ad, ...]}.
+
+    Malzeme etiketlerindeki XCAFDoc_Material özniteliğinden okunur.
+    (GetMaterial_s'in çıkış parametreleri Python bağlamasında DOLMUYOR:
+    True döner ama ad boş kalır - ölçtük.)"""
+    out = {}
+    if mt is None:
+        return out
+    try:
+        from OCP.XCAFDoc import XCAFDoc_Material
+        seq = TDF_LabelSequence()
+        mt.GetMaterialLabels(seq)
+        for i in range(1, seq.Length() + 1):
+            a = XCAFDoc_Material()
+            if not seq.Value(i).FindAttribute(XCAFDoc_Material.GetID_s(), a):
+                continue
+            ad = (a.GetName().ToCString() if a.GetName() else "").strip()
+            y = float(a.GetDensity())
+            if y > 0:
+                lst = out.setdefault(round(y, 6), [])
+                if ad and ad not in lst:
+                    lst.append(ad)
+    except Exception:
+        return {}
+    return out
+
+
+def _malzeme(mt, lab, tablo=None):
+    """XCAF'te tanımlıysa parçanın malzemesi (MalzemeAdi), yoksa None.
+
+    DÜZELTME: eski kod GetMaterial_s'e parçanın etiketini veriyordu (o
+    MALZEME etiketini ister) ve her zaman "yok" dönüyordu - STEP'e
+    yazılmış malzeme hiç okunmamıştı. Ölçtük: 'AISI 304', 7,93 yazılı
+    STEP'ten None çıkıyordu.
+
+    Parçadan malzemeye bağ XCAF'te bir TreeNode'dur, ama o özniteliği bu
+    Python bağlamasında aramak ÇÖKERTİYOR (segmentation fault; örnek
+    montajın 50 etiketinde ölçüldü). Güvenli yol: parçanın yoğunluğu
+    GetDensityForShape_s ile alınır, ad o yoğunluktaki malzemeden gelir.
+    Aynı yoğunlukta birden çok malzeme varsa adlar birlikte verilir
+    ("Steel / S235") - hangisi olduğu tahmin edilmez; kütle zaten
+    yoğunluktan hesaplanır.
+
+    Sınır: yoğunluğu yazılmamış (yalnız adı olan) malzeme bağlanamaz."""
     if mt is None:
         return None
     try:
-        from OCP.TCollection import TCollection_HAsciiString
-        ad = TCollection_HAsciiString(); ac = TCollection_HAsciiString()
-        yog = [0.0]; ya = TCollection_HAsciiString(); yt = TCollection_HAsciiString()
-        if mt.GetMaterial_s(lab, ad, ac, yog, ya, yt):
-            t = (ad.ToCString() or "").strip()
-            return t or None
+        from OCP.XCAFDoc import XCAFDoc_MaterialTool
+        y = float(XCAFDoc_MaterialTool.GetDensityForShape_s(lab))
     except Exception:
-        pass
-    return None
+        return None
+    if not y > 0:
+        return None
+    if tablo is None:
+        tablo = _malzeme_tablosu(mt)
+    # GetDensityForShape yoğunluğu MODEL BİRİMİNE çevirir: 7,93 g/cm3
+    # yazılmış malzeme mm'lik belgede 0,00793 döner - ölçtük. Çevrim bir
+    # birim dönüşümü, yani 10'un tam kuvvetidir; tablodaki (yazıldığı
+    # birimdeki) yoğunluklardan oranı 10'un kuvveti olan TEK malzeme
+    # parçanınkidir. Birden çok ya da hiç yoksa bağ kurulmaz.
+    aday = []
+    for d, adlar in tablo.items():
+        if d <= 0:
+            continue
+        r = y / d
+        us = round(math.log10(r))
+        if abs(r / (10.0 ** us) - 1.0) < 1e-6:
+            aday.append((d, adlar))
+    if len(aday) != 1:
+        return None
+    d, adlar = aday[0]
+    m = MalzemeAdi(" / ".join(adlar))
+    m.yogunluk = d                     # dosyada yazdığı birimle
+    return m
 
 
 # ---------------------------------------------------------- biçim tanıma
@@ -240,9 +310,13 @@ def step_oku(yol, malzeme=False, agac=None):
         st = XCAFDoc_DocumentTool.ShapeTool_s(doc.Main())
         try:
             from OCP.XCAFDoc import XCAFDoc_MaterialTool
-            mt = XCAFDoc_MaterialTool.Set_s(doc.Main()) if malzeme else None
+            # DocumentTool'un malzeme aracı; Set_s(doc.Main()) YANLIŞ
+            # etikette boş bir araç açıyordu (malzeme listesi hep boş).
+            mt = (XCAFDoc_DocumentTool.MaterialTool_s(doc.Main())
+                  if malzeme else None)
         except Exception:
             mt = None
+        mtab = _malzeme_tablosu(mt)       # bir kez: {yoğunluk: [ad]}
         out = []
 
         def _anahtar(lab):
@@ -293,7 +367,7 @@ def step_oku(yol, malzeme=False, agac=None):
                     return
                 if not loc.IsIdentity():
                     sh = BRepBuilderAPI_Transform(sh, loc.Transformation(), True).Shape()
-                mal = _malzeme(mt, lab) if malzeme else None
+                mal = _malzeme(mt, lab, mtab) if malzeme else None
                 ex = TopExp_Explorer(sh, TopAbs_SOLID)
                 while ex.More():
                     k = TopoDS.Solid_s(ex.Current())

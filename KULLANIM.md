@@ -284,6 +284,51 @@ Malzeme vermenin yolları:
   *Analyze ▸ Bill of Material* çıktısı, SolidWorks BOM'u ya da Excel'den
   kaydedilmiş bir CSV olur. `Part Number` ve `Material` sütunları
   başlıklarından bulunur (bkz. `CATIA_MALZEME.md`)
+* **Adım adım:** **Malzemeyi CAD'den al (adım adım)…** düğmesi ya da
+  **Yardım** menüsü — aşağıda.
+
+#### Malzemeyi CAD'den almak — sihirbaz
+
+STEP geometriyi taşır, malzemeyi çoğu zaman **taşımaz**: AP214/AP242'de
+malzeme adı ve yoğunluğu için yer vardır ama CAD'lerin çoğu varsayılan
+ayarla yazmaz. Malzemesi bilinmeyen parça çelik sayılır, kütlesi yanlış
+çıkar. **Yardım ▸ Malzemeyi CAD'den al** dört adımda yol gösterir:
+
+| adım | ne olur |
+|------|---------|
+| 1 STEP'te ne var | açık modelde kaç parçanın malzemesinin STEP'ten geldiği, kaçının adından tanındığı, kaçının bilinmediği |
+| 2 CAD sistemi | SolidWorks, CATIA V5, Siemens NX, PTC Creo, Autodesk Inventor, Solid Edge, Parasolid/diğer |
+| 3 Parça listesi | o CAD'de **parça no + malzeme (+ yoğunluk)** sütunlu listeyi almanın adımları; SolidWorks ve CATIA için **makro** (Makroyu kaydet…) |
+| 4 Dosya | seçilen dosya **önizlenir** — hangi parça hangi malzemeyi alacak, hangisi dosyada yok, hangi ad tanınmadı; ancak **UYGULA** ile işlenir |
+
+Okunan dosyalar: CSV, TXT, sekmeli metin, **Excel .xlsx**, JSON.
+Ayırıcı (sekme ; ,) ve kodlama (UTF-8, UTF-16, Windows Türkçe) kendiliğinden
+anlaşılır. Başlıklar İngilizce, Almanca, Fransızca, Türkçe ya da CAD'in
+kendi adıyla olabilir (`Part Number`, `Teilenummer`, `SW-Material`,
+`PTC_MATERIAL_NAME`, `Werkstoff`, `Malzeme`...). Eski Excel (.xls) okunmaz;
+program bunu söyler ve .xlsx/CSV olarak kaydetmenizi ister.
+
+**Yoğunluk sütunu önerilir** (`Density`, `SW-Density`, `Dichte`,
+`Yoğunluk`; kg/m³ ya da g/cm³ - birim hücrede ya da başlıkta yazıyorsa
+oradan, yazmıyorsa büyüklüğünden anlaşılır). Yoğunluk verilirse:
+
+* adı **tanınmayan** malzeme (ör. `Sonderlegierung AX7`, 2,71) çeliğe
+  düşmez — CAD'in yoğunluğuyla ayrı bir malzeme olarak alınır ve malzeme
+  kutusunda görünür;
+* adı tanınan ama yoğunluğu tablodakinden **%2'den çok** farklıysa
+  CAD'inki esas alınır.
+
+Tanınan malzeme adları için **Yardım ▸ Tanınan malzemeler**. `Steel`,
+`Stahl`, `S235`, `C45`, `42CrMo4`, `AISI 1020`, `1.0038`, `Hardox`,
+`AISI 304`, `1.4301`, `AlMg3`, `6082`, `CuSn8`, `Brass`, `POM`... gibi
+adlar ve malzeme numaraları tanınır.
+
+**STEP'teki malzeme de okunur** (bu sürümde düzeltildi — önceki sürümler
+STEP'e yazılmış malzemeyi hiç okumuyordu). Malzeme adı ve yoğunluğu
+yazılmışsa KAYNAK sütununda `data'dan` görünür.
+
+> SolidWorks makrosu SolidWorks olmadan yazıldı ve denenemedi; ilk
+> kullanımda 4. adımdaki önizlemeyi kontrol edin.
 
 > Kutudaki malzeme yalnız **uygulanacak** malzemedir. Bir parçaya alüminyum
 > verdiğinizde diğerleri çelik kalır.
@@ -1111,7 +1156,8 @@ belgede anlattım: **`CATIA_MALZEME.md`**. Özeti:
 1. CATIA'da `.CATProduct` açıkken **Analyze ▸ Bill of Material**
 2. **Define formats** ile *Material* sütununu görünür listeye ekleyin
 3. **Save As…** ile `.txt` olarak kaydedin
-4. Pi3D 2. adımda → **malzeme.csv yükle…** → o dosyayı seçin
+4. Pi3D'de **Yardım ▸ Malzemeyi CAD'den al** → 4. adımda o dosyayı seçin
+   (ya da 2. adımda → **malzeme.csv yükle…**)
 
 Program `Part Number` ve `Material` sütunlarını başlıklarından bulur,
 ayırıcıyı (sekme / `;` / `,`) kendi anlar, `Steel` · `Aluminium` ·

@@ -99,6 +99,11 @@ VARSAYILAN_MALZEME = "celik"
 MALZEME_DESEN = [
     (r"1\.4301|1\.4404|\bAISI\s*30[46]\b|paslanmaz|rostfrei|stainless|\binox\b", "paslanmaz"),
     (r"\bS235|\bSt\s*37|\bS355|\bSt\s*52|\bDC0[1-6]\b|\bQSt", "celik"),
+    # Alaşımsız / düşük alaşımlı çelik numaraları: AISI/SAE 10xx-11xx, C45,
+    # Ck45, 42CrMo4, Hardox, DIN malzeme no 1.0xxx - 1.1xxx (1.0038=S235JR)
+    (r"\b(?:AISI|SAE)\s*1[01]\d\d\b|\bC[kK]?\s?(?:1[05]|2[25]|3[05]|4[05]|60)\b"
+     r"|\b\d{2}CrMo\d|\b\d{2}CrNiMo|\bhardox\b|\bweldox\b|\bstrenx\b"
+     r"|\b1\.[01]\d{3}\b", "celik"),
     (r"\bAlMg|\bAlSi|\bAlCuMg|\b6060\b|\b6082\b|\b5754\b|aluminyum|alüminyum|aluminium|aluminum", "aluminyum"),
     (r"\bGG\s*\d\d|\bGGG\b|\bEN-?GJ|dokum|döküm|cast\s*iron|gusseisen", "dokum"),
     (r"\bCuZn|pirinc|pirinç|\bbrass\b|messing", "pirinc"),
@@ -142,10 +147,15 @@ def malzeme_coz(ad):
         return None
     if a in MALZEME:
         return a
-    for k in MALZEME:
+    # CAD'den gelen özel malzemeler ("cad:...") yalnız KENDİ anahtarıyla
+    # bulunur. Bulanık aramaya girerlerse görünen adlarındaki "Steel"
+    # yüzünden sonraki bütün "Steel" satırları o özel malzemeye (ör. 7,50
+    # g/cm3) bağlanıyordu - ölçtük.
+    tablo = [(k, v) for k, v in MALZEME.items() if not k.startswith("cad:")]
+    for k, _v in tablo:
         if a.startswith(k) or k.startswith(a):
             return k
-    for k, (tam, _r) in MALZEME.items():
+    for k, (tam, _r) in tablo:
         if a in _tr_sade(tam):
             return k
     # CATIA/SolidWorks gibi programlar malzemeyi İngilizce yazar
@@ -5494,18 +5504,30 @@ def komponentle(kayit, P):
         sinif, tip = sinifla(ad)
         out.append({"ad": ad, "kod": kod_cikar(ad), "adet": len(idx), "indeks": idx,
                     "hacim_mm3": v, "sinif": sinif, "tip": tip,
-                    "malzeme_data": mal.get(an)})
+                    "malzeme_data": mal.get(an),
+                    "malzeme_yogunluk": getattr(mal.get(an), "yogunluk", None)})
     return out
 
 
 # ---------------------------------------------------------------- malzeme seçimi
 # CAD'lerin parça listesi dışa aktarımlarında sütun başlıkları.
-KOD_BASLIK = ("kod", "code", "part number", "partnumber", "part no", "partno",
-              "reference", "référence", "malzeme no", "stok kodu", "item",
-              "no", "number", "parca", "parça", "part")
-MAL_BASLIK = ("malzeme", "material", "matiere", "matière", "werkstoff",
-              "material name", "malzeme adi", "malzeme adı")
-YOG_BASLIK = ("yogunluk", "yoğunluk", "density", "densite", "densité", "dichte")
+# Sütun başlıkları. SIRA ÖNEMLİ: önce en belirgin olan aranır. Inventor'ın
+# listesinde ilk sütun "Item" (1, 2, 3...) - "item" genel adaylardan önce
+# gelseydi parça kodu yerine sıra numarası seçilirdi.
+KOD_BASLIK = ("part number", "partnumber", "part no", "partno", "part no.",
+              "teilenummer", "sachnummer", "artikelnummer", "document number",
+              "db_part_no", "model name", "part name", "file name",
+              "kod", "code", "reference", "référence", "malzeme no",
+              "stok kodu", "parca", "parça", "part", "number", "no")
+MAL_BASLIK = ("sw-material", "ptc_material_name", "material name",
+              "malzeme adi", "malzeme adı", "material", "malzeme", "werkstoff",
+              "matiere", "matière", "materyal")
+YOG_BASLIK = ("sw-density", "density", "yogunluk", "yoğunluk", "dichte",
+              "densite", "densité", "masse volumique")
+
+
+class MalzemeDosyaHatasi(Exception):
+    """Malzeme dosyası okunamadı; ileti kullanıcıya ne yapacağını söyler."""
 
 
 def _ayirici(satir):
@@ -5516,68 +5538,247 @@ def _ayirici(satir):
 
 
 def _sutun(basliklar, adaylar):
-    """Başlık satırında aranan sütunun indeksi; yoksa None."""
+    """Başlık satırında aranan sütunun indeksi; yoksa None.
+
+    Adaylar ÖNCELİK sırasıyla denenir: önce tam eşleşme, sonra içinde
+    geçen - sütun sırasına göre değil."""
     b = [_tr_sade(x) for x in basliklar]
-    for i, x in enumerate(b):                    # tam eşleşme önce
-        if x in adaylar:
-            return i
-    for i, x in enumerate(b):                    # sonra içinde geçen
-        if any(a in x for a in adaylar):
-            return i
+    for a in adaylar:
+        for i, x in enumerate(b):
+            if x == a:
+                return i
+    for a in adaylar:
+        for i, x in enumerate(b):
+            if a in x:
+                return i
     return None
 
 
-def malzeme_dosya_oku(yol):
-    """kod -> malzeme eşlemesi okur.
+def _metin_coz(ham):
+    """Baytları metne çevirir. CAD'lerin dışa aktardığı dosyalar UTF-8,
+    UTF-16 (Excel "Unicode metin") ya da Windows Türkçe (cp1254) olabilir.
+    Eski kod her şeyi UTF-8 sayıp bozuk baytları '?' yapıyordu: CATIA
+    makrosunun ANSI yazdığı "Çelik" "?elik" oluyordu."""
+    if ham[:2] in (b"\xff\xfe", b"\xfe\xff"):
+        return ham.decode("utf-16")
+    for kod in ("utf-8-sig", "cp1254"):
+        try:
+            return ham.decode(kod)
+        except UnicodeDecodeError:
+            pass
+    return ham.decode("latin-1")
 
-    İki biçimi de anlar:
-      * bizim şablonumuz            kod;malzeme;ad
-      * CAD'in parça listesi çıktısı (CATIA "Analyze > Bill of Material",
-        SolidWorks BOM, Excel'den CSV): başlık satırındaki "Part Number" ve
-        "Material" sütunları adlarından bulunur, sekme/noktalı virgül/virgül
-        ayırıcı kendiliğinden anlaşılır.
 
-    Malzeme adı İngilizce ya da Fransızca olabilir ("Steel", "Aluminium",
-    "Stainless Steel"); desenlerden tanınır. Tanınmayanlar ayrıca döndürülür
-    ki kullanıcıya hangi malzemeleri eşleyemediğimiz söylenebilsin."""
+def _xlsx_satirlari(ham):
+    """Excel .xlsx'in İLK sayfası -> satır listesi. Ek paket gerekmez:
+    .xlsx bir zip içinde XML'dir; standart kütüphaneyle okunur (EXE'ye
+    yeni bağımlılık girmesin)."""
+    import io as _io
+    import zipfile
+    import xml.etree.ElementTree as ET
+    ns = {"m": "http://schemas.openxmlformats.org/spreadsheetml/2006/main",
+          "r": "http://schemas.openxmlformats.org/officeDocument/2006/relationships"}
+    try:
+        z = zipfile.ZipFile(_io.BytesIO(ham))
+    except zipfile.BadZipFile:
+        raise MalzemeDosyaHatasi("Excel dosyası açılamadı (bozuk ya da "
+                                 "parolalı olabilir). CSV olarak kaydedin.")
+    ortak = []
+    if "xl/sharedStrings.xml" in z.namelist():
+        for si in ET.fromstring(z.read("xl/sharedStrings.xml")).findall("m:si", ns):
+            ortak.append("".join(t.text or "" for t in si.iter(
+                "{%s}t" % ns["m"])))
+    # İlk sayfanın dosyası: workbook.xml + ilişkiler
+    sayfa = "xl/worksheets/sheet1.xml"
+    try:
+        wb = ET.fromstring(z.read("xl/workbook.xml"))
+        ilk = wb.find("m:sheets/m:sheet", ns)
+        rid = ilk.get("{%s}id" % ns["r"]) if ilk is not None else None
+        rel = ET.fromstring(z.read("xl/_rels/workbook.xml.rels"))
+        for r in rel:
+            if r.get("Id") == rid:
+                h = r.get("Target").lstrip("/")
+                sayfa = h if h.startswith("xl/") else "xl/" + h
+    except Exception:
+        pass
+    if sayfa not in z.namelist():
+        raise MalzemeDosyaHatasi("Excel dosyasında sayfa bulunamadı.")
+
+    def sutun_no(ref):
+        n = 0
+        for c in ref:
+            if c.isalpha():
+                n = n * 26 + (ord(c.upper()) - 64)
+            else:
+                break
+        return n - 1
+
+    satirlar = []
+    for row in ET.fromstring(z.read(sayfa)).iter("{%s}row" % ns["m"]):
+        hucre = {}
+        for c in row.findall("m:c", ns):
+            t = c.get("t")
+            v = c.find("m:v", ns)
+            if t == "s" and v is not None:
+                deger = ortak[int(v.text)] if v.text and v.text.isdigit() \
+                    and int(v.text) < len(ortak) else ""
+            elif t == "inlineStr":
+                deger = "".join(x.text or "" for x in c.iter("{%s}t" % ns["m"]))
+            else:
+                deger = v.text if v is not None and v.text else ""
+            hucre[sutun_no(c.get("r") or "A")] = deger
+        if hucre:
+            satirlar.append([hucre.get(k, "") for k in range(max(hucre) + 1)])
+    return satirlar
+
+
+def _tablo_satirlari(yol):
+    """Tablo dosyası (CSV / TXT / TSV / XLSX) -> satır listesi (str)."""
+    with open(yol, "rb") as f:
+        ham = f.read()
+    if ham[:4] == b"PK\x03\x04":
+        return _xlsx_satirlari(ham)
+    if ham[:8] == b"\xd0\xcf\x11\xe0\xa1\xb1\x1a\xe1":
+        raise MalzemeDosyaHatasi(
+            "Bu dosya eski Excel biçiminde (.xls, Excel 97-2003) ve "
+            "okunamıyor. Excel'de açıp 'Farklı kaydet' ile ya .xlsx ya da "
+            "'CSV (noktalı virgülle ayrılmış)' olarak kaydedin.")
+    metin = _metin_coz(ham)
+    dolu = [x for x in metin.splitlines() if x.strip()]
+    if not dolu:
+        return []
+    ayr = _ayirici(dolu[0] if len(dolu) == 1 else
+                   max(dolu[:5], key=lambda x: sum(x.count(a) for a in "\t;,")))
+    # csv modülü tırnaklı hücreleri doğru ayırır ("Steel, AISI 1020").
+    return [[h.strip() for h in r] for r in csv.reader(dolu, delimiter=ayr)]
+
+
+def _yogunluk_coz(hucre, baslik=""):
+    """Yoğunluk hücresi -> g/cm³ (ya da None).
+
+    Birim hücrede ya da başlıkta yazıyorsa ondan çözülür; yazmıyorsa
+    değerin büyüklüğünden: 100'den büyükse kg/m³ sayılır (çelik 7850),
+    küçükse g/cm³ (çelik 7,85). 0,3 - 23 g/cm³ dışı reddedilir - bilinen
+    hiçbir mühendislik malzemesi o aralığın dışında değildir."""
+    t = _tr_sade(str(hucre or "")).replace(",", ".")
+    m = re.search(r"[-+]?\d+(?:\.\d+)?(?:e[-+]?\d+)?", t)
+    if not m:
+        return None
+    try:
+        v = float(m.group())
+    except ValueError:
+        return None
+    b = t + " " + _tr_sade(baslik or "")
+    if "kg/mm" in b:
+        v *= 1e6
+    elif "g/mm" in b:
+        v *= 1e3
+    elif "kg/m" in b:
+        v /= 1000.0
+    elif "lb/in" in b:
+        v *= 27.6799
+    elif "lb/ft" in b:
+        v *= 0.0160185
+    elif any(x in b for x in ("g/cm", "g/cc", "kg/dm", "g/ml", "t/m")):
+        pass
+    elif v > 100:
+        v /= 1000.0
+    return round(v, 4) if 0.3 <= v <= 23.0 else None
+
+
+def malzeme_ozel(ad, yogunluk, taban=None):
+    """CAD'den gelen, tabloda karşılığı olmayan (ya da yoğunluğu
+    tablodakinden farklı) malzemeyi çalışma süresince tanımlar.
+
+    Eskiden adı tanınmayan malzeme sessizce VARSAYILAN malzemeye (çelik)
+    düşüyordu: 2,7 g/cm³'lük bir alüminyum alaşımı adı tanınmasa çelik
+    kütlesiyle yazılıyordu. Yoğunluk biliniyorsa kütle onunla hesaplanır.
+    Döner: MALZEME sözlüğüne eklenen anahtar."""
+    ad = (str(ad or "").strip() or "CAD malzemesi")[:60]
+    anahtar = _tr_sade(f"cad:{ad}@{yogunluk:.3f}")
+    if anahtar not in MALZEME:
+        gor = f"{ad}  (CAD: {yogunluk:.2f} g/cm3)"
+        MALZEME[anahtar] = (gor, float(yogunluk))
+    return anahtar
+
+
+def malzeme_yogunluklu(ad, yogunluk=None, pay=0.02):
+    """Ad + (varsa) yoğunluk -> malzeme anahtarı; hiçbiri yoksa None.
+
+    Ad tanınır ve yoğunluk tablodakiyle %2 içinde tutarsa tablo malzemesi;
+    yoğunluk farklıysa ya da ad tanınmıyorsa CAD'in yoğunluğuyla özel
+    malzeme. CAD'deki yoğunluk o parçanın GERÇEK tanımıdır; tablodaki
+    ise yalnız bir varsayımdır."""
+    m = malzeme_coz(ad) if ad else None
+    if yogunluk:
+        if m and abs(MALZEME[m][1] - yogunluk) <= pay * MALZEME[m][1]:
+            return m
+        return malzeme_ozel(ad or (MALZEME[m][0] if m else ""), yogunluk, m)
+    return m
+
+
+def malzeme_tablosu(yol):
+    """Malzeme dosyasının satır satır çözümü (sihirbazın önizlemesi için).
+
+    Döner: [{"kod", "malzeme", "yogunluk", "anahtar", "durum"}]
+      durum: "tanındı" / "CAD yoğunluğuyla" / "tanınmadı"
+    Hata: MalzemeDosyaHatasi (ileti kullanıcıya gösterilebilir)."""
     if yol.lower().endswith(".json"):
-        ham = {_tr_sade(k): str(v) for k, v in
-               (json.load(open(yol, encoding="utf-8")) or {}).items()}
-        esl = {k: malzeme_coz(v) for k, v in ham.items()}
-        return {k: v for k, v in esl.items() if v}, \
-               sorted({ham[k] for k, v in esl.items() if not v})
-
-    with open(yol, encoding="utf-8-sig", errors="replace") as f:
-        satirlar = [x.rstrip("\n") for x in f if x.strip()]
-    if not satirlar:
-        return {}, []
-    ayr = _ayirici(satirlar[0])
-    tablo = [x.split(ayr) for x in satirlar]
-
-    # Başlık satırını bul: ilk 10 satırdan kod + malzeme sütunu bulunanı.
+        ham = json.load(open(yol, encoding="utf-8")) or {}
+        tablo = [["kod", "malzeme"]] + [[k, str(v)] for k, v in ham.items()]
+    else:
+        tablo = _tablo_satirlari(yol)
+    if not tablo:
+        return []
     ik = im = iy = bas = None
-    for n, sat in enumerate(tablo[:10]):
+    for n, sat in enumerate(tablo[:15]):
         k = _sutun(sat, KOD_BASLIK)
         m = _sutun(sat, MAL_BASLIK)
         if k is not None and m is not None and k != m:
             ik, im, bas = k, m, n
             iy = _sutun(sat, YOG_BASLIK)
+            if iy in (ik, im):
+                iy = None
             break
     if bas is None:                     # başlık yok: kod;malzeme varsayılır
         ik, im, bas = 0, 1, -1
-
-    esl, bilinmeyen = {}, []
+    ybas = tablo[bas][iy] if (bas >= 0 and iy is not None) else ""
+    out = []
     for sat in tablo[bas + 1:]:
         if len(sat) <= max(ik, im):
             continue
         kod, mal = sat[ik].strip().strip('"'), sat[im].strip().strip('"')
-        if not kod or not mal or _tr_sade(kod) in KOD_BASLIK:
+        if not kod or _tr_sade(kod) in KOD_BASLIK:
             continue
-        m = malzeme_coz(mal)
-        if m:
-            esl[_tr_sade(kod)] = m
-        else:
-            bilinmeyen.append(mal)
+        y = (_yogunluk_coz(sat[iy], ybas)
+             if iy is not None and iy < len(sat) else None)
+        if not mal and not y:
+            continue
+        taban = malzeme_coz(mal) if mal else None
+        a = malzeme_yogunluklu(mal, y)
+        durum = ("tanınmadı" if not a else
+                 "CAD yoğunluğuyla" if a.startswith("cad:") else "tanındı")
+        out.append({"kod": kod, "malzeme": mal, "yogunluk": y,
+                    "anahtar": a, "taban": taban, "durum": durum})
+    return out
+
+
+def malzeme_dosya_oku(yol):
+    """kod -> malzeme eşlemesi okur.
+
+    Biçimler: bizim şablonumuz (kod;malzeme;ad), CAD'lerin parça listesi
+    çıktısı (CATIA, SolidWorks, NX, Creo, Inventor, Solid Edge - CSV, TXT,
+    sekmeli metin ya da Excel .xlsx), JSON. Başlıklar adlarından bulunur,
+    ayırıcı ve kodlama kendiliğinden anlaşılır; yoğunluk sütunu varsa
+    kullanılır (bkz. malzeme_yogunluklu).
+
+    Döner: (eşleme, tanınmayan adlar). Okunamazsa MalzemeDosyaHatasi."""
+    esl, bilinmeyen = {}, []
+    for r in malzeme_tablosu(yol):
+        if r["anahtar"]:
+            esl[_tr_sade(r["kod"])] = r["anahtar"]
+        elif r["malzeme"]:
+            bilinmeyen.append(r["malzeme"])
     return esl, sorted(set(bilinmeyen))
 
 
@@ -5637,7 +5838,14 @@ def malzeme_ata(k, esl, genel, data_oncelik=True):
         if m:
             return m, "secim"
     if data_oncelik:
-        m = malzeme_tahmin(k.get("malzeme_data"), k.get("ad"))
+        # STEP'te malzeme adı ve yoğunluğu varsa ikisi birlikte çözülür;
+        # yoksa parça adındaki ipuçlarından ("S235", "AlMg3") tanınır.
+        yog = k.get("malzeme_yogunluk")
+        m = None
+        if k.get("malzeme_data") and yog:
+            yog = _yogunluk_coz(yog)
+            m = malzeme_yogunluklu(str(k.get("malzeme_data")), yog)
+        m = m or malzeme_tahmin(k.get("malzeme_data"), k.get("ad"))
         if m:
             return m, "data"
     return genel, "genel"
@@ -5968,7 +6176,10 @@ def main():
     # ---- malzeme: kütle bunun üzerinden hesaplanır, tahmin edilmez
     esl, genel = {}, VARSAYILAN_MALZEME
     if a.malzeme_dosya:
-        esl, bilinmeyen = malzeme_dosya_oku(a.malzeme_dosya)
+        try:
+            esl, bilinmeyen = malzeme_dosya_oku(a.malzeme_dosya)
+        except MalzemeDosyaHatasi as ex:
+            sys.exit(f"HATA: malzeme dosyası okunamadı: {ex}")
         print(f"malzeme dosyası: {a.malzeme_dosya} ({len(esl)} kayıt eşleşti)")
         if bilinmeyen:
             print("! tanınmayan malzeme adı: " + ", ".join(bilinmeyen[:10])

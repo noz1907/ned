@@ -35,7 +35,9 @@ Part Number	Nomenclature	Material	Quantity
 06.001.001.34	Keil-forging	Stainless Steel	1
 ```
 
-5. Pi3D'de **2. adım**ta → **malzeme.csv yükle…** → bu dosyayı seçin
+5. Pi3D'de **Yardım ▸ Malzemeyi CAD'den al** → 4. adımda bu dosyayı seçin
+   (önizleme: hangi parça hangi malzemeyi alacak), ya da 2. adımda →
+   **malzeme.csv yükle…**
 
 Program başlık satırındaki `Part Number` ve `Material` sütunlarını adlarından
 bulur; ayırıcının sekme mi, noktalı virgül mü, virgül mü olduğunu kendi
