@@ -194,7 +194,7 @@ if kalan != ["01.051.000.01"]:
 if secili != ["01.051.000.01"]:
     hata.append(("sac secimi", f"secilen {secili}, beklenen ['01.051.000.01']"))
 G.threading.Thread = _eski_thread
-u._bitir = lambda: None
+u._bitir = lambda *a: None
 u.v_out = SahteVar("/tmp")
 u._acilim_geldi([{"kod": "01.051.000.01", "kalinlik_mm": 2.5,
                   "acinim_genislik_mm": 233.9, "acinim_boy_mm": 2480.0,

@@ -1,6 +1,6 @@
 Pi3D  –  3B modelden parça listesi ve teknik resim
 
-Sürüm   : malzeme-sihirbazi  (26.09.2026)
+Sürüm   : devam-ve-klasorler  (26.09.2026)
 Kaynak  : github.com/noz1907/ned   dal: claude/fikstur-parca-stp-57hwc1
 
 KURULUM
@@ -33,6 +33,12 @@ BU SÜRÜMDE NE VAR
                     ve PDF'i çıkar. PDF'ler çıktı klasörünün altındaki
                     PDF klasörüne ..._A3.pdf / ..._A3D.pdf yazılır.
 
+  HER ADIM AYRI YAPILIR, İSTENDİĞİ KADAR TEKRARLANIR. Önceki bir
+  çıktı klasörü açılınca ne var ne eksik yazar; yalnız eksik olan
+  yapılır. Sağdaki panelde her işlemin süresi ve toplam süre.
+
+  Çıktı klasörü:  DXF/  ACINIM/  LZR/  PDF/  + kökte BOM ve raporlar
+
   Ölçüler HER ZAMAN 1:1'dir: ölçek paftanın penceresine aittir,
   rakama değil. 1:1 çizimler silinmez, değiştirilmez.
 
@@ -54,6 +60,11 @@ DENETİM BETİKLERİ (test/)
     python test/cizim_cakisma_denetimi.py --kendini-dene
   Ölçülerin hata oranı (uzun sürer, ~1 dk):
     python test/olcu_dogrulama.py ornek/parca.stp
+  Sınıflama (parça / standart / kaynak) ve devam:
+    python test/sinif_denetimi.py
+    python test/geometri_denetimi.py        (model verirseniz isabet ölçer)
+    python test/devam_denetimi.py
+    python test/gui_devam_denetimi.py        (tkinter + ekran ister)
   Malzeme okuma ve sihirbaz:
     python test/malzeme_denetimi.py
     python test/gui_malzeme_sihirbazi.py      (tkinter + ekran ister)
@@ -74,6 +85,85 @@ DENETİM BETİKLERİ (test/)
   ORNEK_PAFTA_A3_*.png     paftanın görüntüsü
 
 BU SÜRÜMDE DEĞİŞEN
+
+  HER ADIM AYRI, İSTENDİĞİ KADAR YENİDEN; EKSİK OLAN TAMAMLANIR
+    Eskiden sekmeler sırayla açılıyordu: PDF'i unutan kullanıcı modeli
+    yeniden okuyup BOM'u, örneği, bütün çizimleri baştan almak zorundaydı.
+    - 1. sayfada ÖNCEKİ ÇIKTIYI AÇ: klasörde ne var yazar (BOM, kaç
+      detay resmi, montaj, açınım, lazer, PDF; model aynı mı değişmiş mi).
+      Pafta ve PDF için model OKUNMAZ, 7. sekme hemen açılır; paftası
+      önceden kurulu resim doğrudan basılır, PDF'i güncel olan belli olur.
+    - İNCELE'den sonra BÜTÜN sekmeler açılır; malzeme, görünüş, kesit
+      ayarları klasörden geri gelir.
+    - 5. sekmenin kendi ÇİZİMLERİ ÜRET düğmesi var: "yalnız eksik ya da
+      eskimiş çizimler" işaretliyse güncel resimlere dokunulmaz.
+      Güncel = AYNI model içeriği + AYNI görünüş/kesit/malzeme/poz ile
+      üretildiği kayıtlı (pi3d_is.json). Kayıt yoksa ya da tutmuyorsa
+      yeniden üretilir - eski resim yeni diye verilmez.
+      Ölçüldü (TIRSAN ray, 21 resim): tam üretim 320 sn; hemen ardından
+      eksik üretim 13 güncel resmi atladı.
+    - 6. ve 8. sekmede bu modelden önceden üretilmiş açınım / lazer
+      "önceden üretildi" yazar, seçili gelmez; eksikler seçili gelir.
+    - Poz numarası kayınca (ör. sınıf değişti) eski P07_... resmi
+      silinmez, DXF/ESKI'ye taşınır: yanlış parçanın resmi gibi
+      paftalanmasın.
+    - Komut satırı: --eksik
+
+  ÇIKTILAR KLASÖRLERE AYRILDI
+    DXF/ detay + montaj,  ACINIM/ açınım + ACINIM.csv,  LZR/ lazer +
+    LAZER.csv,  PDF/ baskılar; BOM ve raporlar kökte. Eski tek-klasör
+    çıktıları da okunur. ACINIM.csv / LAZER.csv artık BİRLEŞTİRİLİYOR:
+    2 parçayı yeniden üretmek diğerlerinin satırını silmiyor. ZIP klasör
+    düzenini koruyor.
+
+  İŞLEMLER VE SÜRELER (sağdaki panel)
+    Her işlem, açıklaması ve süresi; TOPLAM (bu oturum) ve bu klasörün
+    bütün oturumlarının toplamı. Çalışan işte geçen süre ve ilerleme
+    biliniyorsa ÖLÇÜLEN hıza göre kalan süre.
+
+  KAYNAK DİKİŞLERİ KOMPONENT SAYILMIYOR
+    Kaynaklı kasa montajında 142 dikiş "komponent" gibi listeyi
+    dolduruyordu. Artık tek satır: KAYNAK DİKİŞLERİ - 25 tür (açınca
+    K0 25 MM TEK KAYNAK x103 ...). Hiyerarşik BOM'da her montajın altında
+    tek satır; rapor.md'de türlere göre tablo. "Symmetry of", ".2", "_1"
+    kopya ekleri aynı türde sayılır.
+
+  STANDART / ÜRETİM PARÇASI AYRIMI DÜZELTİLDİ
+    Dört gerçek modeldeki 331 ad eski ve yeni kuralla tek tek
+    karşılaştırıldı; 35 farkın hepsi aşağıdakilerden:
+    - M10 KAYNAK SOMUNU, M6X20 KAYNAK CIVATASI (106 adet) dikiş sayılıp
+      BOM'dan düşüyordu -> standart
+    - K0 CIVATA LAMASI (7 çeşit), K0 ON PANEL / TELEVRE SOMUN SACI
+      STANDART sayılıp resmi hiç çizilmiyordu -> üretim parçası.
+      Türkçe tamlamada asıl isim sondadır: cıvata lamaSI bir lamadır;
+      gövde perçinİ bir perçindir.
+    - M10X1,5 FL SOMUN_2 parça çıkıyordu ('_' sözcük sınırını bozuyordu)
+    - Kamera, yük bağlama halkası, gömme sallama, kauçuk takoz/stoper,
+      menteşe -> standart (satın alınan). ...KAMERASI BRAKETI parça.
+    - Satın alınan grubun (153-02-10-004 GOMME SALLAMA) içindeki
+      151B-02-10-004 gibi parçalar standart; K0 KAYNAKLAR grubunun
+      içindeki ARA DIKME dikiş; K0 BRAKET KAYNAGI dikiş; KAYNAKLI ...
+      dikiş DEĞİL.
+    - Program bilmediği adı yanlış sınıflarsa 2. sekmede satırı seçip
+      Üretim parçası / Standart / Kaynak dikişi deyin: kural SAKLANIR,
+      aynı adlı parça bundan sonra her modelde öyle sınıflanır.
+
+  ADI OLMAYAN KATI GEOMETRİSİNDEN TANINIYOR
+    "COMPOUND", "SOLID", "Body" gibi adsız katılarda program yüzlere
+    bakar: pul, somun (altıgen/kare), cıvata (altıgen ya da imbus baş),
+    perçin, pim (pahlı), o-ring ve köşe kaynağı dikişi. Emin değilse
+    karar vermez (düz uçlu Ø5 çubuk pim de olabilir dikiş de).
+    Ölçüldü - 4 gerçek modelde adı belli 636 komponent: 214 karar,
+    1 yanlış (%0,47); 182 kaynak kararının hepsi doğru, hiçbir üretim
+    parçası dikiş sayılmadı. Adı olan parçada ad kazanır, geometri
+    öneri olarak yazar ("parca - öneri: pul?").
+    Kaynaklı kasada 6 adsız katı tanındı (pul, somun, o-ring); tanınamayan
+    16'sı bir tedarikçi grubunun 300 yüzlü döküm/plastik parçaları -
+    "parca - ADSIZ" yazar, bir kez elle sınıflanır. Adsız katının kuralı
+    ADLA değil GEOMETRİK PARMAK İZİYLE (hacim + ölçüler) saklanır: bir
+    COMPOUND'u standart yapmak bütün COMPOUND'ları etkilemez.
+
+ÖNCEKİ SÜRÜM (malzeme-sihirbazi)
 
   YARDIM MENÜSÜ VE "MALZEMEYİ CAD'DEN AL" SİHİRBAZI
     Pencerenin üstünde Yardım menüsü: Malzemeyi CAD'den al (adım adım),

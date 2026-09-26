@@ -183,8 +183,8 @@ try:
     u.iptal_istendi = False
     u.calisiyor = False
     u.after = lambda *a, **k: None
-    u._basla = lambda d: u.v_durum.set(d)
-    u._bitir = lambda: None
+    u._basla = lambda d, *a: u.v_durum.set(d)
+    u._bitir = lambda *a: None
     u._yaz = lambda m: None
     sut = ("dosya", "tip", "olcu", "kagit", "olcek", "durum")
     u.pf_agac = SahteAgac(sut)

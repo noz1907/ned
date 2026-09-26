@@ -62,6 +62,8 @@ from OCP.HLRAlgo import HLRAlgo_Projector
 from OCP.GCPnts import GCPnts_TangentialDeflection
 
 import pf1_referans as E
+import pf7_is as IS
+import pf8_tani as TN
 
 RHO = 7.85e-6          # kg/mm3 (çelik); --yogunluk ile değiştirilir
 
@@ -178,8 +180,8 @@ def malzeme_listele():
 STANDART = [
     (r"\bDIN\s*\d+", "DIN"), (r"\bISO\s*\d+", "ISO"), (r"\bEN\s*\d{3,}", "EN"),
     (r"civata|cıvata|bolt|screw|schraube", "civata"),
-    (r"\bsomun\b|\bnut\b|mutter", "somun"),
-    (r"\bpul\b|rondela|washer|scheibe|unterlegscheibe", "pul"),
+    (r"\bsomun(?:u|lar[ıi]?)?\b|\bnut\b|mutter", "somun"),
+    (r"\bpul(?:u|lar[ıi]?)?\b|rondela|washer|scheibe|unterlegscheibe", "pul"),
     (r"percin|perçin|rivet|niet", "perçin"),
     (r"\bpim\b|bolzen|\bpin\b|\bmil\b", "pim"),
     (r"\byay\b|\bfeder\b|spring|druckfeder|zugfeder", "yay"),
@@ -187,25 +189,192 @@ STANDART = [
     (r"segman|sicherung|circlip|seeger", "segman"),
     (r"saplama|stud|gewindestift", "saplama"),
 ]
+# Norm numarası taşımayan SATIN ALINAN elemanlar (ticari ürün). Kaynaklı
+# kasa örneğinde kamera, yük bağlama halkası, gömme sallama ve kauçuk
+# takozlar üretim parçası sayılıp resmi çiziliyordu.
+TICARI = [
+    (r"sallama|ba[gğ]lama halka|kald[ıi]rma halka|lashing|zurr|\bmapa\b"
+     r"|lifting eye|eye ?bolt|ringschraube|ringmutter|\bhalka(?:s[ıi])?\b",
+     "bağlama elemanı"),
+    (r"kau[cç]uk (?:takoz|stoper|stopper|tampon|bur[cç])"
+     r"|(?:takoz|stoper|stopper|tampon) kau[cç]uk|\bstop+er\b"
+     r"|gummipuffer|rubber (?:buffer|bumper|stop)", "kauçuk eleman"),
+    (r"\bkamera|\bcamera\b|sens[oö]r|\bsensor\b|\bmotor\b|red[uü]kt[oö]r"
+     r"|\bvalf|\bvalve\b|konnekt[oö]r|connector|\bkablo\b|\blamba\b"
+     r"|mente[sş]e|\bhinge\b|scharnier|\bkilit\b|amortis[oö]r|gasfeder"
+     r"|gas spring", "ticari ürün"),
+]
+# ÜRETİM PARÇASI olduğunu söyleyen isimler. Türkçe tamlamada asıl isim
+# SONDADIR: "CIVATA LAMASI" bir lamadır (üretilir), "SOMUN SACI" bir
+# sactır; "KAYNAK SOMUNU" ise bir somundur, "GOVDE PERCINI" perçindir.
+# Norm numarası (DIN/ISO/EN) yoksa, üretim ismi standart isimden SONRA
+# geliyorsa parça üretim parçasıdır. Kaynaklı kasa
+# örneğinde 4 çeşit "K0 CIVATA LAMASI" ve "K0 ON PANEL SOMUN SACI"
+# standart sayılıp resmi hiç çizilmiyordu.
+URETIM = (r"\blama|\bsac(?:[ıi]|lar[ıi]?)?\b|plaka|braket|bracket|halter"
+          r"|profil|destek|tutucu|\bkapa[kg]|\bblo[kg]|g[oö]vde|travers"
+          r"|konsol|\blevha|blech|platte|winkel|lasche|\bbock\b|lagerbock"
+          r"|\bplate\b|\bsheet\b|\bmontaj|assembly|baugruppe")
+NORM = r"\b(?:DIN|ISO|EN)\s*\d{2,}"
 # Kaynak dikişleri de ayrı tutulur (parça değildir).
 # Dikkat: "naht" serbest bırakılırsa "Anahtar" gibi kelimelere takılır;
-# sözcük sonuna sabitlenir.
-KAYNAK = r"kehlnaht|naht\b|kaynak|weld|\bseam\b|diki[sş]"
+# sözcük sonuna sabitlenir. "KAYNAKLI" (kaynaklı montaj/parça) dikiş
+# DEĞİLDİR; "KAYNAĞI" (braket kaynağı) dikiştir.
+KAYNAK = (r"kehlnaht|naht\b|kayna(?:k|[gğ][ıi])(?!l[ıi])|kaynaklar"
+          r"|weld(?!ed|ment)|\bseam\b|diki[sş]")
+# Montaj ağacında YALNIZ DİKİŞ toplayan grup: "K0 KAYNAKLAR",
+# "KO TELEVRE KAYNAKLAR". İçindeki adsız/garip adlı katılar da dikiştir.
+KAYNAK_GRUBU = (r"kaynaklar|diki[sş]ler|\bwelds\b|schwei(?:ss|ß)n[aä]hte"
+                r"|\bn[aä]hte\b")
+
+
+# "KAYNAK" geçen her ad kaynak dikişi DEĞİLDİR: kaynak somunu, kaynak
+# cıvatası (saplaması) satın alınan standart elemandır, sac parçaya
+# kaynatılır ama BOM'a adediyle girer. Kaynaklı montaj örneğinde
+# "M6X20 KAYNAK CIVATASI" (84 adet) ve "M10 KAYNAK SOMUNU" (22 adet)
+# dikiş sayılıp BOM'dan düşüyordu.
+KAYNAK_ELEMANI = (r"kaynak\s*(?:somun|c[iı]vata|saplama|vida|pim|bur[cç])"
+                  r"|(?:somun|c[iı]vata|saplama)\w*\s+kaynak"
+                  r"|weld(?:ing)?[\s_-]*(?:nut|stud|bolt|screw|pin)"
+                  r"|schwei(?:ss|ß)[\s_-]*(?:mutter|bolzen|schraube)"
+                  r"|anschwei(?:ss|ß)mutter")
 
 
 def _ad_sade(ad):
     return re.sub(r"\s+", " ", (ad or "").strip())
 
 
-def sinifla(ad):
-    """Komponent sınıfı: ('standart', tip) | ('kaynak', '') | ('parca', '')."""
-    a = _ad_sade(ad)
-    if re.search(KAYNAK, a, re.I):
+def _sinif_adi(ad):
+    """Sınıflama için ad: "_", "." ayraç sayılır. "FL SOMUN_2" ve
+    "SOMUN.1" içindeki SOMUN sözcüğü \\b ile yakalanmıyordu ('_' harf
+    sayılır) ve M10 flanşlı somun üretim parçası çıkıyordu."""
+    return re.sub(r"\s+", " ", re.sub(r"[_.]+", " ", ad or "")).strip().lower()
+
+
+def kural_anahtari(ad, k=None):
+    """Kullanıcının elle verdiği sınıfın saklandığı anahtar: kopya ekleri
+    atılmış ad ("Symmetry of X.2" -> "x").
+
+    ADSIZ katıda (COMPOUND, SOLID) ad anahtar olamaz - bir COMPOUND'u
+    standart yapmak bütün COMPOUND'ları standart yapardı. Onlarda anahtar
+    GEOMETRİK PARMAK İZİDİR: hacim + üç ölçü. Aynı tedarikçi parçası
+    başka bir modelde yine tanınır."""
+    if k is not None and k.get("olc") and TN.isimsiz(ad):
+        return ("geo:" + f"{float(k['hacim_mm3']):.1f}:"
+                + "x".join(f"{float(v):.1f}" for v in k["olc"]))
+    return _sinif_adi(kaynak_tipi(ad))
+
+
+def _kural(kural, k):
+    """Komponent için kullanıcının kuralı (yoksa None)."""
+    if not kural:
+        return None
+    return kural.get(kural_anahtari(k["ad"], k))
+
+
+def sinifla(ad, kural=None):
+    """Komponent sınıfı: ('standart', tip) | ('kaynak', '') | ('parca', '').
+
+    Sıra: kullanıcının kuralı > kaynak dikişi > norm (DIN/ISO/EN) >
+    üretim ismi (lama, sac, braket ...) > standart / ticari eleman."""
+    if kural:
+        k = kural.get(kural_anahtari(ad))
+        if k in ("parca", "standart", "kaynak"):
+            return k, ("elle" if k == "standart" else "")
+    a = _sinif_adi(ad)
+    eleman = re.search(KAYNAK_ELEMANI, a, re.I)
+    if re.search(KAYNAK, a, re.I) and not eleman:
         return "kaynak", ""
-    for desen, tip in STANDART:
-        if re.search(desen, a, re.I):
-            return "standart", tip
+    m = re.search(NORM, a, re.I)
+    if m:
+        return "standart", m.group(0).split()[0].upper()[:3]
+    # İkisi birden geçiyorsa SONDAKİ kazanır (asıl isim sondadır):
+    # "CIVATA LAMASI" lama -> parça, "GOVDE PERCINI" perçin -> standart.
+    uretim = max((m.end() for m in re.finditer(URETIM, a, re.I)), default=-1)
+    std = [(max(m.end() for m in re.finditer(d, a, re.I)), t)
+           for d, t in STANDART + TICARI if re.search(d, a, re.I)]
+    if std and max(e for e, _ in std) > uretim:
+        # aynı yerde bitenlerden listede önce geleni (tipi) al
+        son = max(e for e, _ in std)
+        return "standart", next(t for e, t in std if e == son)
+    if uretim >= 0:
+        return "parca", ""
+    if eleman:
+        return "standart", "kaynak elemanı"
     return "parca", ""
+
+
+def agactan_sinifla(agac, komp, kural=None, log=print):
+    """Adı tek başına yetmeyen katıları MONTAJ AĞACINDAN sınıflar.
+
+    1) Satın alınan bir grubun (ör. "153-02-10-004 - GOMME SALLAMA ...")
+       altındaki her katı o grubun parçasıdır: çizilmez, standart sayılır.
+    2) Yalnız dikiş toplayan bir grubun ("K0 KAYNAKLAR") altındaki katı
+       dikiştir ("ARA DIKME" 171 mm3 dolgu kaynağı parça sayılıyordu).
+    Kullanıcının elle verdiği sınıfa dokunulmaz. Bir komponentin BÜTÜN
+    kopyaları aynı yerde olmalı; biri başka yerdeyse sınıfı değişmez."""
+    if not agac:
+        return 0
+    ata = {}                 # katı indeksi -> [(ata adı, montaj mı)], yakından uzağa
+
+    def gez(d, yol):
+        alt = d.get("alt") or []
+        if not alt:
+            for j in d.get("katilar") or []:
+                ata[j] = yol
+        for a in alt:
+            gez(a, [d.get("ad") or ""] + yol)
+    gez(agac, [])
+    degisen = 0
+    for k in komp:
+        if k["sinif"] != "parca" or _kural(kural, k):
+            continue
+        # Ağaç, tekrar eden alt montajın yalnız İLK kopyasının katılarını
+        # tutar; diğer kopyalar ağaçta görünmez. Görünenler karar verir.
+        yollar = [ata[j] for j in k["indeks"] if ata.get(j)]
+        if not yollar:
+            continue
+        # 2) en yakın üst grup dikiş grubu mu
+        if all(re.search(KAYNAK_GRUBU, _sinif_adi(y[0]), re.I)
+               and not re.search(r"\bgrup|group|montaj|assembly", _sinif_adi(y[0]))
+               for y in yollar):
+            k["sinif"], k["tip"] = "kaynak", ""
+            degisen += 1
+            continue
+        # 1) üstlerden biri satın alınan eleman mı (kök hariç)
+        tic = []
+        for y in yollar:
+            bul = next((u for u in y[:-1] if sinifla(u, kural)[0] == "standart"),
+                       None)
+            tic.append(bul)
+        if all(tic):
+            k["sinif"] = "standart"
+            k["tip"] = "satın alınan grup: " + _ad_sade(tic[0])[:40]
+            degisen += 1
+    if degisen:
+        log(f"montaj ağacından {degisen} komponentin sınıfı düzeltildi "
+            "(satın alınan grubun içi / dikiş grubu)")
+    return degisen
+
+
+def kaynak_tipi(ad):
+    """Kaynak dikişinin TÜRÜ: CAD'in kopyaya eklediği ekler atılır.
+
+    "Symmetry of K0 25 MM TEK KAYNAK.2" ve "K0 25 MM TEK KAYNAK_1" aynı
+    dikiştir (25 mm tek kaynak); listede tek satırda sayılır."""
+    a = _ad_sade(ad)
+    a = re.sub(r"^(?:symmetry of|mirror of|simetri(?:si)?)\s+", "", a, flags=re.I)
+    a = re.sub(r"(?:[._]\d+)+$", "", a).strip(" ._,")
+    return a or "kaynak"
+
+
+def kaynak_ozeti(satirlar, en_cok=6):
+    """[(tür, adet), ...] - en çok geçen önce. satirlar: {ad, adet}."""
+    say = {}
+    for r in satirlar:
+        t = kaynak_tipi(r.get("ad"))
+        say[t] = say.get(t, 0) + int(r.get("adet") or 1)
+    return sorted(say.items(), key=lambda t: (-t[1], t[0]))
 
 
 def kod_cikar(ad):
@@ -4982,14 +5151,19 @@ def sac_parcalari(kayit, komp, log=print):
 
 
 def acilim_yaz(kayit, komp, P, klasor, kodlar=None, k_faktor=K_FAKTOR,
-               log=print, ilerleme=None, iptal=None):
+               log=print, ilerleme=None, iptal=None, eksik=False):
     """Seçilen parçaların açınımını hesaplar, DXF ve tablo yazar.
 
+    klasor: ÇIKTI KÖK KLASÖRÜ; dosyalar onun ACINIM alt klasörüne yazılır,
+    ACINIM.csv eskisiyle BİRLEŞTİRİLİR (başka parçaların satırı silinmez).
+    eksik: aynı modelden aynı K-faktörüyle üretilmiş açınım atlanır.
     kodlar None ise bütün komponentler denenir. Geriye (sonuclar, hatalar)
     döner; hata listesi kullanıcıya OLDUĞU GİBİ gösterilmelidir, çünkü
     hangi parçanın neden açılamadığını tek tek söyler."""
-    os.makedirs(klasor, exist_ok=True)
-    sonuc, hata = [], []
+    kok = klasor
+    klasor = IS.alt_klasor(kok, "acinim", olustur=True)
+    step_oz = IS.durum_oku(kok).get("step_ozet", "")
+    sonuc, hata, denenen = [], [], set()
     pozlar = poz_numaralari(komp)
     secili = [(pozlar[i], k) for i, k in enumerate(komp)
               if kodlar is None or (k.get("kod") or k.get("ad")) in kodlar]
@@ -4999,6 +5173,11 @@ def acilim_yaz(kayit, komp, P, klasor, kodlar=None, k_faktor=K_FAKTOR,
         ad = k.get("kod") or k.get("ad") or "?"
         if ilerleme:
             ilerleme(i, len(secili), ad)
+        if eksik and IS.onceden_uretilmis(kok, "acinim", ad, step_oz,
+                                          k_faktor=k_faktor):
+            log(f"  {ad}: açınım güncel (aynı model, K={k_faktor}) - atlandı")
+            continue
+        denenen.add(ad)
         try:
             sh = kayit[k["indeks"][0]][1]
             r = sac_acilim(sh, k, k_faktor=k_faktor)
@@ -5013,6 +5192,7 @@ def acilim_yaz(kayit, komp, P, klasor, kodlar=None, k_faktor=K_FAKTOR,
         dosya = os.path.join(klasor,
                              resim_dosyasi(poz or (i + 1), ad,
                                            k.get("ad"), acinim=True))
+        IS.eskiyi_kaldir(kok, "acinim", ad, os.path.basename(dosya), log)
         dxf_acilim(r, dict(k, poz=poz), dosya, P)
         r["kod"] = ad
         r["ad"] = k.get("ad", "")
@@ -5020,20 +5200,15 @@ def acilim_yaz(kayit, komp, P, klasor, kodlar=None, k_faktor=K_FAKTOR,
         r["adet"] = k.get("adet", 1)
         r["dxf"] = os.path.basename(dosya)
         sonuc.append(r)
+        IS.cizim_kaydet(kok, "acinim", ad, dxf=r["dxf"], step_ozet=step_oz,
+                        k_faktor=k_faktor)
         log(f"  {os.path.basename(dosya)}  {r['acinim_genislik_mm']} x "
             f"{r['acinim_boy_mm']} mm, t={r['kalinlik_mm']}, "
             f"{r['bukum_sayisi']} bükum")
-    if sonuc:
-        yol = os.path.join(klasor, "ACINIM.csv")
-        with open(yol, "w", newline="", encoding="utf-8-sig") as f:
-            w = csv.writer(f, delimiter=";")
-            w.writerow(["poz", "kod", "ad", "adet", "kalinlik_mm",
-                        "acinim_genislik_mm", "acinim_boy_mm", "bukum_sayisi",
-                        "yontem", "en_kisa_kanat_mm", "en_kisa_kanat_t",
-                        "en_kucuk_r_t", "yontem_nedeni", "uyari",
-                        "k_faktor", "bukumler", "dxf"])
-            for r in sonuc:
-                w.writerow([r["poz"], r["kod"], r["ad"], r["adet"],
+    if denenen:
+        yeni = []
+        for r in sonuc:
+            yeni.append([r["poz"], r["kod"], r["ad"], r["adet"],
                             r["kalinlik_mm"], r["acinim_genislik_mm"],
                             r["acinim_boy_mm"], r["bukum_sayisi"],
                             (r.get("yontem") or {}).get("yontem", ""),
@@ -5048,13 +5223,19 @@ def acilim_yaz(kayit, komp, P, klasor, kodlar=None, k_faktor=K_FAKTOR,
                                        f"{b['acinimda_bas_mm']:g}"
                                        for b in r["bukumler"]),
                             r["dxf"]])
-        log(f"  ACINIM.csv  ({len(sonuc)} parça)")
-    if hata:
-        yol = os.path.join(klasor, "ACINIM_yapilamayanlar.txt")
-        with open(yol, "w", encoding="utf-8") as f:
-            for ad, m in hata:
-                f.write(f"{ad}\n    " + m.replace("\n", "\n    ") + "\n\n")
-        log(f"  ACINIM_yapilamayanlar.txt  ({len(hata)} parça)")
+        n = IS.csv_birlestir(
+            os.path.join(klasor, "ACINIM.csv"),
+            ["poz", "kod", "ad", "adet", "kalinlik_mm",
+             "acinim_genislik_mm", "acinim_boy_mm", "bukum_sayisi",
+             "yontem", "en_kisa_kanat_mm", "en_kisa_kanat_t",
+             "en_kucuk_r_t", "yontem_nedeni", "uyari",
+             "k_faktor", "bukumler", "dxf"], yeni, denenen, klasor)
+        if sonuc:
+            log(f"  ACINIM/ACINIM.csv  ({len(sonuc)} yeni, tabloda {n} parça)")
+        h = IS.hata_birlestir(os.path.join(klasor, "ACINIM_yapilamayanlar.txt"),
+                              hata, denenen)
+        if hata:
+            log(f"  ACINIM/ACINIM_yapilamayanlar.txt  ({h} parça)")
     return sonuc, hata
 
 
@@ -5070,9 +5251,14 @@ def lazer_yaz(kayit, komp, klasor, kodlar=None, k_faktor=K_FAKTOR,
     `acilim`: daha önce hesaplanmış açınım sonuçları. Verilirse aynı
     parça ikinci kez açılmaz - açınım parça başına 15-30 saniye sürer.
 
+    klasor: ÇIKTI KÖK KLASÖRÜ; dosyalar LZR alt klasörüne yazılır,
+    LAZER.csv eskisiyle birleştirilir.
+
     Geriye (sonuclar, hatalar) döner."""
-    os.makedirs(klasor, exist_ok=True)
-    sonuc, hata = [], []
+    kok = klasor
+    klasor = IS.alt_klasor(kok, "lazer", olustur=True)
+    step_oz = IS.durum_oku(kok).get("step_ozet", "")
+    sonuc, hata, denenen = [], [], set()
     pozlar = poz_numaralari(komp)
     haz = {a.get("kod"): a for a in (acilim or []) if a.get("kontur_dis")}
     secili = [(pozlar[i], k) for i, k in enumerate(komp)
@@ -5083,6 +5269,7 @@ def lazer_yaz(kayit, komp, klasor, kodlar=None, k_faktor=K_FAKTOR,
             log("! iptal edildi")
             break
         ad = k.get("kod") or k.get("ad") or "?"
+        denenen.add(ad)
         if ilerleme:
             ilerleme(i, len(secili), ad)
         try:
@@ -5112,6 +5299,7 @@ def lazer_yaz(kayit, komp, klasor, kodlar=None, k_faktor=K_FAKTOR,
             log(f"  {ad}: hata - {type(e).__name__}: {e}")
             continue
         dosya = resim_dosyasi(poz or (i + 1), ad, k.get("ad"), lazer=True)
+        IS.eskiyi_kaldir(kok, "lazer", ad, dosya, log)
         dxf_lazer(dis, ic, os.path.join(klasor, dosya))
         xs = [q[0] for w in dis for q in w]
         ys = [q[1] for w in dis for q in w]
@@ -5121,25 +5309,22 @@ def lazer_yaz(kayit, komp, klasor, kodlar=None, k_faktor=K_FAKTOR,
                 "en_mm": round(max(xs) - min(xs), 2),
                 "delik_adedi": len(ic), "kaynak": nere, "dxf": dosya}
         sonuc.append(kayd)
+        IS.cizim_kaydet(kok, "lazer", ad, dxf=dosya, step_ozet=step_oz,
+                        k_faktor=k_faktor)
         log(f"  {dosya}  {kayd['en_mm']} x {kayd['boy_mm']} mm, "
             f"t={t}, {len(ic)} delik  ({nere})")
-    if sonuc:
-        yol = os.path.join(klasor, "LAZER.csv")
-        with open(yol, "w", newline="", encoding="utf-8-sig") as f:
-            w = csv.writer(f, delimiter=";")
-            w.writerow(["poz", "kod", "ad", "adet", "kalinlik_mm", "en_mm",
-                        "boy_mm", "delik_adedi", "kaynak", "dxf"])
-            for r in sonuc:
-                w.writerow([r[c] for c in ("poz", "kod", "ad", "adet",
-                                           "kalinlik_mm", "en_mm", "boy_mm",
-                                           "delik_adedi", "kaynak", "dxf")])
-        log(f"  LAZER.csv  ({len(sonuc)} parça)")
-    if hata:
-        yol = os.path.join(klasor, "LAZER_yapilamayanlar.txt")
-        with open(yol, "w", encoding="utf-8") as f:
-            for ad, m in hata:
-                f.write(f"{ad}\n    " + m.replace("\n", "\n    ") + "\n\n")
-        log(f"  LAZER_yapilamayanlar.txt  ({len(hata)} parça)")
+    if denenen:
+        alan = ("poz", "kod", "ad", "adet", "kalinlik_mm", "en_mm", "boy_mm",
+                "delik_adedi", "kaynak", "dxf")
+        n = IS.csv_birlestir(os.path.join(klasor, "LAZER.csv"), list(alan),
+                             [[r[c] for c in alan] for r in sonuc],
+                             denenen, klasor)
+        if sonuc:
+            log(f"  LZR/LAZER.csv  ({len(sonuc)} yeni, tabloda {n} parça)")
+        h = IS.hata_birlestir(os.path.join(klasor, "LAZER_yapilamayanlar.txt"),
+                              hata, denenen)
+        if hata:
+            log(f"  LZR/LAZER_yapilamayanlar.txt  ({h} parça)")
     return sonuc, hata
 
 
@@ -5486,8 +5671,51 @@ def bom_satirlari(bom, h, en_cok=40):
 
 
 # ---------------------------------------------------------------- komponentleme
-def komponentle(kayit, P):
+def geometriden_sinifla(kayit, komp, kural=None, log=print):
+    """ADI BİLGİ TAŞIMAYAN katıları ("COMPOUND", "SOLID", "Body") YÜZLERİNE
+    bakarak sınıflar: pul, somun, cıvata, perçin, pim, o-ring, kaynak
+    dikişi (pf8_tani). Adı olan parçada ad kazanır; geometri yalnız
+    ÖNERİ olarak yazılır (k["oneri"]) - 2. sekmede görünür, kullanıcı
+    isterse sınıfını değiştirir.
+
+    Ölçüldü (4 gerçek model, adı belli 636 komponent): geometri 214
+    karar verdi, 1'i yanlış (%0,47 - adında SAC geçen pul biçimli parça);
+    182 kaynak kararının hepsi doğru, hiçbir üretim parçası dikiş
+    sayılmadı. Emin olunmayan katıya karar verilmez."""
+    karar = oneri = 0
+    isimsiz = []
+    for k in komp:
+        if k["sinif"] != "parca" or _kural(kural, k):
+            continue
+        adsiz = TN.isimsiz(k["ad"])
+        try:
+            r = TN.tani(kayit[k["indeks"][0]][1], k.get("hacim_mm3"))
+        except Exception:
+            r = None
+        if not r:
+            if adsiz:
+                k["isimsiz"] = True
+                isimsiz.append(k)
+            continue
+        if adsiz:
+            k["sinif"], k["tip"] = r[0], (r[1] or "") + " (geometri)"
+            k["geometri"] = r[2]
+            karar += 1
+        else:
+            k["oneri"] = r
+            oneri += 1
+    if karar or oneri or isimsiz:
+        log(f"geometriden tanıma: {karar} adsız katı sınıflandı"
+            + (f", {oneri} parçada öneri" if oneri else "")
+            + (f"; {len(isimsiz)} adsız katı TANINAMADI (parça sayıldı, "
+               "2. sekmede elle sınıflayın)" if isimsiz else ""))
+    return karar, oneri
+
+
+def komponentle(kayit, P, kural=None):
     """Aynı parçanın kopyalarını tek komponentte toplar (ad + hacim + gabari)."""
+    if kural is None:
+        kural = ayar_oku().get("sinif_kurali") or {}
     grup, mal = defaultdict(list), {}
     for i, r in enumerate(kayit):
         ad, sh = r[0], r[1]
@@ -5501,9 +5729,13 @@ def komponentle(kayit, P):
     out = []
     for an, idx in sorted(grup.items(), key=lambda t: -t[0][1] * len(t[1])):
         ad, v, _olc = an
-        sinif, tip = sinifla(ad)
+        sinif, tip = sinifla(ad, kural)
+        k = {"hacim_mm3": v, "olc": list(_olc)}
+        g = _kural(kural, dict(k, ad=ad)) if TN.isimsiz(ad) else None
+        if g in ("parca", "standart", "kaynak"):
+            sinif, tip = g, ("elle" if g == "standart" else "")
         out.append({"ad": ad, "kod": kod_cikar(ad), "adet": len(idx), "indeks": idx,
-                    "hacim_mm3": v, "sinif": sinif, "tip": tip,
+                    "hacim_mm3": v, "olc": list(_olc), "sinif": sinif, "tip": tip,
                     "malzeme_data": mal.get(an),
                     "malzeme_yogunluk": getattr(mal.get(an), "yogunluk", None)})
     return out
@@ -5864,10 +6096,18 @@ def step_komponentleri(step, P, log=print):
         log(f"! {b} parça adı ve montaj ağacı taşımaz: ölçüler doğru çıkar, "
             f"ama BOM'da kod ve tanım olmaz, civata/somun ayrımı yapılamaz. "
             f"Tam BOM için CAD'den STEP olarak kaydedin.")
-    komp = komponentle(kayit, P)
-    sayim = Counter(k["sinif"] for k in komp)
-    log(f"{len(komp)} komponent  (" + ", ".join(f"{a}: {b}" for a, b in sayim.items()) + ")")
+    kural = ayar_oku().get("sinif_kurali") or {}
+    komp = komponentle(kayit, P, kural)
     agac = ag[0] if ag else None
+    if agac:
+        agactan_sinifla(agac, komp, kural, log)
+    geometriden_sinifla(kayit, komp, kural, log)
+    sayim = Counter(k["sinif"] for k in komp)
+    kyn = [k for k in komp if k["sinif"] == "kaynak"]
+    log(f"{len(komp) - len(kyn)} komponent  ("
+        + ", ".join(f"{a}: {b}" for a, b in sayim.items() if a != "kaynak") + ")"
+        + (f"  + {len(kaynak_ozeti(kyn))} tür kaynak dikişi "
+           f"({sum(k['adet'] for k in kyn)} adet, parça sayılmaz)" if kyn else ""))
     if agac:
         kat = agac_derinlik(agac)
         log(f"montaj ağacı: {agac_dugum_sayisi(agac)} düğüm, {kat} kademe")
@@ -5925,8 +6165,36 @@ def agac_bom(agac, komp, satirlar):
                     if r.get("kg_adet"):
                         sat["toplam_kg"] = round(r["kg_adet"] * toplam, 4)
         out.append(sat)
-        for i, a in enumerate(d.get("alt") or [], 1):
-            gez(a, f"{poz}.{i}", seviye + 1, toplam)
+        # Kaynak dikişleri komponent DEĞİLDİR: her biri ayrı satır olunca
+        # kaynaklı bir grupta 20 dikiş 20 "parça" gibi görünüyordu. Aynı
+        # montajın altındaki dikişler TEK satırda, türüyle sayılır:
+        #   KAYNAK DİKİŞLERİ (parça değil): K0 25 MM TEK KAYNAK x3, ...
+        # Diğer kardeşler kesintisiz numaralanır (1, 2, 3 ...).
+        dikis, n = [], 0
+        for a in d.get("alt") or []:
+            if _kaynak_yapragi(a):
+                dikis.append({"ad": a["ad"], "adet": a.get("adet", 1)})
+                continue
+            n += 1
+            gez(a, f"{poz}.{n}", seviye + 1, toplam)
+        if dikis:
+            oz = kaynak_ozeti(dikis)
+            adet = sum(t[1] for t in oz)
+            metin = ", ".join(f"{t} x{a}" for t, a in oz[:6])
+            if len(oz) > 6:
+                metin += f" (+{len(oz) - 6} tür)"
+            out.append({"poz": f"{poz}.K", "seviye": seviye + 1, "kod": "",
+                        "ad": f"KAYNAK DİKİŞLERİ (parça değil): {metin}",
+                        "adet": adet, "toplam_adet": adet * toplam,
+                        "tur": "kaynak", "malzeme_ad": "",
+                        "malzeme_kaynak": "", "olcu": "", "kg_adet": "",
+                        "toplam_kg": "", "kaynak_turleri": oz})
+
+    def _kaynak_yapragi(d):
+        if d.get("montaj") or d.get("alt") or not d.get("katilar"):
+            return False
+        ki = kati_komp.get(d["katilar"][0])
+        return ki is not None and komp[ki]["sinif"] == "kaynak"
 
     gez(agac, "1", 0, 1)
     return out
@@ -5963,25 +6231,64 @@ def ornek_sec(komp, en_az_hacim=0.0):
     return aday[0] if aday else None
 
 
-def zip_yap(on, ad="cizimler.zip", desen=(".dxf",)):
-    """Üretilen çizimleri tek dosyada toplar."""
+def zip_yap(on, ad="cizimler.zip", desen=(".dxf", ".pdf")):
+    """Üretilen çizimleri tek dosyada toplar; klasör düzeni korunur
+    (DXF/, ACINIM/, LZR/, PDF/ ve kökteki tablolar)."""
     import zipfile
     yol = os.path.join(on, ad)
+    tablo = ("BOM.csv", "BOM.md", "BOM_AGAC.csv", "BOM_AGAC.md", "olculer.csv",
+             "olculer.json", "rapor.md", "ACINIM.csv", "LAZER.csv")
     with zipfile.ZipFile(yol, "w", zipfile.ZIP_DEFLATED) as z:
         for d in sorted(os.listdir(on)):
+            y = os.path.join(on, d)
             if d == ad:
                 continue
-            if d.lower().endswith(tuple(desen)) or d in (
-                    "BOM.csv", "BOM.md", "olculer.csv", "olculer.json", "rapor.md"):
-                z.write(os.path.join(on, d), d)
+            if os.path.isfile(y) and (d.lower().endswith(tuple(desen))
+                                      or d in tablo):
+                z.write(y, d)
+        for tur in ("dxf", "acinim", "lazer", "pdf"):
+            k = IS.alt_klasor(on, tur)
+            if not os.path.isdir(k):
+                continue
+            for d in sorted(os.listdir(k)):
+                if d.lower().endswith(tuple(desen)) or d in tablo:
+                    z.write(os.path.join(k, d), f"{IS.ALT_KLASOR[tur]}/{d}")
         n = len(z.namelist())
     return yol, n
+
+
+def _eski_cizimleri_kaldir(on, dxf_kl, simdiki, log=print):
+    """Tam üretimden sonra, ARTIK KARŞILIĞI OLMAYAN detay resimlerini
+    DXF/ESKI klasörüne taşır (silmez).
+
+    Poz numarası dosya adındadır (P07_...). Model ya da sınıflama değişip
+    numaralar kayınca eski P07 dosyası klasörde kalır, pafta listesine
+    girip yanlış parçanın resmi gibi basılabilirdi. Yalnız Pi3D'nin
+    kendi ürettiği (iş durumunda kayıtlı) dosyalara dokunulur."""
+    d = IS.durum_oku(on)
+    eski = [a for a, r in d["dxf"].items()
+            if a not in simdiki and r.get("kod") != "montaj"
+            and os.path.isfile(os.path.join(dxf_kl, a))]
+    if not eski:
+        return 0
+    hedef = os.path.join(dxf_kl, "ESKI")
+    os.makedirs(hedef, exist_ok=True)
+    for a in eski:
+        os.replace(os.path.join(dxf_kl, a), os.path.join(hedef, a))
+
+    def _d(x):
+        for a in eski:
+            x["dxf"].pop(a, None)
+    IS.durum_guncelle(on, _d)
+    log(f"  {len(eski)} eski çizim (artık karşılığı yok) DXF/ESKI klasörüne "
+        "taşındı")
+    return len(eski)
 
 
 def calistir(step, on, kayit, komp, P, asama=(1, 2, 3), esl=None, agac=None,
              genel=VARSAYILAN_MALZEME, yogunluk=0.0, en_az_hacim=0.0,
              tek=None, en_cok=0, poz_harita=None, tablo_yok=False,
-             log=print, ilerleme=None, iptal=None):
+             eksik=False, log=print, ilerleme=None, iptal=None):
     """Üç aşamalı iş akışını yürütür. GUI ve komut satırı aynı yolu kullanır.
 
     asama    : 1 BOM, 2 detay resmi, 3 montaj resmi
@@ -5989,6 +6296,11 @@ def calistir(step, on, kayit, komp, P, asama=(1, 2, 3), esl=None, agac=None,
     genel    : eşlemede olmayanlar için malzeme
     ilerleme : ilerleme(yapilan, toplam) geri çağrısı
     iptal    : True döndürürse iş bırakılır
+    eksik    : yalnız EKSİK ya da ESKİMİŞ çizimleri üret. Bir çizim ancak
+               aynı model dosyası (içerik özeti) + aynı görünüş/kesit/
+               malzeme ayarıyla üretildiği KAYITLIYSA atlanır (pf7_is).
+
+    Çizimler çıktı klasörünün DXF alt klasörüne yazılır; tablolar kökte.
     """
     # Eşleme anahtarları sadeleştirilir: "01.050.000.01" ile "01.050.000.01 "
     # ya da büyük/küçük harf farkı eşleşmeyi bozmasın.
@@ -5996,6 +6308,11 @@ def calistir(step, on, kayit, komp, P, asama=(1, 2, 3), esl=None, agac=None,
     esl = {_tr_sade(a): b for a, b in (esl or {}).items() if b}
     os.makedirs(on, exist_ok=True)
     dur = (lambda: bool(iptal and iptal()))
+    step_oz = IS.model_kaydet(on, step)
+    ayar = IS.cizim_ayari(P)
+    dxf_kl = IS.alt_klasor(on, "dxf", olustur=bool({2, 3} & asama))
+    onceki = IS.durum_oku(on) if eksik else None
+    atlanan = 0
 
     cizilecek = [k for k in komp if k["sinif"] == "parca"
                  and k["hacim_mm3"] >= en_az_hacim]
@@ -6043,8 +6360,20 @@ def calistir(step, on, kayit, komp, P, asama=(1, 2, 3), esl=None, agac=None,
         sat["toplam_kg"] = round(o["kutle_kg"] * k["adet"], 4)
         if 2 in asama and id(k) in ciz_id:
             dosya = resim_dosyasi(gercek_poz, k["kod"] or k["ad"], k["ad"])
+            im = IS.imza(step_oz, ayar, mal, round(yog * 1e9, 6),
+                         gercek_poz, k["adet"])
+            if eksik and IS.guncel_mi(on, dosya, im, onceki):
+                sat["dxf"] = dosya
+                atlanan += 1
+                log(f"  {dosya}  güncel (aynı model ve ayar) - atlandı")
+                satirlar.append(sat)
+                if ilerleme:
+                    ilerleme(sira, toplam)
+                continue
             try:
-                dxf_komponent(s2, o, sat, os.path.join(on, dosya), P)
+                dxf_komponent(s2, o, sat, os.path.join(dxf_kl, dosya), P)
+                IS.cizim_kaydet(on, "dxf", dosya, imza=im, kod=k["kod"],
+                                step_ozet=step_oz)
                 sat["dxf"] = dosya
                 log(f"  {dosya}  {o['boy_mm']}x{o['en_mm']}x{o['kalinlik_mm']} mm, "
                     f"{o['delik_adedi']} delik, {sat['malzeme_ad'].split(' (')[0]}, "
@@ -6056,16 +6385,37 @@ def calistir(step, on, kayit, komp, P, asama=(1, 2, 3), esl=None, agac=None,
         if ilerleme:
             ilerleme(sira, toplam)
 
+    if (2 in asama and not tek and not en_cok and not tablo_yok
+            and not en_az_hacim and not dur()):
+        _eski_cizimleri_kaldir(on, dxf_kl, {r["dxf"] for r in satirlar
+                                            if r.get("dxf")}, log)
     bom = [r for r in satirlar if r["sinif"] != "kaynak"]
+    if atlanan:
+        log(f"  {atlanan} çizim zaten güncel olduğu için yeniden üretilmedi")
     if tablo_yok:                      # örnek resim turu: tabloları bozma
-        return {"klasor": on, "satirlar": satirlar, "bom": bom, "montaj": None}
+        return {"klasor": on, "dxf_klasor": dxf_kl, "satirlar": satirlar,
+                "bom": bom, "montaj": None, "atlanan": atlanan}
     montaj = None
     if 3 in asama and not dur():
-        log("  montaj resmi hesaplanıyor (büyük montajda sürebilir)...")
-        montaj = dxf_montaj([r[1] for r in kayit], os.path.join(on, "00_MONTAJ.dxf"),
-                            os.path.basename(step), P, bom=bom)
-        log(f"  00_MONTAJ.dxf   gabari {montaj['boy_mm']} x {montaj['en_mm']} x "
-            f"{montaj['yukseklik_mm']} mm")
+        im = IS.imza(step_oz, "montaj", ayar,
+                     [(r["poz"], r["kod"], r["adet"]) for r in bom])
+        if eksik and IS.guncel_mi(on, "00_MONTAJ.dxf", im, onceki):
+            log("  00_MONTAJ.dxf  güncel (aynı model ve ayar) - atlandı")
+            atlanan += 1
+            g = onceki["dxf"]["00_MONTAJ.dxf"].get("gabari")
+            if g:                      # rapordaki gabari satırı kaybolmasın
+                montaj = dict(zip(("boy_mm", "en_mm", "yukseklik_mm"), g))
+        else:
+            log("  montaj resmi hesaplanıyor (büyük montajda sürebilir)...")
+            montaj = dxf_montaj([r[1] for r in kayit],
+                                os.path.join(dxf_kl, "00_MONTAJ.dxf"),
+                                os.path.basename(step), P, bom=bom)
+            IS.cizim_kaydet(on, "dxf", "00_MONTAJ.dxf", imza=im, kod="montaj",
+                            step_ozet=step_oz,
+                            gabari=[montaj["boy_mm"], montaj["en_mm"],
+                                    montaj["yukseklik_mm"]])
+            log(f"  DXF/00_MONTAJ.dxf   gabari {montaj['boy_mm']} x "
+                f"{montaj['en_mm']} x {montaj['yukseklik_mm']} mm")
         if ilerleme:
             ilerleme(toplam, toplam)
 
@@ -6089,7 +6439,8 @@ def calistir(step, on, kayit, komp, P, asama=(1, 2, 3), esl=None, agac=None,
               ensure_ascii=False, indent=1)
     rapor_yaz(on, step, kayit, komp, satirlar, montaj)
     log("  BOM.csv, BOM.md, olculer.csv, olculer.json, rapor.md")
-    return {"klasor": on, "satirlar": satirlar, "bom": bom, "montaj": montaj}
+    return {"klasor": on, "dxf_klasor": dxf_kl, "satirlar": satirlar,
+            "bom": bom, "montaj": montaj, "atlanan": atlanan}
 
 
 # ---------------------------------------------------------------- CLI
@@ -6139,6 +6490,9 @@ def main():
                     help=f"büküm payı K-faktörü, 0.10 - 0.60 arası "
                          f"(saklanan değer; ilk kurulumda {K_FAKTOR})")
     ap.add_argument("--zip", action="store_true", help="çıktıları cizimler.zip'te topla")
+    ap.add_argument("--eksik", action="store_true",
+                    help="yalnız eksik ya da eskimiş çizimleri üret: aynı model "
+                         "ve aynı ayarla üretildiği kayıtlı olanlar atlanır")
     a = ap.parse_args()
     if a.malzeme_liste:
         malzeme_listele()
@@ -6172,6 +6526,7 @@ def main():
 
     on = a.out or (os.path.splitext(os.path.basename(a.step))[0] + "_olcu")
     os.makedirs(on, exist_ok=True)
+    IS.model_kaydet(on, a.step)       # açınım/lazer kaydı model özetini bilsin
 
     # ---- malzeme: kütle bunun üzerinden hesaplanır, tahmin edilmez
     esl, genel = {}, VARSAYILAN_MALZEME
@@ -6222,10 +6577,12 @@ def main():
             print("açınım: bükümlü sac parça bulunamadı")
         else:
             print(f"açınım (K-faktörü {kf}):")
-            acilim_yaz(kayit, komp, P, on, kodlar=kodlar, k_faktor=kf)
+            acilim_yaz(kayit, komp, P, on, kodlar=kodlar, k_faktor=kf,
+                       eksik=a.eksik)
     calistir(a.step, on, kayit, komp, P, asama=asama, esl=esl, agac=agac, genel=genel,
              yogunluk=a.yogunluk, en_az_hacim=a.en_az_hacim, tek=a.tek,
-             en_cok=a.en_cok, log=lambda t: print(f"{t}  [{time.time()-t0:.0f}s]"))
+             en_cok=a.en_cok, eksik=a.eksik,
+             log=lambda t: print(f"{t}  [{time.time()-t0:.0f}s]"))
     if a.zip:
         z, n = zip_yap(on)
         print(f"  {os.path.basename(z)}  ({n} dosya)")
@@ -6254,14 +6611,19 @@ def bom_yaz(on, bom, satirlar):
                  f"{r['dxf'] or '-'} |")
     kyn = [r for r in satirlar if r["sinif"] == "kaynak"]
     if kyn:
-        L.append(f"\nKaynak dikişleri BOM'a girmez: {len(kyn)} çeşit, "
-                 f"toplam {sum(r['adet'] for r in kyn)} adet.")
+        oz = kaynak_ozeti(kyn)
+        L.append(f"\nKaynak dikişleri BOM'a girmez (parça değildir): "
+                 f"{len(oz)} tür, toplam {sum(t[1] for t in oz)} adet.")
     open(os.path.join(on, "BOM.md"), "w", encoding="utf-8").write("\n".join(L) + "\n")
 
 
 def rapor_yaz(on, step, kayit, komp, satirlar, montaj):
     L = [f"# {os.path.basename(step)} – ölçü raporu\n",
-         f"{len(kayit)} katı, {len(komp)} komponent.\n"]
+         f"{len(kayit)} katı, "
+         f"{sum(1 for k in komp if k['sinif'] != 'kaynak')} komponent"
+         + (f" + {sum(1 for k in komp if k['sinif'] == 'kaynak')} kaynak "
+            "dikişi (parça değil)" if any(k["sinif"] == "kaynak" for k in komp)
+            else "") + ".\n"]
     if montaj:
         L.append(f"**Montaj gabarisi:** {montaj['boy_mm']} x {montaj['en_mm']} x "
                  f"{montaj['yukseklik_mm']} mm (boy x en x yükseklik)\n")
@@ -6285,8 +6647,36 @@ def rapor_yaz(on, step, kayit, komp, satirlar, montaj):
             L.append(f"| {r['poz']} | {r['kod'][:30]} | {r['tip']} | {r['adet']} | {r['ad'][:52]} |")
     kyn = [r for r in satirlar if r["sinif"] == "kaynak"]
     if kyn:
-        L.append(f"\n## Kaynak dikişleri\n\n{len(kyn)} çeşit, toplam "
-                 f"{sum(r['adet'] for r in kyn)} adet (parça değildir, çizim üretilmez).\n")
+        oz = kaynak_ozeti(kyn)
+        L.append(f"\n## Kaynak dikişleri\n\n{len(oz)} tür, toplam "
+                 f"{sum(t[1] for t in oz)} adet. Parça değildir: BOM'a "
+                 "girmez, poz almaz, çizimi üretilmez; montaj resminde "
+                 "görünür.\n")
+        L.append("| kaynak türü | adet |")
+        L.append("|-------------|------|")
+        for t, a in oz:
+            L.append(f"| {t} | {a} |")
+    geo = [k for k in komp if k.get("geometri")]
+    oner = [k for k in komp if k.get("oneri")]
+    adsiz = [k for k in komp if k.get("isimsiz") and k["sinif"] == "parca"]
+    if geo or oner or adsiz:
+        L.append("\n## Geometriden tanıma\n")
+        L.append("Adı bilgi taşımayan katılar (COMPOUND, SOLID ...) yüzlerine "
+                 "bakılarak sınıflandı. Adı olan parçada ad geçerlidir; "
+                 "geometri yalnız öneridir.\n")
+        if geo:
+            L.append("| ad | adet | sınıf | gerekçe |")
+            L.append("|----|------|-------|---------|")
+            for k in geo:
+                L.append(f"| {k['ad'][:30]} | {k['adet']} | {k['sinif']} | "
+                         f"{k['geometri']} |")
+        if oner:
+            L.append("\n**Öneri (adı olduğu için uygulanmadı):**\n")
+            for k in oner:
+                L.append(f"- {k['ad'][:50]}: {k['oneri'][2]}")
+        if adsiz:
+            L.append(f"\n**Tanınamayan adsız katı: {len(adsiz)}** — parça "
+                     "sayıldı; arayüzün 2. sekmesinde elle sınıflayın.")
     L.append("\n## Delik ve radüs tabloları\n")
     L.append("Çap yalnız TAM ÇEMBER delikler için verilir. Kenar yuvarlamaları "
              "(fillet) delik değildir, ayrı tabloda yarıçap olarak listelenir.\n")

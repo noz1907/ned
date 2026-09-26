@@ -21,6 +21,7 @@ sonra arka planda yüklenir; arayüz hiçbir işte kilitlenmez.
 from __future__ import annotations
 import base64, math, os, queue, sys, threading, time, traceback
 import tkinter as tk
+import pf7_is as IS
 from tkinter import ttk, filedialog, messagebox
 
 # --------------------------------------------------------------- logolar
@@ -253,7 +254,7 @@ class Uygulama(ttk.Frame):
     # ------------------------------------------------------------ iskelet
     def _kur(self):
         self.master.title(BASLIK)
-        self.master.minsize(1100, 720)
+        self.master.minsize(1240, 740)
         self._pencere_ikonu()
         try:
             ttk.Style().configure("Bas.TButton", font=("Segoe UI", 10, "bold"))
@@ -261,8 +262,11 @@ class Uygulama(ttk.Frame):
         except Exception:
             pass
         self._baslik_seridi()
-        self.defter = ttk.Notebook(self)
-        self.defter.pack(fill="both", expand=True)
+        orta = ttk.Frame(self)
+        orta.pack(fill="both", expand=True)
+        self._sure_paneli(orta)            # sağda: işlemler ve süreleri
+        self.defter = ttk.Notebook(orta)
+        self.defter.pack(side="left", fill="both", expand=True)
         self.sayfa = []
         for ad in ADIM:
             f = ttk.Frame(self.defter, padding=10)
@@ -274,6 +278,7 @@ class Uygulama(ttk.Frame):
         self._sayfa1(); self._sayfa2(); self._sayfa3()
         self._sayfa4(); self._sayfa5(); self._sayfa6(); self._sayfa7()
         self._sayfa8()
+        self.defter.bind("<<NotebookTabChanged>>", self._sekme_degisti)
         self._menu()
         gf = ttk.LabelFrame(self, text=" Günlük ", padding=4)
         gf.pack(fill="both")
@@ -301,6 +306,92 @@ class Uygulama(ttk.Frame):
         self.b_iptal.pack(side="right", padx=(8, 0))
         self.ilerleme = ttk.Progressbar(ic, mode="determinate")
         self.ilerleme.pack(side="left", fill="x", expand=True)
+
+    def _sekme_degisti(self, _e=None):
+        """Sekmeye geçilince listesi boşsa klasörden doldur: önceki
+        çıktıyı açan kullanıcı 'Listeyi tazele' aramak zorunda kalmasın."""
+        try:
+            i = self.defter.index(self.defter.select())
+        except Exception:
+            return
+        if self.calisiyor or not (self.v_out.get() or "").strip():
+            return
+        if i == 4 and self.liste.size() == 0:
+            self._cikti_listesi()
+        elif (i == 6 and hasattr(self, "pf_agac")
+              and not self.pf_agac.get_children()
+              and (IS.dosyalar(self.v_out.get().strip(), "dxf")
+                   or IS.dosyalar(self.v_out.get().strip(), "acinim"))):
+            self.pafta_doldur()
+
+    def _sure_paneli(self, ust):
+        """Sağdaki panel: yapılan her işlem, açıklaması ve süresi; en altta
+        TOPLAM süre. Çalışan işin geçen süresi ve - ilerleme biliniyorsa -
+        ÖLÇÜLEN hıza göre kalan süresi de burada yazar.
+
+        Süreler çıktı klasörüne (pi3d_is.json) de yazılır: iş birkaç
+        oturuma yayılsa da klasörün toplam süresi kaybolmaz."""
+        p = ttk.LabelFrame(ust, text=" İşlemler ve süreler ", padding=4)
+        p.pack(side="right", fill="y", padx=(6, 0))
+        self.v_simdi = tk.StringVar(value="şu an çalışan iş yok")
+        tk.Label(p, textvariable=self.v_simdi, justify="left", anchor="w",
+                 wraplength=250, fg="#0b2340", font=("Segoe UI", 9, "bold")
+                 ).pack(fill="x", pady=(0, 4))
+        cer = ttk.Frame(p); cer.pack(fill="both", expand=True)
+        self.sure_agac = ttk.Treeview(cer, columns=("islem", "sure"),
+                                      show="headings", height=16,
+                                      selectmode="none")
+        self.sure_agac.heading("islem", text="İŞLEM")
+        self.sure_agac.heading("sure", text="SÜRE")
+        self.sure_agac.column("islem", width=170, anchor="w")
+        self.sure_agac.column("sure", width=72, anchor="e", stretch=False)
+        self.sure_agac.tag_configure("eski", foreground="#888")
+        self.sure_agac.tag_configure("hata", foreground="#b00")
+        self.sure_agac.tag_configure("iptal", foreground="#a60")
+        kd = ttk.Scrollbar(cer, orient="vertical", command=self.sure_agac.yview)
+        self.sure_agac.configure(yscrollcommand=kd.set)
+        self.sure_agac.pack(side="left", fill="both", expand=True)
+        kd.pack(side="right", fill="y")
+        self.v_toplam = tk.StringVar(value="")
+        tk.Label(p, textvariable=self.v_toplam, justify="left", anchor="w",
+                 wraplength=250, font=("Segoe UI", 9, "bold")
+                 ).pack(fill="x", pady=(4, 0))
+        self.oturum_sure = 0.0
+        self.klasor_sure = 0.0
+        self._toplam_yaz()
+
+    def _toplam_yaz(self):
+        self.v_toplam.set(
+            f"TOPLAM (bu oturum): {IS.sure_metni(self.oturum_sure)}\n"
+            f"Bu çıktı klasöründe toplam: "
+            f"{IS.sure_metni(self.klasor_sure + self.oturum_sure)}")
+
+    def _sure_satiri(self, ad, sure, sonuc="tamam", eski=False):
+        ek = {"hata": "  (HATA)", "iptal": "  (iptal)"}.get(sonuc, "")
+        tag = ("eski",) if eski else ((sonuc,) if sonuc in ("hata", "iptal")
+                                      else ())
+        i = self.sure_agac.insert("", "end", values=(ad + ek,
+                                                     IS.sure_metni(sure)),
+                                  tags=tag)
+        self.sure_agac.see(i)
+
+    def _klasor_sureleri(self):
+        """Seçilen çıktı klasörünün önceki oturumlarındaki işlemleri
+        panele (soluk renkte) getirir."""
+        self.sure_agac.delete(*self.sure_agac.get_children())
+        on = (self.v_out.get() or "").strip() if hasattr(self, "v_out") else ""
+        d = IS.durum_oku(on) if on else None
+        self.klasor_sure = 0.0
+        if d and d["islemler"]:
+            for r in d["islemler"][-60:]:
+                self._sure_satiri(f"{r.get('tarih', '')[5:16]}  {r['ad']}",
+                                  r.get("sure", 0), r.get("sonuc", "tamam"),
+                                  eski=True)
+            self.klasor_sure = sum(float(r.get("sure") or 0)
+                                   for r in d["islemler"])
+            # Bu oturumda yapılanlar zaten dosyada; iki kez sayılmasın.
+            self.klasor_sure = max(0.0, self.klasor_sure - self.oturum_sure)
+        self._toplam_yaz()
 
     def _pencere_ikonu(self):
         """Pencere ve gorev cubugu ikonu.
@@ -376,15 +467,29 @@ class Uygulama(ttk.Frame):
         ttk.Label(f, text="Kaydedilecek klasör:").grid(row=2, column=0, sticky="w", pady=(6, 0))
         ttk.Entry(f, textvariable=self.v_out, width=76).grid(row=2, column=1, sticky="ew", padx=6, pady=(6, 0))
         ttk.Button(f, text="Gözat…", command=self.out_sec).grid(row=2, column=2, pady=(6, 0))
-        self.b_incele = ttk.Button(f, text="İNCELE  ▸", style="Bas.TButton",
+        dg = ttk.Frame(f); dg.grid(row=3, column=1, sticky="e", pady=14)
+        ttk.Button(dg, text="ÖNCEKİ ÇIKTIYI AÇ…", command=self.onceki_ac
+                   ).pack(side="left", padx=(0, 10), ipadx=6, ipady=5)
+        self.b_incele = ttk.Button(dg, text="İNCELE  ▸", style="Bas.TButton",
                                    command=self.incele, state="disabled")
-        self.b_incele.grid(row=3, column=1, sticky="e", pady=14, ipadx=14, ipady=5)
+        self.b_incele.pack(side="left", ipadx=14, ipady=5)
+        # Önceki çalışmanın özeti: ne var, ne eksik.
+        self.v_onceki = tk.StringVar(value="")
+        ttk.Label(f, textvariable=self.v_onceki, justify="left",
+                  font=("Consolas", 9), foreground="#036"
+                  ).grid(row=5, column=0, columnspan=3, sticky="w", pady=(12, 0))
         ttk.Label(f, foreground="#555", justify="left", text=(
             "Okunan biçimler: STEP (.stp, .step), IGES (.igs), BREP.\n"
             "CATIA (.CATProduct/.CATPart), SolidWorks, NX, Inventor gibi kapali\n"
             "bicimler dogrudan acilamaz; CAD'den STEP olarak kaydedip verin.\n\n"
             "Dosya okunur, kopyalar birleştirilir, parça / standart eleman /\n"
-            "kaynak dikişi ayrımı yapılır. Büyük montajlarda bir-iki dakika sürebilir.")
+            "kaynak dikişi ayrımı yapılır. Büyük montajlarda bir-iki dakika sürebilir.\n\n"
+            "HER ADIM AYRI YAPILABİLİR, İSTENDİĞİ KADAR TEKRARLANABİLİR. Daha önce\n"
+            "çıktı aldığınız klasörü seçerseniz ne var ne eksik aşağıda yazar:\n"
+            "  - pafta ve PDF için modeli okumaya gerek yok: ÖNCEKİ ÇIKTIYI AÇ yeter;\n"
+            "  - eksik çizim, açınım ve lazer için İNCELE ile model okunur, sonra\n"
+            "    istediğiniz sekmeye geçersiniz; ayarlarınız (malzeme, görünüş)\n"
+            "    geri gelir, güncel çizimler yeniden üretilmez.")
         ).grid(row=4, column=0, columnspan=3, sticky="w")
         f.columnconfigure(1, weight=1)
 
@@ -394,7 +499,7 @@ class Uygulama(ttk.Frame):
         ttk.Label(f, text="Komponentler, BOM ve malzeme",
                   style="Baslik.TLabel").pack(anchor="w", pady=(0, 6))
         sut = ("poz", "kod", "tanim", "adet", "sinif", "malzeme", "kaynak", "olcu", "kg")
-        gen = (40, 165, 250, 45, 70, 145, 80, 120, 70)
+        gen = (40, 150, 220, 45, 140, 135, 75, 110, 65)
         cer = ttk.Frame(f); cer.pack(fill="both", expand=True)
         self.ag = ttk.Treeview(cer, columns=sut, show="tree headings",
                                selectmode="extended")
@@ -412,10 +517,21 @@ class Uygulama(ttk.Frame):
         self.ag.tag_configure("data", foreground="#070")
         self.ag.tag_configure("montaj", foreground="#036", font=("Segoe UI", 9, "bold"))
         self.v_hiyerarsik = tk.BooleanVar(value=True)
-        ttk.Checkbutton(f, text="montaj ağacı olarak göster  "
-                               "(ana ürün ▸ alt montaj ▸ parça)",
+        sf = ttk.Frame(f); sf.pack(fill="x", pady=(4, 0))
+        ttk.Checkbutton(sf, text="montaj ağacı olarak göster  "
+                                "(ana ürün ▸ alt montaj ▸ parça)",
                         variable=self.v_hiyerarsik,
-                        command=self._agac_doldur).pack(anchor="w", pady=(4, 0))
+                        command=self._agac_doldur).pack(side="left")
+        # Sınıf addan ve montaj ağacından bulunur; bulunamayanı kullanıcı
+        # düzeltir ve program ÖĞRENİR (ayar dosyasına yazılır, sonraki
+        # modellerde de geçerli).
+        for ad, sinif in (("Kaynak dikişi", "kaynak"),
+                          ("Standart / satın alınan", "standart"),
+                          ("Üretim parçası", "parca")):
+            ttk.Button(sf, text=ad, command=lambda c=sinif: self.sinif_degistir(c)
+                       ).pack(side="right", padx=(4, 0))
+        ttk.Label(sf, text="seçilenin sınıfını değiştir:", foreground="#555"
+                  ).pack(side="right", padx=(0, 4))
 
         mf = ttk.LabelFrame(f, text=" Malzeme – kütle = hacim × yoğunluk ", padding=6)
         mf.pack(fill="x", pady=(8, 0))
@@ -529,10 +645,21 @@ class Uygulama(ttk.Frame):
         self.liste = tk.Listbox(f, font=("Consolas", 9))
         self.liste.pack(fill="both", expand=True, pady=8)
         self.liste.bind("<Double-1>", self.liste_onizle)
+        uf = ttk.Frame(f); uf.pack(fill="x", pady=(0, 6))
+        self.v_eksik = tk.BooleanVar(value=True)
+        ttk.Checkbutton(uf, variable=self.v_eksik, text=(
+            "Yalnız EKSİK ya da ESKİMİŞ çizimleri üret  (aynı model ve aynı "
+            "ayarla üretildiği kayıtlı olanlara dokunulmaz)")
+                        ).pack(side="left")
+        self.b_tumu = ttk.Button(uf, text="ÇİZİMLERİ ÜRET  ▸", style="Bas.TButton",
+                                 command=self.tumunu_uret, state="disabled")
+        self.b_tumu.pack(side="right", ipadx=12, ipady=4)
         af = ttk.Frame(f); af.pack(fill="x")
         self.b_zip = ttk.Button(af, text="ZIP OLUŞTUR", command=self.zip_olustur, state="disabled")
         self.b_zip.pack(side="left")
         ttk.Button(af, text="Klasörü aç", command=self.klasoru_ac).pack(side="left", padx=8)
+        ttk.Button(af, text="Listeyi tazele", command=self._cikti_listesi
+                   ).pack(side="left")
         # (İptal düğmesi artık ortak durum çubuğunda, her sayfadan
         #  erişilebilir.)
 
@@ -541,7 +668,7 @@ class Uygulama(ttk.Frame):
         f = self.sayfa[5]
         ttk.Label(f, text="Bükümlü sac parçaların açınımı",
                   style="Baslik.TLabel").pack(anchor="w", pady=(0, 4))
-        ttk.Label(f, foreground="#555", justify="left", wraplength=1000, text=(
+        ttk.Label(f, foreground="#555", justify="left", wraplength=900, text=(
             "Program bükümlü sac parçaları KENDİSİ bulur; listede "
             "yalnız onlar kalır ve hepsi seçili gelir. İstemediğiniz "
             "varsa seçimden çıkarın (Ctrl ile tıklayın), sonra ÜRET "
@@ -594,6 +721,19 @@ class Uygulama(ttk.Frame):
             style="Bas.TButton",
             command=self.acilim_uret, state="disabled")
         self.b_acilim.pack(side="right", padx=4, ipadx=10, ipady=3)
+
+    def _onceki_uretim(self, tur):
+        """Bu klasörde AYNI MODELDEN daha önce üretilmiş açınım/lazer
+        resimleri: {kod: dosya adı}. Model değiştiyse boş döner - eski
+        modelin açınımı 'var' sayılmaz."""
+        on = (self.v_out.get() or "").strip()
+        if not on:
+            return {}
+        d = IS.durum_oku(on)
+        oz = IS.dosya_ozeti((self.v_step.get() or "").strip())
+        return {k: r["dxf"] for k, r in d[tur].items()
+                if oz and r.get("step_ozet") == oz
+                and IS.dosya_bul(on, r.get("dxf"))}
 
     def _acilim_doldur(self):
         """Parça listesini açınım sayfasına yazar ve TARAMAYI başlatır."""
@@ -657,14 +797,25 @@ class Uygulama(ttk.Frame):
             if i_ is not None:
                 self.tarama_kod[self.komp[i_].get("kod")
                                 or self.komp[i_].get("ad")] = r_
-        sec, duz, degil = [], 0, 0
+        sec, duz, degil, var = [], 0, 0, 0
+        onceki = self._onceki_uretim("acinim")
         for s, r in out.items():
             if not self.ac_agac.exists(s):
                 continue
             if r["tip"] == "bukumlu sac":
-                sec.append(s)
+                i_ = self.ac_satir.get(s)
+                kod_ = (self.komp[i_].get("kod") or self.komp[i_].get("ad")
+                        if i_ is not None else None)
                 if r["kalinlik_mm"]:
                     self.ac_agac.set(s, "kalinlik", f"{r['kalinlik_mm']} mm")
+                if kod_ in onceki:
+                    # Aynı modelden zaten üretilmiş: seçili gelmez, isterseniz
+                    # seçip yeniden üretirsiniz.
+                    var += 1
+                    self.ac_agac.set(s, "durum", "önceden üretildi  –  "
+                                     + onceki[kod_])
+                    continue
+                sec.append(s)
                 d = f"{r['bukum_sayisi']} büküm bulundu – açınımı çıkarılacak"
                 if r.get("eksen_paralel") is False:
                     # Söz vermiyoruz: eksenler paralel değilse açınım
@@ -682,13 +833,16 @@ class Uygulama(ttk.Frame):
         if sec:
             self.ac_agac.selection_set(sec)
             self.ac_agac.see(sec[0])
-        self.b_acilim.configure(state="normal" if sec else "disabled")
+        self.b_acilim.configure(state="normal" if (sec or var) else "disabled")
         elendi = (f"  Listeye alınmayan {duz + degil} parça: "
                   f"{duz} düz sac (açınımı kendisidir), "
                   f"{degil} bükümlü sac değil.") if (duz or degil) else ""
         self.v_ac_ozet.set(
-            (f"{len(sec)} bükümlü sac parça bulundu, hepsi seçili."
-             if sec else "Bu montajda bükümlü sac parça bulunamadı.")
+            (f"{len(sec) + var} bükümlü sac parça bulundu"
+             + (f"; {var} tanesinin açınımı bu modelden önceden üretilmiş "
+                "(seçili değil, isterseniz seçip yeniden üretin), "
+                f"{len(sec)} tanesi seçili." if var else ", hepsi seçili.")
+             if (sec or var) else "Bu montajda bükümlü sac parça bulunamadı.")
             + elendi)
         # Tarama ARKA PLANDA biter, kullanıcı o sırada genellikle 2.
         # adımdadır. Sonucu durum çubuğuna tek başına yazmak 2. adımın
@@ -732,7 +886,7 @@ class Uygulama(ttk.Frame):
                   or self.komp[self.ac_satir[s]].get("ad") for s in sec}
         for s in sec:
             self.ac_agac.set(s, "durum", "hesaplanıyor…")
-        self._basla("açınım hesaplanıyor…")
+        self._basla("açınım hesaplanıyor…", f"Açınım ({len(kodlar)} parça)")
         threading.Thread(target=self._acilim_is, args=(on, kodlar, kf,
                                                        self._P()),
                          daemon=True).start()
@@ -792,8 +946,9 @@ class Uygulama(ttk.Frame):
             return
         d = self.ac_agac.set(s, "durum")
         if d.endswith(".dxf"):
-            yol = os.path.join(self.v_out.get().strip(), d.split("–")[-1].strip())
-            if os.path.isfile(yol):
+            yol = IS.dosya_bul(self.v_out.get().strip(),
+                               d.split("–")[-1].strip())
+            if yol:
                 klasor_ac(yol)
 
     # ----------------------------------------------------------- 7 PAFTA
@@ -801,7 +956,7 @@ class Uygulama(ttk.Frame):
         f = self.sayfa[6]
         ttk.Label(f, text="1:1 resimleri standart A3 paftaya yerleştir",
                   style="Baslik.TLabel").pack(anchor="w", pady=(0, 4))
-        ttk.Label(f, foreground="#555", justify="left", wraplength=1050, text=(
+        ttk.Label(f, foreground="#555", justify="left", wraplength=900, text=(
             "Buraya kadar çıkan resimler 1:1'dir ve ÖYLE KALIR: bu adım "
             "onları silmez, ölçeklerini değiştirmez. Pafta KOPYAYA değil, "
             "resmin KENDİ DOSYASINA eklenir: çizim Model sekmesinde yine "
@@ -827,7 +982,7 @@ class Uygulama(ttk.Frame):
         if self.sablon is None:
             # Sessizce yok olmasın: kullanıcı "çizen/tarih neden
             # sorulmuyor" diye takılıyordu. Nereye bakıldığı yazılır.
-            ttk.Label(f, foreground="#777", justify="left", wraplength=1050,
+            ttk.Label(f, foreground="#777", justify="left", wraplength=900,
                       text=("Firma anteti yok – sade pafta çizilecek: "
                             "sağ alt köşede 150 x 100 mm boş alan kalır, "
                             "kendi antetinizi oraya yapıştırırsınız. "
@@ -929,7 +1084,7 @@ class Uygulama(ttk.Frame):
         f = self.sayfa[7]
         ttk.Label(f, text="Lazer kesim resimleri  (…_Lzr.dxf)",
                   style="Baslik.TLabel").pack(anchor="w", pady=(0, 4))
-        ttk.Label(f, foreground="#555", justify="left", wraplength=1050, text=(
+        ttk.Label(f, foreground="#555", justify="left", wraplength=900, text=(
             "Bu resimler OKUNMAK için değil, KESİLMEK için üretilir. "
             "İçinde yalnız kesim konturu vardır: dış kontur ve delikler, "
             "1:1, tek katmanda (KESIM). Büküm çizgisi, büküm tablosu, "
@@ -986,6 +1141,8 @@ class Uygulama(ttk.Frame):
         pozlar = self.M.poz_numaralari(self.komp)
         acilan = {r.get("kod") for r in (getattr(self, "acilim_liste", None)
                                          or [])}
+        acilan |= set(self._onceki_uretim("acinim"))
+        lz_var = self._onceki_uretim("lazer")
         kod_tip = {a: r["tip"] for a, r in self.tarama_kod.items()}
         sira = []
         for i, k in enumerate(self.komp):
@@ -993,7 +1150,9 @@ class Uygulama(ttk.Frame):
                 continue
             ad = k.get("kod") or k.get("ad")
             tip = kod_tip.get(ad)
-            if ad in acilan:
+            if ad in lz_var:
+                sira.append((3, i, "önceden üretildi  –  " + lz_var[ad], False))
+            elif ad in acilan:
                 sira.append((0, i, "açınımı çıktı", True))
             elif tip == "bukumlu sac":
                 sira.append((1, i, "bükümlü sac", False))
@@ -1009,10 +1168,12 @@ class Uygulama(ttk.Frame):
         sira.sort(key=lambda t: (t[0], t[1]))
         for _, i, tip, secili in sira:
             k = self.komp[i]
+            onc = tip.startswith("önceden")
             s = self.lz_agac.insert("", "end", values=(
                 pozlar[i], k.get("kod", ""), (k.get("ad") or "")[:55],
-                tip, "", "",
-                "seçili – üretilecek" if secili else "isterseniz seçin"))
+                "" if onc else tip, "", "",
+                tip if onc else
+                ("seçili – üretilecek" if secili else "isterseniz seçin")))
             self.lz_satir[s] = i
             if secili:
                 sec.append(s)
@@ -1046,7 +1207,8 @@ class Uygulama(ttk.Frame):
                   or self.komp[self.lz_satir[s]].get("ad") for s in sec}
         for s in sec:
             self.lz_agac.set(s, "durum", "hesaplanıyor…")
-        self._basla("lazer resimleri hazırlanıyor…")
+        self._basla("lazer resimleri hazırlanıyor…",
+                    f"Lazer resmi ({len(kodlar)} parça)")
         threading.Thread(target=self._lazer_is,
                          args=(on, kodlar, kf, dict(self.lz_satir)),
                          daemon=True).start()
@@ -1085,8 +1247,8 @@ class Uygulama(ttk.Frame):
                          f"{len(hata)} parça yapılamadı")
         if sonuc:
             messagebox.showinfo(
-                "Lazer", f"{len(sonuc)} lazer resmi yazıldı (…_Lzr.dxf) ve "
-                f"LAZER.csv.\n\nBu dosyalar paftaya alınmaz, PDF'i "
+                "Lazer", f"{len(sonuc)} lazer resmi LZR klasörüne yazıldı "
+                f"(…_Lzr.dxf) ve LAZER.csv.\n\nBu dosyalar paftaya alınmaz, PDF'i "
                 "basılmaz: içlerinde yalnız kesim konturu vardır.")
         elif hata:
             messagebox.showwarning(
@@ -1148,7 +1310,7 @@ class Uygulama(ttk.Frame):
     def _pdf_klasoru(self):
         """Baskılar buraya gider. Paftanın kendisi resmin dosyasındadır,
         ayrı bir pafta klasörü YOKTUR."""
-        return os.path.join(self.v_out.get().strip() or ".", "PDF")
+        return IS.alt_klasor(self.v_out.get().strip() or ".", "pdf")
 
     def pdf_klasor_ac(self):
         k = self._pdf_klasoru()
@@ -1162,36 +1324,56 @@ class Uygulama(ttk.Frame):
         oturacaklarını hesaplar. Hiçbir dosya yazmaz."""
         if not hasattr(self, "pf_agac"):
             return
+        if self.calisiyor:
+            # İkinci bir plan işi başlarsa iki sonuç üst üste listeye
+            # eklenir (sekmeye geçince kendiliğinden + 'Listeyi tazele').
+            self.v_durum.set("bir iş sürüyor – bitince listeyi tazeleyin")
+            return
         on = self.v_out.get().strip()
         if not on or not os.path.isdir(on):
             messagebox.showinfo("Pafta", "Önce çıktı klasörünü seçin ve "
                                          "resimleri üretin.")
             return
-        import glob
-        # ..._Lzr.dxf LAZER KESİM dosyasıdır: içinde yalnız kontur
-        # vardır, paftası çıkmaz, PDF'i basılmaz. Listeye alınmaz.
-        dosyalar = sorted(y for y in glob.glob(os.path.join(on, "*.dxf"))
-                          if not os.path.basename(y).endswith("_Lzr.dxf"))
+        # Detay + montaj (DXF/) ve açınım (ACINIM/); eski sürümlerin köke
+        # yazdıkları da. ..._Lzr.dxf LAZER KESİM dosyasıdır: içinde yalnız
+        # kontur vardır, paftası çıkmaz, PDF'i basılmaz. Listeye alınmaz.
+        dosyalar = IS.dosyalar(on, "dxf") + IS.dosyalar(on, "acinim")
         self.pf_agac.delete(*self.pf_agac.get_children())
         self.pf_satir = {}
         if not dosyalar:
             self.b_pafta.configure(state="disabled")
-            messagebox.showinfo("Pafta", "Çıktı klasöründe DXF yok. Önce "
-                                         "5. adımda resimleri üretin.")
+            messagebox.showinfo("Pafta", "Çıktı klasöründe DXF yok (DXF ve "
+                                         "ACINIM klasörleri boş). Önce "
+                                         "5. ya da 6. adımda resimleri üretin.")
             return
         kagit = self.v_kagit.get()
-        self._basla(f"{kagit} yerleşimi hesaplanıyor…")
+        self._basla(f"{kagit} yerleşimi hesaplanıyor…",
+                    f"Pafta planı ({len(dosyalar)} resim)")
         threading.Thread(target=self._plan_is,
                          args=(dosyalar, kagit,
-                               self.sablon if self._antet_acik() else None),
+                               self.sablon if self._antet_acik() else None,
+                               self._pdf_klasoru()),
                          daemon=True).start()
 
-    def _plan_is(self, dosyalar, kagit, sablon=None):
+    def _plan_is(self, dosyalar, kagit, sablon=None, pk=None):
         try:
             import pf4_pafta as PF
-            self.kuyruk.put(("plan", (PF.kagit_plani(
-                dosyalar, kagit, sablon=sablon,
-                dur=lambda: self.iptal_istendi), kagit)))
+            plan = PF.kagit_plani(dosyalar, kagit, sablon=sablon,
+                                  dur=lambda: self.iptal_istendi)
+            # Önceki oturumdan kalan pafta ve PDF'ler: pafta yeniden
+            # kurulmadan PDF basılabilsin, PDF'i olan belli olsun.
+            plan["mevcut"] = {}
+            for y in dosyalar if pk else []:
+                if self.iptal_istendi:
+                    break
+                k = PF.mevcut_pafta(y)
+                if k:
+                    ad = os.path.splitext(os.path.basename(y))[0]
+                    pdf = os.path.join(pk, f"{ad}_{k.replace('-', '')}.pdf")
+                    taze = (os.path.isfile(pdf)
+                            and os.path.getmtime(pdf) >= os.path.getmtime(y))
+                    plan["mevcut"][y] = (k, taze)
+            self.kuyruk.put(("plan", (plan, kagit)))
         except Exception:
             self.kuyruk.put(("hata", "Yerleşim hesaplanırken hata:\n\n"
                              + traceback.format_exc()))
@@ -1199,6 +1381,8 @@ class Uygulama(ttk.Frame):
     def _plan_geldi(self, p, kagit):
         self._bitir()
         import pf4_pafta as PF
+        self.pf_agac.delete(*self.pf_agac.get_children())
+        self.pf_satir = {}
         for s in p["birebir"] + p["olcekli"]:
             d = "birebir çizilecek"
             if abs(s["olcek"] - 1.0) > 1e-9:
@@ -1236,15 +1420,33 @@ class Uygulama(ttk.Frame):
         if hepsi:
             self.pf_agac.selection_set(hepsi)
         self.b_pafta.configure(state="normal")
-        self.b_bas.configure(state="disabled")
         self.pafta_dosya = {}
+        # Paftası zaten kurulu olanlar doğrudan basılabilir.
+        mevcut = p.get("mevcut") or {}
+        pdf_var = pafta_var = 0
+        for i in self.pf_agac.get_children():
+            st = self.pf_satir.get(i)
+            if not st or st["dosya"] not in mevcut:
+                continue
+            k, taze = mevcut[st["dosya"]]
+            self.pafta_dosya[i] = (st["dosya"], k)
+            pafta_var += 1
+            pdf_var += taze
+            self.pf_agac.set(i, "durum", (
+                "PDF'i var (güncel)  –  pafta kurulu, yeniden basılabilir"
+                if taze else "pafta kurulu, PDF'i yok  –  doğrudan BAS "
+                "diyebilirsiniz") + f"  [{PF.kagit_adi(k)}]")
+        self.b_bas.configure(state="normal" if self.pafta_dosya else "disabled")
         n = len(p["birebir"]) + len(p["olcekli"])
         ac = sum(1 for s in p["birebir"] + p["olcekli"]
                  if self._resim_tipi(s["dosya"]) == "açınım")
         self.v_durum.set(f"{kagit}: {n} resim yerleşiyor "
                          f"({ac} açınım, {n - ac} detay/montaj; "
                          f"{len(p['birebir'])} tanesi 1:1), "
-                         f"{len(p['sigmayan'])} resim sığmıyor")
+                         f"{len(p['sigmayan'])} resim sığmıyor"
+                         + (f"  ·  {pafta_var} resmin paftası önceden kurulu "
+                            f"({pdf_var} tanesinin PDF'i güncel)"
+                            if pafta_var else ""))
 
     def pafta_uret(self):
         # Hiçbir satır seçilmemişse HEPSİNİ al. Eskiden "seçim yok" deyip
@@ -1289,7 +1491,7 @@ class Uygulama(ttk.Frame):
             it["antet"] = dict(ortak, **it.pop("antet_ek", {}))
             isler.append(it)
             self.pf_agac.set(s, "durum", "paftaya alınıyor…")
-        self._basla("pafta hazırlanıyor…")
+        self._basla("pafta hazırlanıyor…", f"Pafta ({len(isler)} resim)")
         threading.Thread(target=self._pafta_is, args=(isler, sablon),
                          daemon=True).start()
 
@@ -1304,7 +1506,7 @@ class Uygulama(ttk.Frame):
         # adı geçer, açınımı onun üstünden bulunur.
         temel = kok[:-7] + ".dxf" if kok.endswith("_acinim") else ad
         acinim = temel != ad
-        for sat in self.satirlar or []:
+        for sat in (self.satirlar or getattr(self, "bom_kimlik", None) or []):
             if sat.get("dxf") == temel:
                 no = sat.get("kod") or kok.split("_", 1)[-1]
                 return {"resim_no": no,
@@ -1408,7 +1610,7 @@ class Uygulama(ttk.Frame):
             messagebox.showinfo("Baskı", "Önce paftası hazırlanmış "
                                          "satırlardan seçin.")
             return
-        self._basla("PDF üretiliyor…")
+        self._basla("PDF üretiliyor…", f"PDF basımı ({len(sec)} pafta)")
         threading.Thread(
             target=self._bas_is,
             args=([(s,) + tuple(self.pafta_dosya[s]) for s in sec],
@@ -1502,7 +1704,7 @@ class Uygulama(ttk.Frame):
                     self.onizleme_png = veri
                     self._onizleme_ciz()
                 elif tip == "hata":
-                    self._bitir()
+                    self._bitir("hata")
                     self.v_durum.set("hata")
                     messagebox.showerror("Hata", veri)
         except queue.Empty:
@@ -1526,13 +1728,17 @@ class Uygulama(ttk.Frame):
         finally:
             self.after(80, self._kuyruk_isle)
 
-    def _basla(self, durum):
+    def _basla(self, durum, islem=None):
+        """durum: durum çubuğundaki yazı; islem: süre panelindeki ad."""
         self.calisiyor = True; self.iptal_istendi = False
         self.is_basi = time.time()
         self.is_adi = durum
+        self.is_islem = islem or durum.rstrip("… .")
         self._sayaci_isle()
-        for b in (self.b_incele, self.b_bom, self.b_ornek, self.b_onay):
-            b.configure(state="disabled")
+        for b in (self.b_incele, self.b_bom, self.b_ornek, self.b_onay,
+                  getattr(self, "b_tumu", None), getattr(self, "b_devam", None)):
+            if b is not None:
+                b.configure(state="disabled")
         self.b_iptal.configure(state="normal")
         self.v_durum.set(durum)
 
@@ -1545,12 +1751,44 @@ class Uygulama(ttk.Frame):
         self.v_durum.set(f"{self.is_adi}   ({g // 60}:{g % 60:02d} geçti"
                          + ("  –  uzun sürüyor, İptal ile durdurabilirsiniz)"
                             if g > 90 else ")"))
+        # Kalan süre TAHMİN EDİLMEZ, ÖLÇÜLÜR: yapılan iş / geçen süre.
+        # İlerleme bilinmiyorsa (STEP okuma) yalnız geçen süre yazar.
+        kalan = ""
+        try:
+            y = float(self.ilerleme["value"]); t = float(self.ilerleme["maximum"])
+            if (str(self.ilerleme["mode"]) == "determinate" and 0 < y < t
+                    and g >= 5):
+                kalan = f"\nkalan ≈ {IS.sure_metni(g * (t - y) / y)}  " \
+                        f"({int(y)}/{int(t)})"
+        except Exception:
+            pass
+        self.v_simdi.set(f"ŞU AN: {self.is_islem}\ngeçen {IS.sure_metni(g)}"
+                         + kalan)
         self.after(1000, self._sayaci_isle)
 
-    def _bitir(self):
+    def _bitir(self, sonuc=None):
         if self.calisiyor:
             g = time.time() - getattr(self, "is_basi", time.time())
             self._yaz(f"  ({g:.1f} saniye sürdü)")
+            sonuc = sonuc or ("iptal" if self.iptal_istendi else "tamam")
+            ad = getattr(self, "is_islem", "") or "işlem"
+            self._sure_satiri(ad, g, sonuc)
+            self.oturum_sure += g
+            self._toplam_yaz()
+            self.v_simdi.set(f"son iş: {ad} – {IS.sure_metni(g)}"
+                             + ("" if sonuc == "tamam" else f" ({sonuc})"))
+            # Çıktı klasörü henüz yoksa (ilk iş genelde model okumadır)
+            # süre bekletilir, klasör oluşunca yazılır: kaybolmasın.
+            self._bekleyen_islem = getattr(self, "_bekleyen_islem", [])
+            self._bekleyen_islem.append((ad, g, sonuc))
+            on = (self.v_out.get() or "").strip()
+            if on and os.path.isdir(on):
+                try:
+                    for b in self._bekleyen_islem:
+                        IS.islem_kaydet(on, *b)
+                    self._bekleyen_islem = []
+                except Exception:
+                    pass
         self.calisiyor = False
         self.ilerleme.stop(); self.ilerleme.configure(mode="determinate")
         # Motor (OpenCascade) yüklenmeden İNCELE açılmaz: yüklenmemişken
@@ -1558,8 +1796,10 @@ class Uygulama(ttk.Frame):
         self.b_incele.configure(state="normal" if (self.v_step.get() and self.M)
                                 else "disabled")
         self.b_bom.configure(state="normal" if self.komp else "disabled")
-        self.b_ornek.configure(state="normal" if self.satirlar else "disabled")
+        self.b_ornek.configure(state="normal" if self.komp else "disabled")
         self.b_onay.configure(state="normal" if self.ornek_dxf else "disabled")
+        if hasattr(self, "b_tumu"):
+            self.b_tumu.configure(state="normal" if self.komp else "disabled")
         self.b_iptal.configure(state="disabled")
 
     def iptal(self):
@@ -1724,7 +1964,19 @@ class Uygulama(ttk.Frame):
         okumaya kalkarsa "main thread is not in main loop" hatası alır.
         Bu yüzden arka plana yalnız buradan çıkan düz sözlük gider."""
         P = self._P()
-        return {"step": self.v_step.get().strip(), "on": self.v_out.get().strip(),
+        on = self.v_out.get().strip()
+        if on:
+            # Ayarlar çıktı klasörüne yazılır: sonra bu klasör açılınca
+            # malzeme ve görünüş seçimi geri gelir, yeniden girilmez.
+            try:
+                IS.ayar_kaydet(on, malzemeler=dict(self.malzemeler),
+                               gorunusler=list(P["gorunusler"]),
+                               kesit=P["kesit"], gizli=P["gizli"],
+                               en_az_delik=P["en_az_delik"],
+                               montaj=bool(self.v_montaj.get()))
+            except Exception as ex:
+                self._yaz(f"ayar klasöre yazılamadı: {ex}")
+        return {"step": self.v_step.get().strip(), "on": on,
                 # genel = yalnız hiç seçim yapılmamış parçalar için varsayılan.
                 # Kutudaki malzeme "uygulanacak" malzemedir, herkesin varsayılanı
                 # değildir: bir parçaya alüminyum verince diğerleri çelik kalır.
@@ -1758,11 +2010,82 @@ class Uygulama(ttk.Frame):
                 self.v_out.set(os.path.splitext(y)[0] + "_cikti")
             if self.M:
                 self.b_incele.configure(state="normal")
+            self._onceki_tazele()
 
     def out_sec(self):
         y = filedialog.askdirectory(title="Kaydedilecek klasör")
         if y:
             self.v_out.set(y)
+            self._onceki_tazele()
+
+    def _onceki_tazele(self):
+        """1. sayfadaki 'bu klasörde ne var' özetini ve süre panelini
+        seçilen çıktı klasörüne göre tazeler."""
+        on = (self.v_out.get() or "").strip()
+        if not on or not os.path.isdir(on):
+            self.v_onceki.set("")
+            self._klasor_sureleri()
+            return None
+        r = IS.cikti_durumu(on, self.v_step.get().strip() or None)
+        self.v_onceki.set(IS.durum_metni(r))
+        self._klasor_sureleri()
+        return r
+
+    def onceki_ac(self, klasor=None):
+        """Daha önce çıktı alınmış bir klasörü açar. Modeli OKUMAZ:
+        pafta ve PDF hemen yapılabilir, çizim listesi görünür. Eksik
+        çizim / açınım / lazer için model gerekir; kayıtlı model
+        dosyası bulunursa kutuya yazılır, İNCELE demek yeter."""
+        y = klasor or filedialog.askdirectory(title="Önceki çıktı klasörü")
+        if not y:
+            return
+        if not os.path.isdir(y):
+            messagebox.showwarning("Klasör", "Klasör bulunamadı:\n" + y)
+            return
+        self.v_out.set(y)
+        d = IS.durum_oku(y)
+        if d.get("step") and os.path.isfile(d["step"]) and \
+                not self.v_step.get().strip():
+            self.v_step.set(d["step"])
+            if self.M:
+                self.b_incele.configure(state="normal")
+        r = self._onceki_tazele()
+        if not r or not any((r["bom"], r["dxf"], r["montaj"], r["acinim"],
+                             r["lazer"], r["pdf"])):
+            messagebox.showinfo(
+                "Önceki çıktı", "Bu klasörde önceki bir çalışma bulunamadı "
+                "(BOM, DXF, açınım, lazer ya da PDF yok).\n\n" + y)
+            return
+        self._bom_kimlik_oku()
+        # Model gerektirmeyen adımlar hemen açılır.
+        self._adim_ac(4, gecis=False)
+        self._adim_ac(6, gecis=False)
+        self._cikti_listesi()
+        self._durum_ipucu = ("önceki çıktı açıldı – pafta/PDF hemen "
+                             "yapılabilir; eksik çizim, açınım, lazer için "
+                             "İNCELE")
+        self.v_durum.set(self._durum_ipucu)
+        self._yaz(f"önceki çıktı: {y}")
+
+    def _bom_kimlik_oku(self):
+        """BOM.csv'den resim kimlikleri (no, ad, malzeme, kg): model
+        okunmadan paftalanan resmin antetine doğru bilgi gitsin."""
+        self.bom_kimlik = []
+        y = os.path.join((self.v_out.get() or "").strip(), "BOM.csv")
+        if not os.path.isfile(y):
+            return
+        import csv
+        try:
+            with open(y, encoding="utf-8-sig", newline="") as f:
+                for r in csv.DictReader(f, delimiter=";"):
+                    try:
+                        r["kg_adet"] = float(str(r.get("kg_adet") or "")
+                                             .replace(",", ".")) or None
+                    except ValueError:
+                        r["kg_adet"] = None
+                    self.bom_kimlik.append(r)
+        except Exception as ex:
+            self._yaz(f"BOM.csv okunamadı: {ex}")
 
     def klasoru_ac(self):
         y = self.v_out.get()
@@ -1787,7 +2110,8 @@ class Uygulama(ttk.Frame):
             self.v_durum.set("okunamayan biçim"); return
         if not self.v_out.get():
             self.v_out.set(os.path.splitext(yol)[0] + "_cikti")
-        self._basla("STEP okunuyor…")
+        self._basla("STEP okunuyor…",
+                    "Model okuma: " + os.path.basename(yol)[:40])
         self.ilerleme.configure(mode="indeterminate"); self.ilerleme.start(12)
         threading.Thread(target=self._incele_is, args=(yol, self._P()),
                          daemon=True).start()
@@ -1811,18 +2135,92 @@ class Uygulama(ttk.Frame):
         # birlikte çözülür (adı tanınmasa da yoğunluğu yeter).
         d = sum(1 for k in komp if k["sinif"] == "parca"
                 and self.M.malzeme_ata(k, {}, None)[1] == "data")
-        self.v_bom_ozet.set(f"{len(komp)} komponent, {n} parça – "
+        nk = sum(1 for k in komp if k["sinif"] == "kaynak")
+        self.v_bom_ozet.set(f"{len(komp) - nk} komponent, {n} parça"
+                            + (f" (+{nk} kaynak dikişi, parça sayılmaz)"
+                               if nk else "") + " – "
                             f"{d} parçanın malzemesi data'dan okundu, "
                             f"{n - d} parçaya malzeme vermeniz gerekiyor")
+        geri = self._ayar_geri_yukle()
+        on = (self.v_out.get() or "").strip()
+        if on:
+            try:                  # açınım/lazer kaydı hangi modelden bilsin
+                IS.model_kaydet(on, self.v_step.get().strip())
+            except Exception as ex:
+                self._yaz(f"iş durumu yazılamadı: {ex}")
         self._acilim_doldur()
         self.acilim_liste = []
         self.lazer_doldur()
+        self._ornek_adaylari()
         self._adim_ac(1)
-        self._adim_ac(5, gecis=False)     # açınım BOM'u beklemez
-        self._adim_ac(6, gecis=False)     # pafta da
-        self._adim_ac(7, gecis=False)     # lazer de
+        # HER ADIM AYRI YAPILABİLİR: model okununca bütün sekmeler açılır.
+        # Sıra bir öneridir, zorunluluk değil; BOM'u, görünüşü, çizimleri,
+        # açınımı, paftayı, lazeri istediğiniz sırayla, istediğiniz kadar
+        # yeniden yapabilirsiniz.
+        for i in range(2, len(ADIM)):
+            self._adim_ac(i, gecis=False)
+        self._bom_kimlik_oku()
+        self._cikti_listesi()
+        r = self._onceki_tazele()
         self._durum_ipucu = "komponentler hazır – malzemeyi verip BOM ÇIKART deyin"
+        if r and (r["bom"] or r["dxf"] or r["acinim"] or r["lazer"]):
+            self._durum_ipucu = ("önceki çıktı bulundu – istediğiniz adıma "
+                                 "geçin; eksik çizimler için 5. sekme")
         self.v_durum.set(self._durum_ipucu)
+        if geri:
+            self._yaz("önceki ayarlar geri yüklendi: " + geri)
+
+    def _ayar_geri_yukle(self):
+        """Çıktı klasörüne kaydedilmiş malzeme / görünüş / kesit ayarını
+        geri getirir. Eksik çizim üretiminde güncel çizimlerin
+        ATLANABİLMESİ için ayarın aynı olması gerekir; kullanıcı yeniden
+        girmek zorunda kalmasın."""
+        on = (self.v_out.get() or "").strip()
+        a = IS.durum_oku(on)["ayar"] if on else {}
+        if not a:
+            return ""
+        ne = []
+        kodlar = {k["kod"] for k in self.komp or []}
+        mal = {k: v for k, v in (a.get("malzemeler") or {}).items()
+               if k in kodlar and v in self.M.MALZEME}
+        if mal:
+            self.malzemeler.update(mal)
+            ne.append(f"{len(mal)} parçanın malzemesi")
+        gor = [g for g in (a.get("gorunusler") or []) if g in self.v_gor]
+        if gor:
+            for k, v in self.v_gor.items():
+                v.set(k in gor)
+            self.gorunus_sirasi = list(gor)
+            self.gorunus_degisti(None)
+            ne.append("görünüşler (" + ", ".join(gor) + ")")
+        for ad, v in (("kesit", self.v_kesit), ("gizli", self.v_gizli),
+                      ("montaj", self.v_montaj)):
+            if ad in a:
+                v.set(bool(a[ad]))
+        if a.get("en_az_delik") is not None:
+            self.v_delik.set(str(a["en_az_delik"]))
+        ne.append("kesit / gizli çizgi / delik ayarı")
+        if mal:
+            self._agac_doldur()
+        return ", ".join(ne)
+
+    def _ornek_adaylari(self):
+        """Örnek resim adayları. BOM çıktıysa en çok delik/radüs taşıyan
+        önce; çıkmadıysa model sırasıyla parçalar - örnek resim BOM'u
+        beklemesin."""
+        if self.satirlar:
+            p = [r for r in self.satirlar if r["sinif"] == "parca"]
+            p.sort(key=lambda r: -(len(r.get("delikler") or [])
+                                   + len(r.get("radusler") or [])))
+        else:
+            poz = self.M.poz_numaralari(self.komp or [])
+            p = [{"poz": poz[i], "kod": k["kod"], "ad": k["ad"]}
+                 for i, k in enumerate(self.komp or []) if k["sinif"] == "parca"]
+        self.ornek_adaylar = p
+        self.cb_ornek.configure(values=[f"{r['poz']}  {r['kod']}  {r['ad'][:40]}"
+                                        for r in p])
+        if p:
+            self.v_ornek.set(f"{p[0]['poz']}  {p[0]['kod']}  {p[0]['ad'][:40]}")
 
     # ------------------------------------------------------------ 2 BOM
     def _malzeme_onizle(self, k):
@@ -1837,26 +2235,64 @@ class Uygulama(ttk.Frame):
             return
         if self.satirlar:
             for r in self.satirlar:
+                if r["sinif"] == "kaynak":
+                    continue               # aşağıda tek satırda toplanır
                 t = ("std",) if r["sinif"] == "standart" else \
-                    ("kaynak",) if r["sinif"] == "kaynak" else \
                     ("data",) if r.get("malzeme_kaynak") == "data'dan" else ()
                 kg = f"{r['kg_adet']:.3f}" if r.get("kg_adet") else "-"
                 self.ag.insert("", "end", tags=t,
                                values=(r["poz"], r["kod"][:40], r["ad"][:60], r["adet"],
-                                       r["sinif"], (r.get("malzeme_ad") or "-")[:28],
+                                       self._sinif_metni(r["sinif"], r["kod"]),
+                                       (r.get("malzeme_ad") or "-")[:28],
                                        r.get("malzeme_kaynak") or "-",
                                        r.get("olcu") or "-", kg))
+            self._kaynak_satiri(self.satirlar)
             return
         for i, k in enumerate(self.komp or [], 1):
+            if k["sinif"] == "kaynak":
+                continue
             if k["sinif"] == "parca":
                 m, kay = self._malzeme_onizle(k)
                 mal, t = self.M.MALZEME[m][0][:28], ("data",) if kay == "data'dan" else ()
             else:
                 mal, kay = "-", "-"
-                t = ("std",) if k["sinif"] == "standart" else ("kaynak",)
+                t = ("std",)
             self.ag.insert("", "end", tags=t,
                            values=(i, k["kod"][:40], k["ad"][:60], k["adet"],
-                                   k["sinif"], mal, kay, "-", "-"))
+                                   self._sinif_metni(k["sinif"], k["kod"]),
+                                   mal, kay, "-", "-"))
+        self._kaynak_satiri(self.komp or [])
+
+    def _sinif_metni(self, sinif, kod):
+        """SINIF sütunu: sınıf + nereden geldiği (geometri, öneri, adsız)."""
+        k = next((x for x in self.komp or [] if x["kod"] == kod), None)
+        if not k:
+            return sinif
+        if k.get("geometri"):
+            return f"{sinif} (geometri)"
+        if k.get("oneri") and k["oneri"][0] != sinif:
+            return f"{sinif} – öneri: {k['oneri'][1] or k['oneri'][0]}?"
+        if k.get("isimsiz") and sinif == "parca":
+            return "parca – ADSIZ"
+        return sinif
+
+    def _kaynak_satiri(self, liste):
+        """Kaynak dikişleri KOMPONENT DEĞİLDİR: listede tek bir kapalı
+        satırda toplanır, altında türüne göre adetleri durur. Eskiden
+        her dikiş ayrı satırdı; kaynaklı bir montajda 142 dikiş 142
+        parça gibi listeyi dolduruyordu."""
+        kyn = [r for r in liste if r["sinif"] == "kaynak"]
+        if not kyn:
+            return
+        oz = self.M.kaynak_ozeti(kyn)
+        ust = self.ag.insert("", "end", tags=("kaynak",), open=False, values=(
+            "", "", f"KAYNAK DİKİŞLERİ – {len(oz)} tür (parça değil, "
+            "BOM'a girmez, çizilmez)", sum(a for _, a in oz), "kaynak",
+            "-", "-", "-", "-"))
+        for t, a in oz:
+            self.ag.insert(ust, "end", tags=("kaynak",),
+                           values=("", "", t[:60], a, "kaynak",
+                                   "-", "-", "-", "-"))
 
     def _hiyerarsik_doldur(self):
         """Montaj ağacını kademeli göster: ana ürün > alt montaj > parça."""
@@ -1885,11 +2321,77 @@ class Uygulama(ttk.Frame):
                 self.ag.insert(ust, "end", iid=r["poz"], open=r["seviye"] < 3,
                                tags=t,
                                values=(r["poz"], r["kod"][:40], ad, adet,
-                                       r["tur"], (r["malzeme_ad"] or "-")[:28],
+                                       self._sinif_metni(r["tur"], r["kod"])
+                                       if r["tur"] in ("parca", "standart")
+                                       else r["tur"],
+                                       (r["malzeme_ad"] or "-")[:28],
                                        r.get("kaynak") or r.get("malzeme_kaynak") or "-",
                                        r["olcu"] or "-", r["kg_adet"] or "-"))
+                # Kaynak özeti kapalı gelir; açılınca türleri görünür.
+                for j, (tur, a) in enumerate(r.get("kaynak_turleri") or []):
+                    self.ag.insert(r["poz"], "end", iid=f"{r['poz']}#{j}",
+                                   tags=("kaynak",),
+                                   values=("", "", tur[:60], a, "kaynak",
+                                           "-", "-", "-", "-"))
+                if r.get("kaynak_turleri"):
+                    self.ag.item(r["poz"], open=False)
             except Exception:
                 pass
+
+    def _secili_kompler(self):
+        """Ağaçta seçili satırların komponentleri (düz ya da kademeli)."""
+        kodlu = {}
+        for k in self.komp or []:
+            for a in (k["kod"][:40], k["ad"][:60]):
+                if a:
+                    kodlu.setdefault(a, []).append(k)
+        out = []
+        for s in self.ag.selection():
+            v = self.ag.item(s, "values")
+            if not v or str(v[2]).startswith(("KAYNAK DİKİŞLERİ", "▸ ")):
+                continue            # özet satırı ya da montaj
+            if v[4] == "kaynak" and not v[1]:
+                # kaynak türü satırı: o türdeki bütün dikişler
+                bul = [k for k in self.komp if k["sinif"] == "kaynak"
+                       and self.M.kaynak_tipi(k["ad"])[:60] == v[2]]
+            else:
+                bul = kodlu.get(v[1], []) if v[1] else kodlu.get(v[2], [])
+            for k in bul:
+                if all(k is not x for x in out):
+                    out.append(k)
+        return out
+
+    def sinif_degistir(self, yeni):
+        """Seçilen komponentlerin sınıfını elle değiştirir ve kuralı
+        SAKLAR: aynı adlı parça bundan sonra her modelde böyle sınıflanır."""
+        if not self.komp:
+            return
+        sec = self._secili_kompler()
+        if not sec:
+            messagebox.showinfo("Sınıf", "Önce listeden satır seçin.\n\n"
+                                "Kaynak dikişleri tek satırda toplandığı "
+                                "için onları 'Üretim parçası' yapmak "
+                                "isterseniz ağacı açıp alt satırdan seçin.")
+            return
+        kural = dict(self.M.ayar_oku().get("sinif_kurali") or {})
+        ad = {"parca": "üretim parçası", "standart": "standart / satın alınan",
+              "kaynak": "kaynak dikişi"}[yeni]
+        for k in sec:
+            k["sinif"], k["tip"] = yeni, ("elle" if yeni == "standart" else "")
+            kural[self.M.kural_anahtari(k["ad"], k)] = yeni
+            k.pop("geometri", None); k.pop("oneri", None); k.pop("isimsiz", None)
+        self.M.ayar_yaz(sinif_kurali=kural)
+        # Sınıf değişince BOM, poz ve dosya adları değişir: eski BOM
+        # geçersizdir, yeniden çıkarılmalı.
+        self.satirlar = []
+        self._agac_doldur()
+        self._acilim_doldur()
+        self._ornek_adaylari()
+        self._bitir()
+        self._yaz(f"{len(sec)} komponent '{ad}' yapıldı (kural saklandı): "
+                  + ", ".join(k["ad"][:30] for k in sec[:5]))
+        self.v_bom_ozet.set(f"{len(sec)} komponent '{ad}' yapıldı – "
+                            "BOM'u yeniden çıkarın")
 
     def malzeme_uygula(self, yalniz_secili):
         if not self.komp:
@@ -1958,7 +2460,7 @@ class Uygulama(ttk.Frame):
             self._yaz(f"şablon yazıldı: {y}")
 
     def bom_cikart(self):
-        self._basla("BOM çıkarılıyor…")
+        self._basla("BOM çıkarılıyor…", "BOM çıkarma")
         threading.Thread(target=self._bom_is, args=(self._is_girdisi(),), daemon=True).start()
 
     def _bom_is(self, g):
@@ -1975,12 +2477,7 @@ class Uygulama(ttk.Frame):
         kg = sum((r.get("toplam_kg") or 0.0) for r in sonuc["bom"])
         self.v_bom_ozet.set(f"{len(sonuc['bom'])} poz, toplam {kg:.3f} kg – BOM.csv yazıldı")
         # örnek parça adayları: en çok çeşit delik + radüs taşıyan önce
-        p = [r for r in self.satirlar if r["sinif"] == "parca"]
-        p.sort(key=lambda r: -(len(r.get("delikler") or []) + len(r.get("radusler") or [])))
-        self.ornek_adaylar = p
-        self.cb_ornek.configure(values=[f"{r['poz']}  {r['kod']}  {r['ad'][:40]}" for r in p])
-        if p:
-            self.v_ornek.set(f"{p[0]['poz']}  {p[0]['kod']}  {p[0]['ad'][:40]}")
+        self._ornek_adaylari()
         self._adim_ac(2)
         self._durum_ipucu = "BOM hazır – görünüş ve kesit ayarını yapın"
         self.v_durum.set(self._durum_ipucu)
@@ -2002,13 +2499,14 @@ class Uygulama(ttk.Frame):
                              f"(Avrupa): SAĞ sola, SOL sağa, ÜST alta, ALT üste.")
 
     def ornek_uret(self):
-        if not self.satirlar:
+        if not self.komp:
             return
         i = max(self.cb_ornek.current(), 0)
         r = self.ornek_adaylar[i] if self.ornek_adaylar else None
         if not r:
             messagebox.showinfo("Örnek", "Çizilecek parça yok."); return
-        self._basla(f"örnek resim üretiliyor: {r['kod']}")
+        self._basla(f"örnek resim üretiliyor: {r['kod']}",
+                    f"Örnek resim: {r['kod'][:30]}")
         threading.Thread(target=self._ornek_is, args=(r, self._is_girdisi()),
                          daemon=True).start()
 
@@ -2016,11 +2514,12 @@ class Uygulama(ttk.Frame):
         try:
             komp = [k for k in self.komp if k["kod"] == r["kod"] and k["sinif"] == "parca"]
             sonuc = self._calistir(g, asama=(2,), komp=komp, tablo_yok=True,
-                                   poz_harita={x["kod"]: x["poz"] for x in self.satirlar})
+                                   poz_harita={x["kod"]: x["poz"]
+                                               for x in self.ornek_adaylar})
             ciz = [x for x in sonuc["satirlar"] if x.get("dxf", "").endswith(".dxf")]
             if not ciz:
                 raise RuntimeError("örnek resim üretilemedi")
-            self.kuyruk.put(("ornek", (os.path.join(g["on"], ciz[0]["dxf"]), ciz[0],
+            self.kuyruk.put(("ornek", (os.path.join(sonuc["dxf_klasor"], ciz[0]["dxf"]), ciz[0],
                                        g["gorunus_ad"], g["kesit"])))
         except Exception:
             self.kuyruk.put(("hata", "Örnek resim üretilemedi:\n\n"
@@ -2044,16 +2543,26 @@ class Uygulama(ttk.Frame):
 
     # ------------------------------------------------------------ 4/5 tümü
     def tumunu_uret(self):
+        if not self.komp:
+            messagebox.showinfo(
+                "Çizimler", "Çizim için model gerekir: 1. sayfada İNCELE "
+                "deyin. (Pafta ve PDF için gerekmez.)")
+            return
         asama = [2] + ([3] if self.v_montaj.get() else [])
-        self._basla("tüm çizimler üretiliyor…")
+        eksik = bool(self.v_eksik.get())
+        self._basla("çizimler üretiliyor…" if not eksik else
+                    "eksik / eskimiş çizimler üretiliyor…",
+                    "Eksik çizimler" if eksik else "Tüm çizimler")
         self._adim_ac(4)
         self.liste.delete(0, "end")
         threading.Thread(target=self._tumu_is,
-                         args=(tuple(asama), self._is_girdisi()), daemon=True).start()
+                         args=(tuple(asama), self._is_girdisi(), eksik),
+                         daemon=True).start()
 
-    def _tumu_is(self, asama, g):
+    def _tumu_is(self, asama, g, eksik=False):
         try:
-            self.kuyruk.put(("tumu", self._calistir(g, asama=(1,) + asama)))
+            self.kuyruk.put(("tumu", self._calistir(g, asama=(1,) + asama,
+                                                   eksik=eksik)))
         except Exception:
             self.kuyruk.put(("hata", "Üretim sırasında hata:\n\n"
                              + traceback.format_exc(limit=4)))
@@ -2063,18 +2572,34 @@ class Uygulama(ttk.Frame):
         self._bitir()
         self._agac_doldur()
         on = sonuc["klasor"]
-        d = sorted(x for x in os.listdir(on) if x.lower().endswith(".dxf"))
-        self.liste.delete(0, "end")
-        for x in d:
-            self.liste.insert("end", x)
-        for x in ("BOM.csv", "BOM.md", "olculer.csv", "rapor.md"):
-            if os.path.isfile(os.path.join(on, x)):
-                self.liste.insert("end", x)
+        d = self._cikti_listesi()
         kg = sum((r.get("toplam_kg") or 0.0) for r in sonuc["bom"])
-        self.v_sonuc.set(f"{len(d)} DXF, {len(sonuc['bom'])} poz, toplam {kg:.3f} kg\n{on}")
-        self.b_zip.configure(state="normal")
+        at = sonuc.get("atlanan") or 0
+        self.v_sonuc.set(f"{d} DXF, {len(sonuc['bom'])} poz, toplam {kg:.3f} kg"
+                         + (f"  –  {at} çizim güncel olduğu için yeniden "
+                            "üretilmedi" if at else "") + f"\n{on}")
         self._durum_ipucu = "bitti – ZIP oluşturabilirsiniz"
         self.v_durum.set(self._durum_ipucu)
+
+    def _cikti_listesi(self):
+        """5. sayfadaki liste: klasördeki çizimler, türüne göre klasörüyle
+        (DXF/, ACINIM/, LZR/, PDF/) ve kökteki tablolar."""
+        on = (self.v_out.get() or "").strip()
+        self.liste.delete(0, "end")
+        if not on or not os.path.isdir(on):
+            return 0
+        n = 0
+        for tur in ("dxf", "acinim", "lazer", "pdf"):
+            for y in IS.dosyalar(on, tur):
+                self.liste.insert("end", os.path.relpath(y, on).replace("\\", "/"))
+                n += tur == "dxf"
+        for x in ("BOM.csv", "BOM.md", "BOM_AGAC.csv", "olculer.csv", "rapor.md"):
+            if os.path.isfile(os.path.join(on, x)):
+                self.liste.insert("end", x)
+        if not self.v_sonuc.get():
+            self.v_sonuc.set(f"{n} DXF (detay + montaj) klasörde\n{on}")
+        self.b_zip.configure(state="normal" if self.liste.size() else "disabled")
+        return n
 
     def zip_olustur(self):
         try:
@@ -2092,7 +2617,7 @@ class Uygulama(ttk.Frame):
         ad = self.liste.get(s[0])
         if not ad.lower().endswith(".dxf"):
             return
-        self.defter.select(3)
+        self._adim_ac(3)
         self.v_ornek_bilgi.set(ad)
         threading.Thread(target=self._onizle_is,
                          args=(os.path.join(self.v_out.get(), ad),), daemon=True).start()

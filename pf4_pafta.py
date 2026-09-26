@@ -1096,6 +1096,27 @@ def pafta_olcusu(dxf_yolu, pafta_adi="PAFTA"):
     return g, y
 
 
+def mevcut_pafta(dxf_yolu, pafta_adi="PAFTA"):
+    """Resmin içinde daha önce kurulmuş pafta varsa kâğıdı ("A3",
+    "A3D" ...), yoksa None. Önceki oturumda paftalanmış resmin PDF'i,
+    paftayı yeniden kurmadan basılabilsin diye."""
+    try:
+        d = ezdxf.readfile(dxf_yolu)
+        if pafta_adi not in d.layout_names():
+            return None
+        lay = d.layout(pafta_adi)
+        alt, ust = lay.get_paper_limits()
+        g, y = float(ust.x - alt.x), float(ust.y - alt.y)
+        if g < 1.0 or y < 1.0:
+            g, y = float(lay.dxf.paper_width), float(lay.dxf.paper_height)
+    except Exception:
+        return None
+    for k, (kg, ky) in KAGIT.items():
+        if abs(kg - g) < 1.0 and abs(ky - y) < 1.0:
+            return k
+    return None
+
+
 def bas(dxf_yolu, cikti, pafta_adi="PAFTA", siyah=True, dpi=300):
     """Paftayı PDF ya da PNG olarak basar.
 

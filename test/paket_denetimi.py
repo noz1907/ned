@@ -61,6 +61,8 @@ def main():
     # adıyla yazılı olmalı. Sihirbazın "Makroyu kaydet"i CATIA makrosunu,
     # Yardım > Kullanım kılavuzu KULLANIM.md'yi exe'nin içinde arar.
     dogru("pf6_malzeme spec'te yazılı", '"pf6_malzeme"' in spec)
+    dogru("pf7_is (klasör düzeni / devam) spec'te yazılı", '"pf7_is"' in spec)
+    dogru("pf8_tani (geometriden tanıma) spec'te yazılı", '"pf8_tani"' in spec)
     for d in ("catia_malzeme_cikar.CATScript", "KULLANIM.md", "SURUM.txt"):
         dogru(f"{d} pakete giriyor", f'"{d}"' in spec
               and os.path.isfile(os.path.join(KOK, d)),

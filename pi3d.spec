@@ -89,7 +89,8 @@ a = Analysis(
     # suruklemeye calisir. Programin kullandigi UC tanesi yeter -
     # ekrana Agg, PDF'e backend_pdf, PNG'ye yine Agg.
     hiddenimports=ocp_gizli + ezdxf_gizli + [
-        "pf3_olcu", "pf4_pafta", "pf5_antet", "pf6_malzeme", "pf1_referans",
+        "pf3_olcu", "pf4_pafta", "pf5_antet", "pf6_malzeme", "pf7_is", "pf8_tani",
+        "pf1_referans",
         "matplotlib.backends.backend_agg",
         "matplotlib.backends.backend_pdf",
         "matplotlib.backends.backend_svg",

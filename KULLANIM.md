@@ -249,7 +249,83 @@ açıklaması yazar. Program bunun dışında birebir aynıdır.
 python pf3_gui.py
 ```
 
-Pencere adım adım ilerler; bir adım bitmeden sonraki sekme açılmaz.
+Sekmeler bir **öneri sırasıdır, zorunluluk değil**. Model okununca (İNCELE)
+bütün sekmeler açılır; BOM'u, görünüşü, çizimleri, açınımı, paftayı ve
+lazeri istediğiniz sırayla, **istediğiniz kadar yeniden** yapabilirsiniz.
+Daha önce çıktı aldığınız bir klasörde **eksik kalan** adımı da yalnız o
+adımı yaparak tamamlarsınız — bkz. *Önceki çıktıdan devam*.
+
+### Çıktı klasörünün düzeni
+
+```
+<çıktı klasörü>/
+    BOM.csv  BOM.md  BOM_AGAC.csv  BOM_AGAC.md  olculer.*  rapor.md
+    DXF/       detay resimleri + 00_MONTAJ.dxf  (paftaları içlerinde)
+    ACINIM/    ..._acinim.dxf + ACINIM.csv
+    LZR/       ..._Lzr.dxf   + LAZER.csv       (lazer kesim; paftaya girmez)
+    PDF/       basılmış paftalar  ..._A3.pdf
+    pi3d_is.json   iş durumu: hangi çizim hangi model ve ayarla, ne zaman
+                   üretildi; yapılan işlemler ve süreleri
+```
+
+Eski sürümlerin her şeyi tek klasöre yazdığı çıktılar da okunur (dosyanın
+türü adından anlaşılır: `_acinim.dxf`, `_Lzr.dxf`).
+
+`ACINIM.csv` ve `LAZER.csv` artık **birleştirilir**: 2 parçanın açınımını
+yeniden üretince tablodaki diğer parçaların satırları silinmez.
+
+### Önceki çıktıdan devam — eksik ya da yeniden
+
+1. sayfada **ÖNCEKİ ÇIKTIYI AÇ…** ile klasörü seçin. Altta ne olduğu yazar:
+
+```
+Bu klasörde önceki çalışma bulundu:
+  BOM ................ var  (26.09.2026 14:10)
+  detay resmi (DXF) .. 166
+  montaj resmi ....... var
+  açınım ............. 0
+  lazer (LZR) ........ 0
+  PDF ................ 0
+Model dosyası AYNI: üretilmiş çizimler geçerli, yalnız eksikler üretilebilir.
+```
+
+* **Pafta ve PDF** için modeli okumaya gerek yoktur: 7. sekme hemen açılır.
+  Paftası daha önce kurulmuş resimler listede *pafta kurulu* diye gelir;
+  **SEÇİLİ PAFTALARI BAS** doğrudan PDF çıkarır. PDF'i güncel olanlar
+  *PDF'i var (güncel)* yazar.
+* **Eksik çizim, açınım, lazer** için model gerekir: kayıtlı STEP kutuya
+  yazılır, **İNCELE** deyin. Malzeme, görünüş, kesit ayarlarınız klasörden
+  **geri gelir**.
+  * 5. sekmede **ÇİZİMLERİ ÜRET** — *Yalnız EKSİK ya da ESKİMİŞ çizimleri
+    üret* işaretliyse güncel resimlere dokunulmaz.
+  * 6. sekmede açınımı bu modelden önceden üretilmiş parçalar *önceden
+    üretildi* yazar ve seçili gelmez; eksikler seçili gelir.
+  * 8. sekmede de öyle.
+
+**Bir çizim ne zaman "güncel" sayılır:** aynı model dosyası (içerik özeti —
+dosyayı kopyalamak ya da tarihini değiştirmek bozmaz, içeriği değişirse
+bozar) + aynı görünüş / kesit / gizli çizgi / en küçük delik ayarı + aynı
+malzeme + aynı poz ve adet + aynı Pi3D çizim sürümü ile üretildiği
+`pi3d_is.json`'da **kayıtlıysa**. Kayıt yoksa (eski sürüm çıktısı) ya da
+tutmuyorsa çizim yeniden üretilir: eski resmi yeni diye vermek, hiç
+vermemekten kötüdür.
+
+Tam üretimden sonra karşılığı kalmayan eski resimler (ör. sınıf değişip
+poz numaraları kaydıysa eski `P07_...`) **silinmez**, `DXF/ESKI/`
+klasörüne taşınır — pafta listesine girip yanlış parçanın resmi gibi
+basılmasın.
+
+Komut satırında: `python pf3_olcu.py model.stp -o cikti --eksik`
+
+### İşlemler ve süreler (sağdaki panel)
+
+Pencerenin sağında yapılan her işlem, açıklaması ve süresi listelenir:
+*Model okuma: K0_KASA...stp — 3 dk 56 sn*, *BOM çıkarma — 41 sn*,
+*Eksik çizimler — 12 dk 05 sn* … En altta **TOPLAM (bu oturum)** ve **bu
+çıktı klasöründe toplam** süre yazar; önceki oturumların işlemleri soluk
+renkte görünür. Çalışan işin geçen süresi ve — ilerleme biliniyorsa —
+**ölçülen hıza göre kalan süre** üstte yazar (tahmin değil: yapılan iş /
+geçen süre). Süreler `pi3d_is.json`'a da yazılır.
 
 ### Adım 1 — VERİ
 
@@ -262,6 +338,68 @@ Pencere adım adım ilerler; bir adım bitmeden sonraki sekme açılmaz.
 STEP okunur, aynı parçanın kopyaları tek komponentte toplanır, parça /
 standart eleman / kaynak dikişi ayrımı yapılır. Büyük montajlarda bu adım
 bir-iki dakika sürebilir; pencere kilitlenmez, altta günlük akar.
+
+#### Parça mı, standart mı, kaynak dikişi mi
+
+STEP'te "bu satın alınan bir parçadır" diye bir bilgi **yoktur**; program
+bunu ADDAN ve MONTAJ AĞACINDAN çıkarır:
+
+| kural | örnek | sonuç |
+|-------|-------|-------|
+| kaynak dikişi | `K0 25 MM TEK KAYNAK.2`, `BRAKET KAYNAGI`, `Kehlnaht` | dikiş — parça değil |
+| kaynak ile birleşen eleman | `M10 KAYNAK SOMUNU`, `M6X20 KAYNAK CIVATASI` | **standart** (dikiş değil) |
+| norm numarası | `DIN 912`, `ISO 7090` | standart |
+| **üretim ismi** geçiyor | `CIVATA LAMASI`, `SOMUN SACI`, `KAMERA BRAKETI` | **parça** — Türkçe tamlamada asıl isim sondadır: cıvata lamaSI bir lamadır |
+| standart / satın alınan | cıvata, somun (`FL SOMUN_2` dahil), pul, perçin, rulman, menteşe, kamera, sensör, yük bağlama halkası, kauçuk takoz/stoper | standart |
+| satın alınan grubun içi | `153-02-10-004 - GOMME SALLAMA ...` grubunun altındaki `151B-02-10-004` | standart |
+| dikiş grubunun içi | `K0 KAYNAKLAR` altındaki `ARA DIKME` | dikiş |
+| `KAYNAKLI ...` | kaynaklı montaj / parça | **dikiş değil** |
+
+#### Adı olmayan katılar: GEOMETRİDEN tanıma
+
+CAD bazen katıya ad vermez: `COMPOUND`, `SOLID`, `Body`. Adından hiçbir şey
+anlaşılmaz; program o zaman katının **yüzlerine** bakar:
+
+| tanınan | geometrik imza |
+|---------|----------------|
+| **pul** | eksene dik iki düz yüz + dış silindir + boydan boya delik; kalınlık ≤ dış çapın %30'u |
+| **somun** | eksene paralel 6 düz yüz 60° aralıklı (ya da 4 yüz 90°), boydan boya delik; anahtar ağzı / delik 1,3–2,4 |
+| **cıvata** | delik yok; bir ucunda altıgen ya da geniş silindirik baş (imbus yuvası da tanınır), gövde en az bir çap boyunda |
+| **perçin** | gövde + bir ucunda kubbe ya da havşa baş |
+| **pim** | tek çaplı, başsız, uçları pahlı, çap ≤ 12 |
+| **o-ring** | yalnız tor yüzü |
+| **kaynak dikişi** | birbirine dik iki düz bacak yüzü + hipotenüs: uzun üçgen prizma; bacaklar hacimden ve alanlardan hesaplanır (1–20 mm) |
+
+Emin olunmayan katıya **karar verilmez**. Düz uçlu, pahsız bir Ø5 çubuk
+pim de olabilir kaynak dikişi de (CATIA dikişi çoğu zaman böyle modeller);
+o parça kalır. Tanınamayan adsız katı 2. sekmede **parca – ADSIZ** yazar.
+
+**Ölçüldü** — 4 gerçek modelde adı belli 636 komponentle karşılaştırıldı:
+geometri 214 karar verdi, **1'i yanlış (%0,47)**. 182 kaynak kararının
+hepsi doğru, hiçbir üretim parçası dikiş sayılmadı. Tek yanlış adında
+`SAC` geçen pul biçimli bir parça; adı olduğu için ad kazanır, geometri
+orada yalnız **öneri** olarak yazar (`parca – öneri: pul?`).
+
+Adı olan parçada her zaman **ad geçerlidir**; geometri yalnız öneridir.
+`rapor.md`'de *Geometriden tanıma* başlığı altında her kararın gerekçesi
+yazar: `somun: 6 yüz 60° aralıklı, anahtar ağzı 13,0, delik Ø6,9,
+yükseklik 3,5`.
+
+Adsız bir katıyı elle sınıflarsanız kural **adla değil geometrik parmak
+iziyle** (hacim + üç ölçü) saklanır: bir COMPOUND'u standart yapmak
+bütün COMPOUND'ları standart yapmaz, ama aynı tedarikçi parçası başka bir
+modelde yine tanınır.
+
+Kural bilmediği bir adı yanlış sınıflarsa **2. sekmede** satırı seçip
+**Üretim parçası / Standart / Kaynak dikişi** düğmesine basın. Program bunu
+**öğrenir**: kural ayar dosyasına yazılır, aynı adlı parça bundan sonra her
+modelde öyle sınıflanır. Sınıf değişince BOM'u yeniden çıkarın.
+
+**Kaynak dikişleri** parça değildir: BOM'a girmez, poz almaz, resmi
+çizilmez, montaj resminde görünür. Listede tek satırda toplanır
+(*KAYNAK DİKİŞLERİ – 25 tür*), açınca türleri ve adetleri görünür:
+`K0 25 MM TEK KAYNAK x103`. Hiyerarşik BOM'da her montajın altında tek
+satırdır. `rapor.md`'de türlere göre tablo vardır.
 
 ### Adım 2 — BOM ve MALZEME
 
@@ -388,8 +526,10 @@ Aynı yapı `BOM_AGAC.csv` (Excel) ve `BOM_AGAC.md` dosyalarına da yazılır;
 
 ### Adım 5 — TÜM ÇİZİMLER
 
-Bütün detay resimleri (ve istediyseniz montaj resmi) üretilir, dosyalar
-listelenir. Listede bir DXF'e çift tıklarsanız önizlemesi açılır.
+Bütün detay resimleri (ve istediyseniz montaj resmi) `DXF/` klasörüne
+üretilir, dosyalar listelenir. Listede bir DXF'e çift tıklarsanız önizlemesi
+açılır. Bu sekmenin kendi **ÇİZİMLERİ ÜRET** düğmesi vardır: örnek onayına
+dönmeden çizimleri yeniden ya da yalnız eksikleri üretebilirsiniz.
 
 * **ZIP OLUŞTUR** → `cizimler.zip` (bütün DXF'ler + BOM + tablolar)
 * **Klasörü aç** → çıktı klasörünü dosya yöneticisinde açar
@@ -1310,7 +1450,8 @@ Kaynak DXF'lere dokunulmaz; her pafta ayrı bir dosyaya yazılır.
 | `--yogunluk <kg/mm3>` | malzeme seçimini ezer (uzman kullanımı) |
 | `--gorunus ON,ARKA,SAG,SOL,UST,ALT` | görünüş seçimi, en çok 4 |
 | `--kesit` | A-A tam kesit görünüşü ekle |
-| `--zip` | çıktıları `cizimler.zip`'te topla |
+| `--zip` | çıktıları `cizimler.zip`'te topla (klasör düzeniyle) |
+| `--eksik` | yalnız eksik ya da eskimiş çizimleri üret; aynı model ve ayarla üretildiği kayıtlı olanlar atlanır |
 | `--tek <kod>` | yalnız bu kodu çiz |
 | `--en-cok <n>` | en çok bu kadar komponent çiz |
 | `--en-az-hacim <mm3>` | bu hacmin altındaki katıları atla |
@@ -1329,7 +1470,9 @@ Kaynak DXF'lere dokunulmaz; her pafta ayrı bir dosyaya yazılır.
 Her poz için: kod, tanım, adet, malzeme, ölçü (BOY×EN×KALINLIK), adet başına
 kütle, toplam kütle, çizim dosyası. Civata, somun, pul gibi **standart
 elemanlar BOM'a kod + adet olarak girer**, çizimleri üretilmez. Kaynak
-dikişleri BOM'a girmez, ayrıca sayılır.
+dikişleri BOM'a girmez, türüne göre ayrıca sayılır. Detay ve montaj
+resimleri `DXF/`, açınımlar `ACINIM/`, lazer resimleri `LZR/`, PDF'ler
+`PDF/` klasöründedir.
 
 ### `P01_<kod>.dxf` — detay resmi
 

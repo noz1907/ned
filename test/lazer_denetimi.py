@@ -121,12 +121,28 @@ def main():
 
     print("\n-- pafta bu dosyaları almıyor")
     import pf4_pafta as P
-    # Pafta listesi çıktı klasöründeki *.dxf'leri tarar; _Lzr elenmeli.
+    # Pafta listesi DXF/ ve ACINIM/ klasörlerini (ve eski sürümlerin
+    # köke yazdıklarını) tarar; _Lzr hiçbirine girmemeli - LZR/ ayrı
+    # klasördedir, köke düşmüş eski bir _Lzr de elenmeli.
+    import shutil
+    import pf7_is as IS
+    kok = tempfile.mkdtemp(prefix="lzr_kok_")
+    for tur, ad in (("dxf", "P01_A.dxf"), ("acinim", "P01_A_acinim.dxf"),
+                    ("lazer", "P01_A_Lzr.dxf")):
+        shutil.copy(yol, os.path.join(IS.alt_klasor(kok, tur, True), ad))
+    shutil.copy(yol, os.path.join(kok, "P02_B_Lzr.dxf"))       # eski düzen
+    pafta = [os.path.basename(y) for y in IS.dosyalar(kok, "dxf")
+             + IS.dosyalar(kok, "acinim")]
+    dogru("7. adım _Lzr dosyalarını eliyor",
+          pafta == ["P01_A.dxf", "P01_A_acinim.dxf"], str(pafta))
+    lz = [os.path.relpath(y, kok) for y in IS.dosyalar(kok, "lazer")]
+    dogru("lazer dosyaları LZR klasöründe (+ eski kökteki)",
+          sorted(lz) == sorted([os.path.join("LZR", "P01_A_Lzr.dxf"),
+                                "P02_B_Lzr.dxf"]), str(lz))
     gui = open(os.path.join(os.path.dirname(os.path.dirname(
         os.path.abspath(__file__))), "pf3_gui.py"), encoding="utf-8").read()
-    dogru("7. adım _Lzr dosyalarını eliyor",
-          'endswith("_Lzr.dxf")' in gui,
-          "lazer resimleri pafta listesine giriyor")
+    dogru("7. adım listeyi IS.dosyalar ile kuruyor",
+          'IS.dosyalar(on, "dxf") + IS.dosyalar(on, "acinim")' in gui)
     # Yine de biri elle verilse pafta kurulabilir mi - kurulmamalı
     # diye bir kural yok, ama PDF'e kendiliğinden GİRMEMELİ.
     p = P.kagit_plani([yol], "A3")

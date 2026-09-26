@@ -88,7 +88,8 @@ kok = tk.Tk()
 u = G.Uygulama(kok)
 u.pack(fill="both", expand=True)
 u.v_step.set(__file__)                  # varligi yeten herhangi bir dosya
-u.v_out.set(os.path.join(KOK, "_gui_deneme_cikti"))
+import tempfile                         # noqa: E402
+u.v_out.set(tempfile.mkdtemp(prefix="gui_deneme_"))   # repoya yazmasın
 
 t0 = time.time()
 durumlar, bitti = [], []
