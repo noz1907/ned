@@ -65,6 +65,7 @@ DENETİM BETİKLERİ (test/)
     python test/geometri_denetimi.py        (model verirseniz isabet ölçer)
     python test/devam_denetimi.py
     python test/gui_devam_denetimi.py        (tkinter + ekran ister)
+    python test/gui_ekran_denetimi.py        (15 inç: 1366x768 ekranda)
   Malzeme okuma ve sihirbaz:
     python test/malzeme_denetimi.py
     python test/gui_malzeme_sihirbazi.py      (tkinter + ekran ister)
@@ -85,6 +86,18 @@ DENETİM BETİKLERİ (test/)
   ORNEK_PAFTA_A3_*.png     paftanın görüntüsü
 
 BU SÜRÜMDE DEĞİŞEN
+
+  15 İNÇ EKRANDA DÜĞMELER GÖRÜNMÜYORDU
+    Pencere 1755x993 piksel istiyordu. 15 inç dizüstünde (1366x768)
+    alttaki ilerleme çubuğu, İPTAL, günlük ve durum çubuğu tamamen ekran
+    dışında kalıyordu; 6. adımda AÇINIMI ÜRET, 7. adımda PAFTAYA AL,
+    BAS, Tümünü seç ve Listeyi tazele görünmüyordu.
+    Şimdi: küçük ekranda pencere tam ekran açılır; düğme şeritleri ve
+    alt çubuklar önce yer alır, yer daralırsa listeler kısalır; başlık
+    şeridi ve günlük incelir; uzun açıklamalar tek satır olur,
+    tıklayınca açılır; tablo sütunları sığacak kadar daralır.
+    Ölçüldü: 1366x700 ve 1280x650 pencerede 8 sekmenin hiçbirinde gizli
+    düğme yok, listeler en az ~5 satır (test/gui_ekran_denetimi.py).
 
   HER ADIM AYRI, İSTENDİĞİ KADAR YENİDEN; EKSİK OLAN TAMAMLANIR
     Eskiden sekmeler sırayla açılıyordu: PDF'i unutan kullanıcı modeli

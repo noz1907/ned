@@ -255,6 +255,16 @@ lazeri istediğiniz sırayla, **istediğiniz kadar yeniden** yapabilirsiniz.
 Daha önce çıktı aldığınız bir klasörde **eksik kalan** adımı da yalnız o
 adımı yaparak tamamlarsınız — bkz. *Önceki çıktıdan devam*.
 
+### Küçük ekran (15 inç dizüstü)
+
+Ekran 1500 pikselden dar ya da 950 pikselden kısaysa (1366x768; 1920x1080
+%125 ölçekte 1536x864) pencere **tam ekran** açılır ve sıkı düzene geçer:
+başlık şeridi incelir, günlük 3 satıra iner, uzun açıklamalar tek satır
+olur — üzerine tıklayınca tamamı açılır (*▸ ayrıntı*). Düğme şeritleri ve
+alttaki ilerleme / İPTAL / günlük / durum çubuğu **her zaman yer alır**;
+yer daralırsa önce listeler kısalır. 1280x650'lik pencerede bile hiçbir
+düğme gizli kalmaz (`test/gui_ekran_denetimi.py`).
+
 ### Çıktı klasörünün düzeni
 
 ```

@@ -254,7 +254,16 @@ class Uygulama(ttk.Frame):
     # ------------------------------------------------------------ iskelet
     def _kur(self):
         self.master.title(BASLIK)
-        self.master.minsize(1240, 740)
+        # KÜÇÜK EKRAN (15" dizüstü: 1366x768, ya da 1920x1080 %125 ölçekle
+        # 1536x864). Görev çubuğu ve pencere başlığı düşünce ~700 piksel
+        # kalır. Eskiden pencere 1755x993 istiyordu: alttaki İPTAL, günlük
+        # ve durum çubuğu ile 6-7. adımın düğmeleri ekran dışında kalıyordu.
+        try:
+            sw, sh = self.master.winfo_screenwidth(), self.master.winfo_screenheight()
+        except Exception:
+            sw, sh = 1920, 1080
+        self.kucuk = sh < 950 or sw < 1500
+        self.master.minsize(1000, 600)
         self._pencere_ikonu()
         try:
             ttk.Style().configure("Bas.TButton", font=("Segoe UI", 10, "bold"))
@@ -280,17 +289,156 @@ class Uygulama(ttk.Frame):
         self._sayfa8()
         self.defter.bind("<<NotebookTabChanged>>", self._sekme_degisti)
         self._menu()
-        gf = ttk.LabelFrame(self, text=" Günlük ", padding=4)
-        gf.pack(fill="both")
-        self.gunluk = tk.Text(gf, height=7, wrap="none", font=("Consolas", 9))
+        # ALT ÇUBUKLAR ÖNCE YER ALIR: pencere küçükse sekmeler küçülür,
+        # durum çubuğu / günlük / ilerleme + İPTAL asla ekran dışına
+        # itilmez (side="bottom", before=orta: paketleme sırasında önde).
+        self.v_durum = tk.StringVar(value="motor yükleniyor…")
+        self.durum_etiket = ttk.Label(self, textvariable=self.v_durum,
+                                      relief="sunken", anchor="w", padding=3)
+        self.durum_etiket.pack(side="bottom", fill="x", pady=(4, 0), before=orta)
+        gf = ttk.LabelFrame(self, text=" Günlük ", padding=2 if self.kucuk else 4)
+        gf.pack(side="bottom", fill="x", before=orta)
+        self.gunluk = tk.Text(gf, height=3 if self.kucuk else 7, wrap="none",
+                              font=("Consolas", 9))
         gk = ttk.Scrollbar(gf, orient="vertical", command=self.gunluk.yview)
         self.gunluk.configure(yscrollcommand=gk.set, state="disabled")
         self.gunluk.pack(side="left", fill="both", expand=True)
         gk.pack(side="right", fill="y")
-        self.v_durum = tk.StringVar(value="motor yükleniyor…")
-        ttk.Label(self, textvariable=self.v_durum, relief="sunken",
-                  anchor="w", padding=3).pack(fill="x", pady=(4, 0))
+        self._durum_ic.pack(side="bottom", fill="x", pady=(4, 2), before=orta)
+        for i, sf in enumerate(self.sayfa):
+            # 1. sayfada yer boldur ve oradaki yol gösterme ("önceki
+            # çıktıyı aç ...") her zaman okunmalı: kısaltılmaz.
+            self._sayfa_sikistir(sf, kisalt=(i != 0))
         self._adim_ac(0)
+        self._pencereyi_yerlestir(sw, sh)
+
+    def _sayfa_sikistir(self, f, kisalt=True):
+        """Bir sayfayı küçük ekrana uydurur.
+
+        1) Listeden (genişleyen öğe) SONRA gelen her şey - özet satırı,
+           düğme şeridi - sayfanın ALTINA sabitlenir ve paketleme
+           sırasında listenin önüne alınır: yer daralınca önce LİSTE
+           küçülür, düğmeler hiç kaybolmaz.
+        2) Tablo sütunları, toplamı sayfaya sığmayacaksa orantılı
+           daraltılır (genişleyince yine açılırlar).
+        3) Küçük ekranda uzun açıklamalar tek satıra iner; tıklayınca
+           tamamı açılır."""
+        try:
+            kolelar = f.pack_slaves()
+        except Exception:
+            return
+        gen = [w for w in kolelar if str(w.pack_info().get("expand")) in ("1", "True", "true")]
+        if gen:
+            ilk = gen[0]
+            sonra = kolelar[kolelar.index(ilk) + 1:]
+            for w in reversed(sonra):
+                bilgi = {k: v for k, v in w.pack_info().items() if k != "in"}
+                bilgi.update(side="bottom", before=ilk)
+                w.pack(**bilgi)
+        for w in [f] + list(self._tum_cocuklar(f)):
+            sinif = w.winfo_class()
+            if sinif == "Treeview":
+                self._sutun_daralt(w)
+            elif sinif in ("TLabel", "Label") and kisalt:
+                self._aciklama_kisalt(w)
+            elif sinif in ("TFrame", "Frame", "TLabelframe"):
+                self._serit_duzelt(w)
+
+    def _serit_duzelt(self, fr):
+        """Düğme şeridi: sağa yaslı düğmeler ÖNCE yer alsın (dar pencerede
+        soldaki açıklama yazısı onları dışarı itmesin); şeritteki uzun
+        tek satırlık açıklama kaydırılarak sarılsın."""
+        try:
+            kole = fr.pack_slaves()
+        except Exception:
+            return
+        if not kole:
+            return
+        sag = [w for w in kole if w.pack_info().get("side") == "right"]
+        sol = [w for w in kole if w.pack_info().get("side") == "left"]
+        if sag and sol:
+            ilk = kole[0]
+            for w in sag:
+                if w is ilk:
+                    continue
+                bilgi = {k: v for k, v in w.pack_info().items() if k != "in"}
+                bilgi["before"] = ilk
+                w.pack(**bilgi)
+        for w in sol:
+            if w.winfo_class() in ("TLabel", "Label"):
+                try:
+                    t = str(w.cget("text"))
+                    if len(t) > 50 and not int(str(w.cget("wraplength") or 0)):
+                        w.configure(wraplength=480 if self.kucuk else 560,
+                                    justify="left")
+                except Exception:
+                    pass
+
+    @staticmethod
+    def _tum_cocuklar(w):
+        for c in w.winfo_children():
+            yield c
+            yield from Uygulama._tum_cocuklar(c)
+
+    def _sutun_daralt(self, agac):
+        sut = [c for c in (agac["columns"] or ())]
+        if agac.cget("show") and "tree" in str(agac.cget("show")):
+            sut = ["#0"] + list(sut)
+        gen = [int(agac.column(c, "width")) for c in sut]
+        sinir = 820 if self.kucuk else 1150
+        if sum(gen) <= sinir:
+            return
+        k = sinir / float(sum(gen))
+        for c, g in zip(sut, gen):
+            agac.column(c, width=max(36, int(g * k)), stretch=True,
+                        minwidth=30)
+
+    def _aciklama_kisalt(self, w):
+        """Uzun gri açıklama: küçük ekranda ilk cümlesi + '… (tıklayın)'."""
+        try:
+            metin = str(w.cget("text"))
+        except Exception:
+            return
+        if len(metin) < 160 or str(w.cget("textvariable")):
+            return
+        try:
+            if int(str(w.cget("wraplength") or 0)) > 0:
+                w.configure(wraplength=780 if self.kucuk else 900)
+        except Exception:
+            pass
+        if not self.kucuk:
+            return
+        ilk = metin.replace("\n", " ").split(". ")[0].strip()
+        if len(ilk) > 150:
+            ilk = ilk[:147].rstrip() + "…"
+        kisa = ilk.rstrip(".") + ".   ▸ ayrıntı (tıklayın)"
+        izgara = w.winfo_manager() == "grid"
+        w.configure(text=kisa, cursor="hand2",
+                    wraplength=360 if izgara else 780, justify="left")
+        w._pi_uzun, w._pi_kisa, w._pi_acik = metin, kisa, False
+
+        def degis(_e=None, w=w):
+            w._pi_acik = not w._pi_acik
+            w.configure(text=(w._pi_uzun + "   ▴ kapat") if w._pi_acik
+                        else w._pi_kisa)
+        w.bind("<Button-1>", degis)
+
+    def _pencereyi_yerlestir(self, sw, sh):
+        """Pencere ekrandan büyük açılmasın. Küçük ekranda tam ekran
+        (Windows'ta 'zoomed'), büyükte ekranın %90'ı."""
+        try:
+            if self.kucuk:
+                try:
+                    self.master.state("zoomed")
+                    return
+                except Exception:
+                    pass
+                self.master.geometry(f"{sw - 16}x{sh - 80}+0+0")
+            else:
+                g, y = min(1600, int(sw * 0.9)), min(1000, int(sh * 0.9))
+                self.master.geometry(f"{g}x{y}+{(sw - g) // 2}+{(sh - y) // 3}")
+        except Exception:
+            pass
 
     def _durum_cubugu(self):
         """İlerleme çubuğu ve İPTAL düğmesi - her sayfadan görünür.
@@ -300,7 +448,7 @@ class Uygulama(ttk.Frame):
         durdurabilirsiniz" yazıyor ama ortada basılacak bir düğme
         olmuyordu."""
         ic = ttk.Frame(self)
-        ic.pack(fill="x", pady=(6, 2))
+        self._durum_ic = ic               # _kur alta sabitler
         self.b_iptal = ttk.Button(ic, text="İPTAL", command=self.iptal,
                                   state="disabled", width=9)
         self.b_iptal.pack(side="right", padx=(8, 0))
@@ -333,18 +481,20 @@ class Uygulama(ttk.Frame):
         oturuma yayılsa da klasörün toplam süresi kaybolmaz."""
         p = ttk.LabelFrame(ust, text=" İşlemler ve süreler ", padding=4)
         p.pack(side="right", fill="y", padx=(6, 0))
+        k = getattr(self, "kucuk", False)
         self.v_simdi = tk.StringVar(value="şu an çalışan iş yok")
         tk.Label(p, textvariable=self.v_simdi, justify="left", anchor="w",
-                 wraplength=250, fg="#0b2340", font=("Segoe UI", 9, "bold")
+                 wraplength=200 if k else 250, fg="#0b2340", font=("Segoe UI", 9, "bold")
                  ).pack(fill="x", pady=(0, 4))
         cer = ttk.Frame(p); cer.pack(fill="both", expand=True)
         self.sure_agac = ttk.Treeview(cer, columns=("islem", "sure"),
-                                      show="headings", height=16,
+                                      show="headings", height=6 if k else 16,
                                       selectmode="none")
         self.sure_agac.heading("islem", text="İŞLEM")
         self.sure_agac.heading("sure", text="SÜRE")
-        self.sure_agac.column("islem", width=170, anchor="w")
-        self.sure_agac.column("sure", width=72, anchor="e", stretch=False)
+        self.sure_agac.column("islem", width=130 if k else 170, anchor="w")
+        self.sure_agac.column("sure", width=64 if k else 72, anchor="e",
+                              stretch=False)
         self.sure_agac.tag_configure("eski", foreground="#888")
         self.sure_agac.tag_configure("hata", foreground="#b00")
         self.sure_agac.tag_configure("iptal", foreground="#a60")
@@ -354,7 +504,7 @@ class Uygulama(ttk.Frame):
         kd.pack(side="right", fill="y")
         self.v_toplam = tk.StringVar(value="")
         tk.Label(p, textvariable=self.v_toplam, justify="left", anchor="w",
-                 wraplength=250, font=("Segoe UI", 9, "bold")
+                 wraplength=200 if k else 250, font=("Segoe UI", 9, "bold")
                  ).pack(fill="x", pady=(4, 0))
         self.oturum_sure = 0.0
         self.klasor_sure = 0.0
@@ -427,27 +577,31 @@ class Uygulama(ttk.Frame):
         varligina gore degil, SURUME gore davranir; yarim logolu bir
         ekran cikmaz."""
         ZEMIN, YAZI, SOLUK = "#0b2340", "#ffffff", "#8fb3d9"
-        s = tk.Frame(self, bg=ZEMIN, height=84)
+        k = getattr(self, "kucuk", False)
+        s = tk.Frame(self, bg=ZEMIN, height=52 if k else 84)
         s.pack(fill="x", side="top")
         s.pack_propagate(False)
         varmi = logo_var()
         if varmi:
-            self._logo = (logo_yukle("pivision_64.png")
+            self._logo = ((logo_yukle("pivision_44.png") if k else None)
+                          or logo_yukle("pivision_64.png")
                           or logo_yukle("pivision_56.png"))
             if self._logo is not None:
                 tk.Label(s, image=self._logo, bg=ZEMIN, bd=0
-                         ).pack(side="left", padx=(14, 0), pady=4)
-            self._ikon_kucuk = (logo_yukle("pi3d_72.png")
+                         ).pack(side="left", padx=(14, 0), pady=2 if k else 4)
+            self._ikon_kucuk = ((logo_yukle("pi3d_48.png") if k else None)
+                                or logo_yukle("pi3d_72.png")
                                 or logo_yukle("pi3d_64.png"))
             if self._ikon_kucuk is not None:
                 tk.Label(s, image=self._ikon_kucuk, bg=ZEMIN, bd=0
-                         ).pack(side="right", padx=(0, 14), pady=6)
+                         ).pack(side="right", padx=(0, 14), pady=2 if k else 6)
         sag = tk.Frame(s, bg=ZEMIN)
         sag.pack(side="right", padx=(0, 10))
         tk.Label(sag, text="Pi3D", bg=ZEMIN, fg=YAZI, bd=0,
-                 font=("Segoe UI", 17 if varmi else 26, "bold")).pack(anchor="e")
+                 font=("Segoe UI", 14 if k else (17 if varmi else 26), "bold")
+                 ).pack(anchor="e")
         tk.Label(sag, text="3B modelden parça listesi ve teknik resim",
-                 bg=ZEMIN, fg=SOLUK, bd=0, font=("Segoe UI", 9)
+                 bg=ZEMIN, fg=SOLUK, bd=0, font=("Segoe UI", 8 if k else 9)
                  ).pack(anchor="e")
 
     def _adim_ac(self, i, gecis=True):
