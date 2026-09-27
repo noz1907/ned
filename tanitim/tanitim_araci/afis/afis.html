@@ -1,0 +1,89 @@
+<!-- AFİŞ ŞABLONU (Pi3D örneği). Değiştirilecek görseller: logo.png (ürün logosu), rollen_mavi.png (silik arka plan çizimi), ekran_2_bom.png / ekran_6_acinim.png (üstteki iki ekran), rollen_kagit.png + acinim_kagit.png (alt kart), metinler: .ust, h1, .vurgu, .acik, .tani kartı, .alt şeridi. -->
+<!doctype html>
+<html lang="tr"><head><meta charset="utf-8">
+<link href="font.css" rel="stylesheet">
+<style>
+*{box-sizing:border-box;margin:0;padding:0}
+html,body{width:1920px;height:1080px;overflow:hidden}
+body{font-family:Inter,"DejaVu Sans",sans-serif;color:#fff;
+ background:radial-gradient(1200px 800px at 18% 40%,#15295a 0%,#0c1a3d 45%,#070f26 100%);position:relative}
+.izgara{position:absolute;inset:0;background-image:
+ linear-gradient(rgba(120,160,255,.045) 1px,transparent 1px),
+ linear-gradient(90deg,rgba(120,160,255,.045) 1px,transparent 1px);background-size:48px 48px}
+.arka{position:absolute;left:250px;top:560px;width:560px;opacity:.10;filter:blur(.2px)}
+.logo{position:absolute;left:84px;top:46px;display:flex;align-items:center;gap:20px}
+.logo img{width:92px;height:92px;border-radius:20px;box-shadow:0 10px 30px rgba(0,0,0,.45)}
+.logo .ad{font-size:42px;font-weight:800;letter-spacing:.3px;line-height:1}
+.logo .by{font-size:15px;color:#9fb3d8;letter-spacing:1.5px;margin-top:6px}
+.ust{position:absolute;left:88px;top:376px;font-size:19px;font-weight:700;color:#f5c518;letter-spacing:1.2px;display:flex;align-items:center;gap:12px}
+.ust:before{content:"";width:12px;height:12px;border-radius:50%;background:#27c96b;box-shadow:0 0 10px #27c96b}
+h1{position:absolute;left:84px;top:420px;font-size:66px;line-height:1.04;font-weight:900;letter-spacing:-1.5px}
+h1 .sari{background:linear-gradient(90deg,#ffd84d,#f5a818);-webkit-background-clip:text;color:transparent}
+.vurgu{position:absolute;left:86px;top:640px;font-size:38px;font-weight:800;letter-spacing:-.4px;background:linear-gradient(90deg,#ffd84d,#f5a818);-webkit-background-clip:text;color:transparent}
+.acik{position:absolute;left:88px;top:722px;width:680px;font-size:22px;line-height:1.45;color:#c9d5ea;font-weight:400}
+.kart{position:absolute;border-radius:10px;overflow:hidden;background:#fff;
+ box-shadow:0 30px 60px rgba(0,0,0,.55),0 0 0 1px rgba(255,255,255,.25)}
+.kart img{display:block;width:100%}
+.hap{position:absolute;padding:8px 16px;border:2px solid #fff;border-radius:22px;background:#081330;
+ font-size:17px;font-weight:700;letter-spacing:1px;white-space:nowrap}
+.tani{position:absolute;left:1352px;top:470px;width:520px;height:452px;border-radius:18px;
+ background:linear-gradient(160deg,#10245a,#0b1a42);border:2px solid #3c5cae;padding:24px 24px;
+ box-shadow:0 30px 60px rgba(0,0,0,.55)}
+.tani h2{font-size:38px;font-weight:900;color:#f5c518;display:flex;align-items:baseline;gap:12px}
+.tani h2 small{font-size:21px;color:#dfe7f7;font-weight:500}
+.tani p.alt{font-size:16.5px;color:#c9d5ea;margin:6px 0 14px}
+.kutu{border:2px solid #4f6fc2;border-radius:10px;padding:9px 14px;margin-bottom:10px;background:rgba(10,20,55,.55);width:100%}
+.kutu.y{border-color:#27c96b}.kutu.t{border-color:#e39a2f}
+.kutu .k{font-size:14px;color:#9fb3d8;font-weight:600}
+.kutu .b{font-size:19px;font-weight:800;margin-top:2px}
+.kutu .g{font-size:13.5px;color:#c9d5ea;margin-top:1px}
+.serit{position:absolute;left:24px;right:24px;bottom:18px;background:#f5c518;color:#101828;border-radius:8px;
+ padding:11px 14px;font-size:15px;font-weight:800;white-space:nowrap}
+.somun{position:absolute;right:26px;top:22px;width:64px;height:64px;opacity:.9}
+.alt{position:absolute;left:86px;right:60px;top:952px;display:grid;grid-template-columns:1fr 1fr 1fr 1fr 1.2fr;gap:40px}
+.alt .ba{font-size:15px;font-weight:700;letter-spacing:1.3px;color:#9fb3d8;margin-bottom:10px}
+.alt .me{font-size:17px;line-height:1.42;color:#e6ecf7}
+.alt .son .me{color:#e6ecf7}
+.alt .son .kk{font-size:14.5px;color:#9fb3d8;margin-top:6px}
+.cizgi{position:absolute;left:86px;right:60px;top:925px;height:1px;background:linear-gradient(90deg,rgba(255,255,255,.18),rgba(255,255,255,.04))}
+</style></head><body>
+<div class="izgara"></div>
+<img class="arka" src="rollen_mavi.png">
+
+<div class="logo"><img src="logo.png"><div><div class="ad">Pi3D</div><div class="by">BY PIVISION</div></div></div>
+
+<div class="ust">STEP'TEN TEZGÂHA · TEK ZİNCİRDE</div>
+<h1>3D Modelden<br>DXF, BOM, Açınım,<br>PDF, Lazer Kesim.</h1>
+<div class="vurgu">Analiz Ölçüm İşinizi Hızlandırır.</div>
+<div class="acik">Modeli okur, parçaları ayırır, ölçer; kaynağı, cıvatayı, pulu kendisi tanır. Emin olmadığı ölçüyü resme yazmaz — ölçer, tahmin etmez.</div>
+
+<!-- sağ: ekranlar -->
+<div class="kart" style="left:822px;top:128px;width:650px;transform:perspective(1600px) rotateY(-9deg) rotateZ(-1.2deg)"><img src="ekran_2_bom.png"></div>
+<div class="hap" style="left:840px;top:88px">BOM · MONTAJ AĞACI</div>
+
+<div class="kart" style="left:1370px;top:150px;width:505px;transform:perspective(1600px) rotateY(-10deg) rotateZ(1deg)"><img src="ekran_6_acinim.png"></div>
+<div class="hap" style="left:1430px;top:110px">AÇINIM · ABKANT / ROLLFORM</div>
+
+<div class="kart" style="left:838px;top:560px;width:500px;transform:perspective(1600px) rotateY(-7deg) rotateZ(-.8deg)"><img src="rollen_kagit.png"></div>
+<div class="kart" style="left:870px;top:846px;width:460px;transform:perspective(1600px) rotateY(-7deg) rotateZ(-.8deg);box-shadow:0 20px 40px rgba(0,0,0,.5)"><img src="acinim_kagit.png"></div>
+<div class="hap" style="left:850px;top:520px">ÖLÇÜLÜ DETAY RESMİ · DATUM A/B/C</div>
+
+<div class="tani">
+ <svg class="somun" viewBox="0 0 100 100"><polygon points="50,4 90,27 90,73 50,96 10,73 10,27" fill="none" stroke="#f5c518" stroke-width="5"/><circle cx="50" cy="50" r="17" fill="none" stroke="#f5c518" stroke-width="5"/></svg>
+ <h2>Pi3D <small>tanıma</small></h2>
+ <p class="alt">Adından, montaj ağacından, geometrisinden tanır —<br>parça mı, standart mı, kaynak dikişi mi.</p>
+ <div class="kutu"><div class="k">Adsız katı · COMPOUND</div><div class="b">→ somun</div><div class="g">6 yüz 60° aralıklı · anahtar ağzı 13 · delik Ø6,9</div></div>
+ <div class="kutu y"><div class="k">M10 KAYNAK SOMUNU</div><div class="b">→ standart eleman, dikiş değil</div><div class="g">BOM'a adediyle girer</div></div>
+ <div class="kutu t"><div class="k">K0 CIVATA LAMASI</div><div class="b">→ üretim parçası</div><div class="g">asıl isim sondadır: cıvata lamaSI bir lamadır</div></div>
+ <div class="serit">Emin değilse karar vermez — 214 kararda 1 yanlış (%0,47).</div>
+</div>
+
+<div class="cizgi"></div>
+<div class="alt">
+ <div><div class="ba">ÖLÇER</div><div class="me">1992 konum ölçüsü 3D modelle doğrulandı: 0 hata. Emin olmadığı ölçüyü yazmaz.</div></div>
+ <div><div class="ba">AÇINIM</div><div class="me">Bükümlü sacı kendisi bulur; kesim konturu, büküm tablosu, abkant / rollform kararı.</div></div>
+ <div><div class="ba">TANIR</div><div class="me">Kaynak dikişi, cıvata, somun, pul: adından, ağaçtan, geometrisinden.</div></div>
+ <div><div class="ba">KALDIĞI YERDEN</div><div class="me">Güncel çizime dokunmaz, yalnız eksiği üretir: 4 dk yerine 6 sn.</div></div>
+ <div class="son"><div class="me">3D modelden teknik resim sistemi</div><div class="kk">STEP · BOM · Detay · Açınım · Pafta · PDF · Lazer</div></div>
+</div>
+</body></html>
