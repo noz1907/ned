@@ -185,12 +185,24 @@ STANDART = [
     (r"(?:somun|nut|mutter)[\s_-]*per[cç]in|per[cç]in[\s_-]*somun|rivet[\s_-]*nut"
      r"|rivnut|nutsert|(?:blind|ein)?niet[\s_-]*mutter|pop[\s_-]*nut"
      r"|insert[\s_-]*nut|threaded[\s_-]*insert", "perçin somun"),
+    # "Sicherungsscheibe" (E-segman) ve "Scheibenfeder" (yarım ay kama)
+    # pul kalıbındaki "scheibe"yi içerir: pulun ÖNÜNDE durmalılar.
+    (r"sicherungs?scheibe|sicherungsring|\be[\s_-]?segman|\be[\s_-]?clip|snap[\s_-]*ring"
+     r"|retaining[\s_-]*ring", "segman"),
+    (r"\bkama\b|passfeder|scheibenfeder|feather[\s_-]*key|parallel[\s_-]*key|woodruff",
+     "kama"),
+    (r"gres[\s_-]*nipel|gres[oö]rl[uü]k|grease[\s_-]*(?:nipple|fitting)|schmiernippel",
+     "gres nipeli"),
+    (r"yayl[ıi][\s_-]*pim|spannstift|spiralstift|spring[\s_-]*pin|roll[\s_-]*pin"
+     r"|kegelstift|konik[\s_-]*pim|taper[\s_-]*pin|zylinderstift|\bdowel|kopilya"
+     r"|\bsplint|cotter[\s_-]*pin", "pim"),
     (r"civata|cıvata|bolt|screw|schraube", "civata"),
     (r"\bsomun(?:u|lar[ıi]?)?\b|\bnut\b|mutter", "somun"),
     (r"\bpul(?:u|lar[ıi]?)?\b|rondela|washer|scheibe|unterlegscheibe", "pul"),
     (r"percin|perçin|rivet|niet", "perçin"),
     (r"\bpim\b|bolzen|\bpin\b|\bmil\b", "pim"),
-    (r"\byay\b|\bfeder\b|spring|druckfeder|zugfeder", "yay"),
+    (r"\byay\b|\bfeder\b|spring|druckfeder|zugfeder|drehfeder|schenkelfeder|tellerfeder"
+     r"|belleville", "yay"),
     (r"rulman|lager|bearing|kugellager", "rulman"),
     (r"segman|sicherung|circlip|seeger", "segman"),
     (r"saplama|stud|gewindestift", "saplama"),
@@ -1027,8 +1039,10 @@ def kenar_tani(p, duz_tol=0.02, yay_tol=0.05):
 
 
 def _sayi(v):
-    """Ölçü yazısı: tam sayıya yakınsa tam sayı, değilse bir ondalık."""
-    return f"{round(v):g}" if abs(v - round(v)) < 0.05 else f"{v:.1f}"
+    """Ölçü yazısı: tam sayıya yakınsa tam sayı, değilse bir ondalık.
+    Ondalık VİRGÜL; teknik resimde (ISO 129) ölçü rakamına binlik
+    ayracı konmaz: 1513,8."""
+    return f"{round(v):g}" if abs(v - round(v)) < 0.05 else f"{v:.1f}".replace(".", ",")
 
 
 def capraz_kenarlar(kenar, en_az_uz=3.0, aci_pay=1.5, komsu_pay=0.15,
@@ -1318,6 +1332,7 @@ def olcu_stili(doc, h):
     st.dxf.dimgap = h * 0.35
     st.dxf.dimdec = 1              # mm, bir ondalık
     st.dxf.dimzin = 8              # sondaki sıfırları yazma
+    st.dxf.dimdsep = 44            # ondalık ayracı VİRGÜL (Türkçe / ISO)
     st.dxf.dimtad = 1              # yazı ölçü çizgisinin üstünde
     st.dxf.dimtih = 0
     st.dxf.dimtoh = 0
@@ -1630,7 +1645,7 @@ def cap_olculeri(msp, o, yer, kaydir, gkutu, h, ust, en_cok_grup=8):
             x, y = max(noktalar, key=lambda q: (q[0] - mx) ** 2 + (q[1] - my) ** 2)
             onek = f"{d['adet']}x " if d["adet"] > 1 else ""
             metin = (f"{onek}%%c{d['cap_mm']:g}" if tip == "cap"
-                     else f"{onek}R{d['yaricap_mm']:g}")
+                     else f"{onek}R{d['yaricap_mm']:g}").replace(".", ",")
             yw, yy = len(metin) * 0.72 * h, 1.3 * h       # yazı kutusu
             adaylar, yazi_yeri = [], None
             for uz_k in range(7):                          # uzaklık kademeleri
@@ -5208,9 +5223,11 @@ def dxf_acilim(r, k, yol, P=None):
         _yaz(msp, "BUKUM  ACI      IC R   PAY      ALT KENARDAN", x, y, h)
     y -= 2.0 * h
     for i, b in enumerate(r["bukumler"], 1):
-        _yaz(msp, f"B{i:<5d} {b['aci_derece']:>6.1f}  {b['r_ic']:>6.2f} "
-                  f"{b['pay_mm']:>6.2f}  {b['acinimda_bas_mm']:>8.2f} - "
-                  f"{b['acinimda_son_mm']:.2f}", x, y, h)
+        _yaz(msp, f"B{i:<5d} {XL.tr(b['aci_derece'], 1, False):>6s}  "
+                  f"{XL.tr(b['r_ic'], 2, False):>6s} "
+                  f"{XL.tr(b['pay_mm'], 2, False):>6s}  "
+                  f"{XL.tr(b['acinimda_bas_mm'], 2, False):>8s} - "
+                  f"{XL.tr(b['acinimda_son_mm'], 2, False)}", x, y, h)
         y -= 1.8 * h
     if len(r["bukumler"]) <= 4:
         # Sol tarafa, genel genişlik ölçüsünün dışına diz: sağda büküm
@@ -5811,11 +5828,12 @@ def dxf_montaj(katilar, yol, ad, P, bom=None):
     sag = max(x + gorunus_olcusu(gd, L, W, H)[0] for gd, (x, _y) in yer.items())
     sat_h = 2.2 * h
     satir = [(f"MONTAJ   {ad}", 1.5 * h),
-             (f"gabari BOY x EN x YUKSEKLIK : {L:.2f} x {W:.2f} x {H:.2f} mm", 1.1 * h),
+             (f"gabari BOY x EN x YUKSEKLIK : {XL.tr(L, 2, False)} x {XL.tr(W, 2, False)} x "
+              f"{XL.tr(H, 2, False)} mm", 1.1 * h),
              (f"kati sayisi: {len(katilar)}", 1.1 * h)]
     if bom:
         agir = sum((r.get("toplam_kg") or 0.0) for r in bom)
-        satir.append((f"toplam kutle: {agir:.3f} kg   poz sayisi: {len(bom)}", 1.1 * h))
+        satir.append((f"toplam kutle: {XL.tr(agir, 3, False)} kg   poz sayisi: {len(bom)}", 1.1 * h))
     tepe = max(ust.values()) + 2.5 * h + len(satir) * sat_h
     onceki = {e.dxf.handle for e in msp}
     _tablo(msp, satir, sol, tepe, h, sat_h)
@@ -5840,8 +5858,8 @@ BOM_BASLIK = ("poz", "kod", "tanim", "adet", "malzeme", "olcu", "kg/adet", "topl
 
 
 def _bom_metin(r):
-    ka = f"{r['kg_adet']:.3f}" if r.get("kg_adet") else "-"
-    tk = f"{r['toplam_kg']:.3f}" if r.get("toplam_kg") else "-"
+    ka = XL.tr(r["kg_adet"], 3, False) if r.get("kg_adet") else "-"
+    tk = XL.tr(r["toplam_kg"], 3, False) if r.get("toplam_kg") else "-"
     return (f"{str(r['poz']):>3s} {r['kod'][:22]:<22s} {r['ad'][:30]:<30s} "
             f"{r['adet']:>4d} {(r.get('malzeme_ad') or '-')[:22]:<22s} "
             f"{(r.get('olcu') or '-'):<22s} {ka:>9s} {tk:>9s}")
@@ -6904,8 +6922,8 @@ def calistir(step, on, kayit, komp, P, asama=(1, 2, 3), esl=None, agac=None,
         sat["yogunluk_g_cm3"] = round(yog * 1e6, 3)
         sat["malzeme_kaynak"] = {"data": "data'dan", "secim": "secim",
                                  "genel": "varsayilan"}[kaynak]
-        # Türkçe yazım (ondalık virgül): "1513,76 x 1281,19 x 1"
-        sat["olcu"] = " x ".join(f"{float(v):.2f}".rstrip("0").rstrip(".").replace(".", ",")
+        # Türkçe yazım (ondalık virgül, binlik nokta): "1.513,76 x 1.281,19 x 1"
+        sat["olcu"] = " x ".join(XL.tr(float(v), 2)
                                  for v in (o["boy_mm"], o["en_mm"], o["kalinlik_mm"]))
         if k.get("profil"):
             sat["profil"] = k["profil"]

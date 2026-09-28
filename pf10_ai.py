@@ -27,6 +27,8 @@ from __future__ import annotations
 import base64
 import json
 
+import pf9_excel as XL
+
 MODEL = "claude-opus-5"
 YAZI_PARTI = 60                     # 1. turda bir istekte en çok parça
 GORUNTU_PARTI = 20                  # 2. turda bir istekte en çok resim
@@ -264,7 +266,7 @@ def kontrol_et(parcalar, baglam=None, goruntu=None, oncelik=(), anahtar=None,
     sayac["usd"] = maliyet(sayac, model)
     sayac["girdi"] = int(sayac["girdi"])
     def bin_(v):
-        return f"{v:,}".replace(",", ".")
+        return XL.tr(v)
     log(f"AI: {sayac['istek']} istek, {sayac['resim']} resim, {bin_(sayac['girdi'])} girdi "
         f"(önbellek fiyatıyla) + {bin_(sayac['cikti'])} çıktı token ≈ "
         f"${sayac['usd']:.2f} ({model})")

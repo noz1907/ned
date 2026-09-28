@@ -101,6 +101,25 @@ try:
                         ("kg_adet", "15.2243", 15.2243), ("ad", "3,5", "3,5")):
         dogru(f"{sut}={v!r}", XL.sayiya(sut, v) == bek, repr(XL.sayiya(sut, v)))
 
+    print("\n-- Türkçe yazım: ondalık virgül, binlik nokta")
+    for v, nd, bek in ((1513.76, None, "1.513,76"), (4.2, None, "4,2"),
+                       (-1234.5, None, "-1.234,5"), (1234567.891, None, "1.234.567,891"),
+                       (0.5, 3, "0,5"), (1234, None, "1.234"), (0.00001, None, "0,00001")):
+        dogru(f"tr({v!r}) = {bek}", XL.tr(v, nd) == bek, XL.tr(v, nd))
+    dogru("sabit basamak 1.513,760", XL.tr(1513.76, 3, sade=False) == "1.513,760")
+    for t, bek in (("1.513,76", 1513.76), ("3.027,520", 3027.52), ("15,22", 15.22),
+                   ("1.234.567", 1234567), ("152.243", 152.243), ("12", 12),
+                   ("abc", None), ("1,2,3", None)):
+        dogru(f"oku {t!r} -> {bek}", XL.sayi_oku(t) == bek, repr(XL.sayi_oku(t)))
+    dogru("CSV binlik nokta (1.513,76)", XL.tr_sayi(1513.76) == "1.513,76")
+    dogru("CSV tam değer binliksiz (eski noktalı ondalıkla karışmaz)",
+          XL.tr_sayi(1234.0) == "1234" and XL.sayi_oku(XL.tr_sayi(1234.0)) == 1234)
+    for v in (1513.76, 0.0123, 98765.4321, 7.85, 152.243):
+        dogru(f"gidiş-dönüş {v}", XL.sayi_oku(XL.tr_sayi(v)) == v)
+    st = z.read("xl/styles.xml").decode()
+    dogru("xlsx tam sayı biçimi binlikli (numFmtId 3 = #,##0)", 'numFmtId="3"' in st)
+    dogru("xlsx ondalık biçimi binlikli (#,##0.000)", "#,##0.000" in st)
+
     print("\n-- açık (kilitli) dosya")
     kilit = os.path.join(kok, "kilitli.xlsx")
     os.makedirs(kilit)                    # os.replace dizinin üstüne yazamaz

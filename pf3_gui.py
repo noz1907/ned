@@ -22,6 +22,7 @@ from __future__ import annotations
 import base64, json, math, os, queue, sys, threading, time, traceback
 import tkinter as tk
 import pf7_is as IS
+import pf9_excel as XL
 from tkinter import ttk, filedialog, messagebox
 
 # --------------------------------------------------------------- logolar
@@ -483,9 +484,10 @@ class Uygulama(ttk.Frame):
         p.pack(side="right", fill="y", padx=(6, 0))
         k = getattr(self, "kucuk", False)
         self.v_simdi = tk.StringVar(value="şu an çalışan iş yok")
-        tk.Label(p, textvariable=self.v_simdi, justify="left", anchor="w",
-                 wraplength=200 if k else 250, fg="#0b2340", font=("Segoe UI", 9, "bold")
-                 ).pack(fill="x", pady=(0, 4))
+        self.simdi_etiket = tk.Label(p, textvariable=self.v_simdi, justify="left",
+                                     anchor="w", wraplength=200 if k else 250,
+                                     fg="#0b2340", font=("Segoe UI", 9, "bold"))
+        self.simdi_etiket.pack(fill="x", pady=(0, 4))
         cer = ttk.Frame(p); cer.pack(fill="both", expand=True)
         self.sure_agac = ttk.Treeview(cer, columns=("islem", "sure"),
                                       show="headings", height=6 if k else 16,
@@ -1671,7 +1673,7 @@ class Uygulama(ttk.Frame):
                         "antet_ek": {
                             "malzeme": (sat.get("malzeme_ad") or "").split(" (")[0]
                                        if sat.get("malzeme_ad") else "",
-                            "kutle": (f"{sat['kg_adet']:.3f} kg".replace(".", ",")
+                            "kutle": (XL.tr(sat['kg_adet'], 3, sade=False) + " kg"
                                       if sat.get("kg_adet") else "")}}
         r = getattr(self, "acilim_sonuc", {}).get(ad)
         if r:
@@ -1874,7 +1876,7 @@ class Uygulama(ttk.Frame):
             # döngü aşağıdaki finally ile devam etsin.
             iz = traceback.format_exc()
             try:
-                self._bitir()
+                self._bitir("hata")
                 self.v_durum.set("iç hata – ayrıntı günlükte")
                 self._yaz("İÇ HATA (arayüz):\n" + iz)
                 messagebox.showerror(
@@ -1890,6 +1892,11 @@ class Uygulama(ttk.Frame):
         """durum: durum çubuğundaki yazı; islem: süre panelindeki ad."""
         self.calisiyor = True; self.iptal_istendi = False
         self.is_basi = time.time()
+        try:
+            self.simdi_etiket.configure(fg="#0b2340", bg=self.simdi_etiket.master
+                                        .winfo_toplevel().cget("bg"))
+        except Exception:
+            pass
         self.is_adi = durum
         self.is_islem = islem or durum.rstrip("… .")
         self._sayaci_isle()
@@ -1899,6 +1906,56 @@ class Uygulama(ttk.Frame):
                 b.configure(state="disabled")
         self.b_iptal.configure(state="normal")
         self.v_durum.set(durum)
+
+    # İş bitince bir SONRAKİ adım (işlem adının başına göre)
+    SONRAKI = (("Model okuma", "BOM ÇIKAR"),
+               ("BOM çıkarma", "örnek resim ya da TÜMÜNÜ ÜRET"),
+               ("Örnek resim", "resmi onayla, sonra TÜMÜNÜ ÜRET"),
+               ("Tüm çizimler", "açınım / lazer / pafta ya da ZIP"),
+               ("Eksik çizimler", "açınım / lazer / pafta ya da ZIP"),
+               ("Açınım", "lazer resmi"),
+               ("Lazer resmi", "pafta planı"),
+               ("Pafta planı", "pafta"),
+               ("Pafta", "PDF basımı"),
+               ("PDF basımı", "ZIP"),
+               ("AI malzeme", "BOM'u gözden geçir, TÜMÜNÜ ÜRET"))
+
+    def _bitti_bildir(self, ad, g, sonuc):
+        """İş bitti: kullanıcı bir sonraki adıma geçebileceğini AÇIKÇA
+        görsün - yeşil TAMAMLANDI (panel + durum çubuğu + günlük + ses).
+        Hata / iptal kırmızı / turuncu."""
+        sure = IS.sure_metni(g)
+        if sonuc == "tamam":
+            sonraki = next((n for a, n in self.SONRAKI if ad.startswith(a)), "")
+            yazi = (f"✔ TAMAMLANDI: {ad}\n({sure})"
+                    + (f"\nsonraki adım: {sonraki}" if sonraki else ""))
+            renk, zemin, bas = "#0a6b1f", "#dff3e3", "✔ TAMAMLANDI"
+        elif sonuc == "iptal":
+            yazi, renk, zemin, bas = (f"■ İPTAL EDİLDİ: {ad}\n({sure})", "#8a4b00",
+                                      "#fbeed9", "■ İPTAL EDİLDİ")
+        else:
+            yazi, renk, zemin, bas = (f"✖ HATA: {ad}\n({sure}) – ayrıntı günlükte",
+                                      "#a30f0f", "#f8dede", "✖ HATA")
+        self.v_simdi.set(yazi)
+        try:
+            self.simdi_etiket.configure(fg=renk, bg=zemin)
+        except Exception:
+            pass
+        self._yaz(f"===== {bas}: {ad} ({sure}) =====")
+        try:
+            self.simdi_etiket.bell()
+        except Exception:
+            pass
+
+        # durum çubuğunu çağıran iş kendi özetiyle hemen sonra yazar: onun
+        # başına eklenir
+        def durum():
+            if self.calisiyor:
+                return
+            v = self.v_durum.get()
+            if not v.startswith(bas):
+                self.v_durum.set(f"{bas} – {v}" if v and v != "hata" else bas)
+        self.after(60, durum)
 
     def _sayaci_isle(self):
         """Çalışan işin yanında geçen süreyi say. Program takıldı mı yoksa
@@ -1933,8 +1990,7 @@ class Uygulama(ttk.Frame):
             self._sure_satiri(ad, g, sonuc)
             self.oturum_sure += g
             self._toplam_yaz()
-            self.v_simdi.set(f"son iş: {ad} – {IS.sure_metni(g)}"
-                             + ("" if sonuc == "tamam" else f" ({sonuc})"))
+            self._bitti_bildir(ad, g, sonuc)
             # Çıktı klasörü henüz yoksa (ilk iş genelde model okumadır)
             # süre bekletilir, klasör oluşunca yazılır: kaybolmasın.
             self._bekleyen_islem = getattr(self, "_bekleyen_islem", [])
@@ -2237,9 +2293,8 @@ class Uygulama(ttk.Frame):
             with open(y, encoding="utf-8-sig", newline="") as f:
                 for r in csv.DictReader(f, delimiter=";"):
                     try:
-                        r["kg_adet"] = float(str(r.get("kg_adet") or "")
-                                             .replace(",", ".")) or None
-                    except ValueError:
+                        r["kg_adet"] = float(XL.sayi_oku(r.get("kg_adet"))) or None
+                    except (TypeError, ValueError):
                         r["kg_adet"] = None
                     self.bom_kimlik.append(r)
         except Exception as ex:

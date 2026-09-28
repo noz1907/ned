@@ -37,6 +37,26 @@ BU SÜRÜMDE NE VAR
   ACINIM.xlsx, LAZER.xlsx - rakamlar SAYI (Türkçe Excel'de 15.2243 kg
   artık 152.243 görünmez), poz ve kod yazı. CSV'ler ondalık virgülle.
 
+  TÜRKÇE SAYI: ondalık virgül, binlik nokta (1.513,76) - CSV, rapor,
+  ekran, pafta tabloları; çizim ölçü rakamı 1513,8 (ISO 129: ölçüde
+  binlik ayracı yok). Eski noktalı CSV'ler yine doğru okunur.
+
+  İŞ BİTİNCE yeşil "✔ TAMAMLANDI" ve bir sonraki adım (panel, durum
+  çubuğu, günlük, ses); hata kırmızı, iptal turuncu.
+
+  YAY adına bakılmadan bulunur: SPİR yapısı ölçülür (tel kesiti her
+  90°'de çeyrek adım kayar). Basma, konik basma, çekme (halka /
+  kanca), burulma (bacaklı) yayı; tel, dış çap, adım, sarım, sağ / sol
+  helis. 5 gerçek modelde 4 yay (adsız COMPOUND burulma yayı dahil)
+  doğru, yay olmayan parçaya yay kararı yok.
+
+  STANDART AİLELER (pf13_aile) adına bakılmadan: mil / delik segmanı
+  (DIN 471 / 472), E-segman (DIN 6799), yaylı pim (ISO 8752 / 13337),
+  paralel kama (DIN 6885 A; B yalnız aday), konik pim (ISO 2339), gres
+  nipeli (DIN 71412). Segmanlar önceden "pul" sanılıyordu. Adlarla da:
+  Passfeder, Scheibenfeder, Sicherungsscheibe, Spannstift, Kegelstift,
+  Schmiernippel, gresörlük, Schenkelfeder...
+
   PROFİLLER adına bakılmadan bulunur: kutu, boru, köşebent, U, C, I,
   T, Z, lama, mil, alüminyum ekstrüzyon; kesit ölçüsü ve boy.
   PROFIL.xlsx: kesim listesi + 6 m çubuk özeti. Profil biçimli

@@ -337,6 +337,14 @@ renkte görünür. Çalışan işin geçen süresi ve — ilerleme biliniyorsa �
 **ölçülen hıza göre kalan süre** üstte yazar (tahmin değil: yapılan iş /
 geçen süre). Süreler `pi3d_is.json`'a da yazılır.
 
+**İş bitince** panelde yeşil zeminle **✔ TAMAMLANDI: <iş>** ve bir sonraki
+adım yazar (*BOM çıkarma* bitti → *sonraki adım: örnek resim ya da TÜMÜNÜ
+ÜRET*; *Açınım* bitti → *lazer resmi*…); durum çubuğunun başına da
+✔ TAMAMLANDI eklenir, günlüğe `===== ✔ TAMAMLANDI … =====` satırı düşer
+ve kısa bir ses çalar. Hata olursa kırmızı **✖ HATA**, iptalde turuncu
+**■ İPTAL EDİLDİ** yazar. Yeşil yazıyı görmeden bir sonraki adıma
+geçmeyin.
+
 ### Adım 1 — VERİ
 
 * **Model dosyası:** *Gözat…* ile `.stp` / `.step`, `.igs` / `.iges` ya da
@@ -406,7 +414,29 @@ olduğunu (2: yarık, 4: kare / çarpı, 6: altıgen / torx, 8+: diş, tırtıl)
 | **delik + ince halka** | pul — dış dişli, iç dişli, yaylı (grover), konik (belleville / havşa); düz ve kare pul yalnız ADAY (yapıca delikli plakayla aynı) |
 | **başsız gövde + uçta lokma** | setskur |
 | **yalnız küre** | bilye |
+| **spir**: eksene paralel ışın tel kesitini düzenli aralıkla, eşit kalınlıkta keser; ışın eksen çevresinde 90° dönünce kesitler **çeyrek adım** kayar (ya da ince dilimlerde telin açısı kotla düzgün döner) | **yay** — uçlar eksen boyunca taşıyorsa (halka / kanca) *çekme yayı*, yana taşıyorsa (bacak) *burulma yayı*, uçsuz ve açık sarımsa *basma yayı*, iki uç çapı farklıysa *konik basma yayı*; tel, dış çap, adım, sarım sayısı ve sağ / sol helis yazılır |
+| tekrarlanan eşit katman, dönmeden aynı (disk / yaprak yay paketi, spiral yay) | katmanlı yay — yalnız ADAY |
+| **düz açık halka** + boşluğa simetrik iki kulak deliği | **segman**: eş merkezli kenar içteyse mil segmanı (DIN 471), dıştaysa delik segmanı (DIN 472) |
+| düz açık halka, deliksiz, ağız 60 – 180° | E-segman (DIN 6799) — büyük ya da kalınlığı seri dışıysa ADAY (C biçimli sac olabilir) |
+| **ince cidarlı tüp + boydan boya yarık** | yaylı pim: et/çap ≥ 0,15 ağır tip (ISO 8752), altı hafif tip (ISO 13337) |
+| iki eş **yarım silindir uç** + düz yanlar, b × h DIN 6885 tablosunda | paralel kama (DIN 6885 A); düz uçlu kutu (B tipi) lama ile aynı biçim — yalnız ADAY |
+| baskın **koni** yüzü, koniklik **1:50** (yarım açı 0,573°) | konik pim (ISO 2339 / DIN 1) |
+| **küre baş + altıköşe** (anahtar ağzı 7 / 9 / 11) + eksenel ince delik | gres nipeli (DIN 71412 A) |
 | aynı çaplı bükülmüş çubuk | U / J cıvata, kulp, kanca — ADAY |
+
+Yay, segman, pim, kama ve nipel ayrı modüllerdedir (`pf11_yapi.yay`,
+`pf13_aile`). Yay ölçümü helis yüzeyde OCC ışını yerine **üçgen ağ**
+üzerinde yapılır (ışın başına ~0,2 ms): yay 1 – 4 saniyede tanınır. İçi
+boş, yüzeyi çoğunlukla düzlem olmayan parçada yay ÖNCE denenir; eskiden
+aynı parça dönel ölçümlerde dakikalarca bekliyordu.
+
+**Ölçüldü (yay)** — 5 gerçek modelin 1.139 parçasında: kaynaklı kasa ve
+televre modelindeki adsız `COMPOUND` bacaklı **burulma yayı** (~10 sarım,
+dış Ø3,2), `Druckfeder 1 x 6,5` basma yayı (tel ~Ø0,8, dış Ø6,5),
+`Druckfeder-Rungenkeil` basma yayı (dış Ø14,5, ~19 sarım) — dördü de
+doğru; yay olmayan hiçbir parçaya yay kararı verilmedi. Kör perçin ve iki
+büyük sac (oluklu yüzey) önce "katmanlı yay?" adayı çıkıyordu; en az 5
+katman ve katman aralığı ≤ 4 × kalınlık şartıyla ayıklandı.
 
 Öğeler tanıdık bir bağlantı elemanı oranındaysa karar verilir; oran
 alışılmadıksa yalnız kontrol listesine aday olarak girer. Sentetik
@@ -1700,7 +1730,16 @@ göre yorumlar: Türkçe Excel'de nokta *binlik* ayırıcıdır, CSV'deki
 türü dosyada yazılıdır: kütle SAYI, poz ve kod YAZI; hiçbir ayar onu
 değiştiremez. Başlık satırı dondurulmuş ve süzgeçlidir; kütle 3 ondalıklı.
 
-CSV'ler de artık Türkçe Excel'e göre yazılır (ondalık **virgül**, sütun `;`).
+CSV'ler de artık Türkçe Excel'e göre yazılır: ondalık **virgül**, binlik
+**nokta** (`1.513,76`), sütun `;`. Tam değerli sayı binliksiz kalır (`1234`):
+eski sürümlerin noktalı ondalığı (`152.243` = 152,243) ile karışmasın diye;
+program eski CSV'yi okurken de bu kuralı kullanır (virgül varsa Türkçe
+yazım, virgülsüz tek nokta eski ondalık). .xlsx'te sayılar `#.##0,000`
+biçimindedir: Türkçe Excel binlik noktayı kendisi koyar. Rapor, pafta
+tablosu (BOM, büküm tablosu, gabari, toplam kütle), ekrandaki ölçü ve kg
+yazıları da aynı Türkçe yazımdadır. Çizimdeki **ölçü rakamı** ondalık
+virgüllü, binliksiz yazılır (`1513,8`): teknik resimde (ISO 129) ölçü
+rakamına binlik ayracı konmaz.
 Başka bir programa aktarmak için CSV'yi, Excel için .xlsx'i kullanın.
 Excel'de açık olan bir .xlsx'in üstüne yazılamazsa yenisi `..._yeni.xlsx`
 adıyla yanına yazılır.

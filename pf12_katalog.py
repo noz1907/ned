@@ -14,7 +14,8 @@ paftasında küçültülür; en çok PAFTA_EN_COK pafta gider. Paftalar
 isteklerde önbelleklenir: ilk istek tam, sonrakiler onda bir fiyatına.
 
 Bu modül ayrıca kataloğa programın KENDİ çizdiği standart parça
-resimlerini koyabilir (ornek_uret): AI'a giden parça resimleriyle aynı
+resimlerini koyabilir (ornek_uret: cıvata, somun, pul, perçin, segman,
+pim, kama, nipel, yay): AI'a giden parça resimleriyle aynı
 biçimde oldukları için karşılaştırma tutarlıdır; telif sorunu yoktur.
 """
 from __future__ import annotations
@@ -147,6 +148,63 @@ def ornek_uret(klasor):
                         (ro if i % 2 == 0 else ri) * math.sin(math.pi * i / n))
                        for i in range(2 * n)], h, z)
 
+    def helis(R, adim, tur, d):
+        """Tel çapı d, orta yarıçap R, hatve adim: helis süpürme katı ve uçları."""
+        from OCP.BRepAdaptor import BRepAdaptor_CompCurve
+        from OCP.BRepBuilderAPI import BRepBuilderAPI_MakeEdge, BRepBuilderAPI_MakeWire
+        from OCP.BRepLib import BRepLib
+        from OCP.BRepOffsetAPI import BRepOffsetAPI_MakePipeShell
+        from OCP.Geom import Geom_CylindricalSurface
+        from OCP.Geom2d import Geom2d_Line
+        from OCP.gp import gp_Ax3, gp_Circ, gp_Dir2d, gp_Pnt2d
+        yuz = Geom_CylindricalSurface(gp_Ax3(gp_Pnt(0, 0, 0), gp_Dir(0, 0, 1)), R)
+        e = BRepBuilderAPI_MakeEdge(Geom2d_Line(gp_Pnt2d(0, 0), gp_Dir2d(2 * math.pi, adim)),
+                                    yuz, 0.0, tur * math.hypot(2 * math.pi, adim)).Edge()
+        BRepLib.BuildCurves3d_s(e)
+        w = BRepBuilderAPI_MakeWire(e).Wire()
+        c = BRepAdaptor_CompCurve(w)
+        p0, v0, p1, v1 = gp_Pnt(), gp_Vec(), gp_Pnt(), gp_Vec()
+        c.D1(c.FirstParameter(), p0, v0)
+        c.D1(c.LastParameter(), p1, v1)
+        ps = BRepOffsetAPI_MakePipeShell(w)
+        ps.SetMode(gp_Dir(0, 0, 1))
+        ps.Add(BRepBuilderAPI_MakeWire(BRepBuilderAPI_MakeEdge(
+            gp_Circ(gp_Ax2(p0, gp_Dir(v0)), d / 2)).Edge()).Wire())
+        ps.Build()
+        ps.MakeSolid()
+        return ps.Shape(), p0, p1
+
+    def cyl_xy(r, h, x, y, z=0):
+        return BRepPrimAPI_MakeCylinder(gp_Ax2(gp_Pnt(x, y, z), gp_Dir(0, 0, 1)), r, h).Shape()
+
+    def burulma():
+        sh, a, b = helis(6, 1.6, 6, 1.5)
+        bacak = fuse(BRepPrimAPI_MakeCylinder(gp_Ax2(a, gp_Dir(0, -1, 0)), 0.75, 18).Shape(),
+                     BRepPrimAPI_MakeCylinder(gp_Ax2(b, gp_Dir(0, -1, 0)), 0.75, 18).Shape())
+        return fuse(sh, bacak)
+
+    def segman():
+        ri, s_, e = 9.25, 1.2, 1.2
+        r = cut(BRepPrimAPI_MakeCylinder(gp_Ax2(gp_Pnt(-e, 0, 0), gp_Dir(0, 0, 1)),
+                                         ri + 2.6 - e, s_).Shape(), cyl(ri, s_))
+        r = cut(r, kutu(0, -1.8, 0, 20, 3.6, s_))
+        for sg in (1, -1):
+            r = fuse(r, cyl_xy(2, s_, ri + 1.8, sg * 3.8))
+            r = cut(r, cyl_xy(1, s_, ri + 1.8, sg * 3.8))
+        return cut(r, cyl(ri, s_))
+
+    def yayli_pim():
+        t = cut(cut(cyl(3, 30), cyl(1.8, 30)), kutu(-0.5, 0, 0, 1, 4, 30))
+        return t
+
+    def kama():
+        return fuse(fuse(kutu(-16, -4, 0, 32, 8, 7), cyl_xy(4, 7, -16, 0)), cyl_xy(4, 7, 16, 0))
+
+    def nipel():
+        g = fuse(fuse(cyl(4, 5.5), hexa(9, 5, 5.5)), cyl(2.3, 3, 10.5))
+        g = fuse(g, BRepPrimAPI_MakeSphere(gp_Pnt(0, 0, 14.2), 3.25).Shape())
+        return cut(g, BRepPrimAPI_MakeCylinder(gp_Ax2(gp_Pnt(0, 0, -1), gp_Dir(0, 0, 1)), 1, 20).Shape())
+
     saft = cyl(4, 40)
     kube = cut(BRepPrimAPI_MakeSphere(gp_Pnt(0, 0, 34), 10.4).Shape(), kutu(-20, -20, 14, 40, 40, 26))
     parcalar = {
@@ -177,6 +235,12 @@ def ornek_uret(klasor):
                                                       kutu(-7, -7, -7, 14, 14, 7)), cyl(3, 15, -15)),
         "pul-percin-pim/o-ring": BRepPrimAPI_MakeTorus(gp_Ax2(gp_Pnt(0, 0, 0), gp_Dir(0, 0, 1)),
                                                        8, 1.5).Shape(),
+        "pul-percin-pim/mil segmani DIN 471": segman(),
+        "pul-percin-pim/yayli pim ISO 8752": yayli_pim(),
+        "pul-percin-pim/paralel kama DIN 6885 A": kama(),
+        "pul-percin-pim/gres nipeli DIN 71412": nipel(),
+        "yay/basma yayi": helis(8, 5, 8, 1.6)[0],
+        "yay/burulma yayi (bacakli)": burulma(),
     }
     n = 0
     for ad, sh in parcalar.items():

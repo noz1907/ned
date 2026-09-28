@@ -42,6 +42,8 @@ from __future__ import annotations
 import math
 import re
 
+import pf9_excel as XL
+
 from OCP.BRepAdaptor import BRepAdaptor_Surface
 from OCP.BRepBndLib import BRepBndLib
 from OCP.BRepBuilderAPI import BRepBuilderAPI_Transform
@@ -193,21 +195,47 @@ def tani(sh, hacim=None):
 
     Sıra: yüz tipleri (_donel, temiz model) -> ışın ölçümü (_donel_isin:
     diş / tırtıl modelli) -> YAPISAL tanıma (pf11_yapi: gövde + baş +
-    lokma, delik + tutma yüzü...). Yapısal tanıma yalnız KESİN
+    lokma, delik + tutma yüzü...) -> YAY (pf11_yapi.yay: spir yapısı) ->
+    AİLELER (pf13_aile: segman, yaylı pim, kama, konik pim, gres nipeli).
+    Yapısal tanıma yalnız KESİN
     sonucunda karar verir; ayrıca cıvata / somun kararlarının tipini
     ayrıntılandırır ("altıköşe flanşlı başlı cıvata", "bombe başlı
     cıvata, imbus")."""
+    # YAY önce: içi boş, yüzeyi helis olan parçada öbür ölçümler (OCC
+    # ışını helis yüzde yavaştır) dakikalar sürer; yay ağ üzerinde ~2 sn.
+    try:
+        import pf11_yapi as Y
+        if max(_boyutlar(sh)) <= EN_BUYUK and Y.yay_olabilir(sh, hacim):
+            y = Y.yay(sh, hacim)
+            if y:
+                # kesin: spir (basma / çekme / burulma / konik yay); değilse
+                # katmanlı yay adayı: karar yok, aday işaretinde görünür
+                return (y[0], y[1], y[2]) if y[3] else None
+    except Exception:
+        pass
     try:
         r = _tani(sh, hacim)
     except Exception:
         return None
+    # standart AİLELER (pf13_aile): segman "pul" sanılmasın (açık halka +
+    # kulak deliği); karar çıkmayanda yaylı pim, kama, konik pim, nipel
+    if r is None or r[1] == "pul":
+        try:
+            import pf13_aile as A
+            a = A.aile_tani(sh)
+            if a and a[3]:
+                return (a[0], a[1], a[2])
+        except Exception:
+            pass
     try:
         import pf11_yapi as Y
-        if r is None and max(_boyutlar(sh)) <= YAPI_EN_BUYUK:
-            y = Y.yapisal_tani(sh)
-            if y and y[3] and y[0] == "standart":
-                return (y[0], y[1], y[2])
-        elif r[0] == "standart" and r[1] in ("civata", "somun"):
+        if r is None:
+            if max(_boyutlar(sh)) <= YAPI_EN_BUYUK:
+                y = Y.yapisal_tani(sh)
+                if y and y[3] and y[0] == "standart":
+                    return (y[0], y[1], y[2])
+            return None
+        if r[0] == "standart" and r[1] in ("civata", "somun"):
             y = Y.yapisal_tani(sh)
             if y and y[3] and (("cıvata" in y[1]) == (r[1] == "civata")) \
                     and "perçin" not in y[1]:
@@ -354,7 +382,7 @@ def _donel(sh, eksen, V):
     cok = _cokgen(yan_duz)
 
     def m(v):
-        return f"{v:.1f}".replace(".", ",")
+        return XL.tr(v, 1, sade=False)
 
     if cok and delik_r > 0:
         n, s, zb = cok
@@ -794,7 +822,7 @@ def _hizala2_tel(teller):
 
 
 def _m(v):
-    return (f"{v:.1f}".rstrip("0").rstrip(".")).replace(".", ",")
+    return XL.tr(v, 1)
 
 
 def profil(sh, hacim=None):
@@ -1124,7 +1152,7 @@ def _donel_isin(sh, eksen):
     n = len(m)
 
     def f(v):
-        return f"{v:.1f}".replace(".", ",")
+        return XL.tr(v, 1, sade=False)
     Dmax = 2 * max(r[3] for r in m)
     if Dmax > 60 or Dmax <= 0:
         return None
@@ -1351,7 +1379,7 @@ def yay_mi(sh, V):
     eksik = sum(1 for r in m if r[1] is None)
     if eksik < 0.3 * len(m):
         return None
-    return f"helis yay biçimi: Ø{2 * R:.1f} x {H:.1f}, doluluk %{100 * dol:.0f}".replace(".", ",")
+    return f"helis yay biçimi: Ø{XL.tr(2 * R, 1)} x {XL.tr(H, 1)}, doluluk %{100 * dol:.0f}"
 
 
 def aday_isaretleri(sh, V=None):
@@ -1366,6 +1394,21 @@ def aday_isaretleri(sh, V=None):
         if B > ADAY_EN_BUYUK or V <= 0:
             return []
         out = []
+        try:
+            import pf11_yapi as Y
+            if Y.yay_olabilir(sh, V):
+                yy = Y.yay(sh, V)
+                if yy:
+                    return [("yay", f"{yy[1]}{'' if yy[3] else '?'} ({yy[2]})")]
+        except Exception:
+            pass
+        try:
+            import pf13_aile as A
+            a = A.aile_tani(sh)
+            if a and not a[3]:
+                out.append(("aile", f"{a[1]}? ({a[2]})"))
+        except Exception:
+            pass
         try:
             import pf11_yapi as Y
             y = Y.yapisal_tani(sh) if B <= YAPI_EN_BUYUK else None
@@ -1455,7 +1498,7 @@ def parca_png(sh, boyut=512):
         ax.set_box_aspect((1, 1, 1))
         ax.view_init(elev=el, azim=az)
         ax.set_axis_off()
-    fig.suptitle(f"ölçü {uz[0]:.1f} x {uz[1]:.1f} x {uz[2]:.1f} mm".replace(".", ","),
+    fig.suptitle(f"ölçü {XL.tr(uz[0], 1)} x {XL.tr(uz[1], 1)} x {XL.tr(uz[2], 1)} mm",
                  fontsize=10)
     fig.subplots_adjust(left=0, right=1, bottom=0, top=0.92, wspace=0)
     bio = io.BytesIO()

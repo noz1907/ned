@@ -86,7 +86,7 @@ _STIL = ('<?xml version="1.0" encoding="UTF-8" standalone="yes"?>'
          '<cellStyleXfs count="1"><xf numFmtId="0" fontId="0" fillId="0" borderId="0"/></cellStyleXfs>'
          '<cellXfs count="4">'
          '<xf numFmtId="49" fontId="0" fillId="0" borderId="0" xfId="0" applyNumberFormat="1"/>'
-         '<xf numFmtId="1" fontId="0" fillId="0" borderId="0" xfId="0" applyNumberFormat="1"/>'
+         '<xf numFmtId="3" fontId="0" fillId="0" borderId="0" xfId="0" applyNumberFormat="1"/>'
          '<xf numFmtId="164" fontId="0" fillId="0" borderId="0" xfId="0" applyNumberFormat="1"/>'
          '<xf numFmtId="49" fontId="1" fillId="2" borderId="0" xfId="0" applyFont="1" '
          'applyFill="1" applyNumberFormat="1"/>'
@@ -169,18 +169,69 @@ def sozlukten(alan, satirlar):
 
 
 # ------------------------------------------------------------ CSV
+def tr(v, ondalik=None, sade=True):
+    """Sayının TÜRKÇE yazımı: ondalık VİRGÜL, binlik NOKTA.
+    tr(1513.76) -> "1.513,76", tr(4.2) -> "4,2", tr(0.5, 3) -> "0,5",
+    tr(0.5, 3, sade=False) -> "0,500". ondalik=None: sayının kendi
+    basamakları (en çok 10). sade: sondaki sıfırlar atılır."""
+    if v is None or isinstance(v, bool):
+        return "" if v is None else str(v)
+    if isinstance(v, float) and v != v:
+        return ""
+    if ondalik is None:
+        if isinstance(v, int):
+            s = str(v)
+        else:
+            s = repr(float(v))
+            if "e" in s or "E" in s:
+                s = f"{v:.10f}"
+    else:
+        s = f"{float(v):.{ondalik}f}"
+    isaret = "-" if s.startswith("-") else ""
+    s = s.lstrip("-")
+    tam, _, kes = s.partition(".")
+    if sade:
+        kes = kes.rstrip("0")
+    tam = f"{int(tam):,}".replace(",", ".")
+    out = tam + ("," + kes if kes else "")
+    return ("" if out == "0" else isaret) + out
+
+
+_TR_SAYI = re.compile(r"-?\d{1,3}(?:\.\d{3})*(?:,\d+)?|-?\d+(?:,\d+)?")
+_ESKI_SAYI = re.compile(r"-?\d+\.\d+")
+
+
+def sayi_oku(s):
+    """Yazıdan sayı: "1.513,76" -> 1513.76, "4,2" -> 4.2, "1.234.567" ->
+    1234567. Virgülsüz TEK noktalı yazı ("152.243") ESKİ sürümün noktalı
+    ondalığıdır -> 152.243 (binlik sayılmaz; bu program tam sayıya binlik
+    nokta koymaz). Sayı değilse None."""
+    if isinstance(s, (int, float)) and not isinstance(s, bool):
+        return s
+    t = str(s or "").strip().replace(" ", "")
+    if not t:
+        return None
+    if _ESKI_SAYI.fullmatch(t):
+        return float(t)
+    if _TR_SAYI.fullmatch(t):
+        t = t.replace(".", "")
+        if "," in t:
+            return float(t.replace(",", "."))
+        return int(t)
+    return None
+
+
 def tr_sayi(v):
-    """CSV hücresi: ondalık sayıyı Türkçe Excel'in okuyacağı biçimde
-    (virgül) yazar. Tam sayı ve yazı olduğu gibi kalır."""
+    """CSV hücresi: ondalık sayıyı Türkçe Excel'in okuyacağı biçimde yazar
+    (ondalık virgül, binlik nokta: 1.513,76). Tam sayı ile tam değerli
+    ondalık sayı binliksiz kalır ("1234"): eski sürümlerin noktalı ondalığı
+    ("152.243") ile karışmasın diye. Yazı olduğu gibi kalır."""
     if isinstance(v, float) and not isinstance(v, bool):
         if v != v:
             return ""
-        s = repr(v) if abs(v) >= 1e-4 or v == 0 else f"{v:.10f}".rstrip("0")
-        if "e" in s:
-            s = f"{v:.10f}".rstrip("0").rstrip(".")
-        if s.endswith(".0"):
-            s = s[:-2]
-        return s.replace(".", ",")
+        if v == int(v) and abs(v) < 1e15:
+            return str(int(v))
+        return tr(v)
     return v
 
 
@@ -198,17 +249,14 @@ _SAYI_SUTUN = re.compile(r"(_mm\d?|_kg|_t|_g_cm3|adet|adedi|sayisi|faktor|^seviy
 def sayiya(sutun, v):
     """CSV'den okunan (ya da hesaptan gelen) değeri, sütun sayı sütunuysa
     sayıya çevirir. "15,22" ve "15.22" ikisi de 15.22 olur (eski sürümün
-    noktalı CSV'si de okunur). Ağaç pozu "1.1" yazı kalır."""
+    noktalı CSV'si de okunur); binlikli "1.513,76" da 1513.76 olur. Ağaç pozu "1.1" yazı kalır."""
     if not isinstance(v, str) or not _SAYI_SUTUN.search(str(sutun)):
         return v
     s = v.strip()
     if sutun == "poz" or sutun == "seviye":
         return int(s) if re.fullmatch(r"\d+", s) else v
-    if re.fullmatch(r"-?\d+", s):
-        return int(s)
-    if re.fullmatch(r"-?\d+[.,]\d+", s):
-        return float(s.replace(",", "."))
-    return v
+    n = sayi_oku(s)
+    return v if n is None else n
 
 
 def tablo_yaz(yol_csv, baslik, satirlar, sayfa=None):

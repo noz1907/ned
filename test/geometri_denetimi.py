@@ -1,5 +1,5 @@
 # -*- coding: utf-8 -*-
-"""Geometriden tanıma (pf8_tani): adsız katı pul mu, somun mu, cıvata mı,
+"""Geometriden tanıma (pf8_tani): adsız katı pul mu, somun mu, cıvata mı, yay mı,
 perçin mi, pim mi, o-ring mi, kaynak dikişi mi - YA DA HİÇBİRİ Mİ.
 
 Asıl denetlenen ikinci kısımdır: üretim parçası (blok, delikli plaka,
@@ -219,6 +219,250 @@ for ad, sh in (("kademeli mil", fuse(cyl(15, 100), cyl(10, 40, 100))),
     print(f"  {'tamam' if ok else 'HATA '} {ad:30s} kesin karar yok: {r[1] if r else '-'}")
     if not ok:
         HATA.append("yapı " + ad)
+
+print("\n-- YAY: spir yapısı (tel kesiti her 90°'de çeyrek adım kayar) + uç türü")
+from OCP.Geom import Geom_CylindricalSurface, Geom_ConicalSurface  # noqa: E402
+from OCP.Geom2d import Geom2d_Line                               # noqa: E402
+from OCP.gp import gp_Ax3, gp_Pnt2d, gp_Dir2d, gp_Circ           # noqa: E402
+from OCP.BRepBuilderAPI import BRepBuilderAPI_MakeEdge, BRepBuilderAPI_MakeWire  # noqa: E402
+from OCP.BRepLib import BRepLib                                   # noqa: E402
+from OCP.BRepOffsetAPI import BRepOffsetAPI_MakePipeShell        # noqa: E402
+from OCP.BRepAdaptor import BRepAdaptor_CompCurve                # noqa: E402
+from OCP.BRep import BRep_Builder                                # noqa: E402
+from OCP.TopoDS import TopoDS_Compound                           # noqa: E402
+
+
+def helis(R, adim, tur, d, konik=0.0, sol=False):
+    """Tel çapı d, orta yarıçap R, hatve adim, tur sarım; iki uç noktası da döner."""
+    ax = gp_Ax3(gp_Pnt(0, 0, 0), gp_Dir(0, 0, 1))
+    if konik:
+        yuz = Geom_ConicalSurface(ax, math.radians(konik), R)
+        va = adim / math.cos(math.radians(konik))
+    else:
+        yuz, va = Geom_CylindricalSurface(ax, R), adim
+    lin = Geom2d_Line(gp_Pnt2d(0, 0), gp_Dir2d(-2 * math.pi if sol else 2 * math.pi, va))
+    e = BRepBuilderAPI_MakeEdge(lin, yuz, 0.0, tur * math.hypot(2 * math.pi, va)).Edge()
+    BRepLib.BuildCurves3d_s(e)
+    w = BRepBuilderAPI_MakeWire(e).Wire()
+    c = BRepAdaptor_CompCurve(w)
+    p0, v0, p1, v1 = gp_Pnt(), gp_Vec(), gp_Pnt(), gp_Vec()
+    c.D1(c.FirstParameter(), p0, v0)
+    c.D1(c.LastParameter(), p1, v1)
+    prof = BRepBuilderAPI_MakeWire(BRepBuilderAPI_MakeEdge(
+        gp_Circ(gp_Ax2(p0, gp_Dir(v0)), d / 2)).Edge()).Wire()
+    ps = BRepOffsetAPI_MakePipeShell(w)
+    ps.SetMode(gp_Dir(0, 0, 1))
+    ps.Add(prof)
+    ps.Build()
+    ps.MakeSolid()
+    return ps.Shape(), p0, p1
+
+
+def cyl_yon(p, d, r, h):
+    return BRepPrimAPI_MakeCylinder(gp_Ax2(p, d), r, h).Shape()
+
+
+def cekme_yayi():
+    sh, _a, _b = helis(5, 1.02, 10, 1.0)
+    zt = 10 * 1.02
+    for zc in (zt + 5, -5):
+        sh = fuse(sh, BRepPrimAPI_MakeTorus(gp_Ax2(gp_Pnt(0, 0, zc), gp_Dir(1, 0, 0)), 5, 0.5).Shape())
+    return sh
+
+
+def burulma_yayi(bukum=False):
+    """sık sarım + teğet bacak; bukum: bacak ucu eksene paralel bükülür
+    (sarımın yanından boydan boya iner - gerçek modeldeki gibi)."""
+    sh, a, b = helis(3, 0.84, 5, 0.8)
+    # bacaklar önce kendi aralarında birleşir: helis ucuna tek tek eklenince
+    # OCC birleştirmesi sarımı kaybedebiliyor (hacim denetlenir)
+    bacak = None
+    for p in (a, b):
+        parca = cyl_yon(p, gp_Dir(0, -1, 0), 0.4, 8)
+        if bukum:
+            uc = gp_Pnt(p.X(), p.Y() - 8, p.Z())
+            parca = fuse(parca, cyl_yon(uc, gp_Dir(0, 0, 1) if p.Z() < 1 else gp_Dir(0, 0, -1),
+                                        0.4, 4))
+        bacak = parca if bacak is None else fuse(bacak, parca)
+    return fuse(sh, bacak)
+
+
+def disk_paketi():
+    bld, cmp = BRep_Builder(), TopoDS_Compound()
+    bld.MakeCompound(cmp)
+    for i in range(6):
+        up = i % 2 == 0
+        dis = BRepPrimAPI_MakeCone(gp_Ax2(gp_Pnt(0, 0, 3.0 * i), gp_Dir(0, 0, 1)),
+                                   20 if up else 10.5, 10.5 if up else 20, 1.5).Shape()
+        bld.Add(cmp, cut(dis, cyl(10.2, 4, 3.0 * i - 1)))
+    return cmp
+
+
+YAY = (("basma yayı", helis(8, 5, 8, 1.6)[0], "basma yayı", "sağ"),
+       ("basma yayı (sol helis)", helis(8, 5, 8, 1.6, sol=True)[0], "basma yayı", "sol"),
+       ("çekme yayı (halkalı)", cekme_yayi(), "çekme yayı", "sağ"),
+       ("burulma yayı (bacaklı)", burulma_yayi(), "burulma yayı", "sağ"),
+       ("burulma yayı (bükülü bacak)", burulma_yayi(True), "burulma yayı", "sağ"),
+       ("konik basma yayı", helis(12, 6, 6, 2.0, konik=-8)[0], "konik basma yayı", "sağ"))
+for ad, sh, bek, yon in YAY:
+    for d in (False, True):
+        r = T.tani(dondur(sh) if d else sh)
+        ok = bool(r) and r[0] == "standart" and r[1].startswith(bek) and f"{yon} helis" in r[2]
+        print(f"  {'tamam' if ok else 'HATA '} {ad:30s} {'döndü' if d else '     '} "
+              f"{(r[1] + ' | ' + r[2]) if r else '(karar yok)'}")
+        if not ok:
+            HATA.append("yay " + ad)
+r = Y.yay(helis(8, 5, 8, 1.6)[0])
+ok = bool(r) and "dış Ø17,6" in r[2] and "adım 5," in r[2]
+print(f"  {'tamam' if ok else 'HATA '} basma yayı ölçüsü (dış Ø17,6, adım 5)  {r[2] if r else '-'}")
+if not ok:
+    HATA.append("yay ölçüsü")
+# yay OLMAYAN: katmanlar dönmeden aynı (disk paketi) karar değil, en çok aday;
+# dişi modellenmiş cıvata içi dolu
+for ad, sh in (("disk yay paketi (aday olabilir)", disk_paketi()),
+               ("dişli cıvata", fuse(cyl(4.4, 25), helis(4.6, 1.25, 20, 1.0)[0])),
+               ("boru", cut(cyl(10, 60), cyl(9, 60))),
+               ("o-ring", BRepPrimAPI_MakeTorus(gp_Ax2(gp_Pnt(0, 0, 0), gp_Dir(0, 0, 1)), 8, 1.5).Shape())):
+    r = Y.yay(sh)
+    ok = not (r and r[3])
+    print(f"  {'tamam' if ok else 'HATA '} {ad:30s} kesin yay kararı yok: {r[1] if r else '-'}")
+    if not ok:
+        HATA.append("yay değil " + ad)
+
+print("\n-- STANDART AİLELER (pf13_aile): segman, yaylı pim, kama, konik pim, gres nipeli")
+import pf13_aile as A                                            # noqa: E402
+
+
+def kutu(x, y, z, a, b, c):
+    return BRepPrimAPI_MakeBox(gp_Pnt(x, y, z), a, b, c).Shape()
+
+
+def cyl(r, h, z=0, x=0, y=0):                                     # noqa: F811
+    return BRepPrimAPI_MakeCylinder(gp_Ax2(gp_Pnt(x, y, z), gp_Dir(0, 0, 1)), r, h).Shape()
+
+
+def segman_471(d1=20, s=1.2, d3=18.5, a=4.0, d5=2.0, b=2.6):
+    """mil segmanı: iç çap d3 (eş merkezli), dış kenar EKSANTRİK (boşluğun
+    karşısında en geniş b), boşluğun iki yanında dışa taşan delikli kulaklar."""
+    ri = d3 / 2
+    e = 0.45 * b                            # eksantriklik (-x yönüne)
+    ro = ri + b - e
+    r = cut(cyl(ro, s, 0, -e, 0), cyl(ri, s))
+    acik = 0.18 * d1
+    r = cut(r, kutu(0, -acik / 2, 0, ro + 5, acik, s))
+    for sgn in (1, -1):
+        yc = sgn * (acik / 2 + a / 2)
+        xc = ri + a * 0.45
+        r = fuse(r, cyl(a / 2, s, 0, xc, yc))
+        r = cut(r, cyl(d5 / 2, s, 0, xc, yc))
+    return cut(r, cyl(ri, s))
+
+
+def segman_472(d1=20, s=1.0, d3=21.5, a=4.1, d5=2.0, b=2.4):
+    """delik segmanı: dış çap d3 (eş merkezli), iç kenar EKSANTRİK, kulaklar içe."""
+    ro = d3 / 2
+    e = 0.45 * b
+    ri = ro - b + e
+    r = cut(cyl(ro, s), cyl(ri, s, 0, e, 0))
+    acik = 0.18 * d1
+    r = cut(r, kutu(0, -acik / 2, 0, ro + 5, acik, s))
+    for sgn in (1, -1):
+        yc = sgn * (acik / 2 + a / 2)
+        xc = ro - a * 0.45
+        r = fuse(r, cut(cyl(a / 2, s, 0, xc, yc), cut(cyl(ro + 5, s), cyl(ro, s))))
+        r = cut(r, cyl(d5 / 2, s, 0, xc, yc))
+    return r
+
+
+def e_segman(s=0.7, d2=6, d3=12.3):
+    """DIN 6799: dış Ø d3, iç yuva, açık ağız ~120°, üç iç tırnak."""
+    r = cut(cyl(d3 / 2, s), cyl(d2 / 2 + 1.2, s))
+    # ağız: +x yönünde geniş açıklık
+    r = cut(r, prizma([(0, 0), (d3, -d3 * 0.8), (d3, d3 * 0.8)], s))
+    for ang in (180, 70, -70):
+        a = math.radians(ang)
+        x, y = (d2 / 2 + 0.6) * math.cos(a), (d2 / 2 + 0.6) * math.sin(a)
+        r = fuse(r, cyl(0.7, s, 0, x, y))
+    return r
+
+
+def yayli_pim(d=6, L=30, s=1.2, yarik=1.0, pah=0.6):
+    t = cut(cyl(d / 2, L), cyl(d / 2 - s, L))
+    t = cut(t, kutu(-yarik / 2, 0, 0, yarik, d, L))
+    # uç pahları (dış): koni kesimi
+    for z0, yon in ((0, 1), (L, -1)):
+        k = BRepPrimAPI_MakeCone(gp_Ax2(gp_Pnt(0, 0, z0 - yon * 0.001), gp_Dir(0, 0, yon)),
+                                 d / 2 - pah, d / 2 + 0.001, pah).Shape()
+        dis = cut(cyl(d, pah + 0.002, z0 if yon == 1 else z0 - pah - 0.002), k)
+        t = cut(t, dis)
+    return t
+
+
+def kama_a(b=8, h=7, L=40):
+    """DIN 6885 A: uçları yarım daire (R = b/2)."""
+    orta = kutu(-(L / 2 - b / 2), -b / 2, 0, L - b, b, h)
+    return fuse(fuse(orta, cyl(b / 2, h, 0, -(L / 2 - b / 2), 0)), cyl(b / 2, h, 0, L / 2 - b / 2, 0))
+
+
+def kama_b(b=8, h=7, L=40):
+    return kutu(-L / 2, -b / 2, 0, L, b, h)
+
+
+def konik_pim(d=6, L=40):
+    """ISO 2339: 1:50 koniklik, d küçük uç."""
+    D = d + L / 50.0
+    return BRepPrimAPI_MakeCone(gp_Ax2(gp_Pnt(0, 0, 0), gp_Dir(0, 0, 1)), d / 2, D / 2, L).Shape()
+
+
+def gres_nipeli(M=8, s=9):
+    """DIN 71412 A: diş gövdesi + altıköşe + boyun + küre baş + eksenel delik."""
+    g = cyl(M / 2, 5.5)
+    g = fuse(g, hexa(s, 5, 5.5))
+    g = fuse(g, cyl(2.3, 3, 10.5))
+    g = fuse(g, BRepPrimAPI_MakeSphere(gp_Pnt(0, 0, 14.2), 3.25).Shape())
+    return cut(g, cyl(1.0, 20, -1))
+
+
+
+AILE = (("mil segmanı", segman_471(), "mil segmanı (DIN 471)", True),
+        ("delik segmanı", segman_472(), "delik segmanı (DIN 472)", True),
+        ("E-segman", e_segman(), "E-segman (DIN 6799)", True),
+        ("yaylı pim", yayli_pim(), "yaylı pim (ISO 8752", True),
+        ("kama A", kama_a(), "paralel kama (DIN 6885 A)", True),
+        ("konik pim", konik_pim(), "konik pim (ISO 2339", True),
+        ("gres nipeli", gres_nipeli(), "gres nipeli (DIN 71412 A)", True))
+for ad, sh, bek, _k in AILE:
+    for d in (False, True):
+        r = T.tani(dondur(sh) if d else sh)
+        ok = bool(r) and r[0] == "standart" and r[1].startswith(bek)
+        print(f"  {'tamam' if ok else 'HATA '} {ad:30s} {'döndü' if d else '     '} "
+              f"{(r[1] + ' | ' + r[2]) if r else '(karar yok)'}")
+        if not ok:
+            HATA.append("aile " + ad)
+r = A.aile_tani(kama_b())
+ok = bool(r) and not r[3] and "6885 B" in r[1]
+print(f"  {'tamam' if ok else 'HATA '} kama B yalnız ADAY (lama olabilir)   {r[1] if r else '-'}")
+if not ok:
+    HATA.append("aile kama B")
+# AİLE OLMAYAN: kapalı pul pul kalır; grover, düz plaka, kapalı boru, dolu
+# pim, somun, büyük C biçimli sac aileye girmez
+for ad, sh, bek in (("düz pul", cut(cyl(8, 1.6), cyl(4.3, 1.6)), "pul"),
+                    ("grover pul", cut(cut(cyl(7.5, 1.6), cyl(4.2, 1.6)),
+                                       kutu(3.5, -0.4, 0, 5, 0.8, 1.6)), None),
+                    ("delikli plaka", cut(kutu(-20, -15, 0, 40, 30, 3), cyl(5, 3)), None),
+                    ("kapalı boru", cut(cyl(3, 30), cyl(1.8, 30)), None),
+                    ("dolu pim", cyl(3, 30), None),
+                    ("C biçimli sac (Ø120)", cut(cut(cyl(60, 3), cyl(40, 3)),
+                                                  kutu(0, -25, 0, 70, 50, 3)), None),
+                    ("somun", cut(hexa(13, 6.5), cyl(4, 6.5)), None)):
+    r = A.aile_tani(sh)
+    ok = not (r and r[3])
+    if bek:
+        r2 = T.tani(sh)
+        ok = ok and bool(r2) and r2[1] == bek
+    print(f"  {'tamam' if ok else 'HATA '} {ad:30s} aileye girmedi: {r[1] if r else '-'}")
+    if not ok:
+        HATA.append("aile değil " + ad)
 
 print("\n-- profil (sabit kesitli parça): tür ve kesit ölçüsü")
 
