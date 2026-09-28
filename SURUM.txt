@@ -1,6 +1,6 @@
 Pi3D  –  3B modelden parça listesi ve teknik resim
 
-Sürüm   : devam-ve-klasorler  (26.09.2026)
+Sürüm   : profil-ogrenme-excel  (28.09.2026)
 Kaynak  : github.com/noz1907/ned   dal: claude/fikstur-parca-stp-57hwc1
 
 KURULUM
@@ -33,6 +33,22 @@ BU SÜRÜMDE NE VAR
                     ve PDF'i çıkar. PDF'ler çıktı klasörünün altındaki
                     PDF klasörüne ..._A3.pdf / ..._A3D.pdf yazılır.
 
+  EXCEL: BOM.xlsx, BOM_AGAC.xlsx, olculer.xlsx, PROFIL.xlsx,
+  ACINIM.xlsx, LAZER.xlsx - rakamlar SAYI (Türkçe Excel'de 15.2243 kg
+  artık 152.243 görünmez), poz ve kod yazı. CSV'ler ondalık virgülle.
+
+  PROFİLLER adına bakılmadan bulunur: kutu, boru, köşebent, U, C, I,
+  T, Z, lama, mil, alüminyum ekstrüzyon; kesit ölçüsü ve boy.
+  PROFIL.xlsx: kesim listesi + 6 m çubuk özeti. Profil biçimli
+  bükümlü sac, sac olarak kalır (açınımı çıkar).
+
+  PERÇİN SOMUN adından ve biçiminden tanınır; diş / tırtıl modelli
+  somun ve cıvata ışın ölçümüyle tanınır.
+
+  ÖĞRENME: 2. sekmede bir parçanın sınıfını bir kez düzeltin; adı
+  bilgi taşımayan ve biçimi benzeyen parçalar (M6 -> M8) da o sınıfa
+  geçer. CATIA'nın Made / Bought (Source) alanı okunur: en kesin yol.
+
   HER ADIM AYRI YAPILIR, İSTENDİĞİ KADAR TEKRARLANIR. Önceki bir
   çıktı klasörü açılınca ne var ne eksik yazar; yalnız eksik olan
   yapılır. Sağdaki panelde her işlemin süresi ve toplam süre.
@@ -60,12 +76,14 @@ DENETİM BETİKLERİ (test/)
     python test/cizim_cakisma_denetimi.py --kendini-dene
   Ölçülerin hata oranı (uzun sürer, ~1 dk):
     python test/olcu_dogrulama.py ornek/parca.stp
-  Sınıflama (parça / standart / kaynak) ve devam:
+  Sınıflama (parça / standart / kaynak), profil, öğrenme ve devam:
     python test/sinif_denetimi.py
     python test/geometri_denetimi.py        (model verirseniz isabet ölçer)
     python test/devam_denetimi.py
     python test/gui_devam_denetimi.py        (tkinter + ekran ister)
     python test/gui_ekran_denetimi.py        (15 inç: 1366x768 ekranda)
+  Excel tabloları:
+    python test/excel_denetimi.py
   Malzeme okuma ve sihirbaz:
     python test/malzeme_denetimi.py
     python test/gui_malzeme_sihirbazi.py      (tkinter + ekran ister)

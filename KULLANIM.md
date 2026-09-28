@@ -351,8 +351,9 @@ bir-iki dakika sürebilir; pencere kilitlenmez, altta günlük akar.
 
 #### Parça mı, standart mı, kaynak dikişi mi
 
-STEP'te "bu satın alınan bir parçadır" diye bir bilgi **yoktur**; program
-bunu ADDAN ve MONTAJ AĞACINDAN çıkarır:
+STEP'te "bu satın alınan bir parçadır" diye bir bilgi **yoktur**. En kesin
+yol CAD'in kendi **Made / Bought** alanıdır (aşağıda *CAD'den: Made / Bought*);
+o yoksa program bunu ADDAN, MONTAJ AĞACINDAN ve BİÇİMDEN çıkarır:
 
 | kural | örnek | sonuç |
 |-------|-------|-------|
@@ -377,6 +378,8 @@ anlaşılmaz; program o zaman katının **yüzlerine** bakar:
 | **cıvata** | delik yok; bir ucunda altıgen ya da geniş silindirik baş (imbus yuvası da tanınır), gövde en az bir çap boyunda |
 | **perçin** | gövde + bir ucunda kubbe ya da havşa baş |
 | **pim** | tek çaplı, başsız, uçları pahlı, çap ≤ 12 |
+| **perçin somun** | ince başlı burç, delik baştan girer; deliğin baş tarafı geniş (sıkışma bölgesi), uç tarafı dar (dişli kısım) — ya da gövde altıgen/tırtıllı. Kapalı uçlusu da tanınır. |
+| **diş modelli somun / cıvata** | diş, tırtıl ya da serbest yüzle modellenmiş parçada yüz tipleri bir şey söylemez; parça **ölçülür**: eksen boyunca 48 kotta 8 yöne ışın atılır, her kotta delik ve dış yarıçap, dış biçim (altıgen = en büyük/en küçük 1,155) bulunur |
 | **o-ring** | yalnız tor yüzü |
 | **kaynak dikişi** | birbirine dik iki düz bacak yüzü + hipotenüs: uzun üçgen prizma; bacaklar hacimden ve alanlardan hesaplanır (1–20 mm) |
 
@@ -385,10 +388,14 @@ pim de olabilir kaynak dikişi de (CATIA dikişi çoğu zaman böyle modeller);
 o parça kalır. Tanınamayan adsız katı 2. sekmede **parca – ADSIZ** yazar.
 
 **Ölçüldü** — 4 gerçek modelde adı belli 636 komponentle karşılaştırıldı:
-geometri 214 karar verdi, **1'i yanlış (%0,47)**. 182 kaynak kararının
-hepsi doğru, hiçbir üretim parçası dikiş sayılmadı. Tek yanlış adında
-`SAC` geçen pul biçimli bir parça; adı olduğu için ad kazanır, geometri
-orada yalnız **öneri** olarak yazar (`parca – öneri: pul?`).
+geometri 227 karar verdi, **1'i yanlış (%0,44)**. 182 kaynak kararının
+hepsi doğru, hiçbir üretim parçası dikiş sayılmadı. Işın ölçümü 13 karar
+ekledi (perçin somun, diş modelli somunlar, flanşlı cıvata), hepsi doğru;
+denerken çıkan iki yanlış düzeltildi: 24×24×3 delikli bağlantı braketi
+kare somun, saplamalı kauçuk takoz cıvata sanılıyordu (somun yüksekliği
+en az 0,45 d, cıvata başı en çok 2,6 d genişlik / 1,2 d yükseklik). Tek
+yanlış adında `SAC` geçen pul biçimli bir parça; adı olduğu için ad
+kazanır, geometri orada yalnız **öneri** olarak yazar (`parca – öneri: pul?`).
 
 Adı olan parçada her zaman **ad geçerlidir**; geometri yalnız öneridir.
 `rapor.md`'de *Geometriden tanıma* başlığı altında her kararın gerekçesi
@@ -400,10 +407,95 @@ iziyle** (hacim + üç ölçü) saklanır: bir COMPOUND'u standart yapmak
 bütün COMPOUND'ları standart yapmaz, ama aynı tedarikçi parçası başka bir
 modelde yine tanınır.
 
-Kural bilmediği bir adı yanlış sınıflarsa **2. sekmede** satırı seçip
-**Üretim parçası / Standart / Kaynak dikişi** düğmesine basın. Program bunu
-**öğrenir**: kural ayar dosyasına yazılır, aynı adlı parça bundan sonra her
-modelde öyle sınıflanır. Sınıf değişince BOM'u yeniden çıkarın.
+#### Bir kez düzeltin, benzerlerini program tanısın (öğrenme)
+
+Kural bilmediği bir parçayı yanlış sınıflarsa **2. sekmede** satırı seçip
+**Üretim parçası / Standart / Kaynak dikişi** düğmesine basın. Program iki
+şey saklar:
+
+1. **Adı** — aynı adlı parça bundan sonra her modelde öyle sınıflanır.
+2. **Biçimi** — ölçekten ve duruştan bağımsız bir *biçim imzası*: yüz
+   sayısı, yüz tiplerinin alan payı, eylemsizlik oranları, yoğunluk.
+   Adı bir şey söylemeyen (`510206505-00`, `COMPOUND`) ve biçimi
+   buna benzeyen parçalar da **kendiliğinden** aynı sınıfa geçer — o
+   modelde hemen, sonraki modellerde açılırken. M6 perçin somunu bir kez
+   gösterilince M8'i de tanınır; her yeni parçayı tek tek bildirmeniz
+   gerekmez.
+
+Adı ne olduğunu söyleyen parçaya (`... SACI`, `... BRAKETI`, `M6 SOMUN`)
+öğrenme dokunmaz; bir parçanın kendi elle verilmiş sınıfı her zaman
+önce gelir. Listede *(benzerinden öğrenildi)* yazar.
+
+**Ölçüldü** — 4 gerçek modelde adları farklı 636 komponent arasında 13190
+benzer çift çıktı; yalnız 1'i farklı sınıftan (bir bağlantı braketi ile
+25×6,5×1 pul — ikisinin de adı ne olduğunu söylediği için öğrenme onlara
+zaten uygulanmaz).
+
+Sınıf değişince BOM'u yeniden çıkarın.
+
+#### CAD'den: Made / Bought (en kesin yol)
+
+CATIA'da her ürünün **Özellikler ▸ Ürün ▸ Source** alanı vardır: *Made*
+(üretilen) ya da *Bought* (satın alınan). Bu tasarımcının kendi bilgisidir;
+addan ya da biçimden tahminden her zaman doğrudur. Pi3D'nin CATIA makrosu
+(`catia_malzeme_cikar.CATScript`, Yardım ▸ Malzemeyi CAD'den al) bunu
+`malzeme.csv`'nin 4. sütununa (`kaynak`) yazar; CATIA'nın Bill of Material
+listesine **Source** sütununu eklerseniz o da olur. Dosyayı 2. adımda
+**malzeme.csv yükle…** ile verince:
+
+- `Bought` → satın alınan (standart): BOM'a adediyle girer, resmi çizilmez;
+- `Made` → üretim parçası (adı "kamera" olsa bile);
+- bir **alt montaj** Bought ise altındaki bütün parçalar satın alınan sayılır.
+
+Sütun başlığı `Source`, `kaynak`, `Make/Buy`, `Beschaffungsart` olabilir;
+değerler `Bought / Made`, `Satın alınan / Üretim`, `Kaufteil / Eigenfertigung`
+tanınır. Elle verdiğiniz sınıf bundan da önce gelir.
+
+#### Profiller: kutu, boru, köşebent, U, lama, ekstrüzyon
+
+Program adına bakmadan **profilleri** bulur. Parça boyuna 9 yerden kesilir:
+kesitlerin çoğu aynıysa, hiçbiri ondan büyük değilse (delik yalnız
+küçültür; büyükse kademeli ya da flanşlıdır) ve hacim ≈ kesit × boy ise
+parça sabit kesitlidir. Kesitin türü kesitin kendisinden ölçülür:
+
+| kesit | nasıl anlaşılır | yazılan |
+|-------|-----------------|---------|
+| kutu / kare kutu | tek iç boşluk, dış ve iç dikdörtgen, cidar eşit | `kutu profil 30x50x2` |
+| boru | tek iç boşluk, dış ve iç daire | `boru Ø27x8` |
+| köşebent (L) | dış hattın dışbükey örtüsünde 1 köşe cebi, 1 büküm (90°) | `köşebent (L) 40x40x4` |
+| U / C | 1 yan cebi, 2 büküm (180°); ağzı dar ya da 4 büküm → C | `U profil 50x30x2` |
+| I/H, T, Z | 2 cep: karşılıklı yan → I; komşu köşe → T; çapraz → Z | `I/H profil 100x50x5` |
+| lama, mil | dolu dikdörtgen / daire | `lama 50x5`, `mil Ø20` |
+| özel kesit | çok boşluklu, oluklu, kanallı (alüminyum sigma profil) | `özel kesit profil 40x40` |
+
+Cidar kalınlığı alan ve çevreden hesaplanır (bükümlü köşeler dâhil
+doğru çıkar). Parça döndürülmüş, gönye kesilmiş ya da delikli olsa da
+tanınır.
+
+**Profil biçimli her parça profil değildir:** 1,5 mm sacdan bükülmüş bir U
+da sabit kesitlidir ama lazerde kesilip bükülür. Açık kesitte sac taraması
+"bükümlü sac" diyorsa parça **sac** kalır, tipine yalnız kesiti yazılır
+(`bükümlü sac, U kesit 40x15x1,5`) ve açınımı çıkar. 3 mm ve incesi lama
+da sac şerididir. Kutu, boru, mil ve özel kesit profildir.
+
+Profiller **`PROFIL.xlsx`** (ve `PROFIL.csv`) kesim listesine girer:
+
+- *Kesim listesi*: poz, kod, profil, kesit, malzeme, **boy**, adet, toplam
+  boy, kesit alanı, kg/m, kütle;
+- *Stok özeti*: kesit + malzeme başına toplam boy, en uzun parça ve **6 m
+  çubuk sayısı** (toplam boy / 6 m — testere payı ve yerleşim firesi yok,
+  sipariş öncesi kaba ihtiyaç).
+
+**Ölçüldü** — 4 gerçek modelde 38 profil (kare kutu 24, boru 7, kutu 4,
+alüminyum ekstrüzyon 3) ve 76 profil biçimli bükümlü sac bulundu; kesitler
+resmi çizilip tek tek karşılaştırıldı. Denerken çıkan yanlışlar
+düzeltildi: kolları eşit olmayan U köşebent, oluklu sac C, 45° kanatlı
+sac T sanılıyordu (artık dönüş açısı tam 90° / 180° değilse *özel kesit*).
+Kapalı profilin (kutu, boru) açınımı istenirse program gerekçesiyle
+reddeder. Sentetik denetim:
+kutu, delikli kutu, gönyeli kutu, boru, L, U, dudaklı C, T, I, lama, mil,
+sigma — düz ve uzayda döndürülmüş; plaka, blok, kademeli mil, flanşlı
+boru ve kısa burç profil sayılmaz.
 
 **Kaynak dikişleri** parça değildir: BOM'a girmez, poz almaz, resmi
 çizilmez, montaj resminde görünür. Listede tek satırda toplanır
@@ -481,9 +573,11 @@ yazılmışsa KAYNAK sütununda `data'dan` görünür.
 > Kutudaki malzeme yalnız **uygulanacak** malzemedir. Bir parçaya alüminyum
 > verdiğinizde diğerleri çelik kalır.
 
-**BOM ÇIKART ▸** → `BOM.csv`, `BOM.md`, `BOM_AGAC.csv`, `BOM_AGAC.md`,
-`olculer.csv`, `olculer.json`, `rapor.md` yazılır. Tablo gerçek ölçü ve
-kütlelerle dolar.
+**BOM ÇIKART ▸** → `BOM.xlsx`/`.csv`, `BOM.md`, `BOM_AGAC.xlsx`/`.csv`,
+`BOM_AGAC.md`, `olculer.xlsx`/`.csv`, `olculer.json`, `rapor.md` ve profil
+varsa `PROFIL.xlsx` (kesim listesi) yazılır. Tablo gerçek ölçü ve
+kütlelerle dolar. **Excel'de .xlsx'i açın** (bkz. 4. bölüm: CSV'deki
+`15.2243` Türkçe Excel'de `152.243` görünür).
 
 #### Hiyerarşik (çok kademeli) BOM
 
@@ -1475,9 +1569,25 @@ Kaynak DXF'lere dokunulmaz; her pafta ayrı bir dosyaya yazılır.
 
 ## 4. Çıktıları okumak
 
+### Excel: `BOM.xlsx`, `BOM_AGAC.xlsx`, `olculer.xlsx`, `PROFIL.xlsx`, `ACINIM.xlsx`, `LAZER.xlsx`
+
+**Excel'de .xlsx'i açın.** CSV'de rakam yazıdır, Excel onu bölgesel ayara
+göre yorumlar: Türkçe Excel'de nokta *binlik* ayırıcıdır, CSV'deki
+`15.2243` kg **152.243** görünür (yüz elli iki bin!), poz `1.1` tarihe
+(1 Oca) döner, eski Excel'de Türkçe harfler bozulur. .xlsx'te her hücrenin
+türü dosyada yazılıdır: kütle SAYI, poz ve kod YAZI; hiçbir ayar onu
+değiştiremez. Başlık satırı dondurulmuş ve süzgeçlidir; kütle 3 ondalıklı.
+
+CSV'ler de artık Türkçe Excel'e göre yazılır (ondalık **virgül**, sütun `;`).
+Başka bir programa aktarmak için CSV'yi, Excel için .xlsx'i kullanın.
+Excel'de açık olan bir .xlsx'in üstüne yazılamazsa yenisi `..._yeni.xlsx`
+adıyla yanına yazılır.
+
 ### `BOM.csv` / `BOM.md`
 
-Her poz için: kod, tanım, adet, malzeme, ölçü (BOY×EN×KALINLIK), adet başına
+Her poz için: kod, tanım, adet, sınıf, **tip** (standartta `perçin somun`,
+`somun`...; profilde `kutu profil 30x50x2`; profil biçimli sacta
+`bükümlü sac, U kesit 40x15x1,5`), malzeme, ölçü (BOY × EN × KALINLIK), adet başına
 kütle, toplam kütle, çizim dosyası. Civata, somun, pul gibi **standart
 elemanlar BOM'a kod + adet olarak girer**, çizimleri üretilmez. Kaynak
 dikişleri BOM'a girmez, türüne göre ayrıca sayılır. Detay ve montaj

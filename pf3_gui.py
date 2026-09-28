@@ -2428,6 +2428,14 @@ class Uygulama(ttk.Frame):
             return f"{sinif} – öneri: {k['oneri'][1] or k['oneri'][0]}?"
         if k.get("isimsiz") and sinif == "parca":
             return "parca – ADSIZ"
+        if k.get("ogrenildi"):
+            return f"{sinif} (benzerinden öğrenildi)"
+        if k.get("cad_kaynak") and sinif == "standart":
+            return "standart (CAD: satın alınan)"
+        if k.get("profil") and sinif == "parca":
+            return f"profil: {k['profil']['ad']}"
+        if sinif == "standart" and k.get("tip") and k["tip"] not in ("elle",):
+            return f"standart: {k['tip']}"
         return sinif
 
     def _kaynak_satiri(self, liste):
@@ -2533,8 +2541,23 @@ class Uygulama(ttk.Frame):
         for k in sec:
             k["sinif"], k["tip"] = yeni, ("elle" if yeni == "standart" else "")
             kural[self.M.kural_anahtari(k["ad"], k)] = yeni
+            # Öğrenme: parçanın BİÇİMİ de saklanır; adı bilgi taşımayan
+            # benzerleri (başka ölçüdeki aynı aile) bundan sonra kendiliğinden
+            # aynı sınıfa geçer.
+            try:
+                im = k.get("imza") or self.M.TN.bicim_imzasi(
+                    self.kayit[k["indeks"][0]][1])
+                if im:
+                    k["imza"] = im
+                    kural[self.M.sekil_anahtari(im)] = yeni
+            except Exception:
+                pass
             k.pop("geometri", None); k.pop("oneri", None); k.pop("isimsiz", None)
         self.M.ayar_yaz(sinif_kurali=kural)
+        try:
+            benzer = self.M.benzerden_sinifla(self.kayit, self.komp, kural, self._yaz)
+        except Exception:
+            benzer = 0
         # Sınıf değişince BOM, poz ve dosya adları değişir: eski BOM
         # geçersizdir, yeniden çıkarılmalı.
         self.satirlar = []
@@ -2543,7 +2566,8 @@ class Uygulama(ttk.Frame):
         self._ornek_adaylari()
         self._bitir()
         self._yaz(f"{len(sec)} komponent '{ad}' yapıldı (kural saklandı): "
-                  + ", ".join(k["ad"][:30] for k in sec[:5]))
+                  + ", ".join(k["ad"][:30] for k in sec[:5])
+                  + (f"; biçimce benzer {benzer} komponent de değişti" if benzer else ""))
         self.v_bom_ozet.set(f"{len(sec)} komponent '{ad}' yapıldı – "
                             "BOM'u yeniden çıkarın")
 
@@ -2581,6 +2605,16 @@ class Uygulama(ttk.Frame):
             esl, bilinmeyen = self.M.malzeme_dosya_oku(y)
         except Exception as ex:
             messagebox.showerror("Malzeme dosyası", str(ex)); return
+        # CAD'in Made/Bought sütunu varsa (CATIA makrosu yazar) sınıf da
+        # buradan alınır: tasarımcının bilgisi tahminden doğrudur.
+        try:
+            degisen = self.M.cad_kaynagiyla_sinifla(
+                self.komp, self.M.cad_kaynagi_oku(y), log=self._yaz)
+        except Exception:
+            degisen = 0
+        if degisen:
+            self._acilim_doldur()
+            self._ornek_adaylari()
         n = 0
         for k in self.komp:
             if k["sinif"] != "parca":
@@ -2747,7 +2781,8 @@ class Uygulama(ttk.Frame):
             for y in IS.dosyalar(on, tur):
                 self.liste.insert("end", os.path.relpath(y, on).replace("\\", "/"))
                 n += tur == "dxf"
-        for x in ("BOM.csv", "BOM.md", "BOM_AGAC.csv", "olculer.csv", "rapor.md"):
+        for x in ("BOM.xlsx", "BOM.csv", "BOM.md", "BOM_AGAC.xlsx", "BOM_AGAC.csv",
+                  "PROFIL.xlsx", "olculer.xlsx", "olculer.csv", "rapor.md"):
             if os.path.isfile(os.path.join(on, x)):
                 self.liste.insert("end", x)
         if not self.v_sonuc.get():

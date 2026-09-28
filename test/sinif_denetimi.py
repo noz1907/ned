@@ -51,6 +51,10 @@ TABLO = [
     ("M6X15 FLANSLI CIVATA", "standart"),
     ("K0 7X25X2 MM PUL", "standart"),
     ("M6 SOMUN PERCIN", "standart"),
+    ("M8 perçin somun", "standart"),
+    ("RIVNUT M6", "standart"),
+    ("Blindnietmutter M5", "standart"),
+    ("K0 PERCIN SOMUN BRAKETI", "parca"),
     ("Kayar Baba Mekanizma Govde Percini_Q8x58", "standart"),
     ("09.020.000.05 Rillenkugellager DIN 608 2RSR", "standart"),
     ("ISO 7090 WASHER 8X16", "standart"),
@@ -117,6 +121,50 @@ komp = [{"ad": "ARA DIKME", "sinif": "parca", "tip": "", "indeks": [1]}]
 M.agactan_sinifla(agac, komp, {M.kural_anahtari("ARA DIKME"): "parca"},
                   log=lambda t: None)
 esit("ağaç kuralı elle verileni ezmez", komp[0]["sinif"], "parca")
+
+print("\n-- perçin somun tipi (somun ya da perçin değil)")
+for ad in ("M6 SOMUN PERCIN", "M8 perçin somun", "Rivet nut M5", "Einnietmutter M8"):
+    esit(ad, M.sinifla(ad), ("standart", "perçin somun"))
+esit("Govde Percini hâlâ perçin", M.sinifla("Govde Percini"), ("standart", "perçin"))
+esit("M6 SOMUN hâlâ somun", M.sinifla("M6 SOMUN"), ("standart", "somun"))
+
+print("\n-- ad bilgi taşıyor mu (öğrenme yalnız taşımayanlara uygulanır)")
+for ad, bek in (("510206504-00", False), ("COMPOUND", False), ("151B-02-01-038", False),
+                ("K0 TRIM BAGLANTI SACI", True), ("M6 SOMUN", True),
+                ("K0 25 MM TEK KAYNAK", True), ("ISO 4762 M6x20", True)):
+    esit(ad, M.ad_bilgili(ad), bek)
+
+print("\n-- CAD'in Made / Bought bilgisi")
+import tempfile                                                  # noqa: E402
+d = tempfile.mkdtemp(prefix="cad_kaynak_")
+y = os.path.join(d, "malzeme.csv")
+with open(y, "w", encoding="utf-8") as f:
+    f.write("kod;malzeme;ad;kaynak\n"
+            "510206504-00;Steel;Tedarikci parcasi;Bought\n"
+            "K0 KAMERA;Steel;Kamera;Made\n"
+            "01.050.000.01;Steel;U-Blech;Made\n"
+            "ISO 4762 M6x20;Steel;Civata;\n")
+har = M.cad_kaynagi_oku(y)
+esit("Bought -> standart, Made -> parca, boş -> yok", har,
+     {"510206504-00": "standart", "k0 kamera": "parca", "01.050.000.01": "parca"})
+komp = [{"kod": "510206504-00", "ad": "510206504-00", "sinif": "parca", "tip": ""},
+        {"kod": "K0 KAMERA", "ad": "K0 KAMERA", "sinif": "standart", "tip": "ticari ürün"},
+        {"kod": "X", "ad": "01.050.000.01 U-Blech", "sinif": "parca", "tip": ""},
+        {"kod": "K", "ad": "K0 25 MM TEK KAYNAK", "sinif": "kaynak", "tip": ""}]
+n = M.cad_kaynagiyla_sinifla(komp, har, {}, log=lambda t: None)
+esit("tedarikçi parçası CAD'e göre standart", (komp[0]["sinif"], komp[0]["tip"]),
+     ("standart", "CAD: satın alınan"))
+esit("adı 'kamera' ama CAD 'Made' diyor", komp[1]["sinif"], "parca")
+esit("kod adın içinden eşleşti", komp[2]["sinif"], "parca")
+esit("dikişe dokunulmaz", komp[3]["sinif"], "kaynak")
+esit("değişen sayısı", n, 2)
+kural = {M.kural_anahtari("510206504-00"): "parca"}
+komp[0]["sinif"] = "parca"
+M.cad_kaynagiyla_sinifla(komp[:1], har, kural, log=lambda t: None)
+esit("elle verilen sınıf CAD'den de önce gelir", komp[0]["sinif"], "parca")
+with open(y, "w", encoding="utf-8") as f:
+    f.write("kod;malzeme\nA;Steel\n")
+esit("kaynak sütunu yoksa boş", M.cad_kaynagi_oku(y), {})
 
 print("\n-- hiyerarşik BOM: dikişler tek satır")
 agac = {"ad": "KOK", "montaj": True, "alt": [

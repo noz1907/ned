@@ -64,6 +64,7 @@ from OCP.GCPnts import GCPnts_TangentialDeflection
 import pf1_referans as E
 import pf7_is as IS
 import pf8_tani as TN
+import pf9_excel as XL
 
 RHO = 7.85e-6          # kg/mm3 (çelik); --yogunluk ile değiştirilir
 
@@ -179,6 +180,11 @@ def malzeme_listele():
 # Bu desenlere uyan parçalar için çizim üretilmez, sadece kod + adet listelenir.
 STANDART = [
     (r"\bDIN\s*\d+", "DIN"), (r"\bISO\s*\d+", "ISO"), (r"\bEN\s*\d{3,}", "EN"),
+    # Perçin somun EN BAŞTA: "M6 SOMUN PERCIN" hem somun hem perçin
+    # içerir; aynı yerde bitenlerden listede önce gelen tip alınır.
+    (r"(?:somun|nut|mutter)[\s_-]*per[cç]in|per[cç]in[\s_-]*somun|rivet[\s_-]*nut"
+     r"|rivnut|nutsert|(?:blind|ein)?niet[\s_-]*mutter|pop[\s_-]*nut"
+     r"|insert[\s_-]*nut|threaded[\s_-]*insert", "perçin somun"),
     (r"civata|cıvata|bolt|screw|schraube", "civata"),
     (r"\bsomun(?:u|lar[ıi]?)?\b|\bnut\b|mutter", "somun"),
     (r"\bpul(?:u|lar[ıi]?)?\b|rondela|washer|scheibe|unterlegscheibe", "pul"),
@@ -263,6 +269,72 @@ def kural_anahtari(ad, k=None):
         return ("geo:" + f"{float(k['hacim_mm3']):.1f}:"
                 + "x".join(f"{float(v):.1f}" for v in k["olc"]))
     return _sinif_adi(kaynak_tipi(ad))
+
+
+def sekil_anahtari(imza):
+    """Biçim imzasıyla saklanan kural: "sekil:{...}" (bkz. pf8_tani)."""
+    return "sekil:" + json.dumps(imza, sort_keys=True, separators=(",", ":"))
+
+
+def sekil_kurallari(kural):
+    out = []
+    for a, s in (kural or {}).items():
+        if a.startswith("sekil:") and s in ("parca", "standart", "kaynak"):
+            try:
+                out.append((json.loads(a[6:]), s))
+            except ValueError:
+                pass
+    return out
+
+
+def ad_bilgili(ad):
+    """Ad parçanın ne olduğunu söylüyor mu (norm, kaynak, üretim ya da
+    standart eleman sözcüğü). Söylemiyorsa ("510206504-00", "COMPOUND")
+    karar biçimden verilir."""
+    a = _sinif_adi(ad)
+    if TN.isimsiz(ad):
+        return False
+    return bool(re.search(KAYNAK, a, re.I) or re.search(NORM, a, re.I)
+                or re.search(URETIM, a, re.I) or re.search(KAYNAK_ELEMANI, a, re.I)
+                or any(re.search(d, a, re.I) for d, _t in STANDART + TICARI))
+
+
+def benzerden_sinifla(kayit, komp, kural=None, log=print):
+    """ÖĞRENME: kullanıcının elle düzelttiği parçaların BİÇİM İMZASI
+    saklanır; adı bilgi taşımayan ve biçimi onlara benzeyen parçalar da
+    aynı sınıfa geçer (M6 perçin somunu bir kez gösterilince M8'i de).
+    Adı ne olduğunu söyleyen parçaya dokunulmaz; o parçanın kendi elle
+    verilmiş kuralı da her zaman önce gelir.
+
+    Ölçüldü (4 gerçek model, adı belli 636 komponent): adları farklı
+    parçalar arasında 13190 benzer çift çıktı; yalnız 1'i farklı sınıftan
+    (bir bağlantı braketi ile 25x6,5x1 pul) - ikisinin de adı ne olduğunu
+    söylediği için öğrenme onlara zaten uygulanmaz."""
+    if kural is None:
+        kural = ayar_oku().get("sinif_kurali") or {}
+    kurallar = sekil_kurallari(kural)
+    if not kurallar:
+        return 0
+    n = 0
+    for k in komp:
+        if _kural(kural, k) or (ad_bilgili(k["ad"]) and not k.get("geometri")):
+            continue
+        if "imza" not in k:
+            k["imza"] = TN.bicim_imzasi(kayit[k["indeks"][0]][1])
+        for im, s in kurallar:
+            if TN.benzer(k["imza"], im):
+                if s != k["sinif"]:
+                    k["sinif"] = s
+                    k["tip"] = "benzerinden öğrenildi" if s == "standart" else ""
+                    k["ogrenildi"] = True
+                    for a in ("geometri", "oneri", "isimsiz"):
+                        k.pop(a, None)
+                    n += 1
+                break
+    if n:
+        log(f"benzerinden öğrenme: {n} komponent daha önce elle düzeltilen "
+            f"parçalara biçimce benzediği için sınıflandı")
+    return n
 
 
 def _kural(kural, k):
@@ -5678,8 +5750,8 @@ def geometriden_sinifla(kayit, komp, kural=None, log=print):
     ÖNERİ olarak yazılır (k["oneri"]) - 2. sekmede görünür, kullanıcı
     isterse sınıfını değiştirir.
 
-    Ölçüldü (4 gerçek model, adı belli 636 komponent): geometri 214
-    karar verdi, 1'i yanlış (%0,47 - adında SAC geçen pul biçimli parça);
+    Ölçüldü (4 gerçek model, adı belli 636 komponent): geometri 227
+    karar verdi, 1'i yanlış (%0,44 - adında SAC geçen pul biçimli parça);
     182 kaynak kararının hepsi doğru, hiçbir üretim parçası dikiş
     sayılmadı. Emin olunmayan katıya karar verilmez."""
     karar = oneri = 0
@@ -5710,6 +5782,67 @@ def geometriden_sinifla(kayit, komp, kural=None, log=print):
             + (f"; {len(isimsiz)} adsız katı TANINAMADI (parça sayıldı, "
                "2. sekmede elle sınıflayın)" if isimsiz else ""))
     return karar, oneri
+
+
+# Açık kesitin kısa adı ("bükümlü sac, U kesit 40x15x1,5" gibi)
+KESIT_KISA = {"köşebent": "L", "U profil": "U", "C profil": "C", "T profil": "T",
+              "Z profil": "Z", "I/H profil": "I", "lama": "düz", "ekstrüzyon": "özel",
+              "dolu çubuk": "dikdörtgen", "kare çubuk": "kare"}
+KAPALI_PROFIL = ("kutu", "kare kutu", "boru", "mil")
+
+
+def profilden_tanimla(kayit, komp, log=print):
+    """Üretim parçalarından PROFİLLERİ bulur: kutu, boru, köşebent, U, C,
+    I, T, lama, mil, alüminyum ekstrüzyon (pf8_tani.profil - adına
+    bakılmaz, parça boyuna kesilip kesit ölçülür).
+
+    Profil biçimli her parça profil DEĞİLDİR: 1,5 mm sacdan bükülmüş U
+    da sabit kesitlidir ama açınımla lazerde kesilip bükülür. Açık kesitte
+    sac taraması "bükümlü sac" diyorsa parça sac sayılır (tipine yalnız
+    kesiti yazılır); kutu / boru / mil ve dolu sac olamayacak özel kesit
+    profildir. Profiller k["profil"]'e yazılır, PROFIL.xlsx kesim
+    listesine girer.
+
+    Ölçüldü (4 gerçek model): 38 profil (kare kutu 24, boru 7, kutu 4,
+    alüminyum ekstrüzyon 3) ve 76 profil biçimli bükümlü sac; kesitler
+    resmi çizilip tek tek karşılaştırıldı."""
+    say, sacli = Counter(), 0
+    for k in komp:
+        if k["sinif"] != "parca":
+            continue
+        sh = kayit[k["indeks"][0]][1]
+        try:
+            r = TN.profil(sh, k.get("hacim_mm3"))
+        except Exception:
+            r = None
+        # 5 mm'den ince, 20 mm'den kısa "profil" yay teli, pim gibi
+        # küçük parçadır; kesim listesine girmez
+        if not r or max(r["W"], r["H"]) < 5.0 or r["boy"] < 20.0:
+            continue
+        sac = ""
+        if r["tur"] not in KAPALI_PROFIL:
+            try:
+                sac = sac_taramasi(sh)["tip"]
+            except Exception:
+                sac = ""
+        # 3 mm ve incesi "lama" lazerde kesilmiş sac şerididir (lama
+        # stoğu 3 mm'den başlar): kaynaklı kasada 30 x 1,5 bağlantı saçı
+        if (sac == "bukumlu sac" or (r["tur"] == "lama" and (
+                sac == "duz sac" or min(r["W"], r["H"]) <= 3.0))):
+            k["kesit"] = r
+            k["tip"] = (f"{'bükümlü' if sac == 'bukumlu sac' else 'düz'} sac, "
+                        f"{KESIT_KISA.get(r['tur'], r['tur'])} kesit {r['kesit']}")
+            sacli += 1
+            continue
+        k["profil"] = r
+        k["tip"] = r["ad"]
+        say[r["tur"]] += 1
+    if say or sacli:
+        log(f"profil: {sum(say.values())} parça"
+            + (" (" + ", ".join(f"{t} {n}" for t, n in say.most_common()) + ")"
+               if say else "")
+            + (f"; {sacli} parça profil biçimli sac (açınımla üretilir)" if sacli else ""))
+    return say, sacli
 
 
 def komponentle(kayit, P, kural=None):
@@ -6014,6 +6147,83 @@ def malzeme_dosya_oku(yol):
     return esl, sorted(set(bilinmeyen))
 
 
+# CAD'in "Made / Bought" (üretilen / satın alınan) alanı. CATIA'da her
+# ürünün Özellikler > Ürün > "Source" alanıdır; Pi3D'nin CATIA makrosu
+# (catia_malzeme_cikar.CATScript) malzeme.csv'nin 4. sütununa yazar.
+# Tasarımcının kendi verdiği bilgidir: addan ya da biçimden TAHMİNDEN
+# her zaman daha doğrudur.
+KAYNAK_BASLIK = ("source", "kaynak", "make/buy", "make or buy", "tedarik",
+                 "beschaffungsart", "beschaffung", "procurement", "provenance")
+_SATIN = r"bought|\bbuy|purchas|sat[ıi]n|kaufteil|zukauf|achat|fremdteil"
+_URET = r"\bmade\b|\bmake\b|[uü]retim|imalat|eigenfertig|eigenteil|fabriqu"
+
+
+def cad_kaynagi_oku(yol):
+    """Dosyada "Source / kaynak" sütunu varsa kod -> "standart" | "parca".
+    Sütun yoksa boş sözlük (malzeme dosyası yine malzeme için okunur)."""
+    if yol.lower().endswith(".json"):
+        return {}
+    try:
+        tablo = _tablo_satirlari(yol)
+    except Exception:
+        return {}
+    for n, sat in enumerate(tablo[:15]):
+        ik = _sutun(sat, KOD_BASLIK)
+        ic = _sutun(sat, KAYNAK_BASLIK)
+        if ik is None or ic is None or ik == ic:
+            continue
+        out = {}
+        for r in tablo[n + 1:]:
+            if len(r) <= max(ik, ic):
+                continue
+            kod, v = r[ik].strip().strip('"'), _tr_sade(r[ic])
+            if not kod:
+                continue
+            if re.search(_SATIN, v, re.I):
+                out[_tr_sade(kod)] = "standart"
+            elif re.search(_URET, v, re.I):
+                out[_tr_sade(kod)] = "parca"
+        return out
+    return {}
+
+
+def cad_kaynagiyla_sinifla(komp, harita, kural=None, log=print):
+    """CAD'in Made/Bought bilgisiyle sınıflar: Bought -> standart (satın
+    alınan, resmi çizilmez), Made -> üretim parçası. Kaynak dikişine ve
+    kullanıcının elle verdiği sınıfa dokunulmaz. Eşleştirme malzemedeki
+    gibi: parça kodu (Part Number) ya da adın içinde geçen kod."""
+    if not harita:
+        return 0
+    if kural is None:
+        kural = ayar_oku().get("sinif_kurali") or {}
+    n = 0
+    for k in komp:
+        if k["sinif"] == "kaynak" or _kural(kural, k):
+            continue
+        v = harita.get(_tr_sade(k["kod"]))
+        if v is None:
+            kod_s, ad_s = _tr_sade(k["kod"]), _tr_sade(k["ad"])
+            for kod, s in harita.items():
+                if len(kod) < 5:
+                    continue
+                dsn = r"(?<![0-9a-z])" + re.escape(kod) + r"(?![0-9a-z])"
+                if re.search(dsn, kod_s) or re.search(dsn, ad_s):
+                    v = s
+                    break
+        if v is None:
+            continue
+        k["cad_kaynak"] = v
+        if v != k["sinif"]:
+            k["sinif"] = v
+            k["tip"] = "CAD: satın alınan" if v == "standart" else ""
+            for a in ("geometri", "oneri", "isimsiz", "profil", "kesit"):
+                k.pop(a, None)
+            n += 1
+    log(f"CAD'in Made/Bought bilgisi: {len(harita)} kayıt; {n} komponentin "
+        f"sınıfı buna göre değişti")
+    return n
+
+
 def malzeme_sablonu(komp, yol):
     """Kullanıcının doldurup --malzeme-dosya ile geri vereceği şablon."""
     with open(yol, "w", newline="", encoding="utf-8-sig") as f:
@@ -6102,6 +6312,8 @@ def step_komponentleri(step, P, log=print):
     if agac:
         agactan_sinifla(agac, komp, kural, log)
     geometriden_sinifla(kayit, komp, kural, log)
+    benzerden_sinifla(kayit, komp, kural, log)
+    profilden_tanimla(kayit, komp, log)
     sayim = Counter(k["sinif"] for k in komp)
     kyn = [k for k in komp if k["sinif"] == "kaynak"]
     log(f"{len(komp) - len(kyn)} komponent  ("
@@ -6204,12 +6416,8 @@ def agac_bom_yaz(on, agac_satir):
     """Hiyerarşik BOM'u CSV ve okunabilir tablo olarak yazar."""
     alan = ["poz", "seviye", "tur", "kod", "ad", "adet", "toplam_adet",
             "malzeme_ad", "malzeme_kaynak", "olcu", "kg_adet", "toplam_kg"]
-    with open(os.path.join(on, "BOM_AGAC.csv"), "w", newline="",
-              encoding="utf-8-sig") as f:
-        w = csv.DictWriter(f, fieldnames=alan, extrasaction="ignore", delimiter=";")
-        w.writeheader()
-        for r in agac_satir:
-            w.writerow(r)
+    XL.tablo_yaz(os.path.join(on, "BOM_AGAC.csv"), alan,
+                 XL.sozlukten(alan, agac_satir), "BOM_AGAC")
     L = ["# Hiyerarşik parça listesi (çok kademeli BOM)\n",
          "Ana ürün → alt montaj → parça. **Adet bir üst montaj başınadır**; "
          "ürünün tamamındaki sayı `toplam` sütunundadır.\n",
@@ -6236,8 +6444,10 @@ def zip_yap(on, ad="cizimler.zip", desen=(".dxf", ".pdf")):
     (DXF/, ACINIM/, LZR/, PDF/ ve kökteki tablolar)."""
     import zipfile
     yol = os.path.join(on, ad)
-    tablo = ("BOM.csv", "BOM.md", "BOM_AGAC.csv", "BOM_AGAC.md", "olculer.csv",
-             "olculer.json", "rapor.md", "ACINIM.csv", "LAZER.csv")
+    tablo = ("BOM.csv", "BOM.xlsx", "BOM.md", "BOM_AGAC.csv", "BOM_AGAC.xlsx",
+             "BOM_AGAC.md", "olculer.csv", "olculer.xlsx", "olculer.json",
+             "rapor.md", "ACINIM.csv", "ACINIM.xlsx", "LAZER.csv", "LAZER.xlsx",
+             "PROFIL.csv", "PROFIL.xlsx")
     with zipfile.ZipFile(yol, "w", zipfile.ZIP_DEFLATED) as z:
         for d in sorted(os.listdir(on)):
             y = os.path.join(on, d)
@@ -6355,7 +6565,11 @@ def calistir(step, on, kayit, komp, P, asama=(1, 2, 3), esl=None, agac=None,
         sat["yogunluk_g_cm3"] = round(yog * 1e6, 3)
         sat["malzeme_kaynak"] = {"data": "data'dan", "secim": "secim",
                                  "genel": "varsayilan"}[kaynak]
-        sat["olcu"] = f"{o['boy_mm']}x{o['en_mm']}x{o['kalinlik_mm']}"
+        # Türkçe yazım (ondalık virgül): "1513,76 x 1281,19 x 1"
+        sat["olcu"] = " x ".join(f"{float(v):.2f}".rstrip("0").rstrip(".").replace(".", ",")
+                                 for v in (o["boy_mm"], o["en_mm"], o["kalinlik_mm"]))
+        if k.get("profil"):
+            sat["profil"] = k["profil"]
         sat["kg_adet"] = o["kutle_kg"]
         sat["toplam_kg"] = round(o["kutle_kg"] * k["adet"], 4)
         if 2 in asama and id(k) in ciz_id:
@@ -6421,6 +6635,9 @@ def calistir(step, on, kayit, komp, P, asama=(1, 2, 3), esl=None, agac=None,
 
     if 1 in asama:
         bom_yaz(on, bom, satirlar)
+        n = profil_listesi_yaz(on, satirlar)
+        if n:
+            log(f"  PROFIL.xlsx, PROFIL.csv  ({n} profil - kesim listesi ve stok özeti)")
         if agac:
             ags = agac_bom(agac, komp, satirlar)
             agac_bom_yaz(on, ags)
@@ -6429,16 +6646,13 @@ def calistir(step, on, kayit, komp, P, asama=(1, 2, 3), esl=None, agac=None,
     alan = ["poz", "kod", "ad", "adet", "sinif", "tip", "malzeme_ad", "yogunluk_g_cm3",
             "boy_mm", "en_mm", "kalinlik_mm", "sac_kalinlik_mm", "hacim_mm3",
             "kutle_kg", "toplam_kg", "yuzey_mm2", "delik_adedi", "radus_adedi", "dxf"]
-    with open(os.path.join(on, "olculer.csv"), "w", newline="", encoding="utf-8-sig") as f:
-        w = csv.DictWriter(f, fieldnames=alan, extrasaction="ignore", delimiter=";")
-        w.writeheader()
-        for r in satirlar:
-            w.writerow(r)
+    XL.tablo_yaz(os.path.join(on, "olculer.csv"), alan,
+                 XL.sozlukten(alan, satirlar), "olculer")
     json.dump({"step": step, "montaj": montaj, "komponent": satirlar},
               open(os.path.join(on, "olculer.json"), "w", encoding="utf-8"),
               ensure_ascii=False, indent=1)
     rapor_yaz(on, step, kayit, komp, satirlar, montaj)
-    log("  BOM.csv, BOM.md, olculer.csv, olculer.json, rapor.md")
+    log("  BOM.csv/.xlsx, BOM.md, olculer.csv/.xlsx, olculer.json, rapor.md")
     return {"klasor": on, "dxf_klasor": dxf_kl, "satirlar": satirlar,
             "bom": bom, "montaj": montaj, "atlanan": atlanan}
 
@@ -6536,6 +6750,7 @@ def main():
         except MalzemeDosyaHatasi as ex:
             sys.exit(f"HATA: malzeme dosyası okunamadı: {ex}")
         print(f"malzeme dosyası: {a.malzeme_dosya} ({len(esl)} kayıt eşleşti)")
+        cad_kaynagiyla_sinifla(komp, cad_kaynagi_oku(a.malzeme_dosya), log=print)
         if bilinmeyen:
             print("! tanınmayan malzeme adı: " + ", ".join(bilinmeyen[:10])
                   + (f" (+{len(bilinmeyen)-10})" if len(bilinmeyen) > 10 else ""))
@@ -6589,15 +6804,74 @@ def main():
     print(f"bitti [{time.time()-t0:.0f}s]  ->  {on}/")
 
 
+STOK_BOY_MM = 6000.0          # profil çubuk boyu (stok özeti için)
+
+
+def profil_listesi_yaz(on, satirlar):
+    """PROFIL.xlsx / PROFIL.csv: kesim listesi (parça başına boy) ve
+    stok özeti (kesit + malzeme başına toplam boy, 6 m çubuk sayısı).
+    Profil yoksa eski dosyalar silinir (başka modelden kalmasın)."""
+    pr = [r for r in satirlar if r.get("profil") and r.get("sinif") == "parca"]
+    if not pr:
+        for u in ("PROFIL.csv", "PROFIL.xlsx"):
+            y = os.path.join(on, u)
+            if os.path.isfile(y):
+                try:
+                    os.remove(y)
+                except OSError:
+                    pass
+        return 0
+    bas = ["poz", "kod", "ad", "profil", "kesit", "malzeme_ad", "boy_mm", "adet",
+           "toplam_boy_m", "kesit_mm2", "kg_m", "kg_adet", "toplam_kg"]
+    kes, oz = [], {}
+    for r in sorted(pr, key=lambda r: (r["profil"]["tur"], r["profil"]["kesit"],
+                                       -r["profil"]["boy"])):
+        p = r["profil"]
+        yog = r.get("yogunluk_g_cm3") or 7.85
+        kg_m = round(p["alan"] * yog * 1e-3, 3)
+        top = round(p["boy"] * r["adet"] / 1000.0, 3)
+        tur = p["ad"].rsplit(" ", 1)[0]
+        kes.append([r["poz"], r["kod"], r["ad"], tur, p["kesit"], r.get("malzeme_ad", ""),
+                    p["boy"], r["adet"], top, p["alan"], kg_m, r.get("kg_adet"),
+                    r.get("toplam_kg")])
+        a = (tur, p["kesit"], r.get("malzeme_ad", ""))
+        o = oz.setdefault(a, [0, 0.0, 0.0, kg_m, 0.0])
+        o[0] += r["adet"]
+        o[1] += p["boy"] * r["adet"]
+        o[2] = max(o[2], p["boy"])
+        o[4] += r.get("toplam_kg") or 0.0
+    obas = ["profil", "kesit", "malzeme_ad", "parca_adedi", "toplam_boy_m",
+            "en_uzun_parca_mm", "cubuk_6m_adedi", "kg_m", "toplam_kg"]
+    osat = []
+    for (tur, kesit, mal), (n, boy, uz, kg_m, kg) in sorted(oz.items()):
+        # Kaba ihtiyaç: toplam boy / 6 m, yukarı yuvarlanır. Testere payı ve
+        # kesim yerleşimi (fire) hesaba katılmaz - sipariş öncesi kontrol.
+        cubuk = math.ceil(boy / STOK_BOY_MM - 1e-9) if uz <= STOK_BOY_MM else None
+        osat.append([tur, kesit, mal, n, round(boy / 1000.0, 3), uz, cubuk, kg_m,
+                     round(kg, 3)])
+    with open(os.path.join(on, "PROFIL.csv"), "w", newline="", encoding="utf-8-sig") as f:
+        w = csv.writer(f, delimiter=";")
+        w.writerow(bas)
+        for s in kes:
+            w.writerow(XL.tr_satir(s))
+        w.writerow([])
+        w.writerow(["# STOK ÖZETİ (6 m çubuk, fire hariç)"])
+        w.writerow(obas)
+        for s in osat:
+            w.writerow(XL.tr_satir(s))
+    try:
+        XL.xlsx_yaz(os.path.join(on, "PROFIL.xlsx"),
+                     [("Kesim listesi", bas, kes), ("Stok özeti", obas, osat)])
+    except Exception:
+        pass
+    return len(pr)
+
+
 def bom_yaz(on, bom, satirlar):
     """AŞAMA 1 çıktısı: parça listesi (BOM) — CSV + okunabilir tablo."""
     alan = ["poz", "kod", "ad", "adet", "sinif", "tip", "malzeme_ad", "olcu",
             "kg_adet", "toplam_kg", "dxf"]
-    with open(os.path.join(on, "BOM.csv"), "w", newline="", encoding="utf-8-sig") as f:
-        w = csv.DictWriter(f, fieldnames=alan, extrasaction="ignore", delimiter=";")
-        w.writeheader()
-        for r in bom:
-            w.writerow(r)
+    XL.tablo_yaz(os.path.join(on, "BOM.csv"), alan, XL.sozlukten(alan, bom), "BOM")
     agir = sum((r.get("toplam_kg") or 0.0) for r in bom)
     L = ["# BOM – parça listesi\n",
          f"{len(bom)} poz, toplam kütle {agir:.3f} kg\n",
@@ -6677,6 +6951,27 @@ def rapor_yaz(on, step, kayit, komp, satirlar, montaj):
         if adsiz:
             L.append(f"\n**Tanınamayan adsız katı: {len(adsiz)}** — parça "
                      "sayıldı; arayüzün 2. sekmesinde elle sınıflayın.")
+    ogr = [k for k in komp if k.get("ogrenildi")]
+    cad = [k for k in komp if k.get("cad_kaynak")]
+    if ogr or cad:
+        L.append("\n## Öğrenilen ve CAD'den gelen sınıflar\n")
+        if cad:
+            L.append(f"CAD'in Made/Bought bilgisi {len(cad)} komponentte kullanıldı "
+                     f"({sum(k['sinif'] == 'standart' for k in cad)} satın alınan).\n")
+        for k in ogr:
+            L.append(f"- {k['ad'][:50]}: {k['sinif']} — daha önce elle düzeltilen "
+                     "bir parçaya biçimce benziyor")
+    prf = [k for k in komp if k.get("profil")]
+    if prf:
+        L.append("\n## Profiller\n")
+        L.append("Sabit kesitli parçalar (boyuna 9 kesit alındı). Kesim listesi "
+                 "ve 6 m çubuk özeti: `PROFIL.xlsx`.\n")
+        L.append("| ad | adet | profil | boy mm | gerekçe |")
+        L.append("|----|------|--------|--------|---------|")
+        for k in prf:
+            p_ = k["profil"]
+            L.append(f"| {k['ad'][:30]} | {k['adet']} | {p_['ad']} | "
+                     f"{p_['boy']:g} | {p_['gerekce'].split(': ', 1)[-1]} |")
     L.append("\n## Delik ve radüs tabloları\n")
     L.append("Çap yalnız TAM ÇEMBER delikler için verilir. Kenar yuvarlamaları "
              "(fillet) delik değildir, ayrı tabloda yarıçap olarak listelenir.\n")

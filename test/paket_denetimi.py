@@ -63,6 +63,8 @@ def main():
     dogru("pf6_malzeme spec'te yazılı", '"pf6_malzeme"' in spec)
     dogru("pf7_is (klasör düzeni / devam) spec'te yazılı", '"pf7_is"' in spec)
     dogru("pf8_tani (geometriden tanıma) spec'te yazılı", '"pf8_tani"' in spec)
+    # pf7_is pf9_excel'i yalnız csv_birlestir'in İÇİNDE import ediyor
+    dogru("pf9_excel (.xlsx tablolar) spec'te yazılı", '"pf9_excel"' in spec)
     for d in ("catia_malzeme_cikar.CATScript", "KULLANIM.md", "SURUM.txt"):
         dogru(f"{d} pakete giriyor", f'"{d}"' in spec
               and os.path.isfile(os.path.join(KOK, d)),

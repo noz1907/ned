@@ -1,11 +1,17 @@
 ' ==========================================================================
 '  Pi3D - CATIA V5 malzeme cikarma makrosu
 '
-'  Acik olan .CATProduct'in agacini gezer, her parcanin malzemesini okur ve
-'  urun dosyasinin yanina "malzeme.csv" yazar:
+'  Acik olan .CATProduct'in agacini gezer, her parcanin malzemesini ve
+'  KAYNAGINI (Ozellikler > Urun > Source: Made / Bought) okur, urun
+'  dosyasinin yanina "malzeme.csv" yazar:
 '
-'      kod;malzeme;ad
-'      01.050.000.01;Steel;U-Blech-Mechanismus
+'      kod;malzeme;ad;kaynak
+'      01.050.000.01;Steel;U-Blech-Mechanismus;Made
+'      ISO 4762 M6x20;Steel;Civata;Bought
+'
+'  kaynak = Bought olan parca Pi3D'de SATIN ALINAN (standart) sayilir,
+'  resmi cizilmez; Made olan uretim parcasidir. Alt montaj Bought ise
+'  altindaki butun parcalar Bought sayilir (satin alinan grup).
 '
 '  Bu dosyayi Pi3D'de: Yardim > Malzemeyi CAD'den al > 4. adim ile verin.
 '
@@ -35,11 +41,11 @@ Sub CATMain()
     Dim fso, f
     Set fso = CreateObject("Scripting.FileSystemObject")
     Set f = fso.CreateTextFile(yol, True)
-    f.WriteLine "kod;malzeme;ad"
+    f.WriteLine "kod;malzeme;ad;kaynak"
 
     Dim sayac, bulunan
     sayac = 0 : bulunan = 0
-    Gez oDoc.Product, f, sayac, bulunan
+    Gez oDoc.Product, f, sayac, bulunan, ""
 
     f.Close
     MsgBox "Yazildi:" & vbCrLf & yol & vbCrLf & vbCrLf & _
@@ -51,14 +57,17 @@ Sub CATMain()
 End Sub
 
 
-' Montaj agacini yinelemeli gezer.
-Sub Gez(oUrun, f, sayac, bulunan)
+' Montaj agacini yinelemeli gezer. ustKaynak: ust montaj Bought ise
+' altindakiler de Bought yazilir.
+Sub Gez(oUrun, f, sayac, bulunan, ustKaynak)
 
-    Dim i, oAlt
+    Dim i, oAlt, kay
+    kay = KaynakAdi(oUrun)
+    If ustKaynak = "Bought" Then kay = "Bought"
     If oUrun.Products.Count > 0 Then
         For i = 1 To oUrun.Products.Count
             Set oAlt = oUrun.Products.Item(i)
-            Gez oAlt, f, sayac, bulunan
+            Gez oAlt, f, sayac, bulunan, kay
         Next
         Exit Sub
     End If
@@ -72,9 +81,33 @@ Sub Gez(oUrun, f, sayac, bulunan)
     mal = MalzemeAdi(oUrun)
     If mal <> "" Then bulunan = bulunan + 1
 
-    f.WriteLine kod & ";" & mal & ";" & ad
+    f.WriteLine kod & ";" & mal & ";" & ad & ";" & kay
 
 End Sub
+
+
+' Urunun Source alani: 1 = Made (uretilen), 2 = Bought (satin alinan),
+' 0 = Unknown. Alan dogrudan urunde ya da referans urunde olabilir.
+Function KaynakAdi(oUrun)
+
+    Dim s
+    s = 0
+    On Error Resume Next
+    s = oUrun.Source
+    If Err.Number <> 0 Or s = 0 Then
+        Err.Clear
+        s = oUrun.ReferenceProduct.Source
+    End If
+    On Error GoTo 0
+    If s = 1 Then
+        KaynakAdi = "Made"
+    ElseIf s = 2 Then
+        KaynakAdi = "Bought"
+    Else
+        KaynakAdi = ""
+    End If
+
+End Function
 
 
 ' Malzeme adini uc ayri yoldan okumaya calisir.

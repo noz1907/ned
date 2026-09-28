@@ -21,7 +21,7 @@ aktarabilir; **Material** bunlardan biridir.
 1. `.CATProduct` açıkken menüden **Analyze ▸ Bill of Material**
 2. Açılan pencerede **Define formats** düğmesi
 3. *Hidden Properties* listesinden **Material**'i seçip **>** ile
-   *Displayed Properties* tarafına atın.
+   *Displayed Properties* tarafına atın. **Source**'u da ekleyin (aşağıya bakın).
    *Part Number* zaten görünür listede olmalı; değilse onu da ekleyin.
 4. **OK** → **Save As…** → tür olarak **Text (\*.txt)** ya da
    **Excel (\*.xls)** seçip kaydedin
@@ -38,6 +38,23 @@ Part Number	Nomenclature	Material	Quantity
 5. Pi3D'de **Yardım ▸ Malzemeyi CAD'den al** → 4. adımda bu dosyayı seçin
    (önizleme: hangi parça hangi malzemeyi alacak), ya da 2. adımda →
    **malzeme.csv yükle…**
+
+### Source (Made / Bought): hangi parça satın alınıyor?
+
+CATIA'da her ürünün **Özellikler ▸ Ürün ▸ Source** alanı vardır: *Made*
+(üretilen) ya da *Bought* (satın alınan). Tasarımcı bunu dolduruyorsa Pi3D
+parçanın standart mı üretim mi olduğunu **tahmin etmez, CAD'den okur**:
+
+- Bill of Material'e **Source** sütununu ekleyin (yukarıdaki 3. adım), ya da
+  makroyu kullanın (4. sütun `kaynak` olarak yazılır).
+- `Bought` → satın alınan (standart): BOM'da adediyle, resmi çizilmez.
+- `Made` → üretim parçası: resmi, açınımı çıkar.
+- Bir **alt montaj** Bought ise altındaki bütün parçalar satın alınan sayılır
+  (hazır alınan grup).
+
+Adından ya da biçiminden tanınamayan parça (perçin somun, tedarikçi parçası,
+parça numarasıyla adlandırılmış eleman) için en kesin ve en hızlı yol budur:
+CATIA'da bir kez doldurulan alan her modelde geçerlidir.
 
 Program başlık satırındaki `Part Number` ve `Material` sütunlarını adlarından
 bulur; ayırıcının sekme mi, noktalı virgül mü, virgül mü olduğunu kendi

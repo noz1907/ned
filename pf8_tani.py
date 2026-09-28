@@ -1,6 +1,13 @@
 # -*- coding: utf-8 -*-
 """GEOMETRİDEN TANIMA: adı olmayan katı pul mu, somun mu, cıvata mı,
-perçin mi, pim mi, kaynak dikişi mi?
+perçin mi, perçin somun mu, pim mi, kaynak dikişi mi; parça bir PROFİL mi
+(kutu, boru, L, U, lama, ekstrüzyon); iki parça BİÇİMCE benzer mi.
+
+Bölümler:
+  tani()          yüz tiplerinden (_donel) ya da ışın ölçümüyle
+                  (_donel_isin: diş / tırtıl modelli parça) bağlantı elemanı
+  profil()        boyuna 9 kesit: sabit kesitli mi, kesit türü ve ölçüsü
+  bicim_imzasi()  ölçekten ve duruştan bağımsız imza (öğrenme için)
 
 CAD'ler bazen katıya ad vermez ("COMPOUND", "SOLID", "Body"): addan
 sınıflama o zaman hiçbir şey bilemez, cıvata "üretim parçası" sayılıp
@@ -19,7 +26,8 @@ delik Ø10,0, yükseklik 8,0").
              kalınlık <= dış çapın %30'u, iç/dış çap oranı 0,25-0,85
     somun    eksene paralel 6 düz yüz, normalleri 60° aralıklı ve
              eksenden eşit uzakta (altıgen) ya da 4 yüz 90° (kare);
-             boydan boya delik; anahtar ağzı / delik 1,3-2,4
+             boydan boya delik; anahtar ağzı / delik 1,3-2,4;
+             yükseklik / delik >= 0,45 (daha yassısı delikli plakadır)
     cıvata   boydan boya delik YOK; bir ucunda altıgen ya da daha geniş
              silindirik baş, gövdesi (şaft) başından en az 1 çap uzun
     perçin   şaft + bir ucunda kubbe (küre/tor) ya da havşa (koni) baş
@@ -210,9 +218,18 @@ def _tani(sh, V):
         return ("standart", "o-ring",
                 f"o-ring: yalnız tor yüzü, orta çap Ø{2 * R:.1f}".replace(".", ","))
     e = _ana_eksen(yz)
-    if not e:
-        return None
-    return _donel(sh, e, V)
+    if e:
+        r = _donel(sh, e, V) or _donel_isin(sh, e)
+        if r:
+            return r
+    # Dönel yüzü olmayan (dişi serbest yüzle modellenmiş) parçada eksen
+    # eylemsizlikten bulunur: iki asal momenti eşit olan eksen simetri
+    # eksenidir (altıgen, kare, silindir için doğru).
+    e2 = _simetri_ekseni(sh)
+    if e2 and not (e and _paralel(e[1], e2[1])
+                   and _eksene_uzak(e2[0], e[0], e[1]) < EKSEN_TOL):
+        return _donel_isin(sh, e2)
+    return None
 
 
 def _kaynak_dikisi(yz, toplam, V):
@@ -309,7 +326,7 @@ def _donel(sh, eksen, V):
 
     if cok and delik_r > 0:
         n, s, zb = cok
-        if 1.3 <= s / (2 * delik_r) <= 2.4 and 0.25 <= H / (2 * delik_r) <= 1.6:
+        if 1.3 <= s / (2 * delik_r) <= 2.4 and 0.45 <= H / (2 * delik_r) <= 1.6:
             return ("standart", "somun",
                     f"somun: {n} yüz {360 // n}° aralıklı, anahtar ağzı {m(s)}, "
                     f"delik Ø{m(2 * delik_r)}, yükseklik {m(H)}")
@@ -382,6 +399,23 @@ def _donel(sh, eksen, V):
     return None
 
 
+def _simetri_ekseni(sh):
+    g = GProp_GProps()
+    BRepGProp.VolumeProperties_s(sh, g)
+    p = g.PrincipalProperties()
+    I = p.Moments()
+    I = (I[0], I[1], I[2])
+    eks = (p.FirstAxisOfInertia(), p.SecondAxisOfInertia(), p.ThirdAxisOfInertia())
+    c = g.CentreOfMass()
+    for i in range(3):
+        j, k = [x for x in range(3) if x != i]
+        if abs(I[j] - I[k]) <= 0.005 * max(I[j], I[k]) \
+                and abs(I[i] - I[j]) > 0.02 * max(I[i], I[j]):
+            d = eks[i]
+            return (c.X(), c.Y(), c.Z()), (d.X(), d.Y(), d.Z())
+    return None
+
+
 def _eksen_bos(sh, z0, H, n=9):
     """Eksen (Z) üstündeki noktaların hepsi katının dışında mı."""
     from OCP.BRepClass3d import BRepClass3d_SolidClassifier
@@ -415,3 +449,690 @@ def _cokgen(yan):
                 z1 = max(y["z"][1] for y in g)
                 return n, 2 * uz, (z0, z1)
     return None
+
+
+# ================================================================ PROFİL
+# Profil (kutu, boru, köşebent, U, I, T, lama, mil, alüminyum ekstrüzyon):
+# bir eksen boyunca SABİT KESİTLİ parça. Adına bakılmaz; parça boyuna
+# birkaç yerden kesilir:
+#   - kesitlerin çoğu aynı alanda (delik/pah/gönye kesimi birkaçını
+#     bozabilir; ortanca alınır)
+#   - hacim ~ kesit alanı x boy (gönye kesimli uçlar hacmi biraz düşürür)
+#   - boy, kesitin en büyük ölçüsünün en az 3 katı (yoksa plaka/blok)
+# Kesit türü kesitin kendisinden ÖLÇÜLÜR: iç boşluk sayısı, dış çizginin
+# dışbükey örtüsündeki cepler (L'de 1 köşe cebi, U'da 1 yan cebi, I'da 2
+# karşılıklı yan cebi, T'de 2 komşu köşe cebi...).
+PROFIL_NARIN = 3.0          # boy / kesit en büyük ölçüsü alt sınırı
+PROFIL_ISTASYON = 9
+
+
+def _cizgi_kenarlari(sh):
+    from OCP.BRepAdaptor import BRepAdaptor_Curve
+    from OCP.GeomAbs import GeomAbs_Line
+    from OCP.TopAbs import TopAbs_EDGE
+    out = []
+    ex = TopExp_Explorer(sh, TopAbs_EDGE)
+    while ex.More():
+        c = BRepAdaptor_Curve(TopoDS.Edge_s(ex.Current()))
+        ex.Next()
+        if c.GetType() != GeomAbs_Line:
+            continue
+        p, q = c.Value(c.FirstParameter()), c.Value(c.LastParameter())
+        v = (q.X() - p.X(), q.Y() - p.Y(), q.Z() - p.Z())
+        u = _uzunluk(v)
+        if u > 1e-6:
+            out.append((u, tuple(x / u for x in v)))
+    return out
+
+
+def _eksen_adaylari(sh, yz):
+    """Profil ekseni adayları: en uzun doğru kenar yönü, en büyük
+    silindirin ekseni (boru, mil)."""
+    ad = []
+    ke = sorted(_cizgi_kenarlari(sh), key=lambda t: -t[0])
+    if ke:
+        ad.append(ke[0][1])
+    sil = [y for y in yz if y["tip"] == "silindir"]
+    if sil:
+        ad.append(max(sil, key=lambda y: y["alan"])["d"])
+    tek = []
+    for d in ad:
+        if not any(_paralel(d, e) for e in tek):
+            tek.append(d)
+    return tek
+
+
+def _kesit(sh, z):
+    """z düzlemindeki kesit: [(nokta listesi, alan, derinlik)], net alan,
+    ayrı bölge sayısı. Boole kesmesi yerine düzlem kesiti (5 kat hızlı):
+    kesit eğrileri tellere bağlanır; bir tel başka birinin içindeyse
+    boşluktur (derinlik tek), onun içindeki yine malzemedir."""
+    from OCP.BRepAlgoAPI import BRepAlgoAPI_Section
+    from OCP.BRepBuilderAPI import BRepBuilderAPI_MakeFace
+    from OCP.ShapeAnalysis import ShapeAnalysis_FreeBounds
+    from OCP.TopAbs import TopAbs_EDGE
+    from OCP.TopTools import TopTools_HSequenceOfShape
+    from OCP.gp import gp_Pln
+    op = BRepAlgoAPI_Section(sh, gp_Pln(gp_Pnt(0.0, 0.0, z), gp_Dir(0.0, 0.0, 1.0)))
+    op.Build()
+    if not op.IsDone():
+        return [], 0.0, 0
+    kenar = TopTools_HSequenceOfShape()
+    ex = TopExp_Explorer(op.Shape(), TopAbs_EDGE)
+    while ex.More():
+        kenar.Append(ex.Current())
+        ex.Next()
+    teller = TopTools_HSequenceOfShape()
+    ShapeAnalysis_FreeBounds.ConnectEdgesToWires_s(kenar, 1e-5, False, teller)
+    out = []
+    for i in range(1, teller.Length() + 1):
+        w = TopoDS.Wire_s(teller.Value(i))
+        if not w.Closed() and not _kapali(w):
+            return [], 0.0, 0                  # açık tel: kesit güvenilmez
+        mf = BRepBuilderAPI_MakeFace(w, True)
+        if not mf.IsDone():
+            return [], 0.0, 0
+        g = GProp_GProps()
+        BRepGProp.SurfaceProperties_s(mf.Face(), g)
+        p = _tel_nokta(w, 0.05)
+        if len(p) < 3:
+            continue
+        out.append([p, abs(g.Mass()), 0, w])
+    out.sort(key=lambda t: -t[1])
+    for i, t in enumerate(out):
+        q = t[0][0]
+        t[2] = sum(1 for u in out[:i] if _icinde(q, u[0]))
+    net = sum(t[1] * (-1) ** t[2] for t in out)
+    bolge = sum(1 for t in out if t[2] % 2 == 0)
+    return out, net, bolge
+
+
+def _dis_olcu(tel):
+    """Kesit tellerinin X ve Y aralığı (eksen çerçevesinde)."""
+    xs = [q[0] for t in tel for q in t[0]]
+    ys = [q[1] for t in tel for q in t[0]]
+    if not xs:
+        return (0.0, 0.0, 0.0, 0.0)
+    return (min(xs), max(xs), min(ys), max(ys))
+
+
+def _kapali(w):
+    from OCP.BRep import BRep_Tool
+    from OCP.TopExp import TopExp
+    from OCP.TopoDS import TopoDS_Vertex
+    a, b = TopoDS_Vertex(), TopoDS_Vertex()
+    TopExp.Vertices_s(w, a, b)
+    if a.IsNull() or b.IsNull():
+        return False
+    return BRep_Tool.Pnt_s(a).Distance(BRep_Tool.Pnt_s(b)) < 1e-4
+
+
+def _icinde(q, p):
+    """Nokta çokgenin içinde mi (ışın sayma)."""
+    x, y = q
+    ic = False
+    n = len(p)
+    for i in range(n):
+        x1, y1 = p[i]
+        x2, y2 = p[(i + 1) % n]
+        if (y1 > y) != (y2 > y):
+            xk = x1 + (y - y1) * (x2 - x1) / (y2 - y1)
+            if xk > x:
+                ic = not ic
+    return ic
+
+
+def _tel_nokta(w, sapma=0.02):
+    from OCP.BRepTools import BRepTools_WireExplorer
+    from OCP.BRepAdaptor import BRepAdaptor_Curve
+    from OCP.GCPnts import GCPnts_TangentialDeflection
+    p = []
+    ex = BRepTools_WireExplorer(w)
+    while ex.More():
+        e = ex.Current()
+        c = BRepAdaptor_Curve(e)
+        d = GCPnts_TangentialDeflection(c, sapma, 0.1)
+        q = [c.Value(d.Parameter(i)) for i in range(1, d.NbPoints() + 1)]
+        q = [(t.X(), t.Y()) for t in q]
+        from OCP.TopAbs import TopAbs_REVERSED
+        if e.Orientation() == TopAbs_REVERSED:
+            q.reverse()
+        if p and q and math.dist(p[-1], q[0]) < 1e-6:
+            q = q[1:]
+        p += q
+        ex.Next()
+    if len(p) > 1 and math.dist(p[0], p[-1]) < 1e-6:
+        p.pop()
+    return p
+
+
+def _alan2(p):
+    return 0.5 * sum(p[i][0] * p[(i + 1) % len(p)][1] - p[(i + 1) % len(p)][0] * p[i][1]
+                     for i in range(len(p)))
+
+
+def _cevre(p):
+    return sum(math.dist(p[i], p[(i + 1) % len(p)]) for i in range(len(p)))
+
+
+def _ortu(p):
+    """Dışbükey örtünün köşe İNDEKSLERİ (monoton zincir), p'nin sırasıyla.
+    Noktalar 0,0001 mm'ye yuvarlanır: döndürülmüş parçada aynı doğrudaki
+    noktaların x'i 1e-12 oynar, sıralama bozulur, örtü içbükey çıkar."""
+    p = [(round(x, 4), round(y, 4)) for x, y in p]
+    s = sorted(range(len(p)), key=lambda i: p[i])
+
+    def cap(o, a, b):
+        return (p[a][0] - p[o][0]) * (p[b][1] - p[o][1]) - (p[a][1] - p[o][1]) * (p[b][0] - p[o][0])
+    alt, ust = [], []
+    for i in s:
+        while len(alt) >= 2 and cap(alt[-2], alt[-1], i) <= 1e-9:
+            alt.pop()
+        alt.append(i)
+    for i in reversed(s):
+        while len(ust) >= 2 and cap(ust[-2], ust[-1], i) <= 1e-9:
+            ust.pop()
+        ust.append(i)
+    return sorted(set(alt[:-1] + ust[:-1]))
+
+
+def _cepler(p, W, H):
+    """Dış çizgi ile dışbükey örtüsü arasındaki cepler:
+    [(alan, açıldığı kenar(lar) {'x0','x1','y0','y1'}, ağız, iç genişlik)]"""
+    if _alan2(p) < 0:
+        p = p[::-1]
+    h = _ortu(p)
+    n = len(p)
+    tol = 0.02 * max(W, H) + 0.05
+    out = []
+    for a, b in zip(h, h[1:] + h[:1]):
+        zincir = [p[(a + k) % n] for k in range(((b - a) % n) + 1)]
+        if len(zincir) < 3:
+            continue
+        A = abs(_alan2(zincir))
+        if A <= 0:
+            continue
+        pa, pb = zincir[0], zincir[-1]
+
+        def yanlar(q):
+            return {k for k, v in (("x0", q[0]), ("x1", q[0] - W),
+                                   ("y0", q[1]), ("y1", q[1] - H)) if abs(v) < tol}
+        # Ağzın iki ucu AYNI kenar üstündeyse cep o kenara açılır (U, C,
+        # I'nın yanları): tek kenar. Değilse ağız çaprazdır, cep bir
+        # KÖŞEDEDİR (L, T, Z): iki kenar.
+        ortak = yanlar(pa) & yanlar(pb)
+        kenar = ortak if ortak else (yanlar(pa) | yanlar(pb))
+        # Ağız: örtü kenarı üstünde malzemenin BIRAKTIĞI en büyük açıklık
+        # (dudaklı C'de dudak uçları arası). İç genişlik: kenar üstünde
+        # olmayan noktaların kenar boyunca yayılımı.
+        uz = math.dist(pa, pb)
+        ux, uy = (pb[0] - pa[0]) / uz, (pb[1] - pa[1]) / uz
+        ust, ic_ = [], []
+        for q in zincir:
+            t_ = (q[0] - pa[0]) * ux + (q[1] - pa[1]) * uy
+            d_ = abs((q[0] - pa[0]) * uy - (q[1] - pa[1]) * ux)
+            (ust if d_ < 0.2 * tol else ic_).append(t_)
+        ust.sort()
+        agiz = max((b_ - a_ for a_, b_ in zip(ust, ust[1:])), default=uz)
+        gen = (max(ic_) - min(ic_)) if ic_ else agiz
+        don = _donus(zincir)
+        # Yan cep kenarın yarısından kısaysa ÇENTİKTİR (girinti, oluk):
+        # U'nun cebi kenarın neredeyse tamamını kaplar.
+        if len(kenar) == 1:
+            yan_boy = H if next(iter(kenar)) in ("x0", "x1") else W
+            if gen < 0.5 * yan_boy:
+                don = 0.0
+        out.append((A, kenar, agiz, gen, don))
+    return out
+
+
+def _donus(zincir):
+    """Cebin kenarı boyunca İÇBÜKEY dönüşlerin toplamı (derece). Cebi
+    kaç büküm çeviriyor: L 90, U 180 (kolları eşit olmasa da), dudaklı
+    C 360. Kanat uçlarındaki dışbükey dönüşler sayılmaz; büküm yayı
+    dönüşü parçalara böler, toplamı değiştirmez. Çokgen saat yönünün
+    tersine dolaşılır, içbükey dönüş eksi işaretlidir."""
+    yon = []
+    for a, b in zip(zincir, zincir[1:]):
+        if math.dist(a, b) > 1e-6:
+            yon.append(math.atan2(b[1] - a[1], b[0] - a[0]))
+    t = 0.0
+    for a, b in zip(yon, yon[1:]):
+        d = (b - a + math.pi) % (2 * math.pi) - math.pi
+        if d < 0:
+            t -= d
+    return math.degrees(t)
+
+
+def _hizala2_tel(teller):
+    """Kesiti, doğru kenarları X/Y'ye paralel olacak açıyla döndürür.
+    Açı 1° kovalarda oylanır, sonra kazanan kovadaki kenarların boyca
+    ağırlıklı ortalaması alınır (yuvarlanmış açı, döndürülmüş parçada
+    30 mm'lik kenarı 30,1 gösteriyordu)."""
+    kenar = []
+    for w in teller:
+        for u, d in _cizgi_kenarlari(w):
+            kenar.append((u, math.degrees(math.atan2(d[1], d[0])) % 90.0))
+    if not kenar:
+        return 0.0
+    toplam = {}
+    for u, a in kenar:
+        k = round(a) % 90
+        toplam[k] = toplam.get(k, 0.0) + u
+    en = max(toplam.items(), key=lambda t: t[1])[0]
+    pay, ag = 0.0, 0.0
+    for u, a in kenar:
+        f = (a - en + 45.0) % 90.0 - 45.0
+        if abs(f) <= 1.0:
+            pay += u * f
+            ag += u
+    return math.radians(en + (pay / ag if ag else 0.0))
+
+
+def _m(v):
+    return (f"{v:.1f}".rstrip("0").rstrip(".")).replace(".", ",")
+
+
+def profil(sh, hacim=None):
+    """Profil ise sözlük, değilse None:
+    {"tur": "kutu", "ad": "kutu profil 30x50x2", "kesit": "30x50x2",
+     "boy": 1854.0, "alan": 304.0, "gerekce": "..."}"""
+    try:
+        return _profil(sh, hacim)
+    except Exception:
+        return None
+
+
+def _profil(sh, V):
+    if V is None:
+        g = GProp_GProps()
+        BRepGProp.VolumeProperties_s(sh, g)
+        V = g.Mass()
+    if V <= 1e-6:
+        return None
+    yz = _yuzler(sh)
+    for d in _eksen_adaylari(sh, yz):
+        if not _yanal_baskin(yz, d):
+            continue
+        r = _profil_eksen(sh, V, d)
+        if r:
+            return r
+    return None
+
+
+def _yanal_baskin(yz, d):
+    """Ucuz ön eleme (kesit almadan): profilin yüzey alanının çoğu eksene
+    PARALEL yüzlerdir (normali eksene dik düzlem, ekseni eksene paralel
+    silindir). Delikler ve uç yüzler payı düşürür ama %60'ın altına
+    indirmez; döküm / işlenmiş parçada pay küçüktür, kesit hiç alınmaz."""
+    top, yan = 0.0, 0.0
+    for y in yz:
+        top += y["alan"]
+        if y["tip"] == "duz" and _dik(y["n"], d):
+            yan += y["alan"]
+        elif y["tip"] in ("silindir", "koni") and _paralel(y["d"], d):
+            yan += y["alan"]
+    return top > 0 and yan >= 0.6 * top
+
+
+def _profil_eksen(sh, V, d):
+    t = _eksene_tasi(sh, (0.0, 0.0, 0.0), d)
+    kb = _kutu(t)
+    L = kb[5] - kb[2]
+    B = max(kb[3] - kb[0], kb[4] - kb[1])
+    if L <= 0 or B <= 0 or L < PROFIL_NARIN * B:
+        return None
+    istasyon = []
+    for i in range(PROFIL_ISTASYON):
+        z = kb[2] + L * (0.08 + 0.84 * i / (PROFIL_ISTASYON - 1))
+        tel, net, bolge = _kesit(t, z)
+        istasyon.append((z, tel, net, bolge))
+    # Kesit alanı: en çok tekrarlanan alan. Delikler ve kesilmiş yerler
+    # kesiti yalnız KÜÇÜLTÜR; hiçbir istasyon ondan büyük olamaz (olursa
+    # parça sabit kesitli değildir: flanşlı, çıkıntılı, kademeli).
+    alanlar = [s_[2] for s_ in istasyon if s_[2] > 0]
+    if not alanlar:
+        return None
+    A = max(alanlar, key=lambda a: (sum(abs(b - a) <= 0.005 * a for b in alanlar), a))
+    ayni = [s_ for s_ in istasyon if abs(s_[2] - A) <= 0.005 * A and s_[3] == 1]
+    if len(ayni) < 4 or max(alanlar) > 1.01 * A:
+        return None
+    # Delik kesitin İÇİNİ boşaltır, DIŞ ölçüsünü değiştirmez. Küçük
+    # kesitlerin dış ölçüsü de küçülmüşse parça kademelidir (kademeli
+    # mil, boyunlu parça): profil değil. Uçlardaki kertik için 2 istasyon
+    # pay bırakılır.
+    ref = _dis_olcu(ayni[len(ayni) // 2][1])
+    tol = 0.01 * max(ref[1] - ref[0], ref[3] - ref[2]) + 0.05
+    farkli = sum(1 for s_ in istasyon
+                 if not s_[1] or any(abs(a - b) > tol
+                                     for a, b in zip(_dis_olcu(s_[1]), ref)))
+    if farkli > 2:
+        return None
+    # hacim / (kesit x boy): delik ve gönye kesimi düşürür
+    dolu = V / (A * L)
+    if not 0.60 <= dolu <= 1.02:
+        return None
+    # ortanca kesit: tek bölge (iki ayrı parça yan yana değil)
+    z, tel, _a, _b = ayni[len(ayni) // 2]
+    dis_t = [u for u in tel if u[2] == 0][0]
+    ic_t = [u for u in tel if u[2] == 1]
+    aci = _hizala2_tel([u[3] for u in tel])
+    c, s_ = math.cos(-aci), math.sin(-aci)
+
+    def don(p):
+        return [(x * c - y * s_, x * s_ + y * c) for x, y in p]
+    dis = don(dis_t[0])
+    ic = [don(u[0]) for u in ic_t]
+    ada = any(u[2] >= 2 for u in tel)     # boşluğun içinde ada: özel kesit
+    x0 = min(q[0] for q in dis)
+    y0 = min(q[1] for q in dis)
+    dis = [(x - x0, y - y0) for x, y in dis]
+    ic = [[(x - x0, y - y0) for x, y in p] for p in ic]
+    W = max(q[0] for q in dis)
+    H = max(q[1] for q in dis)
+    Ad = abs(_alan2(dis))                 # dış çizginin içi (boşluk dahil)
+    P = _cevre(dis)
+    a, b = sorted((W, H))
+    boy = L
+    temel = {"boy": round(boy, 1), "alan": round(A, 1), "W": round(W, 2),
+             "H": round(H, 2), "dolu": round(dolu, 3)}
+    gerekce = (f"{len(ayni)}/{PROFIL_ISTASYON} kesit aynı ({_m(A)} mm²), "
+               f"hacim/(kesit x boy) = {dolu:.2f}")
+
+    def sonuc(tur, ad, kesit, **ek):
+        r = dict(temel, tur=tur, ad=ad, kesit=kesit,
+                 gerekce=f"{ad}: {gerekce}")
+        r.update(ek)
+        return r
+
+    daire = abs(W - H) < 0.02 * W and abs(Ad - math.pi * W * H / 4) < 0.02 * Ad
+    dikdortgen = Ad >= 0.93 * W * H
+    buyuk_ic = [p for p in ic if abs(_alan2(p)) > 0.02 * Ad]
+    cep_var = bool([c_ for c_ in _cepler(dis, W, H) if c_[0] > 0.03 * W * H])
+    if len(buyuk_ic) == 1 and len(ic) == 1 and not ada and not cep_var:
+        p = buyuk_ic[0]
+        wi = max(q[0] for q in p) - min(q[0] for q in p)
+        hi = max(q[1] for q in p) - min(q[1] for q in p)
+        xi = (max(q[0] for q in p) + min(q[0] for q in p)) / 2
+        yi = (max(q[1] for q in p) + min(q[1] for q in p)) / 2
+        Ai = abs(_alan2(p))
+        ortali = abs(xi - W / 2) < 0.02 * W + 0.05 and abs(yi - H / 2) < 0.02 * H + 0.05
+        ic_daire = abs(wi - hi) < 0.02 * wi and abs(Ai - math.pi * wi * hi / 4) < 0.02 * Ai
+        ic_dik = Ai >= 0.93 * wi * hi
+        esit_cidar = abs((W - wi) - (H - hi)) <= 0.1 * max(W - wi, H - hi) + 0.05
+        if not (ortali and esit_cidar and ((daire and ic_daire) or (dikdortgen and ic_dik))):
+            buyuk_ic = None               # iç boşluk dış biçime uymuyor: özel kesit
+    if buyuk_ic and len(buyuk_ic) == 1 and len(ic) == 1 and not ada and not cep_var:
+        if daire:
+            et = (W - wi) / 2
+            return sonuc("boru", f"boru Ø{_m(W)}x{_m(et)}", f"Ø{_m(W)}x{_m(et)}",
+                         et=round(et, 2))
+        if dikdortgen:
+            et = ((W - wi) + (H - hi)) / 4
+            tur = "kare kutu" if abs(W - H) < 0.02 * W else "kutu"
+            k = f"{_m(a)}x{_m(b)}x{_m(et)}"
+            return sonuc(tur, f"{tur} profil {k}", k, et=round(et, 2))
+    if not ic:
+        if daire:
+            return sonuc("mil", f"mil Ø{_m(W)}", f"Ø{_m(W)}")
+        if dikdortgen:
+            if b >= 2.5 * a:
+                return sonuc("lama", f"lama {_m(b)}x{_m(a)}", f"{_m(b)}x{_m(a)}")
+            if abs(W - H) < 0.02 * W:
+                return sonuc("kare çubuk", f"kare çubuk {_m(a)}x{_m(a)}", f"{_m(a)}x{_m(a)}")
+            return sonuc("dolu çubuk", f"dolu çubuk {_m(b)}x{_m(a)}", f"{_m(b)}x{_m(a)}")
+        cep = [c_ for c_ in _cepler(dis, W, H) if c_[0] > 0.03 * W * H]
+        # ince cidarlı açık kesit: 2t² - P t + 2A = 0
+        disk = P * P - 16 * A
+        et = (P - math.sqrt(disk)) / 4 if disk > 0 else None
+        ince = et is not None and et <= 0.25 * a
+        k = f"{_m(b)}x{_m(a)}" + (f"x{_m(et)}" if ince else "")
+        tur = None
+        # çentik (kenarın küçük bir kısmındaki girinti, dönüşü 0 sayılır)
+        # türü belirlemez ama kesiti özel yapar
+        centik = [c_ for c_ in cep if c_[4] < 45]
+        ana = [c_ for c_ in cep if c_[4] >= 45]
+        # temiz biçim: dönüş tam 90 (bir büküm) ya da 180 (iki büküm);
+        # arada kalan (45° pah, oluklu sac) özel kesittir
+        d90 = [c_ for c_ in ana if 75 <= c_[4] <= 105]
+        d180 = [c_ for c_ in ana if 160 <= c_[4] <= 200]
+        if centik:
+            tur = None
+        elif len(ana) == 1 and d90:
+            tur = "köşebent (L)"
+            k = f"{_m(W)}x{_m(H)}" + (f"x{_m(et)}" if ince else "")
+        elif len(ana) == 1 and len(ana[0][1]) == 1 and (d180 or 340 <= ana[0][4] <= 380):
+            # dudaklı C: dudaklar iki büküm daha ekler (360) ya da ağız
+            # (dudak uçları arası) cebin içinden dardır. C ve U'nun cebi
+            # TEK kenara açılır; köşeye açılan 360° oluklu sactır.
+            c_ = ana[0]
+            tur = "C profil" if (c_[4] >= 340 or c_[2] < 0.85 * c_[3]) else "U profil"
+        elif len(ana) == 1 and d180:
+            tur = "U profil"          # kolları eşit olmayan U: ağız çapraz
+        elif len(ana) == 2 and len(d180) == 2 and all(len(c_[1]) == 1 for c_ in d180):
+            if {next(iter(d180[0][1])), next(iter(d180[1][1]))} in ({"x0", "x1"}, {"y0", "y1"}):
+                tur = "I/H profil"
+        elif len(ana) == 2 and len(d90) == 2:
+            tur = "T profil" if d90[0][1] & d90[1][1] else "Z profil"
+        if tur and ince:
+            return sonuc(tur.split(" (")[0], f"{tur} {k}", k, et=round(et, 2))
+        if tur:
+            return sonuc(tur.split(" (")[0], f"{tur} {k}", k)
+    # geri kalan: çok boşluklu / girintili kesit (alüminyum sigma profil vb.)
+    k = f"{_m(b)}x{_m(a)}"
+    return sonuc("ekstrüzyon", f"özel kesit profil {k}", k)
+
+
+# ================================================== DÖNEL PARÇA: IŞINLA
+# Yüz tiplerine bakan _donel "temiz" modeli tanır. Diş açılmış, tırtıllı
+# ya da CAD'in serbest yüzle (B-spline) modellediği parçada yüzler
+# silindir değildir; _donel emin olamaz. Burada parçanın kendisi
+# ÖLÇÜLÜR: eksen boyunca 48 kotta, eksenden 8 yöne ışın atılır; her
+# kotta iç yarıçap (delik), dış yarıçap ve dış yarıçapın yöne göre
+# değişimi (altıgen: en büyük / en küçük = 1,155) bulunur. Diş ve tırtıl
+# yarıçapı birkaç onda bir oynatır, biçimi değiştirmez.
+ISIN_KOT = 48
+ISIN_YON = tuple(7.5 * i for i in range(8))      # 0 - 52,5°: altıgen ve kare
+
+
+def meridyen(t):
+    """Eksen Z'de, orijinden geçen katı için [(z, r_ic, r_dis_min,
+    r_dis_max)]. r_ic = 0: eksen malzemenin içinde (dolu)."""
+    from OCP.IntCurvesFace import IntCurvesFace_ShapeIntersector
+    from OCP.gp import gp_Lin
+    kb = _kutu(t)
+    z0, z1 = kb[2], kb[5]
+    R = 2.0 * max(abs(v) for v in (kb[0], kb[1], kb[3], kb[4])) + 1.0
+    it = IntCurvesFace_ShapeIntersector()
+    it.Load(t, 1e-6)
+    out = []
+    for i in range(ISIN_KOT):
+        z = z0 + (z1 - z0) * (i + 0.5) / ISIN_KOT
+        ic, dis = [], []
+        for a in ISIN_YON:
+            c, s = math.cos(math.radians(a)), math.sin(math.radians(a))
+            it.Perform(gp_Lin(gp_Pnt(0.0, 0.0, z), gp_Dir(c, s, 0.0)), 0.0, R)
+            p = sorted(it.WParameter(k) for k in range(1, it.NbPnt() + 1))
+            p = [x for j, x in enumerate(p) if j == 0 or x - p[j - 1] > 1e-6]
+            if not p:
+                ic.append(None)
+                dis.append(0.0)
+                continue
+            ic.append(0.0 if len(p) % 2 else p[0])
+            dis.append(p[-1])
+        if any(x is None for x in ic):
+            out.append((z - z0, None, 0.0, 0.0))
+            continue
+        ic.sort()
+        out.append((z - z0, ic[len(ic) // 2], min(dis), max(dis)))
+    return z1 - z0, out
+
+
+def _donel_isin(sh, eksen):
+    o, d = eksen
+    t = _eksene_tasi(sh, o, d)
+    H, m = meridyen(t)
+    if H <= 0 or any(r[1] is None for r in m):
+        return None                      # bir kotta malzeme yok: dönel değil
+    n = len(m)
+
+    def f(v):
+        return f"{v:.1f}".replace(".", ",")
+    Dmax = 2 * max(r[3] for r in m)
+    if Dmax > 60 or Dmax <= 0:
+        return None
+    # dış biçim: kotta en büyük / en küçük dış yarıçap
+    oran = [r[3] / r[2] if r[2] > 0 else 9 for r in m]
+
+    def bicim(q):
+        if q < 1.04:
+            return "yuvarlak"
+        if 1.12 <= q <= 1.19:
+            return "altıgen"
+        if 1.35 <= q <= 1.45:
+            return "kare"
+        return "?"
+    bic = [bicim(q) for q in oran]
+    delikli = [r[1] > 0 for r in m]
+    # --- baş: bir uçta, gövdeden belirgin geniş kotlar
+    govde_r = sorted(r[3] for r in m)[n // 2]
+    bas_uc = None
+    for uc, sira in (("alt", range(n)), ("ust", range(n - 1, -1, -1))):
+        k = 0
+        for i in sira:
+            if m[i][3] >= 1.08 * govde_r:
+                k += 1
+            else:
+                break
+        if 0 < k <= 0.3 * n:
+            if bas_uc is None or k > bas_uc[1]:
+                bas_uc = (uc, k)
+    # gövde kotları: baş dışındakiler (uçtaki pah kotları hariç)
+    if bas_uc:
+        bas = list(range(bas_uc[1])) if bas_uc[0] == "alt" else list(range(n - bas_uc[1], n))
+    else:
+        bas = []
+    govde = [i for i in range(n) if i not in bas]
+    if len(govde) < 0.5 * n:
+        return None
+    # uçlardaki pah kotlarını ayıkla: gövdenin ortanca dış yarıçapından
+    # %8'den fazla küçük kotlar
+    gr = sorted(m[i][3] for i in govde)[len(govde) // 2]
+    govde_ic = [i for i in govde if m[i][3] >= 0.92 * gr]
+    if len(govde_ic) < 0.4 * n:
+        return None
+    gbic = max(set(bic[i] for i in govde_ic), key=lambda b: sum(bic[i] == b for i in govde_ic))
+    if sum(bic[i] == gbic for i in govde_ic) < 0.8 * len(govde_ic) or gbic == "?":
+        return None
+    Hb = H * len(bas) / n
+    Lg = H - Hb
+    Dg = 2 * gr
+
+    # --- SOMUN (diş modelli): başsız, altıgen/kare, boydan boya delik
+    if not bas and all(delikli) and gbic in ("altıgen", "kare"):
+        s_ = 2 * min(m[i][2] for i in govde_ic)           # anahtar ağzı
+        dr = 2 * sorted(m[i][1] for i in govde_ic)[len(govde_ic) // 2]
+        # Yükseklik en az 0,45 d: ince somun (DIN 439) 0,5 d. Daha yassı
+        # altıgen/kare delikli parça bir PLAKADIR (kaynaklı kasada 24x24x3,
+        # Ø11 delikli bağlantı braketi kare somun sanılıyordu).
+        if 1.3 <= s_ / dr <= 2.6 and 0.45 <= H / dr <= 1.6:
+            return ("standart", "somun",
+                    f"somun: {gbic} (ışın ölçümü), anahtar ağzı {f(s_)}, "
+                    f"delik Ø{f(dr)}, yükseklik {f(H)}")
+        return None
+    if not bas:
+        return None
+    Db = 2 * max(m[i][3] for i in bas)
+    bas_delik = all(delikli[i] for i in bas)
+    govde_delik = [delikli[i] for i in govde]
+
+    # --- PERÇİN SOMUN: başlı, ince cidarlı burç; delik baştan girer.
+    # Delik ya boydan boya ya da (kapalı uçlu tipte) baştan başlayıp
+    # gövdenin en az yarısına iner. Ayırıcı imza: deliğin BAŞ TARAFI
+    # geniş (sıkışma bölgesi), uç tarafı dar (dişli kısım) - ya da
+    # gövde altıgen / tırtıllı (yuvarlak değil).
+    if bas_delik and Db <= 2.2 * Dg and Hb <= 0.25 * H and Lg >= 0.8 * Dg:
+        sira = govde if bas_uc[0] == "alt" else govde[::-1]   # baştan uca
+        delik_boy = 0
+        for i in sira:
+            if delikli[i]:
+                delik_boy += 1
+            else:
+                break
+        acik = delik_boy == len(sira)
+        if delik_boy >= 0.5 * len(sira) and all(not delikli[i] for i in sira[delik_boy:]):
+            ri = [m[i][1] for i in sira[:delik_boy]]
+            yakin = sorted(ri[: max(1, len(ri) // 4)])[0]
+            uzak = sorted(ri[-max(1, len(ri) // 3):])[len(ri[-max(1, len(ri) // 3):]) // 2]
+            cidar = uzak / gr
+            kademeli = yakin >= 1.08 * uzak
+            if 0.45 <= cidar <= 0.85 and (kademeli or gbic != "yuvarlak"):
+                return ("standart", "perçin somun",
+                        f"perçin somun: baş Ø{f(Db)}, gövde Ø{f(Dg)} ({gbic}) x {f(Lg)}, "
+                        f"delik Ø{f(2 * uzak)}"
+                        + (f" / baş tarafı Ø{f(2 * yakin)}" if kademeli else "")
+                        + ("" if acik else ", kapalı uçlu"))
+        return None
+
+    # --- CIVATA (diş modelli): baş bir uçta, gövde dolu ve başa göre ince
+    # Baş, gövde çapının 1,4 - 2,6 katı ve en çok 1,2 d yüksekliğinde
+    # (imbus başı 1 d, altıgen 0,7 d). Daha iri "baş" başka bir şeydir:
+    # saplamalı kauçuk takoz (Ø30 kauçuk + M8 saplama) cıvata sanılıyordu.
+    if (not any(govde_delik) and Lg >= Dg and 1.4 * Dg <= Db <= 2.6 * Dg
+            and Hb <= min(0.5 * H, 1.2 * Dg)):
+        bb = max(set(bic[i] for i in bas), key=lambda b: sum(bic[i] == b for i in bas))
+        tur = {"altıgen": "altıgen baş", "kare": "kare baş"}.get(bb, "silindirik baş")
+        if bb in ("altıgen", "kare") or (bb == "yuvarlak" and gbic == "yuvarlak"):
+            return ("standart", "civata",
+                    f"cıvata: {tur} Ø{f(Db)}, gövde Ø{f(Dg)} x {f(Lg)} (ışın ölçümü)")
+    return None
+
+
+# ================================================ BİÇİM İMZASI (öğrenme)
+# Kullanıcı bir parçanın sınıfını bir kez düzeltince BENZERLERİ de o
+# sınıfa geçsin: M6 perçin somunu gösterilince M4 - M10 da tanınsın,
+# ama delikli bir plaka "somun" olmasın. İmza ölçekten bağımsızdır
+# (boyut değil ORAN) ve parçanın duruşundan bağımsızdır (eylemsizlik):
+#   y   yüz sayısı (aynı tedarikçinin aynı ailesinde aynıdır)
+#   t   yüz tiplerinin alan payı: düz, silindir, koni, küre, tor, diğer
+#   g   dönme yarıçaplarının oranı (en küçük / en büyük, orta / en büyük)
+#   k   yoğunluk: hacim / (yüzey alanı ^ 1,5)
+# İki imza "benzer": yüz sayısı aynı, her oran ve pay 0,08 içinde,
+# yoğunluk %25 içinde.
+IMZA_TOL = 0.08
+
+
+def bicim_imzasi(sh):
+    try:
+        yz = _yuzler(sh)
+        if not yz:
+            return None
+        top = sum(y["alan"] for y in yz)
+        pay = {}
+        for y in yz:
+            pay[y["tip"]] = pay.get(y["tip"], 0.0) + y["alan"] / top
+        g = GProp_GProps()
+        BRepGProp.VolumeProperties_s(sh, g)
+        V = g.Mass()
+        if V <= 1e-9:
+            return None
+        I = sorted(g.PrincipalProperties().Moments())
+        r = [math.sqrt(max(i, 0.0) / V) for i in I]
+        return {"y": len(yz),
+                "t": [round(pay.get(t, 0.0), 3) for t in
+                      ("duz", "silindir", "koni", "kure", "tor", "diger")],
+                "g": [round(r[0] / r[2], 3), round(r[1] / r[2], 3)],
+                "k": round(V / top ** 1.5, 4)}
+    except Exception:
+        return None
+
+
+def benzer(a, b, tol=IMZA_TOL):
+    if not a or not b or a.get("y") != b.get("y"):
+        return False
+    for x, y in zip(a["t"] + a["g"], b["t"] + b["g"]):
+        if abs(x - y) > tol:
+            return False
+    # Yoğunluk aile içinde daha çok oynar (M6 perçin somunda cidar / çap
+    # 0,33, M8'de 0,27): %25 pay.
+    return abs(a["k"] - b["k"]) <= 0.25 * max(a["k"], b["k"])

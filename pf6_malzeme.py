@@ -173,8 +173,9 @@ SISTEM = [
      "adimlar": [
          ".CATProduct açıkken: Analyze ▸ Bill of Material.",
          "Define formats ▸ Hidden Properties listesinden 'Material'i seçip "
-         "'>' ile Displayed Properties tarafına alın. 'Part Number' görünür "
-         "listede olmalı.",
+         "'>' ile Displayed Properties tarafına alın. 'Source' (Made / "
+         "Bought) alanını da alın: Pi3D satın alınan parçaları buradan "
+         "kesin olarak tanır. 'Part Number' görünür listede olmalı.",
          "OK ▸ Save As ▸ tür: Text (*.txt). ('Excel' seçeneği bazı "
          "kurulumlarda gerçek Excel değil sekmeli metin yazar; Pi3D ikisini "
          "de okur. Gerçek eski .xls ise Excel'de .xlsx ya da CSV olarak "
@@ -186,7 +187,8 @@ SISTEM = [
          "CATScript dosyasını kaydedin.",
          ".CATProduct açıkken: Tools ▸ Macro ▸ Macros… ▸ Select an external "
          "file ile makroyu seçip Run.",
-         "Ürün dosyasının yanına malzeme.csv yazılır. 4. adımda onu seçin."]},
+         "Ürün dosyasının yanına malzeme.csv yazılır (kod; malzeme; ad; "
+         "kaynak = Made / Bought). 4. adımda onu seçin."]},
     {"anahtar": "nx", "ad": "Siemens NX",
      "adimlar": [
          "Montajı açın, Assembly Navigator'ı (Montaj Gezgini) gösterin.",

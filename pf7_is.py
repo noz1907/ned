@@ -269,10 +269,9 @@ def csv_birlestir(yol, baslik, yeni, denenen, klasor, kod_sutun="kod",
         except ValueError:
             return (1, 0, str(s[1]))
     hepsi = sorted(eski + [list(s) for s in yeni], key=_sira)
-    with open(yol, "w", newline="", encoding="utf-8-sig") as f:
-        w = csv.writer(f, delimiter=";")
-        w.writerow(baslik)
-        w.writerows(hepsi)
+    # CSV Türkçe Excel biçiminde (ondalık virgül) + aynı tablo .xlsx
+    import pf9_excel as XL
+    XL.tablo_yaz(yol, list(baslik), hepsi)
     return len(hepsi)
 
 
