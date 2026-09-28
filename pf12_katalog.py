@@ -9,7 +9,7 @@ REFERANS olarak verir: "bunların hepsi bu firmanın satın aldığı
 standarttır".
 
 Yüzlerce resim tek tek gönderilmez (pahalı): küçük resimler ızgara
-paftalarda toplanır (pafta başına 20), büyük / toplu resimler kendi
+paftalarda toplanır (küçükler 20, orta boylar 4), büyük / toplu resimler kendi
 paftasında küçültülür; en çok PAFTA_EN_COK pafta gider. Paftalar
 isteklerde önbelleklenir: ilk istek tam, sonrakiler onda bir fiyatına.
 
@@ -24,10 +24,13 @@ import os
 
 RESIM = (".jpg", ".jpeg", ".png", ".webp", ".bmp")
 PAFTA_EN_COK = 8
-HUCRE = 180                 # ızgara hücresi (px)
+# Resim boyuna göre üç sınıf: küçük (tekli ürün) 5x4 ızgarada 180 px,
+# orta 2x2 ızgarada 480 px, büyük (toplu resim) kendi paftasında 1000 px.
+HUCRE = 180
 SUTUN = 5
 SATIR = 4
-BUYUK = 700                 # bundan büyük resim kendi paftasında (toplu resim)
+ORTA = 520                  # bundan büyük: 2x2 ızgara
+BUYUK = 1000                # bundan büyük: kendi paftasında
 
 
 def resimler(klasor):
@@ -56,7 +59,7 @@ def paftalar(klasor, en_cok=PAFTA_EN_COK, log=print):
     yollar = resimler(klasor)
     if not yollar:
         return []
-    kucuk, buyuk = [], []
+    kucuk, orta, buyuk = [], [], []
     for y in yollar:
         try:
             im = Image.open(y)
@@ -64,24 +67,29 @@ def paftalar(klasor, en_cok=PAFTA_EN_COK, log=print):
         except Exception:
             log(f"! katalog: {os.path.basename(y)} açılamadı")
             continue
-        (buyuk if max(im.size) > BUYUK else kucuk).append((im.convert("RGB"), _etiket(y, klasor)))
+        m = max(im.size)
+        (buyuk if m > BUYUK else orta if m > ORTA else kucuk).append(
+            (im.convert("RGB"), _etiket(y, klasor)))
     out = []
     for im, et in buyuk:
-        im.thumbnail((1000, 1000))
+        im.thumbnail((BUYUK, BUYUK))
         out.append(im)
-    n = SUTUN * SATIR
-    for i in range(0, len(kucuk), n):
-        grup = kucuk[i:i + n]
-        pafta = Image.new("RGB", (SUTUN * HUCRE, SATIR * (HUCRE + 18)), "white")
-        c = ImageDraw.Draw(pafta)
-        for j, (im, et) in enumerate(grup):
-            im = im.copy()
-            im.thumbnail((HUCRE - 8, HUCRE - 8))
-            x, y = (j % SUTUN) * HUCRE, (j // SUTUN) * (HUCRE + 18)
-            pafta.paste(im, (x + (HUCRE - im.width) // 2, y + (HUCRE - im.height) // 2))
-            if et:
-                c.text((x + 4, y + HUCRE), et, fill="black")
-        out.append(pafta)
+
+    def izgara(liste, sutun, satir, hucre):
+        n = sutun * satir
+        for i in range(0, len(liste), n):
+            pafta = Image.new("RGB", (sutun * hucre, satir * (hucre + 18)), "white")
+            c = ImageDraw.Draw(pafta)
+            for j, (im, et) in enumerate(liste[i:i + n]):
+                im = im.copy()
+                im.thumbnail((hucre - 8, hucre - 8))
+                x, y = (j % sutun) * hucre, (j // sutun) * (hucre + 18)
+                pafta.paste(im, (x + (hucre - im.width) // 2, y + (hucre - im.height) // 2))
+                if et:
+                    c.text((x + 4, y + hucre), et, fill="black")
+            out.append(pafta)
+    izgara(orta, 2, 2, 480)
+    izgara(kucuk, SUTUN, SATIR, HUCRE)
     if len(out) > en_cok:
         # hepsinden örnek: eşit aralıkla seç
         adim = len(out) / en_cok
@@ -172,7 +180,7 @@ def ornek_uret(klasor):
     }
     n = 0
     for ad, sh in parcalar.items():
-        png = TN.parca_png(sh, boyut=384)
+        png = TN.parca_png(sh, boyut=250)
         if not png:
             continue
         y = os.path.join(klasor, "ornek_" + ad.split("/")[0], ad.split("/")[1] + ".jpg")
