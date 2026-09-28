@@ -378,7 +378,8 @@ def _kose_olc(sh, yz, V):
                 bicim, a = "içbükey", (math.sqrt(2) - 1) * min(ba, bb)
             else:
                 continue
-            return {"tip": f"köşe {XL.tr(ba, 1)} x {XL.tr(bb, 1)} ({bicim})", "boy_mm": L,
+            # kaynak ölçüsü ondalıksız: 2,5 x 2,5 bacak -> 3 x 3
+            return {"tip": f"köşe {XL.tam(ba)} x {XL.tam(bb)} ({bicim})", "boy_mm": L,
                     "kesit_mm2": A, "a_mm": a}
     return None
 

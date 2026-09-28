@@ -36,7 +36,8 @@ import os
 import threading
 import time
 
-ALT_KLASOR = {"dxf": "DXF", "acinim": "ACINIM", "lazer": "LZR", "pdf": "PDF"}
+ALT_KLASOR = {"dxf": "DXF", "acinim": "ACINIM", "lazer": "LZR", "pdf": "PDF",
+              "kaynak": "KAYNAK"}
 DURUM_DOSYASI = "pi3d_is.json"
 # Çizim kodu değişince eski resimler "eskimiş" sayılsın diye imzaya
 # girer. Ölçülendirme / görünüş kuralı değiştiğinde artırılır.
@@ -48,7 +49,8 @@ _ozet_onbellek = {}
 
 # ------------------------------------------------------------ klasörler
 def alt_klasor(on, tur, olustur=False):
-    """Çıktı klasörünün altındaki tür klasörü (DXF, ACINIM, LZR, PDF)."""
+    """Çıktı klasörünün altındaki tür klasörü (DXF, ACINIM, LZR, PDF,
+    KAYNAK: kaynak resimleri, yalnız PDF)."""
     yol = os.path.join(on, ALT_KLASOR[tur])
     if olustur:
         os.makedirs(yol, exist_ok=True)
@@ -72,14 +74,14 @@ def dosyalar(on, tur):
     için - köke bakılır. Aynı ad iki yerde varsa klasördeki alınır."""
     if not on or not os.path.isdir(on):
         return []
-    uz = ".pdf" if tur == "pdf" else ".dxf"
+    uz = ".pdf" if tur in ("pdf", "kaynak") else ".dxf"
     bulunan = {}
     k = alt_klasor(on, tur)
     if os.path.isdir(k):
         for a in os.listdir(k):
-            if a.lower().endswith(uz) and (tur == "pdf" or dosya_turu(a) == tur):
+            if a.lower().endswith(uz) and (tur in ("pdf", "kaynak") or dosya_turu(a) == tur):
                 bulunan[a] = os.path.join(k, a)
-    if tur != "pdf":
+    if tur not in ("pdf", "kaynak"):
         for a in os.listdir(on):
             y = os.path.join(on, a)
             if (a.lower().endswith(".dxf") and os.path.isfile(y)
@@ -92,7 +94,8 @@ def dosya_bul(on, ad):
     """Adı bilinen bir çıktı dosyasının yeri (tür klasörü ya da kök)."""
     if not ad:
         return None
-    tur = "pdf" if ad.lower().endswith(".pdf") else dosya_turu(ad)
+    tur = ("kaynak" if ad.lower().endswith("_kaynak.pdf") else
+           "pdf" if ad.lower().endswith(".pdf") else dosya_turu(ad))
     for y in (os.path.join(alt_klasor(on, tur), ad), os.path.join(on, ad)):
         if os.path.isfile(y):
             return y
@@ -340,6 +343,7 @@ def cikti_durumu(on, step=None):
     r["acinim"] = len(dosyalar(on, "acinim"))
     r["lazer"] = len(dosyalar(on, "lazer"))
     r["pdf"] = len(dosyalar(on, "pdf"))
+    r["kaynak"] = len(dosyalar(on, "kaynak"))
     # Model aynı mı: klasörün genel kaydına değil, ÇİZİMLERİN KENDİ
     # kayıtlarına bakılır (her çizim hangi model özetiyle üretildiğini
     # taşır). Yeni bir model okununca genel kayıt değişir; eski çizimler
@@ -355,7 +359,7 @@ def cikti_durumu(on, step=None):
 def durum_metni(r):
     """cikti_durumu() sonucunu insan diliyle yazar."""
     if not any((r["bom"], r["dxf"], r["montaj"], r["acinim"], r["lazer"],
-                r["pdf"])):
+                r["pdf"], r.get("kaynak"))):
         return "Bu klasörde önceki bir çalışma yok."
     v = lambda b: "var" if b else "yok"                     # noqa: E731
     L = ["Bu klasörde önceki çalışma bulundu:",
@@ -365,7 +369,8 @@ def durum_metni(r):
          f"  montaj resmi ....... {v(r['montaj'])}",
          f"  açınım ............. {r['acinim']}",
          f"  lazer (LZR) ........ {r['lazer']}",
-         f"  PDF ................ {r['pdf']}"]
+         f"  PDF ................ {r['pdf']}",
+         f"  kaynak resmi (PDF) . {r.get('kaynak', 0)}"]
     if r["ayni_model"] is True:
         L.append("Model dosyası AYNI: üretilmiş çizimler geçerli, yalnız "
                  "eksikler üretilebilir.")

@@ -14,6 +14,7 @@ ama önerilen dosya .xlsx'tir.
 """
 from __future__ import annotations
 
+import math
 import os
 import re
 import zipfile
@@ -169,6 +170,12 @@ def sozlukten(alan, satirlar):
 
 
 # ------------------------------------------------------------ CSV
+def tam(v):
+    """Yarım yukarı tam sayı (2,5 -> 3; Python'un round'u 2,5'i 2 yapar).
+    Kaynak ölçüleri ondalıksız yazılır: 2,7 çıkan a3'tür."""
+    return int(math.floor(float(v) + 0.5))
+
+
 def tr(v, ondalik=None, sade=True):
     """Sayının TÜRKÇE yazımı: ondalık VİRGÜL, binlik NOKTA.
     tr(1513.76) -> "1.513,76", tr(4.2) -> "4,2", tr(0.5, 3) -> "0,5",

@@ -7384,7 +7384,7 @@ def zip_yap(on, ad="cizimler.zip", desen=(".dxf", ".pdf")):
             if os.path.isfile(y) and (d.lower().endswith(tuple(desen))
                                       or d in tablo):
                 z.write(y, d)
-        for tur in ("dxf", "acinim", "lazer", "pdf"):
+        for tur in ("dxf", "acinim", "lazer", "pdf", "kaynak"):
             k = IS.alt_klasor(on, tur)
             if not os.path.isdir(k):
                 continue
@@ -7538,6 +7538,15 @@ def calistir(step, on, kayit, komp, P, asama=(1, 2, 3), esl=None, agac=None,
             and not en_az_hacim and not dur()):
         _eski_cizimleri_kaldir(on, dxf_kl, {r["dxf"] for r in satirlar
                                             if r.get("dxf")}, log)
+    if (2 in asama and not tek and not en_cok and not tablo_yok and not dur()
+            and P.get("kaynak_resmi", True)
+            and any(k["sinif"] == "kaynak" for k in komp)):
+        # KAYNAK RESİMLERİ: her kaynaklı alt grup için ayrı PDF (KAYNAK/)
+        try:
+            import pf14_kaynak as KR
+            KR.kaynak_resimleri(on, kayit, komp, agac, satirlar, log=log, iptal=dur)
+        except Exception as ex:
+            log(f"  ! kaynak resimleri üretilemedi: {ex}"[:160])
     bom = [r for r in satirlar if r["sinif"] != "kaynak"]
     if atlanan:
         log(f"  {atlanan} çizim zaten güncel olduğu için yeniden üretilmedi")
@@ -7611,6 +7620,8 @@ def main():
   1  komponent parcalarin detaylandirilmasi ve BOM cikarilmasi
   2  detay parcalarin cizilmesi ve olculendirilmesi
   3  montaj resmi ve olculendirilmesi
+Asama 2, model kaynak dikisi iceriyorsa her kaynakli alt grubun kaynak
+resmini de uretir: KAYNAK/<grup>_kaynak.pdf (yalniz PDF).
 --asama ile tek tek ya da birlikte calistirilir (varsayilan: 1,2,3)""")
     ap.add_argument("step", nargs="?",
                     help="okunacak dosya: STEP (.stp/.step), IGES (.igs) ya da BREP")
@@ -7650,6 +7661,8 @@ def main():
     ap.add_argument("--eksik", action="store_true",
                     help="yalnız eksik ya da eskimiş çizimleri üret: aynı model "
                          "ve aynı ayarla üretildiği kayıtlı olanlar atlanır")
+    ap.add_argument("--kaynak-resmi-yok", action="store_true",
+                    help="kaynak resimlerini (KAYNAK/<grup>_kaynak.pdf) üretme")
     a = ap.parse_args()
     if a.malzeme_liste:
         malzeme_listele()
@@ -7662,7 +7675,8 @@ def main():
         asama.discard(3)
     gor = gorunus_sec([t.strip().upper() for t in a.gorunus.replace(";", ",").split(",")])
     P = {"gizli": a.gizli, "en_az_delik": a.en_az_delik, "yogunluk": RHO,
-         "gorunusler": gor, "kesit": bool(a.kesit)}
+         "gorunusler": gor, "kesit": bool(a.kesit),
+         "kaynak_resmi": not a.kaynak_resmi_yok}
     print("görünüşler: " + ", ".join(GORUNUS_AD[g] for g in gor)
           + (" + " + KESIT_AD if a.kesit else ""))
 
@@ -7777,9 +7791,10 @@ def kaynak_ozet_satirlari(satirlar):
             continue
         o = r.get("kaynak_olcu") or {}
         boy, A, a = o.get("boy_mm"), o.get("kesit_mm2"), o.get("a_mm")
+        # kaynak ölçüleri ondalıksız (a 1,77 -> 2; boy 24,7 -> 25)
         k = (kaynak_tipi(r.get("ad")), o.get("tip") or "-",
-             round(boy, 1) if boy else None, round(A, 2) if A else None,
-             round(a, 2) if a else None)
+             XL.tam(boy) if boy else None, XL.tam(A) if A else None,
+             XL.tam(a) if a else None)
         g = grup.setdefault(k, {"adet": 0, "hacim": 0.0})
         n = int(r.get("adet") or 1)
         g["adet"] += n
@@ -7787,12 +7802,12 @@ def kaynak_ozet_satirlari(satirlar):
     sat = []
     for (tur, tip, boy, A, a), g in sorted(grup.items(), key=lambda t: (t[0][0], t[0][2] or 0)):
         sat.append([tur, tip, g["adet"], boy, A, a,
-                    round(boy * g["adet"], 1) if boy else None, round(g["hacim"], 1),
+                    boy * g["adet"] if boy else None, XL.tam(g["hacim"]),
                     round(g["hacim"] * TN.KAYNAK_YOGUNLUK, 4)])
-    # a ölçüsüne göre (0,5 mm sınıf): toplam boy ve kaynak metali
+    # a ölçüsüne göre (tam mm): toplam boy ve kaynak metali
     aoz = {}
     for tur, tip, n, boy, A, a, tb, hac, kg in sat:
-        s_ = f"a {XL.tr(round(a * 2) / 2, 1)}" if a else ("nokta" if "nokta" in tip else "ölçülemedi")
+        s_ = f"a {a}" if a else ("nokta" if "nokta" in tip else "ölçülemedi")
         o = aoz.setdefault(s_, [0, 0.0, 0.0])
         o[0] += n; o[1] += tb or 0.0; o[2] += kg
     aoz = [[k, v[0], round(v[1] / 1000.0, 3), round(v[2], 4)] for k, v in sorted(aoz.items())]

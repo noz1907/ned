@@ -68,6 +68,8 @@ def main():
     dogru("pf10_ai (AI kontrolü) spec'te yazılı", '"pf10_ai"' in spec)
     dogru("pf11_yapi, pf12_katalog, pf13_aile spec'te yazılı",
           '"pf11_yapi"' in spec and '"pf12_katalog"' in spec and '"pf13_aile"' in spec)
+    # pf14_kaynak yalnız calistir'in İÇİNDE import ediliyor
+    dogru("pf14_kaynak (kaynak resmi) spec'te yazılı", '"pf14_kaynak"' in spec)
     dogru("STANDART_KATALOG pakete giriyor", "STANDART_KATALOG" in spec
           and os.path.isfile(os.path.join(KOK, "STANDART_KATALOG", "OKU.txt")))
     for d in ("catia_malzeme_cikar.CATScript", "KULLANIM.md", "SURUM.txt"):

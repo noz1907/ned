@@ -402,8 +402,86 @@ gazaltı teli sarfiyatı = kaynak metali / yöntemin verimi.
 kaynak metali 1,686 kg; a2 30,15 m, a3 5,08 m). Adında boy yazan 141
 dikişin (`K0 25 MM TEK KAYNAK` ...) **141'inde** ölçülen boy adla aynı.
 Bu modeldeki `25 MM TEK KAYNAK` dikişleri çeyrek daire kesitli (2,5 x 2,5
-dışbükey köşe, a = 1,77); ilk sürüm onları düz üçgen sanıp boyu 15,9
+dışbükey köşe, ölçülen a 1,77 -> a2); ilk sürüm onları düz üçgen sanıp boyu 15,9
 buluyordu.
+
+#### Kaynak resimleri: `KAYNAK/<grup>_kaynak.pdf`
+
+Tüm çizimler üretilirken (4/5. adım) model kaynak dikişi içeriyorsa her
+**kaynaklı alt grup** için ayrı bir kaynak resmi çıkar. Resimler **yalnız
+PDF**'tir ve ayrı `KAYNAK` klasörüne yazılır (DXF üretilmez). Artık
+karşılığı olmayan eski `*_kaynak.pdf` dosyaları o klasörden silinir.
+
+**Resimde yalnız kaynak ölçüleri ve kaynak konumları vardır.** Parça
+ölçüsü (gabari, delik, büküm) yoktur; parçalar yalnız dikişin nerede
+olduğunu göstermek için çizilir. Dikişler kırmızı ve kalındır.
+
+**Kaynak ölçüleri ondalıksızdır** (resim, dikiş listesi ve
+`KAYNAK.xlsx`). Değer yarım yukarı yuvarlanır: 2,7 çıkan a **3**'tür,
+1,77 çıkan a **2**'dir. Önemli olan dikişin **yeri, boyu ve varlığıdır**;
+kaynakta alt-milimetre hassasiyet aranmaz.
+
+**Grup nasıl bulunur.** Dikişin grubu, modelde nerede durduğuna göre
+değil, **birleştirdiği parçalara** göre bulunur. CAD'de dikişler çoğu
+zaman ayrı bir `K0 KAYNAKLAR` ağacında durur ve kamyonun dört bir yanına
+dağılır. Program her dikişe **değen** parçaları ölçer (0,2 mm). O
+parçaların montaj ağacındaki en yakın ortak üst grubu dikişin grubudur.
+Braketin kendi dikişleri braketin grubunda kalır; braketi şasiye
+bağlayan dikiş bir üst grupta kalır. Aynı gruptaki birbirinden kopuk
+kümeler ayrı resim olur. Aynı biçimli kopyalar tek resim ve adet olur.
+Dosya adı grubun adıdır: `K0 DIS TRIM BAGLANTI_GRUP 6_SOL_kaynak.pdf`.
+
+**Sayfalar** (A3 yatay, gerçek ISO 5455 ölçekleri, her sayfada antet ve
+sayfa numarası):
+
+1. **Genel görünüş:** ÖN, ÜST, SAĞ ve izometrik.
+   - Az dikişli grupta (8'e kadar) semboller buradadır. Dikiş listesi
+     de kısaysa (10 satıra kadar) bu sayfanın üstündedir.
+   - Çok dikişli grupta dikişler bölgelere ayrılır. Genel görünüşte
+     her bölge harfli bir çerçevedir (A, B, C...).
+2. **Dikiş listesi:** K no, tip, a, z, boy, **kenardan** ve başlangıç /
+   bitiş koordinatları. Koordinatlar grubun sınır kutusunun en küçük
+   köşesine göre, mm'dir. Listede ayrıca birleştirdiği pozlar
+   (P12 + P31) ve dikişin gösterildiği görünüş ya da detay yer alır.
+   Resim ne kadar kalabalık olursa olsun yer ve ölçü buradan kesin
+   okunur.
+3. **Detay sayfaları** (sayfa başına 4 detay). Her bölge, dikişlerinin
+   **en çok göründüğü** yönden çizilir. Aday yönler altı dik görünüş
+   ve altı izometriktir (alttan bakanlar dahil). Bölge kendi
+   ölçeğinde büyütülür (ör. `DETAY B (SOL, 2:1)`).
+
+**Görünürlük ölçülür, tahmin edilmez.** Dikiş boyunca 5 dilimden,
+dikişin göze bakan yüzeyinden göze doğru ışın gönderilir. Işın bir
+parçaya çarpıyorsa dikiş o noktada gizlidir. Dikiş ancak dilimlerin
+%60'ı açıkken o görünüşe konur.
+
+İki dikiş aynı çizgiye izdüşebilir (ör. bir sacın iki yüzündeki
+dikişler). Bu durumda ikincisi o görünüşe konmaz, göründüğü başka bir
+yöne alınır. Hiçbir yönden net görünmeyen dikiş listede `(gizli)` diye
+işaretlenir.
+
+**Sembol (ISO 2553):**
+- ok dikişe değer, sonra kırılır ve yatay referans çizgisine bağlanır;
+- çizginin altında (ok tarafı) köşe kaynağı üçgeni vardır;
+- üçgenin solunda `a` (boğaz), sağında **boy** yazar;
+- uçtaki balonda K numarası vardır;
+- çevre kaynağında kırılmada daire, puntada daire sembolü kullanılır.
+
+**Konum ölçüsü (kenardan).** Dikişin yeri, dikişin **kök çizgisi**
+üzerinde ölçülür. Kök çizgisi, dikişin iki parçaya oturan bacak
+yüzlerinin kesişimidir. Bu çizgi boyunca iki parçanın da yüzeyinin
+sürdüğü aralık (birleşme çizgisi) 0,01 mm'ye bölünerek bulunur.
+- Dikiş bir uca 2 mm'den yakınsa **uçtan başlar** (0).
+- Değilse **yakın uçtan dikiş başına** mesafe tam mm yazılır.
+  Resimde bu değer ölçü çizgisiyle, listede `kenardan` sütununda
+  görünür.
+- Ölçü çizgisi yalnız dikiş görünüş düzlemine paralelken çizilir.
+  Eğik görünüşte boy kısa görünür ve yanıltır; o zaman değer yalnız
+  listededir.
+- Tek parçaya değen dikişte kök çizgisi yoktur: `?`.
+
+Kaynak YÖNTEMİ ve dikişin hangi tarafa yapılacağı (ok tarafı / karşı
+taraf) geometriden anlaşılmaz. Sembol ok tarafına çizilir.
 
 CAD bazen katıya ad vermez (`COMPOUND`, `SOLID`, `Body`) ya da ad yalnız
 **parça numarasıdır** (`FT108161`, `SB108164`, `55RS865978`). Adından hiçbir

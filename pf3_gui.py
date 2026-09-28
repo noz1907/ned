@@ -3079,7 +3079,7 @@ class Uygulama(ttk.Frame):
         if not on or not os.path.isdir(on):
             return 0
         n = 0
-        for tur in ("dxf", "acinim", "lazer", "pdf"):
+        for tur in ("dxf", "acinim", "lazer", "pdf", "kaynak"):
             for y in IS.dosyalar(on, tur):
                 self.liste.insert("end", os.path.relpath(y, on).replace("\\", "/"))
                 n += tur == "dxf"

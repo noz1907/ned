@@ -72,6 +72,16 @@ BU SÜRÜMDE NE VAR
   içbükey, çubuk, nokta, çevre), boy, kesit, a, kaynak metali kg; a
   ölçüsüne göre toplam boy ve kg. Kaynaklı kasada 944 dikiş, 37,25 m.
 
+  KAYNAK RESİMLERİ (yalnız PDF, ayrı klasör): KAYNAK/<grup>_kaynak.pdf -
+  her kaynaklı alt grup için ayrı. Grup, dikişin DEĞDİĞİ parçalardan
+  bulunur ("KAYNAKLAR" ağacında dağınık dursa da). Resimde yalnız kaynak
+  ölçüsü ve konumu var: ISO 2553 sembolü (a, boy) + K numarası, kenardan
+  dikiş başına konum ölçüsü (kök çizgisi üzerinde), dikiş listesi
+  (a, z, boy, kenardan, başlangıç / bitiş koordinatı, birleştirdiği
+  pozlar). Çok dikişli grupta bölge başına büyütülmüş DETAY; her dikiş
+  ışınla ölçülüp GÖRÜNDÜĞÜ yönden (6 dik + 6 izometrik) çizilir.
+  KAYNAK ÖLÇÜLERİ ONDALIKSIZ (resim ve KAYNAK.xlsx): 2,7 -> a3, 1,77 -> a2.
+
   SETSKUR UÇ TİPİ (DIN 913 düz / 914 konik / 915 pim / 916 çanak),
   ÇEKMELİ PİM (ISO 8735 / DIN 7979, iç diş M), silindirik pim.
 
