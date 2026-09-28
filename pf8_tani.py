@@ -547,6 +547,28 @@ def _kesit(sh, z):
     return out, net, bolge
 
 
+def _uc_kesimi(istasyon, fark):
+    """Dış ölçüsü farklı istasyonlar yalnız UÇLARDA ve alanları uca doğru
+    sürekli küçülüyorsa bu açılı / ağız (balık ağzı) kesimdir, kademe
+    değil: kısa bir kutunun iki ucu açılı kesilince 9 istasyonun 4'ü
+    farklı çıkıyordu. Kademeli milde küçük kesitler kendi aralarında
+    EŞİTTİR; o reddedilir."""
+    n = len(fark)
+    bas = 0
+    while bas < n and fark[bas]:
+        bas += 1
+    son = n
+    while son > bas and fark[son - 1]:
+        son -= 1
+    if any(fark[bas:son]) or son - bas < 3:
+        return False                      # ortada farklı istasyon: kademe
+    for uc in (istasyon[:bas][::-1], istasyon[son:]):   # ortadan uca doğru
+        a = [s_[2] for s_ in uc]
+        if any(y >= 0.995 * x for x, y in zip(a, a[1:])):
+            return False                  # uca doğru küçülmüyor
+    return True
+
+
 def _dis_olcu(tel):
     """Kesit tellerinin X ve Y aralığı (eksen çerçevesinde)."""
     xs = [q[0] for t in tel for q in t[0]]
@@ -772,7 +794,29 @@ def _yanal_baskin(yz, d):
             yan += y["alan"]
         elif y["tip"] in ("silindir", "koni") and _paralel(y["d"], d):
             yan += y["alan"]
+        elif y["tip"] == "diger" and _serbest_yanal(y["f"], d):
+            yan += y["alan"]
     return top > 0 and yan >= 0.6 * top
+
+
+def _serbest_yanal(f, d):
+    """Serbest (B-spline) yüz eksene paralel mi: 9 noktada normal eksene
+    dik. Bazı CAD'ler ekstrüzyon profilin yanlarını B-spline yazar
+    (tente kompleksindeki 1515 mm ray)."""
+    s = BRepAdaptor_Surface(f)
+    u0, u1 = s.FirstUParameter(), s.LastUParameter()
+    v0, v1 = s.FirstVParameter(), s.LastVParameter()
+    if not all(math.isfinite(x) for x in (u0, u1, v0, v1)):
+        return False
+    bf = BRepGProp_Face(f)
+    p, n = gp_Pnt(), gp_Vec()
+    for a in (0.1, 0.5, 0.9):
+        for b in (0.1, 0.5, 0.9):
+            bf.Normal(u0 + a * (u1 - u0), v0 + b * (v1 - v0), p, n)
+            m = n.Magnitude()
+            if m < 1e-12 or abs(n.X() * d[0] + n.Y() * d[1] + n.Z() * d[2]) / m > math.sin(ACI_TOL):
+                return False
+    return True
 
 
 def _profil_eksen(sh, V, d):
@@ -803,10 +847,9 @@ def _profil_eksen(sh, V, d):
     # pay bırakılır.
     ref = _dis_olcu(ayni[len(ayni) // 2][1])
     tol = 0.01 * max(ref[1] - ref[0], ref[3] - ref[2]) + 0.05
-    farkli = sum(1 for s_ in istasyon
-                 if not s_[1] or any(abs(a - b) > tol
-                                     for a, b in zip(_dis_olcu(s_[1]), ref)))
-    if farkli > 2:
+    fark = [not s_[1] or any(abs(a - b) > tol for a, b in zip(_dis_olcu(s_[1]), ref))
+            for s_ in istasyon]
+    if sum(fark) > 2 and not _uc_kesimi(istasyon, fark):
         return None
     # hacim / (kesit x boy): delik ve gönye kesimi düşürür
     dolu = V / (A * L)
@@ -997,14 +1040,24 @@ def _donel_isin(sh, eksen):
     # --- baş: bir uçta, gövdeden belirgin geniş kotlar
     govde_r = sorted(r[3] for r in m)[n // 2]
     bas_uc = None
-    for uc, sira in (("alt", range(n)), ("ust", range(n - 1, -1, -1))):
-        k = 0
-        for i in sira:
+    for uc, sira in (("alt", list(range(n))), ("ust", list(range(n - 1, -1, -1)))):
+        # Kubbe (mercimek) başın tepesi gövdeden dardır: uçta yarıçapı
+        # BÜYÜYEREK genişleyen kotlar başa sayılır (en çok boyun %12'si).
+        # ISO 7380 M8'de tepe Ø5,5, gövde Ø8, baş Ø14: eskiden baş hiç
+        # bulunmuyordu.
+        j = 0
+        while (j < len(sira) - 1 and j < 0.12 * n and m[sira[j]][3] < 1.08 * govde_r
+               and m[sira[j + 1]][3] >= m[sira[j]][3]):
+            j += 1
+        if j and m[sira[j]][3] < 1.08 * govde_r:
+            j = 0
+        k = j
+        for i in sira[j:]:
             if m[i][3] >= 1.08 * govde_r:
                 k += 1
             else:
                 break
-        if 0 < k <= 0.3 * n:
+        if j < k <= 0.3 * n:
             if bas_uc is None or k > bas_uc[1]:
                 bas_uc = (uc, k)
     # gövde kotları: baş dışındakiler (uçtaki pah kotları hariç)
@@ -1081,7 +1134,12 @@ def _donel_isin(sh, eksen):
     if (not any(govde_delik) and Lg >= Dg and 1.4 * Dg <= Db <= 2.6 * Dg
             and Hb <= min(0.5 * H, 1.2 * Dg)):
         bb = max(set(bic[i] for i in bas), key=lambda b: sum(bic[i] == b for i in bas))
-        tur = {"altıgen": "altıgen baş", "kare": "kare baş"}.get(bb, "silindirik baş")
+        # başın gövdeden tepeye yarıçap dizisi: tepe daralıyorsa mercimek
+        # (kubbe, ISO 7380), gövde tarafı darsa havşa, düzse silindirik
+        rs = [m[i][3] for i in (bas if bas_uc[0] == "ust" else bas[::-1])]
+        yuvarlak_tur = ("mercimek baş" if rs[-1] < 0.8 * max(rs) else
+                        "havşa baş" if rs[0] < 0.8 * max(rs) else "silindirik baş")
+        tur = {"altıgen": "altıgen baş", "kare": "kare baş"}.get(bb, yuvarlak_tur)
         if bb in ("altıgen", "kare") or (bb == "yuvarlak" and gbic == "yuvarlak"):
             return ("standart", "civata",
                     f"cıvata: {tur} Ø{f(Db)}, gövde Ø{f(Dg)} x {f(Lg)} (ışın ölçümü)")
@@ -1136,3 +1194,157 @@ def benzer(a, b, tol=IMZA_TOL):
     # Yoğunluk aile içinde daha çok oynar (M6 perçin somunda cidar / çap
     # 0,33, M8'de 0,27): %25 pay.
     return abs(a["k"] - b["k"]) <= 0.25 * max(a["k"], b["k"])
+
+
+# ================================================ SATIN ALINAN ADAYI
+# Cıvata, somun, pul, yay, rulman, pim, segman... tipleri saymakla
+# bitmez. Tek tek imza yerine SATIN ALINAN ELEMANIN GENEL İŞARETLERİNE
+# bakılır; işaretler KARAR DEĞİLDİR, "standart tanımı kontrol" listesine
+# gerekçesiyle düşer (tasarımcı düzeltir ya da onaylar).
+ADAY_EN_BUYUK = 100.0              # bundan büyük parça aday sayılmaz (mm)
+
+
+def donel_mi(sh):
+    """Parça bir eksen çevresinde dönel (ya da altıgen/kare prizma) mı:
+    ışınla ölçülür, diş ve tırtıl sonucu değiştirmez.
+    Döner: (eksen, serbest yüz payı) ya da None."""
+    yz = _yuzler(sh)
+    if not yz:
+        return None
+    top = sum(y["alan"] for y in yz)
+    serbest = sum(y["alan"] for y in yz if y["tip"] == "diger") / top
+    adaylar = [e for e in (_ana_eksen(yz), _simetri_ekseni(sh)) if e]
+    for o, d in adaylar:
+        t = _eksene_tasi(sh, o, d)
+        H, m = meridyen(t)
+        if H <= 0 or any(r[1] is None for r in m):
+            continue
+        iyi = sum(1 for r in m if r[2] > 0 and (r[3] / r[2] < 1.04
+                                               or 1.12 <= r[3] / r[2] <= 1.19
+                                               or 1.35 <= r[3] / r[2] <= 1.45))
+        if iyi >= 0.9 * len(m):
+            return (o, d), serbest
+    return None
+
+
+def yay_mi(sh, V):
+    """Helis yay biçimi: simetri ekseni var, eksen boyunca içi boş, katı
+    kapladığı silindirin %35'inden azını doldurur ve dönel DEĞİLDİR
+    (tel her yönde başka yükseklikte)."""
+    e = _simetri_ekseni(sh)
+    if not e:
+        return None
+    t = _eksene_tasi(sh, *e)
+    kb = _kutu(t)
+    H = kb[5] - kb[2]
+    R = max(abs(v) for v in (kb[0], kb[1], kb[3], kb[4]))
+    if H <= 0 or R <= 0:
+        return None
+    dol = V / (math.pi * R * R * H)
+    if dol >= 0.35 or not _eksen_bos(t, kb[2], H):
+        return None
+    _H, m = meridyen(t)
+    eksik = sum(1 for r in m if r[1] is None)
+    if eksik < 0.3 * len(m):
+        return None
+    return f"helis yay biçimi: Ø{2 * R:.1f} x {H:.1f}, doluluk %{100 * dol:.0f}".replace(".", ",")
+
+
+def aday_isaretleri(sh, V=None):
+    """Biçimden gelen işaretler: [(anahtar, gerekçe)]."""
+    try:
+        if V is None:
+            g = GProp_GProps()
+            BRepGProp.VolumeProperties_s(sh, g)
+            V = g.Mass()
+        kb = _kutu(sh)
+        B = max(kb[3] - kb[0], kb[4] - kb[1], kb[5] - kb[2])
+        if B > ADAY_EN_BUYUK or V <= 0:
+            return []
+        out = []
+        d = donel_mi(sh)
+        if d:
+            out.append(("donel", f"dönel küçük parça (en büyük ölçü {B:.0f} mm)"))
+            if d[1] >= 0.2:
+                out.append(("dis", "diş / helis / tırtıl modelli (serbest yüz "
+                                   f"%{100 * d[1]:.0f})"))
+        else:
+            y = yay_mi(sh, V)
+            if y:
+                out.append(("yay", y))
+        return out
+    except Exception:
+        return []
+
+
+# ================================================ GÖRÜNTÜ (AI için)
+def parca_png(sh, boyut=512):
+    """Parçanın gölgelendirilmiş resmi (PNG baytları): sol yarıda eş
+    ölçülü (izometrik) görünüş, sağ yarıda en uzun eksen boyunca bakış.
+    AI'a "bu ne" diye sormak için: biçim, delik, baş, diş görünür.
+    Ölçek çubuğu yazılır (mm)."""
+    import io
+    import matplotlib
+    matplotlib.use("Agg")
+    import matplotlib.pyplot as plt
+    from mpl_toolkits.mplot3d.art3d import Poly3DCollection
+    from OCP.BRep import BRep_Tool
+    from OCP.BRepMesh import BRepMesh_IncrementalMesh
+    from OCP.TopLoc import TopLoc_Location
+    from OCP.TopAbs import TopAbs_REVERSED
+    kb = _kutu(sh)
+    B = max(kb[3] - kb[0], kb[4] - kb[1], kb[5] - kb[2]) or 1.0
+    BRepMesh_IncrementalMesh(sh, B / 150.0, False, 0.3, True)
+    ucg = []
+    ex = TopExp_Explorer(sh, TopAbs_FACE)
+    while ex.More():
+        f = TopoDS.Face_s(ex.Current())
+        ex.Next()
+        loc = TopLoc_Location()
+        t = BRep_Tool.Triangulation_s(f, loc)
+        if t is None:
+            continue
+        tr = loc.Transformation()
+        pts = [t.Node(i).Transformed(tr) for i in range(1, t.NbNodes() + 1)]
+        ters = f.Orientation() == TopAbs_REVERSED
+        for i in range(1, t.NbTriangles() + 1):
+            a, b, c = t.Triangle(i).Get()
+            if ters:
+                b, c = c, b
+            ucg.append([(pts[j - 1].X(), pts[j - 1].Y(), pts[j - 1].Z()) for j in (a, b, c)])
+        if len(ucg) > 60000:
+            break
+    if not ucg:
+        return None
+    isik = (0.4, -0.5, 0.75)
+
+    def renk(u):
+        (x0, y0, z0), (x1, y1, z1), (x2, y2, z2) = u
+        n = ((y1 - y0) * (z2 - z0) - (z1 - z0) * (y2 - y0),
+             (z1 - z0) * (x2 - x0) - (x1 - x0) * (z2 - z0),
+             (x1 - x0) * (y2 - y0) - (y1 - y0) * (x2 - x0))
+        m = math.sqrt(sum(v * v for v in n)) or 1.0
+        k = abs(sum(n[i] * isik[i] for i in range(3))) / m / math.sqrt(sum(v * v for v in isik))
+        g = 0.35 + 0.6 * k
+        return (0.55 * g, 0.62 * g, 0.72 * g)
+    renkler = [renk(u) for u in ucg]
+    orta = ((kb[0] + kb[3]) / 2, (kb[1] + kb[4]) / 2, (kb[2] + kb[5]) / 2)
+    uz = [kb[3] - kb[0], kb[4] - kb[1], kb[5] - kb[2]]
+    en_uzun = uz.index(max(uz))
+    bakis = [(30, -60), {0: (0, 0), 1: (0, -90), 2: (90, -90)}[en_uzun]]
+    fig = plt.figure(figsize=(2 * boyut / 100, boyut / 100), dpi=100)
+    for j, (el, az) in enumerate(bakis):
+        ax = fig.add_subplot(1, 2, j + 1, projection="3d")
+        ax.add_collection3d(Poly3DCollection(ucg, facecolors=renkler, edgecolors="none"))
+        for eks, o in zip("xyz", orta):
+            getattr(ax, f"set_{eks}lim")(o - B / 2, o + B / 2)
+        ax.set_box_aspect((1, 1, 1))
+        ax.view_init(elev=el, azim=az)
+        ax.set_axis_off()
+    fig.suptitle(f"ölçü {uz[0]:.1f} x {uz[1]:.1f} x {uz[2]:.1f} mm".replace(".", ","),
+                 fontsize=10)
+    fig.subplots_adjust(left=0, right=1, bottom=0, top=0.92, wspace=0)
+    bio = io.BytesIO()
+    fig.savefig(bio, format="png", facecolor="white")
+    plt.close(fig)
+    return bio.getvalue()

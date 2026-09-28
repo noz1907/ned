@@ -133,6 +133,67 @@ def ikinci_oturum(cikti):
     dogru("K0 KAMERA üretim parçası oldu", u.komp[0]["sinif"] == "parca")
     dogru("hata kutusu çıkmadı", not [k for k in KUTU if k[0] == "showerror"],
           str(KUTU))
+
+    print("-- kural: standart tanımı belirsizse BOM'dan önce sorulur")
+    kl = tempfile.mkdtemp(prefix="kontrol_")
+    u.v_out.set(kl)
+    u.komp = [{"kod": "FT108161", "ad": "FT108161", "adet": 41, "sinif": "standart",
+               "tip": "civata (geometri)", "geometri": "cıvata: 6 köşe baş",
+               "indeks": [0], "hacim_mm3": 1.0, "olc": [18.7, 18.7, 24.5],
+               "malzeme_data": None}]
+    soru, cvp = [], [False]
+    mb.askyesnocancel = lambda *a, **k: (soru.append(a), cvp[0])[1]
+    G.klasor_ac = lambda y: None
+    dogru("HAYIR: iş durur", u._standart_kontrol() is False and len(soru) == 1)
+    y = os.path.join(kl, "STANDART_KONTROL.xlsx")
+    dogru("HAYIR: liste Excel'e yazıldı", os.path.isfile(y))
+    dogru("HAYIR: kabul edilmedi diye kayıtlı",
+          IS.durum_oku(kl)["standart_kontrol"].get("kabul") is False)
+    cvp[0] = None
+    dogru("İPTAL: iş durur", u._standart_kontrol() is False)
+    cvp[0] = True
+    dogru("EVET: devam", u._standart_kontrol() is True)
+    dogru("EVET: kabul kayda geçti (izlenebilir)",
+          IS.durum_oku(kl)["standart_kontrol"].get("kabul") is True)
+    n = len(soru)
+    dogru("aynı liste bir daha sorulmaz", u._standart_kontrol() is True and len(soru) == n)
+    u.komp[0].pop("geometri")
+    u.komp[0]["sinif"] = "parca"
+    dogru("belirsiz parça yoksa hiç sorulmaz", u._standart_kontrol() is True
+          and len(soru) == n)
+
+    print("-- AI önerisi: onaylanınca uygulanır, öğrenilir; aynı numaralı sac etkilenmez")
+    u.komp = [
+        {"kod": "55460008672", "ad": "55460008672", "adet": 6, "sinif": "parca", "tip": "",
+         "aday": ["dönel küçük parça"], "indeks": [0], "hacim_mm3": 812.4,
+         "olc": [9.0, 27.1, 27.1], "malzeme_data": None},
+        {"kod": "55460008672", "ad": "55460008672", "adet": 1, "sinif": "parca", "tip": "",
+         "indeks": [1], "hacim_mm3": 1939390.0, "olc": [1.0, 1281.2, 1513.8],
+         "malzeme_data": None},
+        {"kod": "FT108161", "ad": "FT108161", "adet": 41, "sinif": "standart",
+         "tip": "civata (geometri)", "geometri": "cıvata: 6 köşe baş", "indeks": [2],
+         "hacim_mm3": 3000.0, "olc": [18.7, 18.7, 24.5], "malzeme_data": None}]
+    u.kayit = [None, None, None]
+    mb.askyesno = lambda *a, **k: (soru.append(a), True)[1]
+    u._ai_geldi(({0: {"karar": "duzelt", "sinif": "standart", "tip": "lastik geçme",
+                      "guven": 0.9, "gerekce": "resim", "goruntu": True},
+                  1: {"karar": "dogru", "sinif": "parca", "tip": "sac", "guven": 0.99,
+                      "gerekce": "sac", "goruntu": False},
+                  2: {"karar": "dogru", "sinif": "standart", "tip": "flanşlı cıvata M8",
+                      "guven": 0.95, "gerekce": "ölçüm", "goruntu": False}},
+                 {"usd": 0.12, "girdi": 1, "cikti": 1, "istek": 2, "resim": 1}))
+    dogru("halka AI önerisiyle standart", u.komp[0]["sinif"] == "standart"
+          and u.komp[0]["tip"] == "lastik geçme (AI)", str(u.komp[0].get("tip")))
+    dogru("AYNI NUMARALI sac üretimde kaldı", u.komp[1]["sinif"] == "parca")
+    dogru("geometriyle bulunan cıvata AI'la doğrulandı (artık kontrol listesinde yok)",
+          not u.M.kontrol_listesi(u.komp), str(u.M.kontrol_listesi(u.komp)))
+    kural = u.M.ayar_oku().get("sinif_kurali") or {}
+    dogru("kural numarayla değil parmak iziyle saklandı",
+          "55460008672" not in kural and kural.get("geo:812.4:9.0x27.1x27.1") == "standart")
+    dogru("başka model: aynı numaralı sac yine üretim",
+          u.M._kural(kural, {"ad": "55460008672", "hacim_mm3": 1939390.0,
+                             "olc": [1.0, 1281.2, 1513.8]}) is None)
+    shutil.rmtree(kl, ignore_errors=True)
     kok.destroy()
     os._exit(1 if HATA else 0)
 

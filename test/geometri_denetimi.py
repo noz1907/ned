@@ -210,7 +210,8 @@ ogr = [("510206504-00", percin_somun(5.2, 1.0, 4.5, 13, 4.0, 4, 3.0)),      # M6
        ("PARCA-77", cut(fuse(cyl(9, 2), cyl(6, 15, 2)), cyl(4, 17)))]       # flanşlı burç
 kayit = [(a, dondur(sh) if i % 2 else sh) for i, (a, sh) in enumerate(ogr)]
 komp = [{"ad": a, "kod": a, "sinif": "parca", "tip": "", "indeks": [i],
-         "hacim_mm3": 0.0, "olc": [0, 0, 0]} for i, (a, _s) in enumerate(ogr)]
+         "hacim_mm3": 100.0 * (i + 1), "olc": [i + 1.0, 10.0, 20.0]}
+        for i, (a, _s) in enumerate(ogr)]
 im0 = T.bicim_imzasi(kayit[0][1])
 kural = {M.kural_anahtari(komp[0]["ad"], komp[0]): "standart",
          M.sekil_anahtari(im0): "standart"}

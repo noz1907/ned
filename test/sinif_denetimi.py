@@ -166,6 +166,33 @@ with open(y, "w", encoding="utf-8") as f:
     f.write("kod;malzeme\nA;Steel\n")
 esit("kaynak sütunu yoksa boş", M.cad_kaynagi_oku(y), {})
 
+print("\n-- standart tanımı kontrol listesi (tasarımcıya giden, geri gelen)")
+import pf9_excel as XL                                           # noqa: E402
+komp = [{"kod": "FT108161", "ad": "FT108161", "sinif": "standart", "tip": "civata (geometri)",
+         "geometri": "cıvata: 6 köşe baş", "adet": 41, "olc": [18.7, 18.7, 24.5]},
+        {"kod": "55460008672", "ad": "55460008672", "sinif": "parca", "tip": "",
+         "aday": ["dönel küçük parça"], "adet": 6, "olc": [9, 27.1, 27.1]},
+        {"kod": "55460008672", "ad": "55460008672", "sinif": "parca", "tip": "",
+         "adet": 1, "olc": [1, 1281.2, 1513.8]},
+        {"kod": "COMPOUND", "ad": "COMPOUND", "sinif": "parca", "tip": "", "isimsiz": True,
+         "adet": 1, "olc": [2, 3, 11]},
+        {"kod": "K0 SAC", "ad": "K0 SAC", "sinif": "parca", "tip": "", "adet": 1,
+         "oneri": ("standart", "pul", "pul: Ø18"), "olc": [2, 18, 18]}]
+kl = M.kontrol_listesi(komp)
+esit("dört durum da listede, düz sac yok", [r[0].split(":")[0].split(" -")[0] for r in kl],
+     ["geometri", "standart olabilir", "tanınmadı", "ad ile biçim çelişiyor"])
+y = M.kontrol_yaz(d, komp)
+esit("STANDART_KONTROL.xlsx yazıldı", os.path.basename(y), "STANDART_KONTROL.xlsx")
+esit("doldurulmamış liste hiçbir şey değiştirmez", M.cad_kaynagi_oku(y), {})
+sat = [r[:8] + ["Bought" if r[1] == "55460008672" else ""] for r in kl]
+XL.xlsx_yaz(y, [("Kontrol", M.KONTROL_BASLIK, sat)])
+esit("malzeme sütunu yok (yalnız sınıf dosyası)", M.malzeme_sutunu_var(y), False)
+har = M.cad_kaynagi_oku(y)
+M.cad_kaynagiyla_sinifla(komp, har, {}, log=lambda t: None)
+esit("ortak kodlu halka Bought -> standart", komp[1]["sinif"], "standart")
+esit("AYNI KODLU sac (başka ölçü) üretimde kalır", komp[2]["sinif"], "parca")
+esit("liste boşalınca dosya silinir", M.kontrol_yaz(d, []) is None and not os.path.isfile(y), True)
+
 print("\n-- hiyerarşik BOM: dikişler tek satır")
 agac = {"ad": "KOK", "montaj": True, "alt": [
     {"ad": "PARCA A", "katilar": [0]},

@@ -138,7 +138,8 @@ def cizim_ayari(P):
 # ------------------------------------------------------------ durum dosyası
 def _bos():
     return {"surum": 1, "step": "", "step_ozet": "", "ayar": {},
-            "dxf": {}, "acinim": {}, "lazer": {}, "islemler": []}
+            "dxf": {}, "acinim": {}, "lazer": {}, "islemler": [],
+            "standart_kontrol": {}}
 
 
 def durum_oku(on):
@@ -201,6 +202,16 @@ def islem_kaydet(on, ad, sure, sonuc="tamam"):
                               "sonuc": sonuc,
                               "tarih": time.strftime("%Y-%m-%d %H:%M:%S")})
         d["islemler"] = d["islemler"][-500:]
+    durum_guncelle(on, _d)
+
+
+def kontrol_kaydet(on, sayi, kabul, step_ozet=""):
+    """Standart tanımı kontrolü: kaç parça belirsizdi, kullanıcı listeyi
+    olduğu gibi kabul etti mi (izlenebilirlik: "çıkana razı olundu")."""
+    def _d(d):
+        d["standart_kontrol"] = {"sayi": int(sayi), "kabul": bool(kabul),
+                                 "step_ozet": step_ozet,
+                                 "tarih": time.strftime("%Y-%m-%d %H:%M:%S")}
     durum_guncelle(on, _d)
 
 

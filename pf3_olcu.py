@@ -264,8 +264,12 @@ def kural_anahtari(ad, k=None):
     ADSIZ katıda (COMPOUND, SOLID) ad anahtar olamaz - bir COMPOUND'u
     standart yapmak bütün COMPOUND'ları standart yapardı. Onlarda anahtar
     GEOMETRİK PARMAK İZİDİR: hacim + üç ölçü. Aynı tedarikçi parçası
-    başka bir modelde yine tanınır."""
-    if k is not None and k.get("olc") and TN.isimsiz(ad):
+    başka bir modelde yine tanınır. Adı yalnız parça numarası olanlarda
+    da (aynı numara birden çok farklı parçada olabiliyor) anahtar budur."""
+    # Adı yalnız parça numarası olan katıda da ad anahtar olamaz: tente
+    # kompleksinde 20'den fazla FARKLI parça aynı "55460008672" adını
+    # taşıyordu; birini standart yapmak hepsini (sacları) standart yapardı.
+    if k is not None and k.get("olc") and not ad_bilgili(ad):
         return ("geo:" + f"{float(k['hacim_mm3']):.1f}:"
                 + "x".join(f"{float(v):.1f}" for v in k["olc"]))
     return _sinif_adi(kaynak_tipi(ad))
@@ -5744,17 +5748,23 @@ def bom_satirlari(bom, h, en_cok=40):
 
 # ---------------------------------------------------------------- komponentleme
 def geometriden_sinifla(kayit, komp, kural=None, log=print):
-    """ADI BİLGİ TAŞIMAYAN katıları ("COMPOUND", "SOLID", "Body") YÜZLERİNE
-    bakarak sınıflar: pul, somun, cıvata, perçin, pim, o-ring, kaynak
-    dikişi (pf8_tani). Adı olan parçada ad kazanır; geometri yalnız
-    ÖNERİ olarak yazılır (k["oneri"]) - 2. sekmede görünür, kullanıcı
-    isterse sınıfını değiştirir.
+    """ADI BİLGİ TAŞIMAYAN katıları YÜZLERİNE bakarak sınıflar: pul, somun,
+    cıvata, perçin, perçin somun, pim, o-ring, kaynak dikişi (pf8_tani).
+
+    Adı bilgi taşımayan: adsız ("COMPOUND", "SOLID", "Body") ya da yalnız
+    parça numarası ("FT108161", "55RS865978"). Tente kompleksi modelinde
+    41 flanşlı cıvata, 29 mercimek başlı cıvata ve 69 perçin somun
+    böyle adlandırılmıştı; geometri tanıyordu ama yalnız öneri yazıyordu,
+    hepsi üretim parçası kalıyordu. Adı ne olduğunu söyleyen parçada
+    ("... SACI", "M6 SOMUN") ad kazanır; geometri yalnız ÖNERİ olarak
+    yazılır (k["oneri"]) - 2. sekmede görünür, kullanıcı isterse
+    sınıfını değiştirir.
 
     Ölçüldü (4 gerçek model, adı belli 636 komponent): geometri 227
     karar verdi, 1'i yanlış (%0,44 - adında SAC geçen pul biçimli parça);
     182 kaynak kararının hepsi doğru, hiçbir üretim parçası dikiş
     sayılmadı. Emin olunmayan katıya karar verilmez."""
-    karar = oneri = 0
+    karar = oneri = numarali = 0
     isimsiz = []
     for k in komp:
         if k["sinif"] != "parca" or _kural(kural, k):
@@ -5769,19 +5779,197 @@ def geometriden_sinifla(kayit, komp, kural=None, log=print):
                 k["isimsiz"] = True
                 isimsiz.append(k)
             continue
-        if adsiz:
+        if adsiz or not ad_bilgili(k["ad"]):
             k["sinif"], k["tip"] = r[0], (r[1] or "") + " (geometri)"
             k["geometri"] = r[2]
             karar += 1
+            numarali += not adsiz
         else:
             k["oneri"] = r
             oneri += 1
     if karar or oneri or isimsiz:
-        log(f"geometriden tanıma: {karar} adsız katı sınıflandı"
+        log(f"geometriden tanıma: {karar} komponent sınıflandı"
+            + (f" ({numarali} tanesinin adı yalnız parça numarası)" if numarali else "")
             + (f", {oneri} parçada öneri" if oneri else "")
             + (f"; {len(isimsiz)} adsız katı TANINAMADI (parça sayıldı, "
                "2. sekmede elle sınıflayın)" if isimsiz else ""))
     return karar, oneri
+
+
+# ------------------------------------------------ standart tanımı kontrolü
+# KURAL: CAD ne olursa olsun, standart (satın alınan) parçanın tanımı
+# belirsizse program SÖYLER. Tasarımcı ya CAD'de düzeltir (ad ya da
+# Made/Bought) ya da listeyi olduğu gibi kabul eder; kabul kayda geçer.
+KONTROL_DOSYASI = "STANDART_KONTROL.xlsx"
+KONTROL_BASLIK = ["durum", "kod", "ad", "adet", "olcu", "simdiki_sinif", "oneri",
+                  "gerekce", "kaynak"]
+
+
+def standart_denetimi(kayit, komp, kural=None, log=print):
+    """Adı bilgi taşımayan (adsız ya da yalnız parça numarası) ve biçimi
+    satın alınan elemana benzeyen üretim parçalarına k["aday"] yazar:
+    dönel küçük parça, diş / helis modelli, helis yay. KARAR DEĞİLDİR;
+    kontrol listesine gerekçesiyle girer.
+
+    Ölçüldü (5 gerçek model): adı standart diyen 60 komponentin hepsi
+    bu işaretlerden en az birini taşıyor (cıvata, somun, pul, rulman,
+    pim, perçin, kauçuk takoz, yay); adı üretim diyen 14 parça da
+    taşıyor (burç, kare delikli plaka) - o yüzden karar değil uyarı."""
+    if kural is None:
+        kural = ayar_oku().get("sinif_kurali") or {}
+    n = 0
+    for k in komp:
+        k.pop("aday", None)
+        if (k["sinif"] != "parca" or _kural(kural, k) or k.get("profil")
+                or k.get("cad_kaynak") or ad_bilgili(k["ad"])):
+            continue
+        isr = TN.aday_isaretleri(kayit[k["indeks"][0]][1], k.get("hacim_mm3"))
+        if isr:
+            k["aday"] = [g for _a, g in isr]
+            n += 1
+    liste = kontrol_listesi(komp)
+    if liste:
+        log(f"! STANDART TANIMI KONTROL: {len(liste)} parça belirsiz "
+            f"({sum(r[0].startswith('geometri') for r in liste)} biçiminden standart "
+            f"sayıldı, {sum(r[0].startswith('standart olabilir') for r in liste)} standart "
+            f"olabilir, {sum(r[0].startswith('tanınmadı') for r in liste)} adsız ve "
+            f"tanınmadı). Tasarımcı CAD'de düzeltsin ya da listeyi onaylayın.")
+    return n
+
+
+def kontrol_listesi(komp):
+    """Standart tanımı belirsiz parçalar: [durum, kod, ad, adet, ölçü,
+    şimdiki sınıf, öneri, gerekçe, kaynak(boş - tasarımcı doldurur)]."""
+    out = []
+    for k in komp:
+        olc = _olc_metni(k)
+        if k["sinif"] == "standart" and k.get("geometri"):
+            out.append(["geometri: standart sayıldı - onaylayın", k["kod"], k["ad"],
+                        k["adet"], olc, "standart", (k.get("tip") or "").replace(" (geometri)", ""),
+                        k["geometri"], ""])
+        elif k["sinif"] == "parca" and k.get("aday"):
+            out.append(["standart olabilir - kontrol edin", k["kod"], k["ad"], k["adet"],
+                        olc, "parca", "standart?", "; ".join(k["aday"]), ""])
+        elif k["sinif"] == "parca" and k.get("isimsiz"):
+            out.append(["tanınmadı: adsız katı", k["kod"], k["ad"], k["adet"], olc,
+                        "parca", "", "adı yok, biçimi bilinen bir elemana uymuyor", ""])
+        elif k["sinif"] == "parca" and k.get("oneri") and k["oneri"][0] != "parca":
+            out.append(["ad ile biçim çelişiyor", k["kod"], k["ad"], k["adet"], olc,
+                        "parca", k["oneri"][1] or k["oneri"][0], k["oneri"][2], ""])
+        else:
+            continue
+        a = k.get("ai")
+        if a:
+            out[-1][6] = (f"AI ({a.get('karar', '')}): {a['sinif']}"
+                          + (f" ({a['tip']})" if a["tip"] else "")
+                          + f" %{100 * a['guven']:.0f}")
+            out[-1][7] = f"{out[-1][7]} | AI: {a['gerekce']}"
+    return out
+
+
+def _karar_kaynagi(k):
+    if k.get("ogrenildi"):
+        return "benzerinden öğrenme (daha önce elle düzeltilen parçaya benziyor)"
+    if k.get("geometri"):
+        return "geometri ölçümü"
+    if k.get("profil"):
+        return "kesit ölçümü (profil)"
+    if TN.isimsiz(k["ad"]):
+        return "yok: adsız katı, bilinen biçime uymadı"
+    if ad_bilgili(k["ad"]):
+        return "parça adı / montaj ağacı"
+    return "yok: ad yalnız numara, biçim bilinen bir elemana uymadı (varsayılan: parca)"
+
+
+def ai_girdisi(komp, kural=None):
+    """AI kontrolüne gidecek veri: kaynak dikişleri, kullanıcının ELLE
+    verdiği ve CAD'in Made/Bought ile söylediği sınıflar HARİÇ bütün
+    komponentler; her birinin sınıfı, kararın kaynağı ve programın
+    ölçtüğü bulgular. CAD dosyası / geometri gitmez.
+    Döner: (parcalar, baglam, oncelik) - no = komp listesindeki sıra,
+    oncelik = programın zaten belirsiz bulduğu (kontrol listesi)."""
+    if kural is None:
+        kural = ayar_oku().get("sinif_kurali") or {}
+    kontrol = {id(k) for k in _kontrol_komp(komp)}
+    parcalar, oncelik = [], []
+    for i, k in enumerate(komp):
+        if k["sinif"] == "kaynak" or k.get("cad_kaynak") or _kural(kural, k):
+            continue
+        b = []
+        if k.get("geometri"):
+            b.append("program ölçtü: " + k["geometri"])
+        if k.get("profil"):
+            b.append("program ölçtü: " + k["profil"]["gerekce"])
+        for g in k.get("aday") or []:
+            b.append("program ölçtü (işaret): " + g)
+        if k.get("oneri"):
+            b.append("program ölçtü (biçim önerisi): " + k["oneri"][2])
+        parcalar.append({"no": i, "kod": k["kod"], "ad": k["ad"], "adet": k["adet"],
+                         "olcu_mm": [round(float(v), 1) for v in (k.get("olc") or [])],
+                         "program_sinif": k["sinif"], "program_tip": k.get("tip") or "",
+                         "karar_kaynagi": _karar_kaynagi(k), "bulgular": b})
+        if id(k) in kontrol:
+            oncelik.append(i)
+    uretim = [k["kod"] for k in komp if k["sinif"] == "parca"
+              and (k.get("profil") or "sac" in (k.get("tip") or ""))][:25]
+    baglam = {"komponent_sayisi": len(komp),
+              "uretim_parcasi_numara_ornekleri": uretim,
+              "standart_numara_ornekleri": [k["kod"] for k in komp
+                                            if k["sinif"] == "standart"
+                                            and not k.get("geometri")][:25]}
+    return parcalar, baglam, oncelik
+
+
+def ai_goruntu(kayit, komp):
+    """AI'ın 2. turu için: no -> parçanın PNG resmi."""
+    def f(no):
+        return TN.parca_png(kayit[komp[no]["indeks"][0]][1], boyut=384)
+    return f
+
+
+def ai_isle(komp, sonuc):
+    """AI sonuçlarını komponentlere yazar (k["ai"]); sınıfı DEĞİŞTİRMEZ."""
+    for no, r in sonuc.items():
+        if 0 <= no < len(komp):
+            komp[no]["ai"] = r
+    return len(sonuc)
+
+
+def _kontrol_komp(komp):
+    out = []
+    for k in komp:
+        if ((k["sinif"] == "standart" and k.get("geometri"))
+                or (k["sinif"] == "parca" and (k.get("aday") or k.get("isimsiz")
+                                               or (k.get("oneri") and k["oneri"][0] != "parca")))):
+            out.append(k)
+    return out
+
+
+def kontrol_yaz(on, komp):
+    """STANDART_KONTROL.xlsx: tasarımcıya gönderilecek liste. 'kaynak'
+    sütununa Bought (satın alınan) ya da Made (üretim) yazılıp dosya
+    2. adımda 'malzeme.csv yükle...' ile geri verilince sınıflar oradan
+    alınır. Liste boşsa eski dosya silinir. Yazılan yolu döner."""
+    y = os.path.join(on, KONTROL_DOSYASI)
+    liste = kontrol_listesi(komp)
+    if not liste:
+        if os.path.isfile(y):
+            try:
+                os.remove(y)
+            except OSError:
+                pass
+        return None
+    os.makedirs(on, exist_ok=True)
+    aciklama = [
+        ["Bu listedeki parçaların standart (satın alınan) mı üretim mi olduğu "
+         "modelden kesin anlaşılamadı."],
+        ["Kısa yol: 'kaynak' sütununa Bought (satın alınan) ya da Made (üretim) "
+         "yazın, dosyayı Pi3D'de 2. adımda 'malzeme.csv yükle...' ile verin."],
+        ["Kalıcı çözüm: CAD'de parçanın Source (Made / Bought) alanını doldurun "
+         "ya da adını düzeltin (ör. 'ISO 7380 M8x16'). Pi3D bir kez düzeltilen "
+         "parçanın biçimini öğrenir; benzerleri kendiliğinden tanınır."]]
+    return XL.xlsx_yaz(y, [("Kontrol", KONTROL_BASLIK, liste),
+                           ("Nasıl doldurulur", ["açıklama"], aciklama)])
 
 
 # Açık kesitin kısa adı ("bükümlü sac, U kesit 40x15x1,5" gibi)
@@ -5864,7 +6052,7 @@ def komponentle(kayit, P, kural=None):
         ad, v, _olc = an
         sinif, tip = sinifla(ad, kural)
         k = {"hacim_mm3": v, "olc": list(_olc)}
-        g = _kural(kural, dict(k, ad=ad)) if TN.isimsiz(ad) else None
+        g = _kural(kural, dict(k, ad=ad)) if not ad_bilgili(ad) else None
         if g in ("parca", "standart", "kaynak"):
             sinif, tip = g, ("elle" if g == "standart" else "")
         out.append({"ad": ad, "kod": kod_cikar(ad), "adet": len(idx), "indeks": idx,
@@ -6154,8 +6342,8 @@ def malzeme_dosya_oku(yol):
 # her zaman daha doğrudur.
 KAYNAK_BASLIK = ("source", "kaynak", "make/buy", "make or buy", "tedarik",
                  "beschaffungsart", "beschaffung", "procurement", "provenance")
-_SATIN = r"bought|\bbuy|purchas|sat[ıi]n|kaufteil|zukauf|achat|fremdteil"
-_URET = r"\bmade\b|\bmake\b|[uü]retim|imalat|eigenfertig|eigenteil|fabriqu"
+_SATIN = r"bought|\bbuy|purchas|sat[ıi]n|kaufteil|zukauf|achat|fremdteil|standart"
+_URET = r"\bmade\b|\bmake\b|[uü]retim|imalat|eigenfertig|eigenteil|fabriqu|\bpar[cç]a\b"
 
 
 def cad_kaynagi_oku(yol):
@@ -6172,6 +6360,10 @@ def cad_kaynagi_oku(yol):
         ic = _sutun(sat, KAYNAK_BASLIK)
         if ik is None or ic is None or ik == ic:
             continue
+        # Kontrol listesinde ölçü de vardır: aynı kodu taşıyan FARKLI
+        # parçalar (tente kompleksinde 20'den fazla parça "55460008672")
+        # ölçüleriyle ayrılır; anahtar "kod|ölçü".
+        io = next((i for i, h in enumerate(sat) if _tr_sade(h) in ("olcu", "ölçü")), None)
         out = {}
         for r in tablo[n + 1:]:
             if len(r) <= max(ik, ic):
@@ -6179,12 +6371,32 @@ def cad_kaynagi_oku(yol):
             kod, v = r[ik].strip().strip('"'), _tr_sade(r[ic])
             if not kod:
                 continue
-            if re.search(_SATIN, v, re.I):
-                out[_tr_sade(kod)] = "standart"
-            elif re.search(_URET, v, re.I):
-                out[_tr_sade(kod)] = "parca"
+            s_ = ("standart" if re.search(_SATIN, v, re.I) else
+                  "parca" if re.search(_URET, v, re.I) else None)
+            if not s_:
+                continue
+            a = _tr_sade(kod)
+            if io is not None and io < len(r) and r[io].strip():
+                a += "|" + r[io].strip()
+            out[a] = s_
         return out
     return {}
+
+
+def _olc_metni(k):
+    """Kontrol listesindeki ölçü yazımı (eşleştirme anahtarı)."""
+    return " x ".join(f"{float(v):g}".replace(".", ",") for v in (k.get("olc") or []))
+
+
+def malzeme_sutunu_var(yol):
+    """Dosyanın ilk satırlarında malzeme sütunu başlığı var mı."""
+    if yol.lower().endswith(".json"):
+        return True
+    try:
+        tablo = _tablo_satirlari(yol)
+    except Exception:
+        return False
+    return any(_sutun(sat, MAL_BASLIK) is not None for sat in tablo[:15])
 
 
 def cad_kaynagiyla_sinifla(komp, harita, kural=None, log=print):
@@ -6197,14 +6409,20 @@ def cad_kaynagiyla_sinifla(komp, harita, kural=None, log=print):
     if kural is None:
         kural = ayar_oku().get("sinif_kurali") or {}
     n = 0
+    kod_say = Counter(_tr_sade(k["kod"]) for k in komp)
     for k in komp:
         if k["sinif"] == "kaynak" or _kural(kural, k):
             continue
-        v = harita.get(_tr_sade(k["kod"]))
+        v = harita.get(_tr_sade(k["kod"]) + "|" + _olc_metni(k))
+        if v is None and kod_say[_tr_sade(k["kod"])] > 1 and any(
+                a.startswith(_tr_sade(k["kod"]) + "|") for a in harita):
+            continue                    # ortak kod, bu ölçü listede yok
+        if v is None:
+            v = harita.get(_tr_sade(k["kod"]))
         if v is None:
             kod_s, ad_s = _tr_sade(k["kod"]), _tr_sade(k["ad"])
             for kod, s in harita.items():
-                if len(kod) < 5:
+                if len(kod) < 5 or "|" in kod:
                     continue
                 dsn = r"(?<![0-9a-z])" + re.escape(kod) + r"(?![0-9a-z])"
                 if re.search(dsn, kod_s) or re.search(dsn, ad_s):
@@ -6314,6 +6532,7 @@ def step_komponentleri(step, P, log=print):
     geometriden_sinifla(kayit, komp, kural, log)
     benzerden_sinifla(kayit, komp, kural, log)
     profilden_tanimla(kayit, komp, log)
+    standart_denetimi(kayit, komp, kural, log)
     sayim = Counter(k["sinif"] for k in komp)
     kyn = [k for k in komp if k["sinif"] == "kaynak"]
     log(f"{len(komp) - len(kyn)} komponent  ("
@@ -6444,7 +6663,7 @@ def zip_yap(on, ad="cizimler.zip", desen=(".dxf", ".pdf")):
     (DXF/, ACINIM/, LZR/, PDF/ ve kökteki tablolar)."""
     import zipfile
     yol = os.path.join(on, ad)
-    tablo = ("BOM.csv", "BOM.xlsx", "BOM.md", "BOM_AGAC.csv", "BOM_AGAC.xlsx",
+    tablo = (KONTROL_DOSYASI, "BOM.csv", "BOM.xlsx", "BOM.md", "BOM_AGAC.csv", "BOM_AGAC.xlsx",
              "BOM_AGAC.md", "olculer.csv", "olculer.xlsx", "olculer.json",
              "rapor.md", "ACINIM.csv", "ACINIM.xlsx", "LAZER.csv", "LAZER.xlsx",
              "PROFIL.csv", "PROFIL.xlsx")
@@ -6635,6 +6854,10 @@ def calistir(step, on, kayit, komp, P, asama=(1, 2, 3), esl=None, agac=None,
 
     if 1 in asama:
         bom_yaz(on, bom, satirlar)
+        y = kontrol_yaz(on, komp)
+        if y:
+            log(f"  ! {os.path.basename(y)}  ({len(kontrol_listesi(komp))} parçanın "
+                "standart tanımı belirsiz - tasarımcıya gönderin)")
         n = profil_listesi_yaz(on, satirlar)
         if n:
             log(f"  PROFIL.xlsx, PROFIL.csv  ({n} profil - kesim listesi ve stok özeti)")
@@ -6744,6 +6967,10 @@ def main():
 
     # ---- malzeme: kütle bunun üzerinden hesaplanır, tahmin edilmez
     esl, genel = {}, VARSAYILAN_MALZEME
+    if a.malzeme_dosya and not malzeme_sutunu_var(a.malzeme_dosya) \
+            and cad_kaynagi_oku(a.malzeme_dosya):
+        cad_kaynagiyla_sinifla(komp, cad_kaynagi_oku(a.malzeme_dosya), log=print)
+        a.malzeme_dosya = None           # yalnız sınıf (kontrol listesi) dosyası
     if a.malzeme_dosya:
         try:
             esl, bilinmeyen = malzeme_dosya_oku(a.malzeme_dosya)
@@ -6891,7 +7118,7 @@ def bom_yaz(on, bom, satirlar):
     open(os.path.join(on, "BOM.md"), "w", encoding="utf-8").write("\n".join(L) + "\n")
 
 
-def rapor_yaz(on, step, kayit, komp, satirlar, montaj):
+def rapor_yaz(on, step, kayit, komp, satirlar, montaj):  # noqa: C901
     L = [f"# {os.path.basename(step)} – ölçü raporu\n",
          f"{len(kayit)} katı, "
          f"{sum(1 for k in komp if k['sinif'] != 'kaynak')} komponent"
@@ -6961,6 +7188,19 @@ def rapor_yaz(on, step, kayit, komp, satirlar, montaj):
         for k in ogr:
             L.append(f"- {k['ad'][:50]}: {k['sinif']} — daha önce elle düzeltilen "
                      "bir parçaya biçimce benziyor")
+    kl = kontrol_listesi(komp)
+    if kl:
+        kk = IS.durum_oku(on).get("standart_kontrol") or {}
+        L.append("\n## Standart tanımı kontrolü\n")
+        L.append(f"**{len(kl)} parçanın** standart (satın alınan) mı üretim mi olduğu "
+                 "modelden kesin anlaşılamadı; liste `STANDART_KONTROL.xlsx`. "
+                 + ("Kullanıcı listeyi **olduğu gibi kabul etti** "
+                    f"({kk.get('tarih', '')})." if kk.get("kabul") else
+                    "Liste henüz onaylanmadı.") + "\n")
+        L.append("| durum | ad | adet | öneri | gerekçe |")
+        L.append("|-------|----|------|-------|---------|")
+        for r in kl:
+            L.append(f"| {r[0]} | {str(r[2])[:30]} | {r[3]} | {r[6]} | {r[7]} |")
     prf = [k for k in komp if k.get("profil")]
     if prf:
         L.append("\n## Profiller\n")

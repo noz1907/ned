@@ -366,16 +366,20 @@ o yoksa program bunu ADDAN, MONTAJ AĞACINDAN ve BİÇİMDEN çıkarır:
 | dikiş grubunun içi | `K0 KAYNAKLAR` altındaki `ARA DIKME` | dikiş |
 | `KAYNAKLI ...` | kaynaklı montaj / parça | **dikiş değil** |
 
-#### Adı olmayan katılar: GEOMETRİDEN tanıma
+#### Adı bilgi taşımayan katılar: GEOMETRİDEN tanıma
 
-CAD bazen katıya ad vermez: `COMPOUND`, `SOLID`, `Body`. Adından hiçbir şey
-anlaşılmaz; program o zaman katının **yüzlerine** bakar:
+CAD bazen katıya ad vermez (`COMPOUND`, `SOLID`, `Body`) ya da ad yalnız
+**parça numarasıdır** (`FT108161`, `SB108164`, `55RS865978`). Adından hiçbir
+şey anlaşılmaz; program o zaman katının **yüzlerine** bakar ve karar verir.
+(Tente kompleksinde 41 flanşlı cıvata, 29 mercimek başlı cıvata ve 69 perçin
+somun böyle adlandırılmıştı; eskiden geometri yalnız öneri yazıyordu, hepsi
+üretim parçası kalıyordu.)
 
 | tanınan | geometrik imza |
 |---------|----------------|
 | **pul** | eksene dik iki düz yüz + dış silindir + boydan boya delik; kalınlık ≤ dış çapın %30'u |
 | **somun** | eksene paralel 6 düz yüz 60° aralıklı (ya da 4 yüz 90°), boydan boya delik; anahtar ağzı / delik 1,3–2,4 |
-| **cıvata** | delik yok; bir ucunda altıgen ya da geniş silindirik baş (imbus yuvası da tanınır), gövde en az bir çap boyunda |
+| **cıvata** | delik yok; bir ucunda altıgen, silindirik, **mercimek (kubbe, ISO 7380)** ya da havşa baş (imbus yuvası da tanınır), gövde en az bir çap boyunda |
 | **perçin** | gövde + bir ucunda kubbe ya da havşa baş |
 | **pim** | tek çaplı, başsız, uçları pahlı, çap ≤ 12 |
 | **perçin somun** | ince başlı burç, delik baştan girer; deliğin baş tarafı geniş (sıkışma bölgesi), uç tarafı dar (dişli kısım) — ya da gövde altıgen/tırtıllı. Kapalı uçlusu da tanınır. |
@@ -388,7 +392,7 @@ pim de olabilir kaynak dikişi de (CATIA dikişi çoğu zaman böyle modeller);
 o parça kalır. Tanınamayan adsız katı 2. sekmede **parca – ADSIZ** yazar.
 
 **Ölçüldü** — 4 gerçek modelde adı belli 636 komponentle karşılaştırıldı:
-geometri 227 karar verdi, **1'i yanlış (%0,44)**. 182 kaynak kararının
+geometri 228 karar verdi, **1'i yanlış (%0,44)**. 182 kaynak kararının
 hepsi doğru, hiçbir üretim parçası dikiş sayılmadı. Işın ölçümü 13 karar
 ekledi (perçin somun, diş modelli somunlar, flanşlı cıvata), hepsi doğru;
 denerken çıkan iki yanlış düzeltildi: 24×24×3 delikli bağlantı braketi
@@ -406,6 +410,36 @@ Adsız bir katıyı elle sınıflarsanız kural **adla değil geometrik parmak
 iziyle** (hacim + üç ölçü) saklanır: bir COMPOUND'u standart yapmak
 bütün COMPOUND'ları standart yapmaz, ama aynı tedarikçi parçası başka bir
 modelde yine tanınır.
+
+#### KURAL: standart tanımı belirsizse program söyler
+
+Cıvata, somun, pul, yay, rulman... tiplerinin sonu yok; hepsine kural
+yazılamaz. Bu yüzden program, CAD hangisi olursa olsun, **standart
+(satın alınan) parça tanımı belirsiz olan her parçayı listeler** ve BOM
+ya da tüm çizimlerden ÖNCE sorar:
+
+| durum | ne demek |
+|-------|----------|
+| geometri: standart sayıldı – onaylayın | adı bilgi taşımıyor, biçiminden cıvata / somun / perçin somun... sayıldı |
+| standart olabilir – kontrol edin | adı bilgi taşımıyor, biçiminde satın alınan eleman işareti var: **dönel küçük parça**, **diş / helis / tırtıl modelli**, **helis yay** |
+| tanınmadı: adsız katı | adı yok, biçimi bilinen bir elemana uymuyor |
+| ad ile biçim çelişiyor | adı üretim diyor, biçimi standart eleman |
+
+Soru penceresinde:
+
+- **EVET** – olduğu gibi kabul et ve devam et. Kabul, tarihiyle çıktı
+  klasörüne ve `rapor.md`'ye yazılır ("çıkana razı olundu").
+- **HAYIR** – liste `STANDART_KONTROL.xlsx` olarak yazılır, iş durur.
+  Tasarımcı CAD'de düzeltir (Source = Made/Bought ya da parça adı) **ya da**
+  listedeki `kaynak` sütununa **Bought / Made** yazar; dosya 2. adımda
+  **malzeme.csv yükle…** ile geri verilince sınıflar oradan alınır (aynı
+  numarayı taşıyan farklı parçalar ölçüleriyle ayrılır).
+- **İPTAL** – vazgeç.
+
+Aynı liste bir kez kabul edildiyse bir daha sorulmaz. İşaretler **karar
+değildir**: 5 gerçek modelde adı standart diyen 60 komponentin hepsi en az
+bir işaret taşıyor, ama adı üretim diyen 14 parça da (burç, kare delikli
+plaka) taşıyor; bu yüzden liste yalnız adı bilgi taşımayan parçaları kapsar.
 
 #### Bir kez düzeltin, benzerlerini program tanısın (öğrenme)
 
@@ -432,6 +466,45 @@ benzer çift çıktı; yalnız 1'i farklı sınıftan (bir bağlantı braketi il
 zaten uygulanmaz).
 
 Sınıf değişince BOM'u yeniden çıkarın.
+
+#### AI ile kontrol (isteğe bağlı)
+
+2. sekmede **AI ile kontrol et**. Akış:
+
+1. **Önce program** kendi bildiği kadar tanımlar (ad, montaj ağacı, geometri
+   ölçümü, profil, öğrenilmiş kurallar) — yukarıdakilerin hepsi.
+2. **AI 1. tur (yazı):** bütün parçaların sınıfını, kararın kaynağını ve
+   programın ölçtüğü bulguları okur; her biri için *doğru / düzelt / belirsiz*.
+3. **AI 2. tur (görüntü):** 1. turda emin olamadığı ve programın zaten
+   belirsiz bulduğu parçaların **resmi** (gölgelendirilmiş iki görünüş +
+   ölçü) gönderilir; AI resme bakıp yeniden karar verir.
+4. **Öneriler** listelenir (%80 ve üstü güvenle). Onaylarsanız uygulanır ve
+   program **öğrenir**; emin olunmayanlar kontrol listesinde kalır.
+
+Kullanıcının elle verdiği ve CAD'in Made/Bought ile söylediği sınıflar
+kesindir, AI'a sorulmaz.
+
+**Ne gönderilir:** parça adı, kodu, adedi, ölçüleri, programın bulguları ve
+(2. turda) parçanın resmi. CAD dosyası **gönderilmez**. Veri Anthropic'e
+(Claude) gider — firmanızın izni olmalı; program ilk kullanımda sorar.
+
+**Kurulum:** `pip install anthropic` (requirements.txt'te var) ve bir API
+anahtarı (console.anthropic.com): `ANTHROPIC_API_KEY` ortam değişkeni ya da
+ilk kullanımda program sorar, ayar dosyasına saklar. İnternet yoksa program
+AI'sız çalışmaya devam eder.
+
+**Maliyet:** her çalışmada GERÇEK kullanım (token) üzerinden hesaplanıp
+günlüğe yazılır; göndermeden önce tahmini tutar sorulur. Ölçülen girdi
+büyüklüğüyle tahmin (Claude Opus 5, $5 / $25 her 1M girdi / çıktı token):
+
+| model | parça | 1. tur | resimli 2. tur | toplam (tahmin) |
+|-------|-------|--------|----------------|-----------------|
+| tente kompleksi | 67 | ~7 bin girdi, ~7 bin çıktı token | ~15 resim | **≈ $0,35** |
+| kaynaklı kasa | 197 | ~20 bin girdi, ~18 bin çıktı token | ~40 resim | **≈ $0,80** |
+
+Daha ucuz model için ayar dosyasına `"ai_model": "claude-sonnet-5"`
+yazın (~2,5 kat ucuz). Düğmeye basılmadıkça hiçbir şey gönderilmez,
+ücret de çıkmaz.
 
 #### CAD'den: Made / Bought (en kesin yol)
 
@@ -469,8 +542,8 @@ parça sabit kesitlidir. Kesitin türü kesitin kendisinden ölçülür:
 | özel kesit | çok boşluklu, oluklu, kanallı (alüminyum sigma profil) | `özel kesit profil 40x40` |
 
 Cidar kalınlığı alan ve çevreden hesaplanır (bükümlü köşeler dâhil
-doğru çıkar). Parça döndürülmüş, gönye kesilmiş ya da delikli olsa da
-tanınır.
+doğru çıkar). Parça döndürülmüş, gönye / açılı kesilmiş, delikli ya da
+yanları serbest yüzle (B-spline) yazılmış olsa da tanınır.
 
 **Profil biçimli her parça profil değildir:** 1,5 mm sacdan bükülmüş bir U
 da sabit kesitlidir ama lazerde kesilip bükülür. Açık kesitte sac taraması

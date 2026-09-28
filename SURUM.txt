@@ -45,6 +45,18 @@ BU SÜRÜMDE NE VAR
   PERÇİN SOMUN adından ve biçiminden tanınır; diş / tırtıl modelli
   somun ve cıvata ışın ölçümüyle tanınır.
 
+  KURAL: standart (satın alınan) tanımı belirsiz parçalar BOM'dan
+  ÖNCE sorulur: kabul et / STANDART_KONTROL.xlsx'e yaz (tasarımcı
+  düzeltsin ya da 'kaynak' sütununu doldurup geri versin) / vazgeç.
+  Genel işaretler: dönel küçük parça, diş/helis modelli, helis yay.
+  Adı yalnız parça numarası olanlar da biçiminden tanınır
+  (mercimek başlı cıvata dâhil).
+
+  AI İLE KONTROL (isteğe bağlı): önce program tanımlar, sonra Claude
+  bütün parçaları kontrol eder, emin olamadıklarına RESİMLE bakar;
+  öneriler onayla uygulanır ve öğrenilir. Maliyet her seferinde
+  ölçülüp yazılır (67 parçalı model ≈ $0,35).
+
   ÖĞRENME: 2. sekmede bir parçanın sınıfını bir kez düzeltin; adı
   bilgi taşımayan ve biçimi benzeyen parçalar (M6 -> M8) da o sınıfa
   geçer. CATIA'nın Made / Bought (Source) alanı okunur: en kesin yol.
@@ -82,8 +94,9 @@ DENETİM BETİKLERİ (test/)
     python test/devam_denetimi.py
     python test/gui_devam_denetimi.py        (tkinter + ekran ister)
     python test/gui_ekran_denetimi.py        (15 inç: 1366x768 ekranda)
-  Excel tabloları:
+  Excel tabloları ve AI ajanı (sahte istemciyle):
     python test/excel_denetimi.py
+    python test/ai_denetimi.py
   Malzeme okuma ve sihirbaz:
     python test/malzeme_denetimi.py
     python test/gui_malzeme_sihirbazi.py      (tkinter + ekran ister)

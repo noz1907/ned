@@ -60,6 +60,15 @@ print(f"pi3d.spec: {'PI3D (logolu, antetsiz)' if LOGOLU else 'FIRMA (antetli)'}"
 # yaniltici satiri susturur, toplanan dosyalari DEGISTIRMEZ.
 ocp_bin, ocp_data, ocp_gizli = collect_all("OCP", on_error="ignore")
 ezdxf_bin, ezdxf_data, ezdxf_gizli = collect_all("ezdxf", on_error="ignore")
+# AI kontrolü (pf10_ai) isteğe bağlıdır: 'anthropic' paketi derleyen
+# makinede kuruluysa exe'ye girer, değilse program AI'sız çalışır.
+# pf10_ai onu yalnız bir fonksiyonun İÇİNDE import eder; PyInstaller
+# kendiliğinden göremez.
+try:
+    import anthropic  # noqa: F401
+    AI_GIZLI = ["anthropic"]
+except ImportError:
+    AI_GIZLI = []
 
 a = Analysis(
     ["pf3_gui.py"],
@@ -90,11 +99,12 @@ a = Analysis(
     # ekrana Agg, PDF'e backend_pdf, PNG'ye yine Agg.
     hiddenimports=ocp_gizli + ezdxf_gizli + [
         "pf3_olcu", "pf4_pafta", "pf5_antet", "pf6_malzeme", "pf7_is", "pf8_tani", "pf9_excel",
+        "pf10_ai",
         "pf1_referans",
         "matplotlib.backends.backend_agg",
         "matplotlib.backends.backend_pdf",
         "matplotlib.backends.backend_svg",
-    ] + (["pi3d_logo"] if LOGOLU else []),
+    ] + AI_GIZLI + (["pi3d_logo"] if LOGOLU else []),
     hookspath=[],
     runtime_hooks=[],
     # Programin kullanmadigi agir paketler disarida kalsin.

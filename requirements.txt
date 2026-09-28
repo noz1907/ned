@@ -5,3 +5,6 @@
 cadquery-ocp>=7.9,<8
 ezdxf>=1.1
 matplotlib>=3.7
+# Istege bagli: "AI ile kontrol et" (pf10_ai). Kurulu degilse program
+# AI'siz calisir; dugmeye basinca kurulum yolunu soyler.
+anthropic

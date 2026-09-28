@@ -19,7 +19,7 @@ hesabını yapmaz. Motor ağır (OpenCascade) olduğu için pencere açıldıkta
 sonra arka planda yüklenir; arayüz hiçbir işte kilitlenmez.
 """
 from __future__ import annotations
-import base64, math, os, queue, sys, threading, time, traceback
+import base64, json, math, os, queue, sys, threading, time, traceback
 import tkinter as tk
 import pf7_is as IS
 from tkinter import ttk, filedialog, messagebox
@@ -679,6 +679,8 @@ class Uygulama(ttk.Frame):
         # Sınıf addan ve montaj ağacından bulunur; bulunamayanı kullanıcı
         # düzeltir ve program ÖĞRENİR (ayar dosyasına yazılır, sonraki
         # modellerde de geçerli).
+        ttk.Button(sf, text="AI ile kontrol et", command=self.ai_sor
+                   ).pack(side="right", padx=(8, 0))
         for ad, sinif in (("Kaynak dikişi", "kaynak"),
                           ("Standart / satın alınan", "standart"),
                           ("Üretim parçası", "parca")):
@@ -1854,6 +1856,8 @@ class Uygulama(ttk.Frame):
                     self._pafta_geldi(veri)
                 elif tip == "baski":
                     self._baski_geldi(veri)
+                elif tip == "ai":
+                    self._ai_geldi(veri)
                 elif tip == "onizleme":
                     self.onizleme_png = veri
                     self._onizleme_ciz()
@@ -2295,6 +2299,11 @@ class Uygulama(ttk.Frame):
                                if nk else "") + " – "
                             f"{d} parçanın malzemesi data'dan okundu, "
                             f"{n - d} parçaya malzeme vermeniz gerekiyor")
+        kl = (self.M.kontrol_listesi(komp)
+              if hasattr(self.M, "kontrol_listesi") else [])
+        if kl:
+            self.v_bom_ozet.set(self.v_bom_ozet.get() + f"\n⚠ {len(kl)} parçanın standart "
+                                "tanımı belirsiz: BOM'dan önce sorulacak (SINIF sütunu)")
         geri = self._ayar_geri_yukle()
         on = (self.v_out.get() or "").strip()
         if on:
@@ -2426,6 +2435,8 @@ class Uygulama(ttk.Frame):
             return f"{sinif} (geometri)"
         if k.get("oneri") and k["oneri"][0] != sinif:
             return f"{sinif} – öneri: {k['oneri'][1] or k['oneri'][0]}?"
+        if k.get("aday") and sinif == "parca":
+            return "parca – standart olabilir?"
         if k.get("isimsiz") and sinif == "parca":
             return "parca – ADSIZ"
         if k.get("ogrenildi"):
@@ -2535,29 +2546,9 @@ class Uygulama(ttk.Frame):
                                 "için onları 'Üretim parçası' yapmak "
                                 "isterseniz ağacı açıp alt satırdan seçin.")
             return
-        kural = dict(self.M.ayar_oku().get("sinif_kurali") or {})
         ad = {"parca": "üretim parçası", "standart": "standart / satın alınan",
               "kaynak": "kaynak dikişi"}[yeni]
-        for k in sec:
-            k["sinif"], k["tip"] = yeni, ("elle" if yeni == "standart" else "")
-            kural[self.M.kural_anahtari(k["ad"], k)] = yeni
-            # Öğrenme: parçanın BİÇİMİ de saklanır; adı bilgi taşımayan
-            # benzerleri (başka ölçüdeki aynı aile) bundan sonra kendiliğinden
-            # aynı sınıfa geçer.
-            try:
-                im = k.get("imza") or self.M.TN.bicim_imzasi(
-                    self.kayit[k["indeks"][0]][1])
-                if im:
-                    k["imza"] = im
-                    kural[self.M.sekil_anahtari(im)] = yeni
-            except Exception:
-                pass
-            k.pop("geometri", None); k.pop("oneri", None); k.pop("isimsiz", None)
-        self.M.ayar_yaz(sinif_kurali=kural)
-        try:
-            benzer = self.M.benzerden_sinifla(self.kayit, self.komp, kural, self._yaz)
-        except Exception:
-            benzer = 0
+        benzer = self._sinif_uygula(sec, yeni)
         # Sınıf değişince BOM, poz ve dosya adları değişir: eski BOM
         # geçersizdir, yeniden çıkarılmalı.
         self.satirlar = []
@@ -2570,6 +2561,146 @@ class Uygulama(ttk.Frame):
                   + (f"; biçimce benzer {benzer} komponent de değişti" if benzer else ""))
         self.v_bom_ozet.set(f"{len(sec)} komponent '{ad}' yapıldı – "
                             "BOM'u yeniden çıkarın")
+
+    def _sinif_uygula(self, sec, yeni, tip=None):
+        """Sınıfı değiştirir ve kuralı saklar (ad + biçim imzası); biçimce
+        benzer adsız / numaralı parçalar da değişir. Benzer sayısını döner."""
+        kural = dict(self.M.ayar_oku().get("sinif_kurali") or {})
+        for k in sec:
+            k["sinif"] = yeni
+            k["tip"] = tip if tip is not None else ("elle" if yeni == "standart" else "")
+            kural[self.M.kural_anahtari(k["ad"], k)] = yeni
+            # Öğrenme: parçanın BİÇİMİ de saklanır; adı bilgi taşımayan
+            # benzerleri (başka ölçüdeki aynı aile) bundan sonra kendiliğinden
+            # aynı sınıfa geçer.
+            try:
+                im = k.get("imza") or self.M.TN.bicim_imzasi(
+                    self.kayit[k["indeks"][0]][1])
+                if im:
+                    k["imza"] = im
+                    kural[self.M.sekil_anahtari(im)] = yeni
+            except Exception:
+                pass
+            for a in ("geometri", "oneri", "isimsiz", "aday"):
+                k.pop(a, None)
+        self.M.ayar_yaz(sinif_kurali=kural)
+        try:
+            return self.M.benzerden_sinifla(self.kayit, self.komp, kural, self._yaz)
+        except Exception:
+            return 0
+
+    # ------------------------------------------------ AI malzeme tanımlama
+    def ai_sor(self):
+        """Programın tanımlamasını AI'a KONTROL ETTİRİR (pf10_ai): önce
+        yazıyla bütün parçalar, emin olunamayanlar resimle. Sonuç
+        öneridir; kullanıcı onaylayınca uygulanır ve öğrenilir."""
+        if not (self.M and self.komp):
+            messagebox.showinfo("AI", "Önce modeli inceleyin."); return
+        import pf10_ai as AI
+        parcalar, baglam, oncelik = self.M.ai_girdisi(self.komp)
+        if not parcalar:
+            messagebox.showinfo("AI", "Kontrol edilecek parça yok (hepsi elle ya da "
+                                "CAD'den kesin)."); return
+        if not AI.hazir_mi():
+            messagebox.showerror("AI", "AI için 'anthropic' paketi kurulu değil.\n\n"
+                                 "Komut satırında:  pip install anthropic"); return
+        ayar = self.M.ayar_oku()
+        model = ayar.get("ai_model") or AI.MODEL
+        anahtar = os.environ.get("ANTHROPIC_API_KEY") or ayar.get("ai_anahtar")
+        if not anahtar:
+            from tkinter import simpledialog
+            anahtar = simpledialog.askstring(
+                "AI anahtarı", "Anthropic API anahtarı (console.anthropic.com):\n"
+                "Bu bilgisayardaki Pi3D ayar dosyasına saklanır.", show="*",
+                parent=self)
+            if not anahtar:
+                return
+            self.M.ayar_yaz(ai_anahtar=anahtar.strip())
+        # kaba tahmin: ~3 karakter / token, parça başına ~70 çıktı token,
+        # resim başına ~450 token (768x384); 1. turda emin olunamayanlar
+        # için ayrıca %30 pay
+        yazi = len(json.dumps(parcalar, ensure_ascii=False)) / 3.0 + 1200
+        resim = int(len(oncelik) + 0.3 * len(parcalar))
+        tahmin = AI.maliyet({"girdi": yazi + resim * 550, "cikti": 70 * (len(parcalar) + resim)
+                             + 3000}, model)
+        if not messagebox.askyesno(
+                "AI ile kontrol",
+                f"Program {len(parcalar)} parçayı tanımladı; AI bunları kontrol edecek.\n"
+                f"Emin olamadıkları ve programın belirsiz bulduğu {len(oncelik)} parça "
+                "için parçanın RESMİ de gönderilir.\n\n"
+                "Gönderilen: ad, kod, adet, ölçü, programın bulguları, resim. "
+                "CAD dosyası GÖNDERİLMEZ. Veri Anthropic'e gider: firmanızın izni "
+                "olmalı.\n\n"
+                f"Model: {model}\nTahmini maliyet: ≈ ${tahmin:.2f} (işlem sonunda "
+                "gerçek tutar günlüğe yazılır)\n\nDevam edilsin mi?"):
+            return
+        self._basla("AI kontrol ediyor…", "AI malzeme tanımlama")
+        threading.Thread(target=self._ai_is,
+                         args=(parcalar, baglam, oncelik, anahtar.strip(), model),
+                         daemon=True).start()
+
+    def _ai_is(self, parcalar, baglam, oncelik, anahtar, model):
+        import pf10_ai as AI
+        try:
+            sonuc, sayac = AI.kontrol_et(
+                parcalar, baglam, goruntu=self.M.ai_goruntu(self.kayit, self.komp),
+                oncelik=oncelik, anahtar=anahtar, model=model, log=self._yaz)
+            self.kuyruk.put(("ai", (sonuc, sayac)))
+        except AI.AIHatasi as ex:
+            self.kuyruk.put(("hata", f"AI malzeme tanımlama:\n\n{ex}"))
+        except Exception as ex:
+            self.kuyruk.put(("hata", f"AI malzeme tanımlama:\n\n{type(ex).__name__}: {ex}"))
+
+    def _ai_geldi(self, veri):
+        import pf10_ai as AI
+        sonuc, sayac = veri
+        self._bitir()
+        self.M.ai_isle(self.komp, sonuc)
+        kontrol = {id(k) for k in self.M._kontrol_komp(self.komp)}
+        # Düzeltme: AI emin (>= %80) ve sınıf farklı. Doğrulama: programın
+        # belirsiz bulduğu parçada AI aynı sınıfı emin söylüyor.
+        duzelt = [(self.komp[no], r) for no, r in sorted(sonuc.items())
+                  if r["karar"] == "duzelt" and r["guven"] >= AI.EMIN
+                  and r["sinif"] != self.komp[no]["sinif"]]
+        dogrula = [(self.komp[no], r) for no, r in sorted(sonuc.items())
+                   if id(self.komp[no]) in kontrol and r["karar"] == "dogru"
+                   and r["guven"] >= AI.EMIN and r["sinif"] == self.komp[no]["sinif"]]
+        belirsiz = [no for no, r in sonuc.items()
+                    if r["karar"] == "belirsiz" or r["guven"] < AI.EMIN]
+        self._agac_doldur()
+        ozet = (f"AI: {len(sonuc)} parça kontrol edildi — {len(duzelt)} düzeltme önerisi, "
+                f"{len(dogrula)} belirsiz parça doğrulandı, {len(belirsiz)} emin değil; "
+                f"maliyet ≈ ${sayac['usd']:.2f}")
+        self._yaz(ozet)
+        if not (duzelt or dogrula):
+            messagebox.showinfo("AI", ozet + "\n\nUygulanacak öneri yok.")
+            return
+        satir = "\n".join(f"  • {k['ad'][:26]} x{k['adet']}: {k['sinif']} → {r['sinif']}"
+                          + (f" ({r['tip']})" if r["tip"] else "")
+                          + f" %{100 * r['guven']:.0f}"
+                          + (" [resimle]" if r.get("goruntu") else "")
+                          for k, r in duzelt[:10])
+        if not messagebox.askyesno(
+                "AI önerileri",
+                ozet + "\n\n"
+                + (f"DÜZELTME ({len(duzelt)}):\n{satir}"
+                   + ("\n  ..." if len(duzelt) > 10 else "") + "\n\n" if duzelt else "")
+                + (f"Programın belirsiz bulup AI'ın doğruladığı: {len(dogrula)} parça\n"
+                   if dogrula else "")
+                + "\nUygulansın mı? (Evet: uygulanır ve program ÖĞRENİR; emin "
+                  "olunmayanlar STANDART_KONTROL.xlsx'te kalır)"):
+            return
+        benzer = 0
+        for k, r in duzelt + dogrula:
+            benzer += self._sinif_uygula(
+                [k], r["sinif"], tip=(r["tip"] + " (AI)") if r["sinif"] == "standart" else "")
+        self.satirlar = []
+        self._agac_doldur()
+        self._acilim_doldur()
+        self._ornek_adaylari()
+        self._yaz(f"AI önerileri uygulandı: {len(duzelt) + len(dogrula)} parça"
+                  + (f", biçimce benzer {benzer} parça da" if benzer else ""))
+        self.v_bom_ozet.set("AI önerileri uygulandı – BOM'u yeniden çıkarın")
 
     def malzeme_uygula(self, yalniz_secili):
         if not self.komp:
@@ -2601,17 +2732,27 @@ class Uygulama(ttk.Frame):
                        ("Tümü", "*.*")])
         if not y:
             return
+        # CAD'in Made/Bought sütunu varsa (CATIA makrosu ya da doldurulmuş
+        # STANDART_KONTROL.xlsx) sınıf da buradan alınır: tasarımcının
+        # bilgisi tahminden doğrudur. Malzeme sütunu olmayan dosya yalnız
+        # sınıf için okunur.
         try:
-            esl, bilinmeyen = self.M.malzeme_dosya_oku(y)
-        except Exception as ex:
-            messagebox.showerror("Malzeme dosyası", str(ex)); return
-        # CAD'in Made/Bought sütunu varsa (CATIA makrosu yazar) sınıf da
-        # buradan alınır: tasarımcının bilgisi tahminden doğrudur.
+            harita = self.M.cad_kaynagi_oku(y)
+        except Exception:
+            harita = {}
+        if harita and not self.M.malzeme_sutunu_var(y):
+            esl, bilinmeyen = {}, []
+        else:
+            try:
+                esl, bilinmeyen = self.M.malzeme_dosya_oku(y)
+            except Exception as ex:
+                messagebox.showerror("Malzeme dosyası", str(ex)); return
         try:
-            degisen = self.M.cad_kaynagiyla_sinifla(
-                self.komp, self.M.cad_kaynagi_oku(y), log=self._yaz)
+            degisen = self.M.cad_kaynagiyla_sinifla(self.komp, harita, log=self._yaz)
         except Exception:
             degisen = 0
+        if degisen:
+            self._agac_doldur()
         if degisen:
             self._acilim_doldur()
             self._ornek_adaylari()
@@ -2647,7 +2788,59 @@ class Uygulama(ttk.Frame):
             self.M.malzeme_sablonu(self.komp, y)
             self._yaz(f"şablon yazıldı: {y}")
 
+    def _standart_kontrol(self):
+        """KURAL: standart parça tanımı belirsizse BOM ve çizimden ÖNCE
+        söylenir. Tasarımcı ya düzeltir (liste Excel'e yazılır, iş durur)
+        ya da olduğu gibi kabul eder (kabul kayda geçer). Aynı liste bir
+        kez kabul edildiyse tekrar sorulmaz. True: devam."""
+        if not (self.M and self.komp) or not hasattr(self.M, "kontrol_listesi"):
+            return True
+        liste = self.M.kontrol_listesi(self.komp)
+        if not liste:
+            return True
+        imza = tuple((r[0], r[1], r[2], r[3]) for r in liste)
+        if getattr(self, "_kontrol_kabul", None) == imza:
+            return True
+        say = {}
+        for r in liste:
+            say[r[0]] = say.get(r[0], 0) + 1
+        ornek = "\n".join(f"  • {r[2][:32]}  x{r[3]}  –  {r[6] or r[0]}" for r in liste[:6])
+        cvp = messagebox.askyesnocancel(
+            "Standart parça tanımı",
+            f"{len(liste)} parçanın standart (satın alınan) mı üretim mi olduğu "
+            "modelden kesin anlaşılamadı:\n\n"
+            + "\n".join(f"  {n}  {d}" for d, n in say.items())
+            + f"\n\n{ornek}" + ("\n  ..." if len(liste) > 6 else "")
+            + "\n\nEVET  →  olduğu gibi kabul et ve devam et\n"
+              "HAYIR →  listeyi Excel'e yaz ve DUR: tasarımcı CAD'de düzeltsin "
+              "(Source = Made/Bought ya da parça adı) veya 'kaynak' sütununu "
+              "doldurup 2. adımda 'malzeme.csv yükle…' ile geri verin\n"
+              "İPTAL →  vazgeç")
+        on = (self.v_out.get() or "").strip()
+        if cvp is None:
+            return False
+        if cvp:
+            self._kontrol_kabul = imza
+            if on:
+                IS.kontrol_kaydet(on, len(liste), True)
+            self._yaz(f"standart tanımı: {len(liste)} belirsiz parça olduğu gibi kabul edildi")
+            return True
+        if not on:
+            messagebox.showinfo("Standart parça tanımı", "Önce çıktı klasörünü seçin.")
+            return False
+        try:
+            y = self.M.kontrol_yaz(on, self.komp)
+            IS.kontrol_kaydet(on, len(liste), False)
+        except Exception as ex:
+            messagebox.showerror("Standart parça tanımı", f"Liste yazılamadı:\n{ex}")
+            return False
+        self._yaz(f"standart tanımı kontrol listesi yazıldı: {y}")
+        klasor_ac(y)
+        return False
+
     def bom_cikart(self):
+        if not self._standart_kontrol():
+            return
         self._basla("BOM çıkarılıyor…", "BOM çıkarma")
         threading.Thread(target=self._bom_is, args=(self._is_girdisi(),), daemon=True).start()
 
@@ -2735,6 +2928,8 @@ class Uygulama(ttk.Frame):
             messagebox.showinfo(
                 "Çizimler", "Çizim için model gerekir: 1. sayfada İNCELE "
                 "deyin. (Pafta ve PDF için gerekmez.)")
+            return
+        if not self._standart_kontrol():
             return
         asama = [2] + ([3] if self.v_montaj.get() else [])
         eksik = bool(self.v_eksik.get())
