@@ -154,9 +154,11 @@ def _cagir(istemci, icerik, model, nolar, sayac):
         raise
     u = getattr(r, "usage", None)
     if u is not None:
-        sayac["girdi"] += (getattr(u, "input_tokens", 0) or 0) \
-            + (getattr(u, "cache_read_input_tokens", 0) or 0) \
-            + (getattr(u, "cache_creation_input_tokens", 0) or 0)
+        # önbellekten okunan girdi onda bir, önbelleğe yazılan 1,25 kat fiyat
+        okunan = getattr(u, "cache_read_input_tokens", 0) or 0
+        yazilan = getattr(u, "cache_creation_input_tokens", 0) or 0
+        sayac["girdi"] += (getattr(u, "input_tokens", 0) or 0) + 0.1 * okunan + 1.25 * yazilan
+        sayac["onbellek"] = sayac.get("onbellek", 0) + okunan
         sayac["cikti"] += getattr(u, "output_tokens", 0) or 0
     sayac["istek"] += 1
     if r.stop_reason == "refusal":
@@ -184,13 +186,35 @@ def maliyet(sayac, model=MODEL):
     return round(sayac["girdi"] * fi / 1e6 + sayac["cikti"] * fo / 1e6, 4)
 
 
+def _katalog_blogu(katalog):
+    """Standart ürün kataloğu paftaları: her resimli istekte AYNI baştaki
+    içerik -> önbelleğe alınır (sonraki isteklerde onda bir fiyatına)."""
+    if not katalog:
+        return []
+    blok = [{"type": "text", "text":
+             "STANDART ÜRÜN KATALOĞU: aşağıdaki resimlerin HEPSİ bu firmanın SATIN "
+             "ALDIĞI standart / katalog ürünlerdir (adı olmasa da). Sac, lama, profil, "
+             "üretim parçası bu katalogda yoktur. Bir parçanın resmi bunlardan birine "
+             "YAPISAL olarak benziyorsa (aynı öğeler: baş + gövde, delik + anahtar "
+             "yüzeyi, halka, yay...) standart olma olasılığı yüksektir; benzemiyorsa "
+             "bu tek başına üretim parçası olduğunu göstermez."}]
+    for png in katalog:
+        blok.append({"type": "image", "source": {
+            "type": "base64", "media_type": "image/png",
+            "data": base64.standard_b64encode(png).decode("ascii")}})
+    blok[-1]["cache_control"] = {"type": "ephemeral"}
+    return blok
+
+
 def kontrol_et(parcalar, baglam=None, goruntu=None, oncelik=(), anahtar=None,
-               model=MODEL, log=print, istemci=None):
+               model=MODEL, log=print, istemci=None, katalog=None):
     """parcalar: [{"no", "kod", "ad", "adet", "olcu_mm", "program_sinif",
     "program_tip", "karar_kaynagi", "bulgular"}]
     goruntu: no -> PNG baytları (None: görüntü turu yok)
     oncelik: programın zaten belirsiz bulduğu parçaların no'ları (2. turda
     her durumda resimle bakılır).
+    katalog: standart ürün kataloğu paftaları (PNG baytları, pf12_katalog);
+    2. turda her isteğin başına referans olarak eklenir (önbellekli).
     Döner: ({no: {"karar", "sinif", "tip", "guven", "gerekce", "goruntu"}},
             {"girdi", "cikti", "istek", "resim", "usd"})."""
     if istemci is None:
@@ -198,7 +222,7 @@ def kontrol_et(parcalar, baglam=None, goruntu=None, oncelik=(), anahtar=None,
             raise AIHatasi("AI için 'anthropic' paketi kurulu değil:\n"
                            "  pip install anthropic")
         istemci = _istemci(anahtar)
-    sayac = {"girdi": 0, "cikti": 0, "istek": 0, "resim": 0}
+    sayac = {"girdi": 0, "cikti": 0, "istek": 0, "resim": 0, "onbellek": 0}
     sonuc = {}
     # ---- 1. tur: yazı, bütün parçalar
     for i in range(0, len(parcalar), YAZI_PARTI):
@@ -218,7 +242,7 @@ def kontrol_et(parcalar, baglam=None, goruntu=None, oncelik=(), anahtar=None,
                   or sonuc[p["no"]]["guven"] < EMIN]
         for i in range(0, len(ikinci), GORUNTU_PARTI):
             parti = ikinci[i:i + GORUNTU_PARTI]
-            icerik = [{"type": "text", "text":
+            icerik = _katalog_blogu(katalog) + [{"type": "text", "text":
                        "Bu parçalara RESİMLERİYLE birlikte yeniden bak. Model bağlamı:\n"
                        + json.dumps(baglam or {}, ensure_ascii=False)}]
             for p in parti:
@@ -238,7 +262,10 @@ def kontrol_et(parcalar, baglam=None, goruntu=None, oncelik=(), anahtar=None,
                                 sayac).items():
                 sonuc[no] = dict(r, goruntu=True)
     sayac["usd"] = maliyet(sayac, model)
-    log(f"AI: {sayac['istek']} istek, {sayac['resim']} resim, "
-        f"{sayac['girdi']:,} girdi + {sayac['cikti']:,} çıktı token ≈ "
-        f"${sayac['usd']:.2f} ({model})".replace(",", "."))
+    sayac["girdi"] = int(sayac["girdi"])
+    def bin_(v):
+        return f"{v:,}".replace(",", ".")
+    log(f"AI: {sayac['istek']} istek, {sayac['resim']} resim, {bin_(sayac['girdi'])} girdi "
+        f"(önbellek fiyatıyla) + {bin_(sayac['cikti'])} çıktı token ≈ "
+        f"${sayac['usd']:.2f} ({model})")
     return sonuc, sayac

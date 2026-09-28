@@ -52,6 +52,16 @@ BU SÜRÜMDE NE VAR
   Adı yalnız parça numarası olanlar da biçiminden tanınır
   (mercimek başlı cıvata dâhil).
 
+  YAPISAL TANIMA: cıvata / somun / pul / rulman tipleri kalıpla değil
+  öğelerle: gövde + baş + lokma (imbus, torx, yıldız, düz), delik +
+  anahtar yüzeyi (flanşlı, kronlu, kapalı, manşon), iki eş merkezli
+  halka (rulman, ISO 15 ölçüsüyle), ince halka (dişli, yaylı, konik pul).
+  Profilde iç yapı: hücre, T-kanal, oluk, vida kanalı -> ekstrüzyon;
+  basit özel kesit -> kalıp / dövme / bükme.
+
+  STANDART_KATALOG klasörü: tedarikçi STEP'leri yerel (AI'sız)
+  eşleştirilir; resimler AI'a referans olur.
+
   AI İLE KONTROL (isteğe bağlı): önce program tanımlar, sonra Claude
   bütün parçaları kontrol eder, emin olamadıklarına RESİMLE bakar;
   öneriler onayla uygulanır ve öğrenilir. Maliyet her seferinde

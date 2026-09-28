@@ -66,6 +66,10 @@ def main():
     # pf7_is pf9_excel'i yalnız csv_birlestir'in İÇİNDE import ediyor
     dogru("pf9_excel (.xlsx tablolar) spec'te yazılı", '"pf9_excel"' in spec)
     dogru("pf10_ai (AI kontrolü) spec'te yazılı", '"pf10_ai"' in spec)
+    dogru("pf11_yapi, pf12_katalog spec'te yazılı",
+          '"pf11_yapi"' in spec and '"pf12_katalog"' in spec)
+    dogru("STANDART_KATALOG pakete giriyor", "STANDART_KATALOG" in spec
+          and os.path.isfile(os.path.join(KOK, "STANDART_KATALOG", "OKU.txt")))
     for d in ("catia_malzeme_cikar.CATScript", "KULLANIM.md", "SURUM.txt"):
         dogru(f"{d} pakete giriyor", f'"{d}"' in spec
               and os.path.isfile(os.path.join(KOK, d)),

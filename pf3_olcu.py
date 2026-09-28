@@ -341,6 +341,119 @@ def benzerden_sinifla(kayit, komp, kural=None, log=print):
     return n
 
 
+# ------------------------------------------------ standart ürün kataloğu
+# STANDART_KATALOG klasörü: içine YALNIZ standart (satın alınan) ürün
+# konur - adı olmasa da. Sac, lama, profil, üretim parçası KONMAZ.
+#   *.stp / *.step  tedarikçinin CAD'i: biçim imzası çıkarılır; modelde
+#                   aynı biçimli (ölçeği farklı olsa da) ve adı bilgi
+#                   taşımayan parça YEREL olarak (AI'sız) standart sayılır
+#   *.jpg / *.png   AI kontrolünün resimli turuna referans (pf10_ai)
+KATALOG_ADI = "STANDART_KATALOG"
+
+
+def katalog_klasoru():
+    """Ayarda 'katalog_klasoru' varsa o; yoksa programın yanındaki
+    STANDART_KATALOG (kaynak klasör, exe'nin yanı, paket içi)."""
+    y = (ayar_oku().get("katalog_klasoru") or "").strip()
+    if y and os.path.isdir(y):
+        return y
+    if getattr(sys, "frozen", False):
+        # exe: kullanıcının dosya ekleyeceği klasör exe'nin YANINDADIR; yoksa
+        # paketteki örneklerle kurulur (paket içi geçici ve salt okunur)
+        k = os.path.join(os.path.dirname(sys.executable), KATALOG_ADI)
+        if not os.path.isdir(k):
+            ic = os.path.join(getattr(sys, "_MEIPASS", ""), KATALOG_ADI)
+            try:
+                import shutil
+                if os.path.isdir(ic):
+                    shutil.copytree(ic, k)
+                else:
+                    os.makedirs(k)
+            except OSError:
+                return ic if os.path.isdir(ic) else None
+        return k
+    k = os.path.join(os.path.dirname(os.path.abspath(__file__)), KATALOG_ADI)
+    return k if os.path.isdir(k) else None
+
+
+def katalog_dosyalari(klasor, uzanti):
+    out = []
+    for kok, _d, dosyalar in os.walk(klasor or ""):
+        for d in sorted(dosyalar):
+            if d.lower().endswith(uzanti):
+                out.append(os.path.join(kok, d))
+    return sorted(out)
+
+
+def katalog_imzalari(klasor=None, log=print):
+    """Katalogdaki STEP'lerin biçim imzaları: [(imza, etiket)]. Okunan
+    dosyanın imzası klasördeki .pi3d_katalog.json'a saklanır (dosya
+    değişmedikçe yeniden okunmaz)."""
+    klasor = klasor or katalog_klasoru()
+    if not klasor:
+        return []
+    onbellek_yol = os.path.join(klasor, ".pi3d_katalog.json")
+    try:
+        onbellek = json.load(open(onbellek_yol, encoding="utf-8"))
+    except Exception:
+        onbellek = {}
+    yeni, out, degisti = {}, [], False
+    for y in katalog_dosyalari(klasor, (".stp", ".step")):
+        st = os.stat(y)
+        anahtar = os.path.relpath(y, klasor)
+        imza_ = f"{st.st_size}:{int(st.st_mtime)}"
+        kayit_ = onbellek.get(anahtar)
+        if not kayit_ or kayit_.get("imza") != imza_:
+            try:
+                katilar = E.oku(y)
+                sek = [TN.bicim_imzasi(k[1]) for k in katilar]
+                kayit_ = {"imza": imza_, "sekiller": [q for q in sek if q]}
+            except Exception as ex:
+                log(f"! katalog: {anahtar} okunamadı ({type(ex).__name__})")
+                kayit_ = {"imza": imza_, "sekiller": []}
+            degisti = True
+        yeni[anahtar] = kayit_
+        etiket = os.path.splitext(anahtar)[0].replace(os.sep, " / ")
+        out += [(q, etiket) for q in kayit_["sekiller"]]
+    if degisti or set(yeni) != set(onbellek):
+        try:
+            json.dump(yeni, open(onbellek_yol, "w", encoding="utf-8"), ensure_ascii=False)
+        except OSError:
+            pass
+    return out
+
+
+def katalogdan_sinifla(kayit, komp, kural=None, katalog=None, log=print):
+    """Katalogdaki bir STEP şekline benzeyen, adı bilgi taşımayan üretim
+    parçasını standart yapar (tip: "katalog: <dosya adı>"). Elle verilen
+    sınıfa ve adı ne olduğunu söyleyen parçaya dokunulmaz."""
+    if katalog is None:
+        katalog = katalog_imzalari(log=log)
+    if not katalog:
+        return 0
+    if kural is None:
+        kural = ayar_oku().get("sinif_kurali") or {}
+    n = 0
+    for k in komp:
+        if k["sinif"] != "parca" or _kural(kural, k) or ad_bilgili(k["ad"]) \
+                or k.get("cad_kaynak"):
+            continue
+        if "imza" not in k:
+            k["imza"] = TN.bicim_imzasi(kayit[k["indeks"][0]][1])
+        for im, etiket in katalog:
+            if TN.benzer(k["imza"], im):
+                k["sinif"], k["tip"] = "standart", f"katalog: {etiket}"
+                k["katalog"] = etiket
+                for a in ("aday", "isimsiz", "oneri"):
+                    k.pop(a, None)
+                n += 1
+                break
+    if n:
+        log(f"standart ürün kataloğu: {n} komponent katalogdaki bir ürüne biçimce "
+            "benzediği için standart sayıldı")
+    return n
+
+
 def _kural(kural, k):
     """Komponent için kullanıcının kuralı (yoksa None)."""
     if not kural:
@@ -5760,8 +5873,8 @@ def geometriden_sinifla(kayit, komp, kural=None, log=print):
     yazılır (k["oneri"]) - 2. sekmede görünür, kullanıcı isterse
     sınıfını değiştirir.
 
-    Ölçüldü (4 gerçek model, adı belli 636 komponent): geometri 227
-    karar verdi, 1'i yanlış (%0,44 - adında SAC geçen pul biçimli parça);
+    Ölçüldü (5 gerçek model): geometri 236 karar verdi, 1'i yanlış
+    (%0,42 - adında SAC geçen pul biçimli parça);
     182 kaynak kararının hepsi doğru, hiçbir üretim parçası dikiş
     sayılmadı. Emin olunmayan katıya karar verilmez."""
     karar = oneri = numarali = 0
@@ -5870,6 +5983,8 @@ def kontrol_listesi(komp):
 def _karar_kaynagi(k):
     if k.get("ogrenildi"):
         return "benzerinden öğrenme (daha önce elle düzeltilen parçaya benziyor)"
+    if k.get("katalog"):
+        return "standart ürün kataloğundaki bir STEP'e biçimce benziyor"
     if k.get("geometri"):
         return "geometri ölçümü"
     if k.get("profil"):
@@ -5975,6 +6090,7 @@ def kontrol_yaz(on, komp):
 # Açık kesitin kısa adı ("bükümlü sac, U kesit 40x15x1,5" gibi)
 KESIT_KISA = {"köşebent": "L", "U profil": "U", "C profil": "C", "T profil": "T",
               "Z profil": "Z", "I/H profil": "I", "lama": "düz", "ekstrüzyon": "özel",
+              "özel kesit": "özel",
               "dolu çubuk": "dikdörtgen", "kare çubuk": "kare"}
 KAPALI_PROFIL = ("kutu", "kare kutu", "boru", "mil")
 
@@ -6531,6 +6647,10 @@ def step_komponentleri(step, P, log=print):
         agactan_sinifla(agac, komp, kural, log)
     geometriden_sinifla(kayit, komp, kural, log)
     benzerden_sinifla(kayit, komp, kural, log)
+    try:
+        katalogdan_sinifla(kayit, komp, kural, log=log)
+    except Exception as ex:
+        log(f"! katalog kullanılamadı: {type(ex).__name__}: {ex}")
     profilden_tanimla(kayit, komp, log)
     standart_denetimi(kayit, komp, kural, log)
     sayim = Counter(k["sinif"] for k in komp)

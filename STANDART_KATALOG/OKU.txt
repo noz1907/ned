@@ -1,0 +1,33 @@
+STANDART ÜRÜN KATALOĞU
+======================
+
+Bu klasöre YALNIZ STANDART (SATIN ALINAN) ÜRÜN konur - adı olsun olmasın:
+cıvata, somun, pul, perçin, perçin somun, rulman, yay, pim, segman,
+kelepçe, menteşe, kilit, kulp, tampon, teker, conta ...
+
+KONMAZ: sac, lama, profil, çelik düz malzeme, firmada üretilen parça.
+(Buradaki her şey "standart" sayılır; üretim parçası konursa o biçimdeki
+parçalar da satın alınan sayılır.)
+
+Ne konabilir
+------------
+1) STEP dosyası (.stp / .step) - tedarikçinin sitesinden indirilen CAD.
+   EN DOĞRU YOL. Pi3D her dosyanın biçim imzasını çıkarır (ölçekten
+   bağımsız). Modelde bu biçimdeki, adı bilgi taşımayan (numara, COMPOUND)
+   parça AI'SIZ ve ÜCRETSİZ olarak standart sayılır. Aynı ailenin başka
+   ölçüleri de (M6 konursa M8) tanınır. Tipi: "katalog: <dosya adı>".
+
+2) Resim (.jpg / .png) - tekli ya da toplu, yüzlerce olabilir.
+   "AI ile kontrol et"te resimli tura REFERANS olarak gider: "bunların
+   hepsi satın alınan ürün". Yüzlerce resim birkaç paftada toplanır ve
+   önbelleğe alınır (ilk istekten sonra onda bir fiyatına).
+   En çok işe yaradığı yer FİRMAYA ÖZEL satın alınan ürünlerdir (özel
+   menteşe, kilit, kulp...): AI sıradan cıvatayı zaten tanır.
+
+Alt klasör ve dosya adı etiket olur (isteğe bağlı): somun/kronlu.jpg,
+tedarikci/rivnut M8.stp. Adı anlamsızsa (IMG_1234) klasör adı kullanılır.
+
+ornek_* klasörleri Pi3D'nin kendi çizdiği örnek resimlerdir; silinebilir.
+
+Başka bir klasör kullanmak için ayar dosyasına:
+  "katalog_klasoru": "D:\\Ortak\\StandartKatalog"

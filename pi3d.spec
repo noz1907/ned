@@ -85,7 +85,11 @@ a = Analysis(
           # kilavuzu (F1) ve surum notu (Hakkinda).
           + [(d, ".") for d in ("catia_malzeme_cikar.CATScript",
                                 "KULLANIM.md", "SURUM.txt")
-             if os.path.isfile(d)],
+             if os.path.isfile(d)]
+          # Standart urun katalogu: ilk calismada exe'nin yanina kopyalanir,
+          # kullanici STEP ve resim ekler.
+          + [(os.path.join(k, "*"), k.replace("\\", "/")) for k, _d, f in
+             os.walk("STANDART_KATALOG") if f],
     # matplotlib arka uclarini ADIYLA yukler (fig.savefig bir .pdf
     # gorunce backend_pdf'i calisma aninda import eder), bu yuzden
     # PyInstaller onlari kendiliginden bulamaz. Yalniz backend_agg
@@ -99,7 +103,7 @@ a = Analysis(
     # ekrana Agg, PDF'e backend_pdf, PNG'ye yine Agg.
     hiddenimports=ocp_gizli + ezdxf_gizli + [
         "pf3_olcu", "pf4_pafta", "pf5_antet", "pf6_malzeme", "pf7_is", "pf8_tani", "pf9_excel",
-        "pf10_ai",
+        "pf10_ai", "pf11_yapi", "pf12_katalog",
         "pf1_referans",
         "matplotlib.backends.backend_agg",
         "matplotlib.backends.backend_pdf",

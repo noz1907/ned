@@ -2443,6 +2443,8 @@ class Uygulama(ttk.Frame):
             return f"{sinif} (benzerinden öğrenildi)"
         if k.get("cad_kaynak") and sinif == "standart":
             return "standart (CAD: satın alınan)"
+        if k.get("katalog") and sinif == "standart":
+            return "standart (katalog)"
         if k.get("profil") and sinif == "parca":
             return f"profil: {k['profil']['ad']}"
         if sinif == "standart" and k.get("tip") and k["tip"] not in ("elle",):
@@ -2642,9 +2644,20 @@ class Uygulama(ttk.Frame):
     def _ai_is(self, parcalar, baglam, oncelik, anahtar, model):
         import pf10_ai as AI
         try:
+            katalog = []
+            try:
+                import pf12_katalog as KT
+                kl = self.M.katalog_klasoru()
+                if kl:
+                    katalog = KT.paftalar(kl, log=self._yaz)
+                    self._yaz(f"standart ürün kataloğu: {len(katalog)} pafta referans olarak "
+                              "gönderilecek")
+            except Exception as ex:
+                self._yaz(f"! katalog resimleri okunamadı: {ex}")
             sonuc, sayac = AI.kontrol_et(
                 parcalar, baglam, goruntu=self.M.ai_goruntu(self.kayit, self.komp),
-                oncelik=oncelik, anahtar=anahtar, model=model, log=self._yaz)
+                oncelik=oncelik, anahtar=anahtar, model=model, log=self._yaz,
+                katalog=katalog)
             self.kuyruk.put(("ai", (sonuc, sayac)))
         except AI.AIHatasi as ex:
             self.kuyruk.put(("hata", f"AI malzeme tanımlama:\n\n{ex}"))

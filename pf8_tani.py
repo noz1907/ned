@@ -50,7 +50,7 @@ from OCP.Bnd import Bnd_Box
 from OCP.GeomAbs import (GeomAbs_Plane, GeomAbs_Cylinder, GeomAbs_Cone,
                          GeomAbs_Sphere, GeomAbs_Torus)
 from OCP.GProp import GProp_GProps
-from OCP.TopAbs import TopAbs_FACE
+from OCP.TopAbs import TopAbs_EDGE, TopAbs_FACE
 from OCP.TopExp import TopExp_Explorer
 from OCP.TopoDS import TopoDS
 from OCP.gp import gp_Ax3, gp_Dir, gp_Pnt, gp_Trsf, gp_Vec
@@ -58,6 +58,7 @@ from OCP.gp import gp_Ax3, gp_Dir, gp_Pnt, gp_Trsf, gp_Vec
 ACI_TOL = math.radians(1.5)       # paralel / dik sayılan sapma
 EKSEN_TOL = 0.05                  # iki eksen aynı çizgi mi (mm)
 EN_BUYUK = 400.0                  # bundan büyük katı bağlantı elemanı sayılmaz
+YAPI_EN_BUYUK = 160.0             # yapısal tanıma (1440 ışın) bu boyuta kadar
 
 # Adı bilgi taşımayan katılar: yalnız bunlarda geometri KARAR verir.
 ISIMSIZ = (r"^(?:(?:compound|solid|body|bodies|part|parca|parça|kati|katı"
@@ -188,11 +189,37 @@ _delik_mi = _ice_bakar
 
 # ------------------------------------------------------------ tanıma
 def tani(sh, hacim=None):
-    """(sinif, tip, gerekce) ya da None (emin değil)."""
+    """(sinif, tip, gerekce) ya da None (emin değil).
+
+    Sıra: yüz tipleri (_donel, temiz model) -> ışın ölçümü (_donel_isin:
+    diş / tırtıl modelli) -> YAPISAL tanıma (pf11_yapi: gövde + baş +
+    lokma, delik + tutma yüzü...). Yapısal tanıma yalnız KESİN
+    sonucunda karar verir; ayrıca cıvata / somun kararlarının tipini
+    ayrıntılandırır ("altıköşe flanşlı başlı cıvata", "bombe başlı
+    cıvata, imbus")."""
     try:
-        return _tani(sh, hacim)
+        r = _tani(sh, hacim)
     except Exception:
         return None
+    try:
+        import pf11_yapi as Y
+        if r is None and max(_boyutlar(sh)) <= YAPI_EN_BUYUK:
+            y = Y.yapisal_tani(sh)
+            if y and y[3] and y[0] == "standart":
+                return (y[0], y[1], y[2])
+        elif r[0] == "standart" and r[1] in ("civata", "somun"):
+            y = Y.yapisal_tani(sh)
+            if y and y[3] and (("cıvata" in y[1]) == (r[1] == "civata")) \
+                    and "perçin" not in y[1]:
+                return (r[0], y[1], f"{r[2]}; {y[2]}")
+    except Exception:
+        pass
+    return r
+
+
+def _boyutlar(sh):
+    kb = _kutu(sh)
+    return (kb[3] - kb[0], kb[4] - kb[1], kb[5] - kb[2])
 
 
 def _tani(sh, V):
@@ -212,6 +239,11 @@ def _tani(sh, V):
     r = _kaynak_dikisi(yz, toplam, V)
     if r:
         return r
+    # Bilye: yalnız küre yüzü (rulman elemanı, bilyeli kilit...)
+    if all(y["tip"] == "kure" for y in yz):
+        R = max(y["r"] for y in yz)
+        return ("standart", "bilye",
+                f"bilye: yalnız küre yüzü, Ø{2 * R:.2f}".replace(".", ","))
     # O-ring / halka conta: yalnız tor yüzlerinden oluşan katı
     if all(y["tip"] == "tor" for y in yz):
         R = max(y["r"] for y in yz)
@@ -689,13 +721,23 @@ def _cepler(p, W, H):
         # olmayan noktaların kenar boyunca yayılımı.
         uz = math.dist(pa, pb)
         ux, uy = (pb[0] - pa[0]) / uz, (pb[1] - pa[1]) / uz
-        ust, ic_ = [], []
+        ic_ = []
+        agiz, son_ust, disarda = 0.0, 0.0, False
         for q in zincir:
             t_ = (q[0] - pa[0]) * ux + (q[1] - pa[1]) * uy
             d_ = abs((q[0] - pa[0]) * uy - (q[1] - pa[1]) * ux)
-            (ust if d_ < 0.2 * tol else ic_).append(t_)
-        ust.sort()
-        agiz = max((b_ - a_ for a_, b_ in zip(ust, ust[1:])), default=uz)
+            if d_ < 0.2 * tol:
+                # çizgiye DÖNÜŞ: ayrıldığı yerle arası açıklıktır; çizgi
+                # üstünde yürünen kısım (dolu kenar) açıklık değildir
+                if disarda:
+                    agiz = max(agiz, abs(t_ - son_ust))
+                    disarda = False
+                son_ust = t_
+            else:
+                disarda = True
+                ic_.append(t_)
+        if agiz == 0.0:
+            agiz = uz
         gen = (max(ic_) - min(ic_)) if ic_ else agiz
         don = _donus(zincir)
         # Yan cep kenarın yarısından kısaysa ÇENTİKTİR (girinti, oluk):
@@ -961,9 +1003,71 @@ def _profil_eksen(sh, V, d):
             return sonuc(tur.split(" (")[0], f"{tur} {k}", k, et=round(et, 2))
         if tur:
             return sonuc(tur.split(" (")[0], f"{tur} {k}", k)
-    # geri kalan: çok boşluklu / girintili kesit (alüminyum sigma profil vb.)
+    # geri kalan: çok boşluklu / girintili kesit (alüminyum ekstrüzyon vb.)
+    # Şekil kalıbı yerine YAPISI sayılır: kapalı hücre, T-kanal (ağzı
+    # içinden dar oluk), açık oluk, vida kanalı (küçük yuvarlak delik).
     k = f"{_m(b)}x{_m(a)}"
-    return sonuc("ekstrüzyon", f"özel kesit profil {k}", k)
+    y = kesit_yapisi(dis, ic, W, H)
+    kenar = 0
+    for u in tel:
+        ex = TopExp_Explorer(u[3], TopAbs_EDGE)
+        while ex.More():
+            kenar += 1
+            ex.Next()
+    y["kenar"] = kenar
+    parca_ = []
+    if y["hucre"]:
+        parca_.append(f"{y['hucre']} hücre")
+    if y["t_kanal"]:
+        parca_.append(f"{y['t_kanal']} T-kanal")
+    if y["oluk"]:
+        parca_.append(f"{y['oluk']} oluk")
+    if y["vida"]:
+        parca_.append(f"{y['vida']} vida kanalı")
+    # Üretim yöntemi kesitin KARMAŞIKLIĞINDAN: içi çok şekilli kesit
+    # (birden çok hücre / kanal / oluk / vida kanalı ya da 24'ten çok
+    # kenar) ekstrüzyondur; tek ya da birkaç düz öğeli özel kesit
+    # genellikle kalıp, dövme ya da bükmedir.
+    karmasik = (y["hucre"] + y["t_kanal"] + y["oluk"] + y["vida"] >= 2
+                or y["t_kanal"] or y["vida"] or kenar >= 24)
+    y["yontem"] = "ekstrüzyon" if karmasik else "kalıp / dövme / bükme"
+    if y["t_kanal"] >= 2 and abs(W - H) < 0.05 * max(W, H):
+        ad = "sigma (T-kanallı) ekstrüzyon profil"
+    elif karmasik:
+        ad = "ekstrüzyon profil"
+    else:
+        ad = "özel kesit profil"
+        parca_.append("basit kesit: kalıp / dövme / bükme")
+    return sonuc("ekstrüzyon" if karmasik else "özel kesit",
+                 f"{ad} {k}" + (f" ({', '.join(parca_)})" if parca_ else ""),
+                 k, yapi=y)
+
+
+def kesit_yapisi(dis, ic, W, H):
+    """Kesitin yapısal öğeleri: kapalı hücre (büyük iç boşluk), vida
+    kanalı (küçük, yuvarlağa yakın iç boşluk: Ø2-10), T-kanal (dış
+    çizgideki ağzı içinden dar cep), oluk (ağzı açık cep)."""
+    Ad = abs(_alan2(dis)) or 1.0
+    hucre = vida = 0
+    for p in ic:
+        A = abs(_alan2(p))
+        xs = [q[0] for q in p]
+        ys = [q[1] for q in p]
+        w, h = max(xs) - min(xs), max(ys) - min(ys)
+        daire = w > 0 and abs(w - h) < 0.15 * w and A > 0.6 * w * h
+        if daire and 1.5 <= w <= 12.0 and A < 0.05 * Ad:
+            vida += 1
+        elif A > 0.01 * Ad:
+            hucre += 1
+    t_kanal = oluk = 0
+    for c_ in _cepler(dis, W, H):
+        if c_[0] < 0.005 * W * H:
+            continue
+        if c_[2] < 0.85 * c_[3]:
+            t_kanal += 1
+        elif c_[2] < 0.5 * max(W, H):
+            oluk += 1
+    return {"hucre": hucre, "vida": vida, "t_kanal": t_kanal, "oluk": oluk}
 
 
 # ================================================== DÖNEL PARÇA: IŞINLA
@@ -1137,7 +1241,7 @@ def _donel_isin(sh, eksen):
         # başın gövdeden tepeye yarıçap dizisi: tepe daralıyorsa mercimek
         # (kubbe, ISO 7380), gövde tarafı darsa havşa, düzse silindirik
         rs = [m[i][3] for i in (bas if bas_uc[0] == "ust" else bas[::-1])]
-        yuvarlak_tur = ("mercimek baş" if rs[-1] < 0.8 * max(rs) else
+        yuvarlak_tur = ("kubbe baş" if rs[-1] < 0.8 * max(rs) else
                         "havşa baş" if rs[0] < 0.8 * max(rs) else "silindirik baş")
         tur = {"altıgen": "altıgen baş", "kare": "kare baş"}.get(bb, yuvarlak_tur)
         if bb in ("altıgen", "kare") or (bb == "yuvarlak" and gbic == "yuvarlak"):
@@ -1262,6 +1366,16 @@ def aday_isaretleri(sh, V=None):
         if B > ADAY_EN_BUYUK or V <= 0:
             return []
         out = []
+        try:
+            import pf11_yapi as Y
+            y = Y.yapisal_tani(sh) if B <= YAPI_EN_BUYUK else None
+            if y and not y[3]:
+                out.append(("yapi", f"{y[1]}? ({y[2]})"))
+            bc = Y.bukulmus_cubuk(sh)
+            if bc:
+                out.append(("bukulmus", f"{bc[0]}: {bc[1]}"))
+        except Exception:
+            pass
         d = donel_mi(sh)
         if d:
             out.append(("donel", f"dönel küçük parça (en büyük ölçü {B:.0f} mm)"))

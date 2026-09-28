@@ -387,12 +387,39 @@ somun böyle adlandırılmıştı; eskiden geometri yalnız öneri yazıyordu, h
 | **o-ring** | yalnız tor yüzü |
 | **kaynak dikişi** | birbirine dik iki düz bacak yüzü + hipotenüs: uzun üçgen prizma; bacaklar hacimden ve alanlardan hesaplanır (1–20 mm) |
 
+#### YAPISAL tanıma: tipleri saymak yerine öğelere ayırmak
+
+Cıvata, somun, pul, rulman tiplerinin sonu yok (imbus, torx, yıldız, düz;
+bombe, mercimek, havşa, mantar, para, kare, flanşlı; kronlu, kelebek,
+kapalı, manşon, kaynak somunu, T-somun...). Program her birine ayrı kalıp
+yazmaz; parçayı **yapısal öğelerine** ayırır (`pf11_yapi`): eksen boyunca
+60 kotta 24 yöne ışın atar, her kotta dış ve iç biçimin kaç katlı simetrik
+olduğunu (2: yarık, 4: kare / çarpı, 6: altıgen / torx, 8+: diş, tırtıl)
+ölçer. Tip öğelerin birleşiminden çıkar:
+
+| öğeler | tip |
+|--------|-----|
+| **gövde + baş** | cıvata / vida — başın biçimi (altıköşe, altıköşe flanşlı, kare, harici torx, silindir, alçak silindir, bombe, mantar, mercimek, havşa, para) + **lokma** (imbus, torx, yıldız, düz, kare) |
+| **delik + tutma yüzü**, başsız, kısa | somun — altıköşe, kare, flanşlı, tırtıllı flanşlı, kronlu, kapalı (kör), manşon (uzatma) |
+| **delik + ince flanş + gövde**, delik kademeli ya da gövde altıgen | perçin somun (düz delikli yuvarlak olan "perçin somun / flanşlı burç" adayı) |
+| **delik + iki eş merkezli halka** (her yönde) | rulman — iç Ø x dış Ø x genişlik ISO 15 serileriyle karşılaştırılır: "rulman (608 ölçüsünde)" |
+| **delik + ince halka** | pul — dış dişli, iç dişli, yaylı (grover), konik (belleville / havşa); düz ve kare pul yalnız ADAY (yapıca delikli plakayla aynı) |
+| **başsız gövde + uçta lokma** | setskur |
+| **yalnız küre** | bilye |
+| aynı çaplı bükülmüş çubuk | U / J cıvata, kulp, kanca — ADAY |
+
+Öğeler tanıdık bir bağlantı elemanı oranındaysa karar verilir; oran
+alışılmadıksa yalnız kontrol listesine aday olarak girer. Sentetik
+denetimde yukarıdaki tiplerin hepsi düz ve uzayda döndürülmüş olarak
+doğru adlandırılır; kademeli mil, flanş, flanşlı burç ve delikli sac
+plaka hiçbir şey sayılmaz.
+
 Emin olunmayan katıya **karar verilmez**. Düz uçlu, pahsız bir Ø5 çubuk
 pim de olabilir kaynak dikişi de (CATIA dikişi çoğu zaman böyle modeller);
 o parça kalır. Tanınamayan adsız katı 2. sekmede **parca – ADSIZ** yazar.
 
 **Ölçüldü** — 4 gerçek modelde adı belli 636 komponentle karşılaştırıldı:
-geometri 228 karar verdi, **1'i yanlış (%0,44)**. 182 kaynak kararının
+geometri 236 karar verdi, **1'i yanlış (%0,42)**. 182 kaynak kararının
 hepsi doğru, hiçbir üretim parçası dikiş sayılmadı. Işın ölçümü 13 karar
 ekledi (perçin somun, diş modelli somunlar, flanşlı cıvata), hepsi doğru;
 denerken çıkan iki yanlış düzeltildi: 24×24×3 delikli bağlantı braketi
@@ -506,6 +533,27 @@ Daha ucuz model için ayar dosyasına `"ai_model": "claude-sonnet-5"`
 yazın (~2,5 kat ucuz). Düğmeye basılmadıkça hiçbir şey gönderilmez,
 ücret de çıkmaz.
 
+#### Standart ürün kataloğu (STANDART_KATALOG klasörü)
+
+Programın yanındaki `STANDART_KATALOG` klasörüne **yalnız standart (satın
+alınan) ürün** konur — adı olmasa da. Sac, lama, profil, üretim parçası
+KONMAZ: buradaki her şey standart sayılır.
+
+- **STEP dosyası** (tedarikçinin sitesinden indirilen CAD) — en doğru yol.
+  Program biçim imzasını çıkarır; modelde bu biçimdeki, adı bilgi taşımayan
+  parça **AI'sız ve ücretsiz** standart sayılır; aynı ailenin başka ölçüsü
+  de (M6 konursa M8). Tipi: `katalog: tedarikci / rivnut M8`. İmzalar
+  klasöre önbelleklenir, dosya değişmedikçe yeniden okunmaz.
+- **Resim** (.jpg / .png, tekli ya da toplu, yüzlerce) — "AI ile kontrol
+  et"in resimli turunda **referans** olarak gider. Resimler en çok 8
+  paftada toplanır ve önbelleğe alınır (ilk istekten sonra onda bir
+  fiyatına). En çok firmaya özel satın alınan ürünlerde işe yarar (özel
+  menteşe, kilit, kulp); sıradan cıvatayı AI zaten tanır.
+
+`ornek_*` klasörleri programın kendi çizdiği örnek resimlerdir (AI'a giden
+parça resimleriyle aynı biçimde; telif sorunu yok). Başka klasör için ayar
+dosyasına `"katalog_klasoru": "..."`. Ayrıntı: klasördeki `OKU.txt`.
+
 #### CAD'den: Made / Bought (en kesin yol)
 
 CATIA'da her ürünün **Özellikler ▸ Ürün ▸ Source** alanı vardır: *Made*
@@ -539,7 +587,8 @@ parça sabit kesitlidir. Kesitin türü kesitin kendisinden ölçülür:
 | U / C | 1 yan cebi, 2 büküm (180°); ağzı dar ya da 4 büküm → C | `U profil 50x30x2` |
 | I/H, T, Z | 2 cep: karşılıklı yan → I; komşu köşe → T; çapraz → Z | `I/H profil 100x50x5` |
 | lama, mil | dolu dikdörtgen / daire | `lama 50x5`, `mil Ø20` |
-| özel kesit | çok boşluklu, oluklu, kanallı (alüminyum sigma profil) | `özel kesit profil 40x40` |
+| ekstrüzyon | içi çok şekilli kesit: birden çok **hücre**, **T-kanal** (ağzı içinden dar oluk), **oluk**, **vida kanalı** ya da 24'ten çok kenar | `ekstrüzyon profil 210,8x26 (2 hücre, 3 T-kanal)`, `sigma (T-kanallı) ekstrüzyon profil 40x40 (4 T-kanal, 1 vida kanalı)` |
+| özel kesit (basit) | tek ya da birkaç düz öğeli özel kesit: genellikle kalıp, dövme ya da bükme | `özel kesit profil 60x40 (basit kesit: kalıp / dövme / bükme)` |
 
 Cidar kalınlığı alan ve çevreden hesaplanır (bükümlü köşeler dâhil
 doğru çıkar). Parça döndürülmüş, gönye / açılı kesilmiş, delikli ya da

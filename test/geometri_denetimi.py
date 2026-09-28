@@ -15,6 +15,7 @@ Gerçek modellerde ölçmek için (adı belli komponentlerle karşılaştırır)
 """
 import math
 import os
+import shutil
 import sys
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
@@ -41,6 +42,15 @@ def prizma(pts,h,z=0):
 def hexa(s,h,z=0):
     R=s/math.sqrt(3)
     return prizma([(R*math.cos(math.radians(30+60*i)),R*math.sin(math.radians(30+60*i))) for i in range(6)],h,z)
+def _don(a):
+    tr = gp_Trsf(); tr.SetRotation(gp_Ax1(gp_Pnt(0, 0, 0), gp_Dir(0, 0, 1)), math.radians(a))
+    return tr
+def _don_x(a):
+    tr = gp_Trsf(); tr.SetRotation(gp_Ax1(gp_Pnt(20, 0, 0), gp_Dir(0, 1, 0)), math.radians(a))
+    return tr
+def _kaydir(x, y, z):
+    tr = gp_Trsf(); tr.SetTranslation(gp_Vec(x, y, z))
+    return tr
 def dondur(sh, ax=(1,1,0.3), a=37, t=(120,-40,55)):
     tr=gp_Trsf(); tr.SetRotation(gp_Ax1(gp_Pnt(0,0,0),gp_Dir(*ax)),math.radians(a))
     t2=gp_Trsf(); t2.SetTranslation(gp_Vec(*t))
@@ -115,6 +125,100 @@ for ad, (sh, bek) in S.items():
               f"{r[2] if r else '(karar yok)'}")
         if not ok:
             HATA.append(ad)
+
+print("\n-- YAPISAL tanıma: öğelerden tip (baş + lokma, delik + tutma yüzü)")
+import pf11_yapi as Y                                            # noqa: E402
+from OCP.BRepPrimAPI import BRepPrimAPI_MakeCone as _Koni       # noqa: E402
+
+
+def yildiz(ri, ro, n, h, z=0):
+    return prizma([((ro if i % 2 == 0 else ri) * math.cos(math.pi * i / n),
+                    (ro if i % 2 == 0 else ri) * math.sin(math.pi * i / n))
+                   for i in range(2 * n)], h, z)
+
+
+def kutu_(x0, y0, z0, dx, dy, dz):
+    return BRepPrimAPI_MakeBox(gp_Pnt(x0, y0, z0), dx, dy, dz).Shape()
+
+
+saft = cyl(4, 40)
+YP = {
+    "imbus silindir başlı": (cut(fuse(saft, cyl(6.5, 8, 40)), hexa(6, 4, 44)),
+                             ["silindir başlı", "imbus"]),
+    "torx silindir başlı": (cut(fuse(saft, cyl(6.5, 8, 40)), yildiz(1.9, 2.8, 6, 4, 44)),
+                            ["silindir başlı", "torx"]),
+    "yıldız silindir başlı": (cut(cut(fuse(saft, cyl(6.5, 5, 40)), kutu_(-3, -0.6, 42, 6, 1.2, 3)),
+                                  kutu_(-0.6, -3, 42, 1.2, 6, 3)), ["yıldız"]),
+    "düz (yarık) silindir başlı": (cut(fuse(saft, cyl(6.5, 5, 40)), kutu_(-8, -0.6, 43, 16, 1.2, 2)),
+                                   ["düz (yarık)"]),
+    "havşa başlı imbus": (cut(fuse(saft, _Koni(gp_Ax2(gp_Pnt(0, 0, 40), gp_Dir(0, 0, 1)),
+                                               4, 8, 4).Shape()), hexa(5, 3, 41)),
+                          ["havşa başlı", "imbus"]),
+    "bombe başlı imbus (ISO 7380)": (cut(fuse(saft, cut(BRepPrimAPI_MakeSphere(gp_Pnt(0, 0, 34), 10.4).Shape(),
+                                                         kutu_(-20, -20, 14, 40, 40, 26))),
+                                         hexa(5, 3, 42.4)), ["bombe başlı", "imbus"]),
+    "altıköşe flanşlı başlı": (fuse(fuse(saft, cyl(9, 1.5, 40)), hexa(13, 6, 41.5)),
+                               ["altıköşe flanşlı"]),
+    "kare başlı": (fuse(saft, prizma([(-6.5, -6.5), (6.5, -6.5), (6.5, 6.5), (-6.5, 6.5)], 6, 40)),
+                   ["kare başlı"]),
+    "kronlu somun": (cut(cut(cut(cut(hexa(17, 13), cyl(5, 13)), kutu_(-10, -1.5, 9, 20, 3, 4)),
+                             BRepBuilderAPI_Transform(kutu_(-10, -1.5, 9, 20, 3, 4), _don(60), True).Shape()),
+                         BRepBuilderAPI_Transform(kutu_(-10, -1.5, 9, 20, 3, 4), _don(120), True).Shape()),
+                     ["kronlu"]),
+    "kapalı somun": (cut(fuse(hexa(17, 9), cut(BRepPrimAPI_MakeSphere(gp_Pnt(0, 0, 9), 7).Shape(),
+                                               kutu_(-9, -9, 0, 18, 18, 9))), cyl(5, 12)),
+                     ["kapalı"]),
+    "manşon somun": (cut(hexa(13, 30), cyl(4, 30)), ["manşon"]),
+    "setskur": (cut(cyl(4, 12), hexa(4, 3, 9)), ["setskur", "imbus"]),
+}
+for ad, (sh, beklenen) in YP.items():
+    for d in (False, True):
+        r = Y.yapisal_tani(dondur(sh) if d else sh)
+        ok = bool(r) and r[0] == "standart" and r[3] and all(b in r[1] for b in beklenen)
+        print(f"  {'tamam' if ok else 'HATA '} {ad:30s} {'döndü' if d else '     '} "
+              f"{(r[1] + ' | ' + r[2]) if r else '(karar yok)'}")
+        if not ok:
+            HATA.append("yapı " + ad)
+# rulman: iç halka + dış halka + 8 bilye (bileşik katı), 6204 ölçüsünde
+from OCP.TopoDS import TopoDS_Compound                          # noqa: E402
+from OCP.BRep import BRep_Builder                               # noqa: E402
+_b, _rul = BRep_Builder(), TopoDS_Compound()
+_b.MakeCompound(_rul)
+_b.Add(_rul, cut(cyl(14.5, 14), cyl(10, 14)))
+_b.Add(_rul, cut(cyl(23.5, 14), cyl(19.5, 14)))
+for _i in range(8):
+    _a = math.radians(45 * _i)
+    _b.Add(_rul, BRepPrimAPI_MakeSphere(gp_Pnt(17 * math.cos(_a), 17 * math.sin(_a), 7), 3.4).Shape())
+for ad, sh, bek, kesin in (
+        ("rulman 6204", _rul, "6204", True),
+        ("dış dişli pul", cut(yildiz(9, 10.5, 12, 0.8), cyl(4.3, 0.8)), "dış dişli", True),
+        ("yaylı (grover) pul", cut(cut(cyl(7.5, 1.6), cyl(4.2, 1.6)), kutu_(3.5, -0.4, 0, 5, 0.8, 1.6)),
+         "yaylı", True),
+        ("düz pul (yalnız aday)", cut(cyl(8, 1.6), cyl(4.3, 1.6)), "düz pul", False)):
+    for d in (False, True):
+        r = Y.yapisal_tani(dondur(sh) if d else sh)
+        ok = bool(r) and bek in r[1] and r[3] == kesin
+        print(f"  {'tamam' if ok else 'HATA '} {ad:30s} {'döndü' if d else '     '} "
+              f"{(r[1] + ' | ' + r[2]) if r else '(karar yok)'}")
+        if not ok:
+            HATA.append("yapı " + ad)
+u = fuse(fuse(cyl(4, 60, 0), BRepBuilderAPI_Transform(cyl(4, 60, 0), _kaydir(40, 0, 0), True).Shape()),
+         BRepBuilderAPI_Transform(BRepPrimAPI_MakeTorus(gp_Ax2(gp_Pnt(20, 0, 0), gp_Dir(0, 1, 0)),
+                                                        20, 4, math.pi).Shape(), _don_x(180), True).Shape())
+r = Y.bukulmus_cubuk(u)
+ok = bool(r) and "Ø8" in r[0]
+print(f"  {'tamam' if ok else 'HATA '} U cıvata (bükülmüş çubuk)          {r[0] if r else '(yok)'}")
+if not ok:
+    HATA.append("yapı U cıvata")
+for ad, sh in (("kademeli mil", fuse(cyl(15, 100), cyl(10, 40, 100))),
+               ("flanş", cut(fuse(cyl(40, 10), cyl(20, 30, 10)), cyl(12, 40))),
+               ("delikli kare plaka", cut(prizma([(-12, -12), (12, -12), (12, 12), (-12, 12)], 3),
+                                          cyl(5.5, 3)))):
+    r = Y.yapisal_tani(sh)
+    ok = not (r and r[3])
+    print(f"  {'tamam' if ok else 'HATA '} {ad:30s} kesin karar yok: {r[1] if r else '-'}")
+    if not ok:
+        HATA.append("yapı " + ad)
 
 print("\n-- profil (sabit kesitli parça): tür ve kesit ölçüsü")
 
@@ -226,6 +330,42 @@ ok = n == 1
 print(f"  {'tamam' if ok else 'HATA '} yalnız M8 değişti ({n})")
 if not ok:
     HATA.append("öğrenme sayısı")
+
+print("\n-- standart ürün kataloğu: tedarikçi STEP'i klasöre konur")
+import tempfile                                                  # noqa: E402
+from OCP.STEPControl import STEPControl_Writer, STEPControl_AsIs  # noqa: E402
+kd = tempfile.mkdtemp(prefix="katalog_")
+os.makedirs(os.path.join(kd, "tedarikci"))
+w = STEPControl_Writer()
+w.Transfer(ogr[1][1], STEPControl_AsIs)                         # M8 perçin somun
+w.Write(os.path.join(kd, "tedarikci", "rivnut M8.stp"))
+kat = M.katalog_imzalari(kd, log=lambda t: None)
+ok = len(kat) == 1 and kat[0][1] == "tedarikci / rivnut M8"
+print(f"  {'tamam' if ok else 'HATA '} katalog STEP'i okundu: {[e for _i, e in kat]}")
+if not ok:
+    HATA.append("katalog okuma")
+ok = os.path.isfile(os.path.join(kd, ".pi3d_katalog.json"))
+print(f"  {'tamam' if ok else 'HATA '} imza önbelleğe yazıldı (bir daha okunmaz)")
+if not ok:
+    HATA.append("katalog önbellek")
+komp = [{"ad": a, "kod": a, "sinif": "parca", "tip": "", "indeks": [i],
+         "hacim_mm3": 100.0 * (i + 1), "olc": [i + 1.0, 10.0, 20.0]}
+        for i, (a, _s) in enumerate(ogr)]
+n = M.katalogdan_sinifla(kayit, komp, {}, katalog=M.katalog_imzalari(kd, log=lambda t: None),
+                         log=lambda t: None)
+for k, bek in zip(komp, ("standart", "standart", "parca", "parca", "parca")):
+    ok = k["sinif"] == bek
+    print(f"  {'tamam' if ok else 'HATA '} {k['ad']:30s} {k['sinif']} {k['tip']}")
+    if not ok:
+        HATA.append("katalog " + k["ad"])
+import pf12_katalog as KT                                        # noqa: E402
+KT.ornek_uret(kd)
+pf = KT.paftalar(kd, log=lambda t: None)
+ok = 1 <= len(pf) <= KT.PAFTA_EN_COK and all(b[:4] == b"\x89PNG" for b in pf)
+print(f"  {'tamam' if ok else 'HATA '} katalog resimleri paftalandı ({len(pf)} pafta)")
+if not ok:
+    HATA.append("katalog pafta")
+shutil.rmtree(kd, ignore_errors=True)
 
 print("\n-- adsız mı")
 for ad, bek in (("COMPOUND", True), ("SOLID", True), ("Body1", True),
