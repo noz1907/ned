@@ -439,6 +439,57 @@ for ad, sh, bek, _k in AILE:
               f"{(r[1] + ' | ' + r[2]) if r else '(karar yok)'}")
         if not ok:
             HATA.append("aile " + ad)
+def setskur(uc="duz", d=8, L=12):
+    """imbus setskur: üstte altıgen lokma; alt uç: duz / konik / pim / canak."""
+    r = d / 2
+    g = cyl(r, L)
+    g = cut(g, hexa(4, 3.5, L - 3.5))
+    if uc == "duz":
+        k = BRepPrimAPI_MakeCone(gp_Ax2(gp_Pnt(0, 0, 0), gp_Dir(0, 0, 1)), r - 0.6, r + 0.001, 0.6).Shape()
+        g = cut(g, cut(cyl(r + 1, 0.6), k))
+    elif uc == "konik":
+        k = BRepPrimAPI_MakeCone(gp_Ax2(gp_Pnt(0, 0, 0), gp_Dir(0, 0, 1)), 0.2, r, 3.0).Shape()
+        g = fuse(cut(g, cyl(r + 1, 3.0)), k)
+    elif uc == "pim":
+        g = fuse(cut(g, cyl(r + 1, 3.0)), cyl(0.6 * r, 3.0))
+    elif uc == "canak":
+        k = BRepPrimAPI_MakeCone(gp_Ax2(gp_Pnt(0, 0, 0), gp_Dir(0, 0, 1)), 0.6 * r, 0.05, 1.5).Shape()
+        g = cut(g, k)
+    return g
+
+
+def cekmeli_pim(d=8, L=30, M=5, derin=10):
+    """ISO 8735 / DIN 7979: dolu silindir, bir ucunda iç dişli kör delik (çekirdek Ø)."""
+    g = cyl(d / 2, L)
+    for z0, yon in ((0, 1), (L, -1)):
+        k = BRepPrimAPI_MakeCone(gp_Ax2(gp_Pnt(0, 0, z0 - yon * 0.001), gp_Dir(0, 0, yon)),
+                                 d / 2 - 0.5, d / 2 + 0.001, 0.5).Shape()
+        g = cut(g, cut(cyl(d, 0.502, z0 if yon == 1 else z0 - 0.502), k))
+    return cut(g, cyl(0.84 * M / 2, derin, L - derin))
+
+
+for uc, bek in (("duz", "düz uç (DIN 913)"), ("konik", "konik uç (DIN 914)"),
+                ("pim", "pim uç (DIN 915)"), ("canak", "çanak uç (DIN 916)")):
+    for L in (12, 20):
+        for d in (False, True):
+            sh = setskur(uc, L=L)
+            r = T.tani(dondur(sh) if d else sh)
+            ok = bool(r) and "setskur" in r[1] and bek in r[1]
+            print(f"  {'tamam' if ok else 'HATA '} setskur {uc:6s} L{L} {'döndü' if d else '     '} "
+                  f"{r[1] if r else '(karar yok)'}")
+            if not ok:
+                HATA.append(f"setskur {uc} {L}")
+for d_, L_, M_ in ((6, 24, 4), (8, 30, 5), (10, 40, 6)):
+    r = T.tani(cekmeli_pim(d_, L_, M_))
+    ok = bool(r) and r[1].startswith("çekmeli") and f"M{M_}" in r[2]
+    print(f"  {'tamam' if ok else 'HATA '} çekmeli pim Ø{d_} -> M{M_}          {r[1] if r else '-'}")
+    if not ok:
+        HATA.append(f"çekmeli pim {d_}")
+r = T.tani(pahla(cyl(3, 30)))
+ok = bool(r) and r[1].startswith("silindirik pim")
+print(f"  {'tamam' if ok else 'HATA '} pahlı dolu pim -> silindirik pim     {r[1] if r else '-'}")
+if not ok:
+    HATA.append("silindirik pim")
 r = A.aile_tani(kama_b())
 ok = bool(r) and not r[3] and "6885 B" in r[1]
 print(f"  {'tamam' if ok else 'HATA '} kama B yalnız ADAY (lama olabilir)   {r[1] if r else '-'}")

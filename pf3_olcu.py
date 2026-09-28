@@ -2291,6 +2291,52 @@ PENCERE_EN_COK = 4          # bir görünüşte konumu verilecek en çok iç pen
 PENCERE_EN_COK_HALKA = 400  # bundan çok halkalı görünüşte pencere aranmaz
 
 
+def _slot(kaynaklar):
+    """Halka bir SLOT (uzun delik) mu: iki EŞİT yarıçaplı yay (her biri
+    ~180°, parçalı olabilir) + düz kenarlar. Döner {"c1", "c2", "r"} ya da
+    None. Slot ölçüsü merkezlerden verilir (ISO 129-1): konum yay
+    merkezine, boy iki merkez arası, genişlik R ile - kenar (teğet)
+    çizgilerinden değil."""
+    yay = {}
+    gorulen = set()
+    for q in kaynaklar:
+        # kaynak listesi her çizgi parçası için kenarı TEKRAR verir
+        if id(q) in gorulen:
+            continue
+        gorulen.add(id(q))
+        t = kenar_tani(q) if len(q) > 2 else {"tip": "dogru"}
+        if not t:
+            continue
+        if t["tip"] == "yay":
+            k = None
+            for (cx, cy, r) in yay:
+                if math.hypot(cx - t["merkez"][0], cy - t["merkez"][1]) <= max(0.05, 0.01 * r) \
+                        and abs(r - t["r"]) <= max(0.03, 0.01 * r):
+                    k = (cx, cy, r)
+                    break
+            if k is None:
+                k = (t["merkez"][0], t["merkez"][1], t["r"])
+                yay[k] = 0.0
+            # açı, noktalar boyunca açı adımlarının toplamı (kenar_tani'nin
+            # "aci"sı 0°'dan geçen çeyrek yayda 270 diyebiliyor)
+            cx, cy = t["merkez"]
+            aci = 0.0
+            for u, v in zip(q, q[1:]):
+                d = math.atan2(v[1] - cy, v[0] - cx) - math.atan2(u[1] - cy, u[0] - cx)
+                aci += abs((d + math.pi) % (2 * math.pi) - math.pi)
+            yay[k] += math.degrees(aci)
+        elif t["tip"] != "dogru":
+            return None
+    if len(yay) != 2:
+        return None
+    (a, aa), (b, ba) = yay.items()
+    if abs(a[2] - b[2]) > max(0.03, 0.01 * a[2]) or not all(150 <= v <= 210 for v in (aa, ba)):
+        return None
+    if math.hypot(a[0] - b[0], a[1] - b[1]) < 0.05:
+        return None                         # tek merkez: daire
+    return {"c1": (a[0], a[1]), "c2": (b[0], b[1]), "r": (a[2] + b[2]) / 2}
+
+
 def ic_pencereler(kenar, kutu_, en_az_oran=GIRINTI_EN_AZ_ORAN,
                   en_cok=PENCERE_EN_COK):
     """Görünüşün İÇİNDEKİ daire olmayan kapalı halkalar: yuva, pencere,
@@ -2394,7 +2440,7 @@ def ic_pencereler(kenar, kutu_, en_az_oran=GIRINTI_EN_AZ_ORAN,
                for r in out):
             continue
         out.append({"kutu": tuple(round(v, 4) for v in k),
-                    "alan": _cokgen_alani(h)})
+                    "alan": _cokgen_alani(h), "slot": _slot(kay[i])})
     # Birbirine BİNEN adaylar tek bir bölgenin parçalarıdır (aralarından
     # bir teğet çizgisi geçiyor); hangisinin gerçek öznitelik olduğu
     # bilinemez. Birleştirip tahmin etmek yerine hiçbiri ölçülmez.
@@ -2799,8 +2845,24 @@ def konum_plani(o, gorunusler, ham, h, kenarlar=None, tol=0.05,
                     # olarak resme giriyordu.
                     if min(abs(v - e0), abs(v - e1)) > 0.2:
                         ekle(v, "girinti")
+            slot_ara = []
             for r in pencere:              # pencerenin iki kenarı
                 k = r["kutu"]
+                sl = r.get("slot")
+                if sl:
+                    # SLOT: konum yay MERKEZİNE (datuma yakın olan), sonra
+                    # iki merkez arası; kenar (teğet) çizgisine değil
+                    m1, m2 = sorted((sl["c1"][eksen], sl["c2"][eksen]),
+                                    key=lambda v: abs(v - dat))
+                    ekle(m1, "slot")
+                    if abs(m2 - m1) > 0.2:
+                        a_, b_ = otur(m1), otur(m2)
+                        if a_ is not None and b_ is not None:
+                            slot_ara.append({"a": a_, "b": b_, "metin": None,
+                                             "kaynak": ["slot"]})
+                        else:
+                            atlanan["slot"] += 1
+                    continue
                 ekle(k[eksen], "pencere")
                 ekle(k[eksen + 2], "pencere")
             for _k, v in obek.items():
@@ -2866,6 +2928,8 @@ def konum_plani(o, gorunusler, ham, h, kenarlar=None, tol=0.05,
                 if abs(x - dat) > 0.2:
                     ara.append({"a": dat, "b": x, "metin": None,
                                 "kaynak": sorted(kaynak[x])})
+            # 3) Slot: iki yay merkezi arası (boyu); R ayrıca yazılır
+            ara.extend(slot_ara)
             # Aynı ölçüyü iki kez yazma.
             gor, temiz = set(), []
             for r in ara:
@@ -2888,7 +2952,8 @@ def konum_plani(o, gorunusler, ham, h, kenarlar=None, tol=0.05,
                          "dusey": cikti.get("dusey", []),
                          "yatay_simetrik": cikti.get("yatay_simetrik", False),
                          "dusey_simetrik": cikti.get("dusey_simetrik", False),
-                         "ozellik": ozel}
+                         "ozellik": ozel,
+                         "slot": [r["slot"] for r in pencere if r.get("slot")]}
     if rapor is not None:
         rapor.update(atlanan)
     return plan
@@ -3188,6 +3253,19 @@ def konum_olculeri(msp, plan, kaydir, gkutu, h, en_cok_kademe=8):
             continue
         dx, dy = kaydir[gad]
         gk = gkutu[gad]
+        # SLOT merkez çizgileri: konum ve merkezler arası ölçü yay
+        # merkezlerine gidiyor; merkezler resimde görünmeli (ISO 128):
+        # slot boyunca eksen çizgisi + her merkezde dik kısa çizgi
+        for sl in pl.get("slot") or []:
+            (x1, y1), (x2, y2), r = sl["c1"], sl["c2"], sl["r"]
+            L = math.hypot(x2 - x1, y2 - y1) or 1.0
+            ux, uy = (x2 - x1) / L, (y2 - y1) / L
+            u = r + max(1.5, 0.4 * h)
+            msp.add_line((x1 - ux * u + dx, y1 - uy * u + dy),
+                         (x2 + ux * u + dx, y2 + uy * u + dy), dxfattribs={"layer": "EKSEN"})
+            for cx, cy in ((x1, y1), (x2, y2)):
+                msp.add_line((cx - uy * u + dx, cy + ux * u + dy),
+                             (cx + uy * u + dx, cy - ux * u + dy), dxfattribs={"layer": "EKSEN"})
         dolu = _varlik_kutulari(msp)      # resimde şu an ne varsa, ölçülmüş
         for yon, kayd in (("yatay", dx), ("dusey", dy)):
             sirali = sorted(pl[yon], key=lambda r: -(r["b"] - r["a"]))
@@ -6804,7 +6882,7 @@ def zip_yap(on, ad="cizimler.zip", desen=(".dxf", ".pdf")):
     tablo = (KONTROL_DOSYASI, "BOM.csv", "BOM.xlsx", "BOM.md", "BOM_AGAC.csv", "BOM_AGAC.xlsx",
              "BOM_AGAC.md", "olculer.csv", "olculer.xlsx", "olculer.json",
              "rapor.md", "ACINIM.csv", "ACINIM.xlsx", "LAZER.csv", "LAZER.xlsx",
-             "PROFIL.csv", "PROFIL.xlsx")
+             "PROFIL.csv", "PROFIL.xlsx", "KAYNAK.csv", "KAYNAK.xlsx")
     with zipfile.ZipFile(yol, "w", zipfile.ZIP_DEFLATED) as z:
         for d in sorted(os.listdir(on)):
             y = os.path.join(on, d)
@@ -6904,6 +6982,12 @@ def calistir(step, on, kayit, komp, P, asama=(1, 2, 3), esl=None, agac=None,
             # Standart eleman ve kaynak dikişi için çizim yok; kod + adet yeter.
             if k["sinif"] == "kaynak":
                 poz -= 1; sat["poz"] = ""
+                # dikiş ölçülür: tip, boy, kesit, a, kaynak metali (KAYNAK.xlsx)
+                try:
+                    sat["kaynak_olcu"] = TN.kaynak_olcu(kayit[k["indeks"][0]][1],
+                                                        k.get("hacim_mm3"))
+                except Exception:
+                    pass
             satirlar.append(sat)
             if ilerleme:
                 ilerleme(sira, toplam)
@@ -6999,6 +7083,10 @@ def calistir(step, on, kayit, komp, P, asama=(1, 2, 3), esl=None, agac=None,
         n = profil_listesi_yaz(on, satirlar)
         if n:
             log(f"  PROFIL.xlsx, PROFIL.csv  ({n} profil - kesim listesi ve stok özeti)")
+        ko = kaynak_listesi_yaz(on, satirlar)
+        if ko:
+            log(f"  KAYNAK.xlsx, KAYNAK.csv  ({ko['adet']} dikiş, toplam boy "
+                f"{XL.tr(ko['boy_m'], 2)} m, kaynak metali {XL.tr(ko['kg'], 3)} kg)")
         if agac:
             ags = agac_bom(agac, komp, satirlar)
             agac_bom_yaz(on, ags)
@@ -7172,6 +7260,77 @@ def main():
 STOK_BOY_MM = 6000.0          # profil çubuk boyu (stok özeti için)
 
 
+def kaynak_ozet_satirlari(satirlar):
+    """Dikişler türe ve ölçüye göre gruplanır. Döner: (satırlar, a özeti,
+    toplam) - satır: [tür, model biçimi, adet, boy, kesit, a, toplam boy,
+    toplam hacim, kaynak metali kg]."""
+    grup = {}
+    for r in satirlar:
+        if r.get("sinif") != "kaynak":
+            continue
+        o = r.get("kaynak_olcu") or {}
+        boy, A, a = o.get("boy_mm"), o.get("kesit_mm2"), o.get("a_mm")
+        k = (kaynak_tipi(r.get("ad")), o.get("tip") or "-",
+             round(boy, 1) if boy else None, round(A, 2) if A else None,
+             round(a, 2) if a else None)
+        g = grup.setdefault(k, {"adet": 0, "hacim": 0.0})
+        n = int(r.get("adet") or 1)
+        g["adet"] += n
+        g["hacim"] += n * (o.get("hacim_mm3") or r.get("hacim_mm3") or 0.0)
+    sat = []
+    for (tur, tip, boy, A, a), g in sorted(grup.items(), key=lambda t: (t[0][0], t[0][2] or 0)):
+        sat.append([tur, tip, g["adet"], boy, A, a,
+                    round(boy * g["adet"], 1) if boy else None, round(g["hacim"], 1),
+                    round(g["hacim"] * TN.KAYNAK_YOGUNLUK, 4)])
+    # a ölçüsüne göre (0,5 mm sınıf): toplam boy ve kaynak metali
+    aoz = {}
+    for tur, tip, n, boy, A, a, tb, hac, kg in sat:
+        s_ = f"a {XL.tr(round(a * 2) / 2, 1)}" if a else ("nokta" if "nokta" in tip else "ölçülemedi")
+        o = aoz.setdefault(s_, [0, 0.0, 0.0])
+        o[0] += n; o[1] += tb or 0.0; o[2] += kg
+    aoz = [[k, v[0], round(v[1] / 1000.0, 3), round(v[2], 4)] for k, v in sorted(aoz.items())]
+    top = {"adet": sum(r[2] for r in sat), "boy_m": sum((r[6] or 0) for r in sat) / 1000.0,
+           "kg": sum(r[8] for r in sat)}
+    return sat, aoz, top
+
+
+KAYNAK_BAS = ["kaynak_turu", "model_bicimi", "adet", "boy_mm", "kesit_mm2", "a_mm",
+              "toplam_boy_mm", "toplam_hacim_mm3", "kaynak_metali_kg"]
+KAYNAK_OZET_BAS = ["a_sinifi", "adet", "toplam_boy_m", "kaynak_metali_kg"]
+
+
+def kaynak_listesi_yaz(on, satirlar):
+    """KAYNAK.xlsx / KAYNAK.csv: dikiş listesi (tür, model biçimi, boy,
+    kesit, a, toplam boy, kaynak metali) ve a ölçüsüne göre özet. Dikiş
+    yoksa eski dosyalar silinir. Döner: toplam dict ya da None."""
+    sat, aoz, top = kaynak_ozet_satirlari(satirlar)
+    if not sat:
+        for u in ("KAYNAK.csv", "KAYNAK.xlsx"):
+            y = os.path.join(on, u)
+            if os.path.isfile(y):
+                try:
+                    os.remove(y)
+                except OSError:
+                    pass
+        return None
+    with open(os.path.join(on, "KAYNAK.csv"), "w", newline="", encoding="utf-8-sig") as f:
+        w = csv.writer(f, delimiter=";")
+        w.writerow(KAYNAK_BAS)
+        for r in sat:
+            w.writerow(XL.tr_satir(r))
+        w.writerow([])
+        w.writerow(["# a ÖLÇÜSÜNE GÖRE ÖZET (kaynak metali = dikiş hacmi x 7,85 g/cm3)"])
+        w.writerow(KAYNAK_OZET_BAS)
+        for r in aoz:
+            w.writerow(XL.tr_satir(r))
+    try:
+        XL.xlsx_yaz(os.path.join(on, "KAYNAK.xlsx"),
+                    [("Dikişler", KAYNAK_BAS, sat), ("a özeti", KAYNAK_OZET_BAS, aoz)])
+    except Exception:
+        pass
+    return top
+
+
 def profil_listesi_yaz(on, satirlar):
     """PROFIL.xlsx / PROFIL.csv: kesim listesi (parça başına boy) ve
     stok özeti (kesit + malzeme başına toplam boy, 6 m çubuk sayısı).
@@ -7291,10 +7450,22 @@ def rapor_yaz(on, step, kayit, komp, satirlar, montaj):  # noqa: C901
                  f"{sum(t[1] for t in oz)} adet. Parça değildir: BOM'a "
                  "girmez, poz almaz, çizimi üretilmez; montaj resminde "
                  "görünür.\n")
-        L.append("| kaynak türü | adet |")
-        L.append("|-------------|------|")
-        for t, a in oz:
-            L.append(f"| {t} | {a} |")
+        sat, aoz, top = kaynak_ozet_satirlari(kyn)
+        L.append(f"Toplam dikiş boyu **{XL.tr(top['boy_m'], 2)} m**, kaynak metali "
+                 f"**{XL.tr(top['kg'], 3)} kg** (dikiş katılarının hacminden, 7,85 "
+                 "g/cm³). Kaynak yöntemi (gazaltı, TIG...) geometriden anlaşılmaz; "
+                 "tel sarfiyatı = kaynak metali / yöntemin verimi. Ayrıntı: "
+                 "`KAYNAK.xlsx`.\n")
+        L.append("| kaynak türü | model biçimi | adet | boy mm | a mm | toplam boy mm | kg |")
+        L.append("|-------------|--------------|------|--------|------|---------------|----|")
+        for tur, tip, n, boy, A, a, tb, hac, kg in sat:
+            L.append(f"| {tur} | {tip} | {n} | {XL.tr(boy, 1) if boy else '-'} | "
+                     f"{XL.tr(a, 2) if a else '-'} | {XL.tr(tb, 1) if tb else '-'} | "
+                     f"{XL.tr(kg, 4)} |")
+        L.append("\n| a sınıfı | adet | toplam boy m | kaynak metali kg |")
+        L.append("|----------|------|--------------|------------------|")
+        for k_, n, bm, kg in aoz:
+            L.append(f"| {k_} | {n} | {XL.tr(bm, 3)} | {XL.tr(kg, 4)} |")
     geo = [k for k in komp if k.get("geometri")]
     oner = [k for k in komp if k.get("oneri")]
     adsiz = [k for k in komp if k.get("isimsiz") and k["sinif"] == "parca"]

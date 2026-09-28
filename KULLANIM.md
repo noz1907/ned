@@ -376,6 +376,24 @@ o yoksa program bunu ADDAN, MONTAJ AĞACINDAN ve BİÇİMDEN çıkarır:
 
 #### Adı bilgi taşımayan katılar: GEOMETRİDEN tanıma
 
+**Kaynak dikişleri ölçülür: `KAYNAK.xlsx`.** Dikiş BOM'a girmez ama her
+dikiş katısı geometriden ölçülür: model biçimi (köşe kaynağı — düz,
+dışbükey ya da içbükey kesitli; CATIA'nın düz çubuk dikişi; nokta
+(punta); çevre / kollu dikiş), **boy** (köşede iki bacak düzleminin
+kesişme doğrultusundaki gerçek uzunluk, ötekinde hacim / kesit),
+**kesit**, **a ölçüsü** (köşede iç üçgenin yüksekliği, ötekinde aynı
+kesitli köşe kaynağınınki = √kesit) ve **kaynak metali kütlesi** (dikiş
+hacmi × 7,85 g/cm³). İkinci sayfa **a ölçüsüne göre** toplam boy ve kg
+verir. Kaynak YÖNTEMİ (gazaltı, TIG, elektrot) geometriden anlaşılmaz:
+gazaltı teli sarfiyatı = kaynak metali / yöntemin verimi.
+
+**Ölçüldü** — kaynaklı kasa: 944 dikişin hepsi ölçüldü (toplam 37,25 m,
+kaynak metali 1,686 kg; a2 30,15 m, a3 5,08 m). Adında boy yazan 141
+dikişin (`K0 25 MM TEK KAYNAK` ...) **141'inde** ölçülen boy adla aynı.
+Bu modeldeki `25 MM TEK KAYNAK` dikişleri çeyrek daire kesitli (2,5 x 2,5
+dışbükey köşe, a = 1,77); ilk sürüm onları düz üçgen sanıp boyu 15,9
+buluyordu.
+
 CAD bazen katıya ad vermez (`COMPOUND`, `SOLID`, `Body`) ya da ad yalnız
 **parça numarasıdır** (`FT108161`, `SB108164`, `55RS865978`). Adından hiçbir
 şey anlaşılmaz; program o zaman katının **yüzlerine** bakar ve karar verir.
@@ -422,6 +440,8 @@ olduğunu (2: yarık, 4: kare / çarpı, 6: altıgen / torx, 8+: diş, tırtıl)
 | iki eş **yarım silindir uç** + düz yanlar, b × h DIN 6885 tablosunda | paralel kama (DIN 6885 A); düz uçlu kutu (B tipi) lama ile aynı biçim — yalnız ADAY |
 | baskın **koni** yüzü, koniklik **1:50** (yarım açı 0,573°) | konik pim (ISO 2339 / DIN 1) |
 | **küre baş + altıköşe** (anahtar ağzı 7 / 9 / 11) + eksenel ince delik | gres nipeli (DIN 71412 A) |
+| başsız gövde + uçta lokma; **öbür ucun biçimi** | setskur uç tipi: düz (DIN 913), konik — çap uca doğru sıfıra iner (914), pim uçlu — sabit ince basamak (915), çanak — uç yüzde çukur (916) |
+| tek çaplı, pahlı dolu silindir + bir ucunda eş eksenli **kör delik** (d → M: 6→M4, 8→M5, 10→M6, 12→M6, 16→M8, 20→M10) | çekmeli (iç dişli) pim (ISO 8735 / DIN 7979); deliksizse silindirik pim / merkezleme pimi (ISO 2338 / 8734); uçta lokma varsa setskur |
 | aynı çaplı bükülmüş çubuk | U / J cıvata, kulp, kanca — ADAY |
 
 Yay, segman, pim, kama ve nipel ayrı modüllerdedir (`pf11_yapi.yay`,
@@ -1422,6 +1442,19 @@ içindeki yuva / pencere de konumlanır:
 - **Çıkıntı:** ayrı bir tür değildir; dışarı taşan kulağın iki yanı
   girinti olarak çıkar ve verilen ölçüler kulağın yerini verir.
 - **İç pencere (yuva, cep):** dört kenarı datumdan.
+- **Slot (uzun delik):** kenarından (teğet çizgisinden) DEĞİL, **yay
+  merkezlerinden** ölçülür (ISO 129-1): slot boyunca datumdan yakın yay
+  merkezine konum + **iki merkez arası** (slot boyu), dik yönde slotun
+  **merkez çizgisine** konum; genişlik `2x R5,5` ile. Slotta eksen çizgisi
+  ve iki merkezde dik kısa çizgi çizilir (ölçünün gittiği yer görünsün).
+  Slot tanıma: iç halka iki EŞİT yarıçaplı ~180° yay + düz kenarlardan
+  oluşur. Delikler zaten her zaman merkezlerinden ölçülür.
+
+  ```
+  eskisi (yanlış)                    şimdi
+  |--52--| slotun alt kenarı          |--34,5--| birinci yay merkezi
+  |----64----| slotun üst kenarı      |--34,5--|--11--| merkezler arası
+  ```
 
 **Sanal köşe.** Çentiğin ağzı yuvarlatılmışsa ölçü yayın teğet
 noktasına değil, doğru kenarın uzantısının kesiştiği **sanal keskin

@@ -47,6 +47,8 @@ SEGMAN_S = (0.3, 0.4, 0.5, 0.6, 0.7, 0.8, 0.9, 1.0, 1.1, 1.2, 1.3, 1.5, 1.75, 2.
 # gres nipeli anahtar ağzı (DIN 71412): M6 -> 7, M8x1 -> 9, M10x1 / R1/8 -> 11
 NIPEL_SW = (7.0, 9.0, 11.0)
 KONIK_PIM_ACI = math.degrees(math.atan(1 / 100.0))   # 1:50 çapta -> 0,573°
+# ISO 8735 / DIN 7979 çekmeli (iç dişli) silindirik pim: d -> iç diş M
+CEKMELI_PIM_M = {6: 4, 8: 5, 10: 6, 12: 6, 16: 8, 20: 10}
 
 
 def _m(v, n=1):
@@ -407,3 +409,40 @@ def gres_nipeli(sh, yz):
     return ("standart", "gres nipeli (DIN 71412 A)",
             f"yapı: küre baş Ø{_m(2 * kure[0]['r'])} + altıköşe SW{sw[0]:g} + eksenel "
             f"yağ deliği Ø{_m(2 * delik[0]['r'])}; boy {_m(B)}", True)
+
+
+# ------------------------------------------------------------ pim tipi
+def pim_tipi(sh, yz=None):
+    """"pim" kararı verilmiş dolu silindirin TİPİ: bir ucunda eş eksenli
+    KÖR delik varsa çekmeli (iç dişli) pim (ISO 8735 / DIN 7979; delik
+    çapı dişin çekirdek ya da anma çapı), yoksa silindirik pim (ISO 2338
+    / 8734 - merkezleme pimi). Döner (tip, gerekce) ya da None."""
+    yz = yz if yz is not None else TN._yuzler(sh)
+    sil = [y for y in yz if y["tip"] == "silindir"]
+    dis = [y for y in sil if not _delik(y)]
+    if not dis:
+        return None
+    a = max(dis, key=lambda y: y["alan"])
+    d = 2 * a["r"]
+    t = TN._eksene_tasi(sh, a["o"], a["d"])
+    kb = TN._kutu(t)
+    L = kb[5] - kb[2]
+    delik = [y for y in sil if _delik(y) and TN._paralel(y["d"], a["d"])
+             and TN._eksene_uzak(y["o"], a["o"], a["d"]) < 0.05]
+    if not delik:
+        return ("silindirik pim (ISO 2338 / 8734)",
+                f"dolu silindir Ø{_m(d, 2)} x {_m(L)}, deliksiz")
+    h = min(delik, key=lambda y: y["r"])
+    # kör mü: delik yüzeyinin eksen boyunca uzunluğu boydan kısa
+    derin = TN._kutu(TN._eksene_tasi(h["f"], a["o"], a["d"]))
+    dz = derin[5] - derin[2]
+    if dz >= 0.9 * L:
+        return None                         # boydan boya delik: burç / boru
+    dn = min(CEKMELI_PIM_M, key=lambda k: abs(k - d))
+    M = CEKMELI_PIM_M[dn]
+    dh = 2 * h["r"]
+    if abs(d - dn) <= 0.05 and 0.75 * M <= dh <= 1.02 * M:
+        return ("çekmeli (iç dişli) pim (ISO 8735 / DIN 7979)",
+                f"dolu silindir Ø{_m(d, 2)} x {_m(L)}, bir ucunda iç diş M{M} "
+                f"(kör delik Ø{_m(dh, 2)} x {_m(dz)})")
+    return None

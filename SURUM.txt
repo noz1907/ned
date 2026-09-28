@@ -50,6 +50,16 @@ BU SÜRÜMDE NE VAR
   helis. 5 gerçek modelde 4 yay (adsız COMPOUND burulma yayı dahil)
   doğru, yay olmayan parçaya yay kararı yok.
 
+  SLOT ÖLÇÜSÜ MERKEZDEN: konum yay merkezine, iki merkez arası ve R;
+  kenar (teğet) çizgisine ölçü verilmez; slotta eksen çizgisi.
+
+  KAYNAK.xlsx: her dikiş ölçülür - biçim (köşe düz / dışbükey /
+  içbükey, çubuk, nokta, çevre), boy, kesit, a, kaynak metali kg; a
+  ölçüsüne göre toplam boy ve kg. Kaynaklı kasada 944 dikiş, 37,25 m.
+
+  SETSKUR UÇ TİPİ (DIN 913 düz / 914 konik / 915 pim / 916 çanak),
+  ÇEKMELİ PİM (ISO 8735 / DIN 7979, iç diş M), silindirik pim.
+
   STANDART AİLELER (pf13_aile) adına bakılmadan: mil / delik segmanı
   (DIN 471 / 472), E-segman (DIN 6799), yaylı pim (ISO 8752 / 13337),
   paralel kama (DIN 6885 A; B yalnız aday), konik pim (ISO 2339), gres

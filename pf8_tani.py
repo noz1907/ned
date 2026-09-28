@@ -235,6 +235,16 @@ def tani(sh, hacim=None):
                 if y and y[3] and y[0] == "standart":
                     return (y[0], y[1], y[2])
             return None
+        if r[0] == "standart" and r[1] == "pim":
+            # uçta lokma: setskur; kör delik: çekmeli pim; yoksa silindirik
+            y = Y.yapisal_tani(sh) if max(_boyutlar(sh)) <= YAPI_EN_BUYUK else None
+            if y and y[3] and "setskur" in y[1]:
+                return (r[0], y[1], f"{r[2]}; {y[2]}")
+            import pf13_aile as A
+            p = A.pim_tipi(sh)
+            if p:
+                return (r[0], p[0], f"{r[2]}; {p[1]}")
+            return r
         if r[0] == "standart" and r[1] in ("civata", "somun"):
             y = Y.yapisal_tani(sh)
             if y and y[3] and (("cıvata" in y[1]) == (r[1] == "civata")) \
@@ -293,6 +303,18 @@ def _tani(sh, V):
 
 
 def _kaynak_dikisi(yz, toplam, V):
+    k = _kose(yz, toplam, V)
+    if k:
+        ba, bb, L = k
+        return ("kaynak", "",
+                f"köşe kaynağı: dik iki bacak {ba:.1f} x {bb:.1f} mm, "
+                f"boy {L:.0f} mm")
+    return None
+
+
+def _kose(yz, toplam, V):
+    """Köşe kaynağı biçimi (dik iki bacaklı üçgen prizma): (bacak1, bacak2,
+    boy) ya da None."""
     duz = sorted((y for y in yz if y["tip"] == "duz"), key=lambda y: -y["alan"])
     for i in range(min(3, len(duz))):
         for j in range(i + 1, min(4, len(duz))):
@@ -313,10 +335,117 @@ def _kaynak_dikisi(yz, toplam, V):
             uclar = toplam - a["alan"] - b["alan"] - h["alan"]
             if uclar > 0.15 * toplam:
                 continue
-            return ("kaynak", "",
-                    f"köşe kaynağı: dik iki bacak {ba:.1f} x {bb:.1f} mm, "
-                    f"boy {L:.0f} mm")
+            return ba, bb, L
     return None
+
+
+KAYNAK_YOGUNLUK = 7.85e-6            # kaynak metali (çelik), kg/mm³
+
+
+def _kose_olc(sh, yz, V):
+    """Köşe kaynağı ÖLÇÜSÜ: iki dik bacak düzlemi; boy bacakların kesişme
+    doğrultusundaki GERÇEK uzunluk (kesitin üçgen olduğu varsayılmaz),
+    bacaklar = düzlem alanı / boy, kesit = hacim / boy. Kesit biçimi
+    kesit alanının bacak çarpımına oranından: 1/2 düz üçgen, π/4
+    dışbükey, 1 - π/4 içbükey. a (boğaz): düz ve dışbükeyde iç üçgenin
+    yüksekliği, içbükeyde köşeden yüzeye (√2 - 1) x bacak."""
+    duz = sorted((y for y in yz if y["tip"] == "duz"), key=lambda y: -y["alan"])
+    for i in range(min(3, len(duz))):
+        for j in range(i + 1, min(4, len(duz))):
+            na, nb = duz[i]["n"], duz[j]["n"]
+            if not _dik(na, nb):
+                continue
+            e = (na[1] * nb[2] - na[2] * nb[1], na[2] * nb[0] - na[0] * nb[2],
+                 na[0] * nb[1] - na[1] * nb[0])
+            n = _uzunluk(e)
+            if n < 1e-9:
+                continue
+            e = tuple(v / n for v in e)
+            tk = _kutu(_eksene_tasi(sh, (0.0, 0.0, 0.0), e))
+            L = tk[5] - tk[2]
+            if L <= 0:
+                continue
+            ba, bb = duz[i]["alan"] / L, duz[j]["alan"] / L
+            if ba <= 0 or bb <= 0 or L < 2 * max(ba, bb) or max(ba, bb) > 3 * min(ba, bb):
+                continue
+            A = V / L
+            oran = A / (ba * bb)
+            if abs(oran - 0.5) <= 0.06:
+                bicim, a = "düz", ba * bb / math.hypot(ba, bb)
+            elif abs(oran - math.pi / 4) <= 0.06:
+                bicim, a = "dışbükey", ba * bb / math.hypot(ba, bb)
+            elif abs(oran - (1 - math.pi / 4)) <= 0.05:
+                bicim, a = "içbükey", (math.sqrt(2) - 1) * min(ba, bb)
+            else:
+                continue
+            return {"tip": f"köşe {XL.tr(ba, 1)} x {XL.tr(bb, 1)} ({bicim})", "boy_mm": L,
+                    "kesit_mm2": A, "a_mm": a}
+    return None
+
+
+def kaynak_olcu(sh, V=None):
+    """Kaynak dikişi katısının ÖLÇÜSÜ (sınıfı zaten kaynak olan katı için).
+
+    CAD dikişi farklı modeller: gerçek köşe kaynağı (üçgen prizma), düz
+    çubuk (CATIA'da sık: "25 MM TEK KAYNAK" = Ø2,5 x 25), nokta (punta)
+    ya da serbest kesitli dikiş. Döner dict: tip, boy_mm, kesit_mm2, a_mm
+    (kesitten: köşede üçgenin yüksekliği, ötekinde aynı kesitli eşkenar
+    köşe kaynağının a'sı = √kesit), hacim_mm3, kg (kaynak metali).
+    Kaynak YÖNTEMİ (gazaltı, TIG, elektrot) geometriden anlaşılmaz."""
+    if V is None:
+        g = GProp_GProps()
+        BRepGProp.VolumeProperties_s(sh, g)
+        V = g.Mass()
+    out = {"tip": "dikiş", "boy_mm": None, "kesit_mm2": None, "a_mm": None,
+           "hacim_mm3": V, "kg": V * KAYNAK_YOGUNLUK}
+    if V <= 0:
+        return out
+    yz = _yuzler(sh)
+    toplam = sum(y["alan"] for y in yz) or 1.0
+    kb = _kutu(sh)
+    olc = sorted((kb[3] - kb[0], kb[4] - kb[1], kb[5] - kb[2]))
+    k = _kose_olc(sh, yz, V)
+    if k:
+        out.update(k)
+        return out
+    sil = [y for y in yz if y["tip"] == "silindir"]
+    if sil and sum(y["alan"] for y in sil) >= 0.7 * toplam:
+        r = max(y["r"] for y in sil)
+        if all(abs(y["r"] - r) < 1e-3 and _paralel(y["d"], sil[0]["d"]) for y in sil):
+            A = math.pi * r * r
+            out.update(tip=f"çubuk Ø{XL.tr(2 * r, 1)}", boy_mm=V / A, kesit_mm2=A,
+                       a_mm=math.sqrt(A))
+            return out
+    if olc[2] <= 12 and olc[2] <= 2.5 * max(olc[0], 1e-6):
+        out.update(tip="nokta (punta)")
+        return out
+    # serbest kesit: en uzun asal eksene dik orta kesit, boy = hacim / kesit;
+    # tutmazsa kapalı HALKA dikiş (boru / kutu çevresi): ortadan geçen ve
+    # halka düzlemine dik kesit dikişi iki (ya da daha çok) yerden keser
+    try:
+        g = GProp_GProps()
+        BRepGProp.VolumeProperties_s(sh, g)
+        p, c = g.PrincipalProperties(), g.CentreOfMass()
+        m = (p.FirstAxisOfInertia(), p.SecondAxisOfInertia(), p.ThirdAxisOfInertia())
+        I = p.Moments()
+        sira = sorted(range(3), key=lambda i: I[i])
+        o = (c.X(), c.Y(), c.Z())
+        cap = 1.3 * math.sqrt(sum(v * v for v in olc))
+        for i in sira:
+            e = m[i]
+            t = _eksene_tasi(sh, o, (e.X(), e.Y(), e.Z()))
+            tk = _kutu(t)
+            loops, A, bolge = _kesit(t, 0.5 * (tk[2] + tk[5]))
+            if A <= 0 or bolge < 1:
+                continue
+            A1 = A / bolge
+            if V / A1 <= cap * (bolge if bolge > 1 else 1):
+                out.update(boy_mm=V / A1, kesit_mm2=A1, a_mm=math.sqrt(A1),
+                           tip="dikiş" if bolge == 1 else "çevre / kollu dikiş")
+                break
+    except Exception:
+        pass
+    return out
 
 
 def _donel(sh, eksen, V):

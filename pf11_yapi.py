@@ -509,13 +509,47 @@ def _basiz(y):
     if not g:
         return None
     a, b, r = g
-    if (b - a) < 0.7 * n:
+    # başsız: gövde boyun en az %35i (lokma ve uç dışı) ve HİÇBİR kotta baş / flanş yok
+    # (kısa setskurda lokma boyun üçte birine varır: M8 x 12'de 3,5 mm)
+    if (b - a) < 0.35 * n or any(k["ro_max"] > 1.08 * r for k in kot):
         return None
-    for uclar in (kot[:n // 5], kot[-(n // 5):][::-1]):
+    # uç bölgesi: uçtan GÖVDENİN başladığı kota kadar (+2): pim uç boyun
+    # dörtte birini aşabilir, sabit oranlı pencere gövdeye dönüşü görmez
+    uc_bas, uc_son = kot[:min(n, a + 3)], kot[max(0, b - 3):][::-1]
+    for uclar, obur in ((kot[:n // 5], uc_son), (kot[-(n // 5):][::-1], uc_bas)):
         lok = _lokma(uclar)
         if lok and lok != "düz (yarık)":
-            return ("standart", f"setskur (başsız), {lok}",
-                    f"yapı: başsız gövde Ø{_m(2 * r)} x {_m(H)}, uçta {lok}", True)
+            uc = _setskur_ucu(obur, r)
+            return ("standart", f"setskur (başsız), {lok}" + (f", {uc}" if uc else ""),
+                    f"yapı: başsız gövde Ø{_m(2 * r)} x {_m(H)}, uçta {lok}"
+                    + (f"; öbür uç: {uc}" if uc else ""), True)
+    return None
+
+
+def _setskur_ucu(kotlar, r):
+    """Setskurun lokmasız ucu (kotlar uçtan gövdeye): DIN 913 düz, 914
+    konik, 915 pim uçlu, 916 çanak. Belirsizse None."""
+    if len(kotlar) < 4:
+        return None
+    rs = [k["ro_max"] for k in kotlar]
+    # çanak: uç kotlarında eksen boş, dış çap gövdeye yakın
+    if any(not k["dolu_eksen"] and k["ro_max"] >= 0.7 * r for k in kotlar[:3]):
+        return "çanak uç (DIN 916)"
+    # pim uç: uçta en az iki kot SABİT ince çap (0,4 - 0,8 r), sonra gövde
+    ince = 0
+    for v in rs:
+        if 0.4 * r <= v <= 0.8 * r and abs(v - rs[0]) <= 0.08 * rs[0]:
+            ince += 1
+        else:
+            break
+    if ince >= 2 and any(v >= 0.9 * r for v in rs[ince:]):
+        return "pim uç (DIN 915)"
+    # konik: uçta çap küçük, gövdeye doğru düzgün artar
+    if rs[0] < 0.4 * r and all(rs[i + 1] >= rs[i] - 0.02 * r for i in range(len(rs) - 1)) \
+            and max(rs) >= 0.9 * r:
+        return "konik uç (DIN 914)"
+    if rs[0] >= 0.75 * r and all(v >= 0.75 * r for v in rs):
+        return "düz uç (DIN 913)"
     return None
 
 

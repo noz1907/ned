@@ -485,6 +485,51 @@ def main():
     dogru("delik de yerinde (90 / 20)", 90.0 in y11 and 20.0 in d11,
           f"{y11} {d11}")
 
+    print("\n-- SLOT: ölçü yay MERKEZLERİNDEN (kenar / teğet çizgisinden değil)")
+    # Kullanıcının resmi: R5,5 slotun konumu slot kenarlarına (64 / 52)
+    # veriliyordu. Doğrusu: datumdan yakın yay merkezine konum, sonra iki
+    # merkez arası (slot boyu), dik yönde slotun merkez çizgisi; R ayrıca.
+    from OCP.BRepAlgoAPI import BRepAlgoAPI_Fuse
+    for ad_, c1, c2, yatay_ in (("slot X yönünde", (34.5, 64.0), (45.5, 64.0), True),
+                                ("slot Y yönünde", (40.0, 50.0), (40.0, 65.0), False)):
+        r_ = 5.5
+        if yatay_:
+            kes = BRepPrimAPI_MakeBox(gp_Pnt(c1[0], c1[1] - r_, -1), c2[0] - c1[0], 2 * r_, 5).Shape()
+        else:
+            kes = BRepPrimAPI_MakeBox(gp_Pnt(c1[0] - r_, c1[1], -1), 2 * r_, c2[1] - c1[1], 5).Shape()
+        for c in (c1, c2):
+            kes = BRepAlgoAPI_Fuse(kes, BRepPrimAPI_MakeCylinder(
+                gp_Ax2(gp_Pnt(c[0], c[1], -1), gp_Dir(0, 0, 1)), r_, 5).Shape()).Shape()
+        sl = BRepAlgoAPI_Cut(plaka(80.0, 80.0, 3.0, [(15.0, 20.0, 4.0)]), kes).Shape()
+        s12, o12 = O.komponent_olcu(sl, P)
+        ken12 = O.hlr(s12, *O.GORUNUS["UST"], gizli=False)
+        pe12 = O.ic_pencereler(ken12, O._kenar_kutusu(ken12))
+        dogru(f"{ad_}: slot tanındı (iki yay merkezi, R5,5)",
+              len(pe12) == 1 and pe12[0]["slot"] and abs(pe12[0]["slot"]["r"] - 5.5) < 0.01,
+              str([p_["slot"] for p_ in pe12]))
+        pl12 = O.konum_plani(o12, ("UST",), {"UST": O._kenar_kutusu(ken12)},
+                             4.0, {"UST": ken12})
+        # ÜST görünüşünde model X -> görünüş düşey, model Y -> görünüş yatay
+        uz = (c2[0] - c1[0]) if yatay_ else (c2[1] - c1[1])
+        boy_yon, dik_yon = ("dusey", "yatay") if yatay_ else ("yatay", "dusey")
+        boy_ = sorted(round(abs(r["b"] - r["a"]), 2) for r in pl12["UST"][boy_yon]
+                      if "slot" in (r.get("kaynak") or []))
+        dik_ = sorted(round(abs(r["b"] - r["a"]), 2) for r in pl12["UST"][dik_yon]
+                      if "slot" in (r.get("kaynak") or []))
+        yakin = min(c1[0], c2[0]) if yatay_ else min(c1[1], c2[1])
+        merkez_c = c1[1] if yatay_ else c1[0]
+        print(f"     {ad_}: boyunca {boy_}  dik {dik_}")
+        esit(f"{ad_}: boyunca yakın merkez + merkezler arası", boy_,
+             sorted([round(yakin, 2), round(uz, 2)]))
+        esit(f"{ad_}: dik yönde merkez çizgisi", dik_, [round(merkez_c, 2)])
+        kenar_ = {round(v, 2) for v in (yakin - r_, yakin + uz + r_, merkez_c - r_, merkez_c + r_)}
+        hep = {round(abs(r["b"] - r["a"]), 2) for yon in ("yatay", "dusey")
+               for r in pl12["UST"][yon]}
+        dogru(f"{ad_}: hiçbir ölçü slot KENARINA gitmiyor", not (hep & kenar_),
+              str(hep & kenar_))
+        dogru(f"{ad_}: plan slot merkez çizgisini taşıyor",
+              len(pl12["UST"].get("slot") or []) == 1)
+
     print("\n-- eğri siluet: her eğik çizgi kesim değildir")
     import math
     # 20 kenarlı çokgen = aslında bir EĞRİ. Kenarlarının her birine
