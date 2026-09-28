@@ -863,7 +863,7 @@ def hizali_kati(sh):
 
 
 # ---------------------------------------------------------------- delikler
-def delik_ve_radus(sh, en_az_cap=1.0, tam_oran=0.90):
+def delik_ve_radus(sh, en_az_cap=1.0, tam_oran=0.90, slot_listesi=None):
     """İç silindirik yüzeyleri DELİK ve RADÜS olarak ayırır.
 
     Delik = açısal olarak tam çember (360°) kapatan silindir. Kenar
@@ -936,12 +936,46 @@ def delik_ve_radus(sh, en_az_cap=1.0, tam_oran=0.90):
                          # 284,004) hangisi olduğu belirsiz kalıyordu.
                          "merkezler": [[round(v, 4) for v in h["merkez"]] for h in lst[:200]],
                          "egim": [round(h["egim"], 6) for h in lst[:200]]})
+    # SLOT: aynı yarıçaplı, aynı eksenli (paralel) iki YARIM silindir
+    # (~180°), eksenleri birbirinden uzak. Görünüşten (HLR) değil 3B'den
+    # bulunur: gizli kalan slot da (üst flanşın altındaki) konum alır.
+    # Karşılıklı en yakın ikililer eşlenir.
+    slotlar = []
+    for (r, eks), lst in radus_g.items():
+        if eks < 0:
+            continue
+        yarim = [h for h in lst if 0.85 * math.pi <= h["aci"] <= 1.15 * math.pi]
+        if len(yarim) < 2:
+            continue
+
+        def uz(a, b):
+            return math.sqrt(sum((a["merkez"][t] - b["merkez"][t]) ** 2
+                                 for t in range(3) if t != eks))
+        en_yakin = {}
+        for i, a in enumerate(yarim):
+            aday = [(uz(a, b), j) for j, b in enumerate(yarim) if j != i
+                    and abs(a["merkez"][eks] - b["merkez"][eks]) < max(1.0, 2 * r)]
+            if aday:
+                en_yakin[i] = min(aday)
+        kul = set()
+        for i, (d, j) in en_yakin.items():
+            if i in kul or j in kul or en_yakin.get(j, (0, -1))[1] != i:
+                continue
+            if d < 0.05 or d > 40 * r:
+                continue
+            kul.update((i, j))
+            slotlar.append({"yaricap_mm": round(r, 3), "eksen": "XYZ"[eks],
+                            "c1": [round(v, 4) for v in yarim[i]["merkez"]],
+                            "c2": [round(v, 4) for v in yarim[j]["merkez"]],
+                            "boy_mm": round(d, 3)})
     radusler = []
     for (r, eks), lst in sorted(radus_g.items(), key=lambda t: (-len(t[1]), t[0][0])):
         radusler.append({"yaricap_mm": r, "adet": len(lst),
                          "eksen": "XYZ"[eks] if eks >= 0 else "eğik",
                          "uzunluk_mm": round(max(h["boy"] for h in lst), 2),
                          "merkezler": [[round(v, 2) for v in h["merkez"]] for h in lst[:200]]})
+    if slot_listesi is not None:
+        slot_listesi.extend(slotlar)
     return delikler, radusler
 
 
@@ -984,7 +1018,9 @@ def komponent_olcu(sh, P):
         "dis_capler": dis_capler(s),
         "hizalama": [[round(q, 4) for q in r] for r in R],
     }
-    o["delikler"], o["radusler"] = delik_ve_radus(s, P.get("en_az_delik", 1.0))
+    o["slotlar"] = []
+    o["delikler"], o["radusler"] = delik_ve_radus(s, P.get("en_az_delik", 1.0),
+                                                  slot_listesi=o["slotlar"])
     o["delik_adedi"] = sum(d["adet"] for d in o["delikler"])
     o["radus_adedi"] = sum(d["adet"] for d in o["radusler"])
     return s, o
@@ -1680,6 +1716,71 @@ def gorunus_ciz(msp, kenar, ox, oy, ad, h=4.0, olcu2=True, etiket=None,
     return G, Y, dx, dy
 
 
+def _cizgi_parcalari(msp, alan, katman=("GORUNEN", "GIZLI", "EKSEN", "OLCU")):
+    """alan (x0, y0, x1, y1) içindeki ÇİZGİ PARÇALARI: görünüş, gizli,
+    eksen ve ölçü çizgileri (ölçünün kendi çizgileri dahil). Yazının yerini
+    görünüşün KUTUSUYLA değil gerçek çizgilerle denetlemek için: kutu dolu
+    sayılınca parçanın ortasındaki deliğin yazısı hep görünüşün dışına,
+    uzun kılavuzla gidiyordu."""
+    out = []
+
+    def ekle(p, q):
+        if (max(p[0], q[0]) < alan[0] or min(p[0], q[0]) > alan[2]
+                or max(p[1], q[1]) < alan[1] or min(p[1], q[1]) > alan[3]):
+            return
+        out.append((p, q))
+
+    def gez(e):
+        t = e.dxftype()
+        try:
+            if t == "LINE":
+                ekle((e.dxf.start.x, e.dxf.start.y), (e.dxf.end.x, e.dxf.end.y))
+            elif t == "LWPOLYLINE":
+                p = [(a, b) for a, b in e.get_points("xy")]
+                if e.closed and p:
+                    p.append(p[0])
+                for a, b in zip(p, p[1:]):
+                    ekle(a, b)
+            elif t in ("DIMENSION", "INSERT"):
+                for v in e.virtual_entities():
+                    gez(v)
+        except Exception:
+            pass
+    for e in msp:
+        if e.dxf.layer in katman:
+            gez(e)
+    return out
+
+
+def _cizgi_kesiyor(k, parcalar, pay=0.0):
+    """Dikdörtgen k (pay kadar büyütülmüş) çizgi parçalarından birini
+    kesiyor ya da içine alıyor mu (Liang-Barsky)."""
+    x0, y0, x1, y1 = k[0] - pay, k[1] - pay, k[2] + pay, k[3] + pay
+    for (ax, ay), (bx, by) in parcalar:
+        if max(ax, bx) < x0 or min(ax, bx) > x1 or max(ay, by) < y0 or min(ay, by) > y1:
+            continue
+        dx, dy = bx - ax, by - ay
+        t0, t1 = 0.0, 1.0
+        ok = True
+        for pp, qq in ((-dx, ax - x0), (dx, x1 - ax), (-dy, ay - y0), (dy, y1 - ay)):
+            if abs(pp) < 1e-12:
+                if qq < 0:
+                    ok = False
+                    break
+                continue
+            r = qq / pp
+            if pp < 0:
+                t0 = max(t0, r)
+            else:
+                t1 = min(t1, r)
+            if t0 > t1:
+                ok = False
+                break
+        if ok:
+            return True
+    return False
+
+
 def _cakisiyor(k, digerleri, pay=0.0):
     """İki dikdörtgen (x0, y0, x1, y1) üst üste biniyor mu?"""
     for d in digerleri:
@@ -1803,8 +1904,13 @@ def cap_olculeri(msp, o, yer, kaydir, gkutu, h, ust, en_cok_grup=8):
         # içine düşebiliyor: gerçek montajda ÜST görünüşün deliğine ait
         # "R5.06" yazısı 85 mm yukarı tırmanıp ÖN görünüşün konturuna
         # oturmuştu. Yakın çevre süzgeci o mesafeyi görmüyordu.
-        dolu = ([gk, etiket_k] + [v for a, v in gkutu.items() if a != gad]
-                + [b for b in mevcut if _cakisiyor(b, [yakin])])
+        # Görünüşün KUTUSU dolu sayılmaz, ÇİZGİLERİ sayılır: yazı parçanın
+        # içindeki boş alana (plaka yüzeyi, slotun yanı) konabilir - deliğin
+        # yanında. Kutu dolu sayılınca her yazı görünüşün dışına, uzun
+        # kılavuzla gidiyordu. Yazılar ve öbür görünüşler yine dolu.
+        dolu = ([etiket_k] + [v for a, v in gkutu.items() if a != gad]
+                + [b for b in _yazi_kutulari(msp) if _cakisiyor(b, [yakin])])
+        cizgi = _cizgi_parcalari(msp, yakin)
         gruplar.sort(key=lambda q: -q[2])
         for tip, d, r in gruplar:
             noktalar = [(p[0] + dx, p[1] + dy)
@@ -1826,7 +1932,8 @@ def cap_olculeri(msp, o, yer, kaydir, gkutu, h, ust, en_cok_grup=8):
                     # değişebildiğinden iki yana da yer ayrılır; böylece
                     # hangi hizalama kullanılırsa kullanılsın çakışma olmaz.
                     k = (px - yw, py - yy / 2, px + yw, py + yy / 2)
-                    if not _cakisiyor(k, dolu, 0.3 * h):
+                    if not _cakisiyor(k, dolu, 0.3 * h) and \
+                            not _cizgi_kesiyor(k, cizgi, 0.25 * h):
                         adaylar.append(((px, py), k))
                         yazi_yeri = True
                         if len(adaylar) >= 6:
@@ -1839,7 +1946,8 @@ def cap_olculeri(msp, o, yer, kaydir, gkutu, h, ust, en_cok_grup=8):
             py = en_ust.get(gad, gk[3]) + 1.2 * h
             for _ in range(14):
                 k = (x - yw, py - yy / 2, x + yw, py + yy / 2)
-                if not _cakisiyor(k, dolu, 0.3 * h):
+                if not _cakisiyor(k, dolu + [gk], 0.3 * h) and \
+                        not _cizgi_kesiyor(k, cizgi, 0.25 * h):
                     adaylar.append(((x, py), k))
                 py += 1.6 * h
             # Hiçbir yere sığmadıysa kılavuzu uzatıp görünüşün soluna
@@ -1878,7 +1986,8 @@ def cap_olculeri(msp, o, yer, kaydir, gkutu, h, ust, en_cok_grup=8):
                     kutu_y = None
                     continue
                 gercek = _olcu_yazi_kutusu(dim)
-                if gercek is None or not _cakisiyor(gercek, dolu, 0.3 * h):
+                if gercek is None or (not _cakisiyor(gercek, dolu, 0.3 * h)
+                                      and not _cizgi_kesiyor(gercek, cizgi, 0.15 * h)):
                     kutu_y = gercek or kaba
                     break
                 _olcu_sil(msp, dim)      # yeri tutmadı, bir sonrakini dene
@@ -2023,7 +2132,9 @@ def halkalar(kenar, katman=("GORUNEN",), tol=HALKA_TOL, en_cok_kenar=6000,
     if not parca or len(parca) > en_cok_kenar:
         return []
     parca = _kopya_at(parca, tol)
+    parca = _kopya_at(_t_bol(parca, tol), tol)
     parca = _asili_buda(parca, tol)
+    parca = _kopru_at(parca, tol)
     n = len(parca)
     if n < 2:
         return []
@@ -2085,13 +2196,117 @@ def _kopya_at(parca, tol=HALKA_TOL):
     for i, q in enumerate(parca):
         a, b = dug[2 * i], dug[2 * i + 1]
         uz = sum(math.dist(q[j], q[j + 1]) for j in range(len(q) - 1))
-        o = q[len(q) // 2]
+        # orta nokta YÖNDEN BAĞIMSIZ: iki noktalı çizgide q[1] bitiş
+        # noktasıdır; TERS YÖNDE gelen kopya (63,4 -> 63,0 / 63,0 -> 63,4)
+        # farklı "orta" verip kopya sayılmıyor, dış hattı bozuyordu
+        m1, m2 = q[len(q) // 2], q[(len(q) - 1) // 2]
+        o = ((m1[0] + m2[0]) / 2.0, (m1[1] + m2[1]) / 2.0)
         im = (min(a, b), max(a, b), round(uz, 3),
               round(o[0], 2), round(o[1], 2))
         if im not in gor:
             gor.add(im)
             tek.append(q)
     return tek
+
+
+def _t_bol(parca, tol=HALKA_TOL):
+    """T BİRLEŞİMLERİNİ böler: bir kenarın UCU başka bir kenarın ORTASINA
+    değiyorsa o kenar orada iki parçaya ayrılır.
+
+    Yüz dolaşımı yalnız uç uca buluşan kenarları tanır. Bükümlü sacın ÖN
+    görünüşünde flanş çizgileri dış hatta T biçiminde biner; bölünmezse
+    o uçlar "asılı" sayılıp budanıyor ve DIŞ HAT HİÇ KAPANMIYORDU (ölçtük:
+    K0 TELEVRE ON KOSE_SOL'un ÖN ve ÜST görünüşünde dış hat yoktu, R15
+    ve R5,5 slotlar, girintiler konumsuz kalıyordu)."""
+    uclar = [p for q in parca for p in (q[0], q[-1])]
+    if not uclar:
+        return parca
+    hucre = max(1.0, 50 * tol)
+    kova = defaultdict(list)
+    for p in uclar:
+        kova[(int(math.floor(p[0] / hucre)), int(math.floor(p[1] / hucre)))].append(p)
+    out = []
+    for q in parca:
+        yeni = [q[0]]
+        kesik = []                      # yeni listede bölünecek nokta indeksleri
+        for a, b in zip(q, q[1:]):
+            dx, dy = b[0] - a[0], b[1] - a[1]
+            L2 = dx * dx + dy * dy
+            if L2 > tol * tol:
+                L = math.sqrt(L2)
+                x0, x1 = sorted((a[0], b[0]))
+                y0, y1 = sorted((a[1], b[1]))
+                aday = []
+                for ix in range(int(math.floor((x0 - tol) / hucre)), int(math.floor((x1 + tol) / hucre)) + 1):
+                    for iy in range(int(math.floor((y0 - tol) / hucre)), int(math.floor((y1 + tol) / hucre)) + 1):
+                        for e in kova.get((ix, iy), ()):
+                            t = ((e[0] - a[0]) * dx + (e[1] - a[1]) * dy) / L2
+                            if t * L <= tol or (1 - t) * L <= tol:
+                                continue
+                            d = abs((e[0] - a[0]) * dy - (e[1] - a[1]) * dx) / L
+                            if d <= tol:
+                                aday.append((t, e))
+                for t, e in sorted(set(aday)):
+                    if math.dist(yeni[-1], e) > tol:
+                        yeni.append(e)
+                        kesik.append(len(yeni) - 1)
+            yeni.append(b)
+        if not kesik:
+            out.append(q)
+            continue
+        bas = 0
+        for k in kesik:
+            out.append(yeni[bas:k + 1])
+            bas = k
+        out.append(yeni[bas:])
+    return [q for q in out if len(q) >= 2]
+
+
+def _kopru_at(parca, tol=HALKA_TOL):
+    """KÖPRÜ kenarları atar: iki bölgeyi birbirine bağlayan, iki yanında da
+    aynı yüz olan kenar (kaldırılınca uçları ayrı kalır). Köprü hiçbir
+    yüzün sınırı değildir; dolaşımda iki kez geçilir ve o yüz BÜTÜNÜYLE
+    atılıyordu - bükümlü sacın ÖN görünüşünde bu yüz DIŞ HATTIN kendisiydi.
+    Tarjan köprü bulma (yinelemeli, çoklu kenar güvenli)."""
+    n = len(parca)
+    if n < 2:
+        return parca
+    dug, _yer = _dugumle([p for q in parca for p in (q[0], q[-1])], tol)
+    kom = defaultdict(list)
+    for i in range(n):
+        a, b = dug[2 * i], dug[2 * i + 1]
+        if a == b:
+            continue
+        kom[a].append((b, i))
+        kom[b].append((a, i))
+    giris, dusuk, kopru = {}, {}, set()
+    sayac = 0
+    for kok in list(kom):
+        if kok in giris:
+            continue
+        giris[kok] = dusuk[kok] = sayac; sayac += 1
+        yigin = [(kok, -1, iter(kom[kok]))]
+        while yigin:
+            v, ust_kenar, it = yigin[-1]
+            ilerle = False
+            for w, ki in it:
+                if ki == ust_kenar:
+                    continue
+                if w not in giris:
+                    giris[w] = dusuk[w] = sayac; sayac += 1
+                    yigin.append((w, ki, iter(kom[w])))
+                    ilerle = True
+                    break
+                dusuk[v] = min(dusuk[v], giris[w])
+            if ilerle:
+                continue
+            yigin.pop()
+            if yigin:
+                u = yigin[-1][0]
+                dusuk[u] = min(dusuk[u], dusuk[v])
+                if dusuk[v] > giris[u]:
+                    kopru.add(ust_kenar)
+    return [q for i, q in enumerate(parca) if i not in kopru] if kopru else parca
 
 
 def _asili_buda(parca, tol=HALKA_TOL):
@@ -2506,6 +2721,31 @@ def _slot(kaynaklar):
     return {"c1": (a[0], a[1]), "c2": (b[0], b[1]), "r": (a[2] + b[2]) / 2}
 
 
+def _daire_parcasi(kaynaklar):
+    """Halka tek bir dairenin PARÇASI mı (yay(lar)ı tek merkezli + kiriş):
+    bir çizginin ikiye böldüğü delik. Delik 3B'den merkezinden ölçülür;
+    yarımları pencere sayılıp kenarlarından ölçülmemeli (ölçtük: flanş
+    çizgisinin böldüğü Ø8,5 delik ÜST'te dört "pencere" çıkıyordu)."""
+    merkez = None
+    yay_var = False
+    gorulen = set()
+    for q in kaynaklar:
+        if id(q) in gorulen:
+            continue
+        gorulen.add(id(q))
+        t = kenar_tani(q) if len(q) > 2 else {"tip": "dogru"}
+        if not t or t["tip"] == "egri":
+            return False
+        if t["tip"] == "yay":
+            m = (t["merkez"][0], t["merkez"][1], t["r"])
+            if merkez and (math.hypot(m[0] - merkez[0], m[1] - merkez[1]) > max(0.05, 0.01 * m[2])
+                           or abs(m[2] - merkez[2]) > max(0.03, 0.01 * m[2])):
+                return False
+            merkez = merkez or m
+            yay_var = True
+    return yay_var
+
+
 def ic_pencereler(kenar, kutu_, en_az_oran=GIRINTI_EN_AZ_ORAN,
                   en_cok=PENCERE_EN_COK):
     """Görünüşün İÇİNDEKİ daire olmayan kapalı halkalar: yuva, pencere,
@@ -2572,6 +2812,8 @@ def ic_pencereler(kenar, kutu_, en_az_oran=GIRINTI_EN_AZ_ORAN,
             continue
         if not islenmis(kay[i]):
             continue
+        if _daire_parcasi(kay[i]):
+            continue                   # bölünmüş delik: delik olarak ölçülüyor
         # DAİRE Mİ? Yalnız köşelere bakmak YETMEZ: dikdörtgenin dört
         # köşesi tam bir çemberin üstündedir, 20 x 10'luk pencere "delik"
         # sayılıp atlanıyordu. Kenar ORTALARI da çembere yakın olmalı -
@@ -2885,6 +3127,14 @@ def konum_plani(o, gorunusler, ham, h, kenarlar=None, tol=0.05,
                 if eg > DELIK_EGIM_SINIR:
                     continue           # eğik eksen: konumu kesin değil
                 nokta.append(izdusum(c, gad))
+        # SLOT (3B'den: iki yarım silindir) - delik gibi, eksenine dik İLK
+        # seçili görünüşte; görünüşte gizli kalsa da (flanşın altında)
+        slot3 = []
+        for sl in (o or {}).get("slotlar") or []:
+            ilk = next((g for g in DELIK_GOR.get(sl["eksen"], ()) if g in gorunusler), None)
+            if gad == ilk:
+                slot3.append({"c1": izdusum(sl["c1"], gad), "c2": izdusum(sl["c2"], gad),
+                              "r": sl["yaricap_mm"]})
         # EĞİK KESİMİN UÇLARI da konum ister: köşe kırma değil,
         # parçanın gerçek biçimidir; atölye nereden nereye keseceğini
         # ancak uçlarının kenarlardan yerinden bilir. (Pahlar buraya
@@ -2903,6 +3153,15 @@ def konum_plani(o, gorunusler, ham, h, kenarlar=None, tol=0.05,
         ozel = gorunus_ozellikleri(kenarlar[gad], kutu_) if ayna_bos else []
         # İÇ PENCERE (yuva, cep): kenarı değil bütün kutusu konum ister.
         pencere = ic_pencereler(kenarlar[gad], kutu_) if ayna_bos else []
+        # 3B'den gelen slotla aynı olan görünüş slotu ikinci kez ölçülmez
+        # (ham koordinatta merkezler aynı)
+        if slot3:
+            def ayni(a, b):
+                return math.dist(a, b) <= 0.2
+            pencere = [r for r in pencere if not (r.get("slot") and any(
+                (ayni(r["slot"]["c1"], s_["c1"][:2]) and ayni(r["slot"]["c2"], s_["c2"][:2]))
+                or (ayni(r["slot"]["c1"], s_["c2"][:2]) and ayni(r["slot"]["c2"], s_["c1"][:2]))
+                for s_ in slot3))]
         if ozel or pencere:
             ayna_verildi.add(cift)
         # YOĞUNLUK: bir görünüş, yazı boyuna göre ancak bu kadar girinti
@@ -2943,7 +3202,7 @@ def konum_plani(o, gorunusler, ham, h, kenarlar=None, tol=0.05,
             sigar = max(1, int(buyuk_ / (4.0 * h)))
             ozel = ozel[:min(GIRINTI_EN_COK, sigar)]
             pencere = pencere[:min(PENCERE_EN_COK, sigar)]
-        if not nokta and not kesim and not ozel and not pencere:
+        if not nokta and not kesim and not ozel and not pencere and not slot3:
             continue
         cikti = {}
         for ad, eksen, e0, e1 in (("yatay", 0, kutu_[0], kutu_[2]),
@@ -3015,7 +3274,7 @@ def konum_plani(o, gorunusler, ham, h, kenarlar=None, tol=0.05,
                     if min(abs(v - e0), abs(v - e1)) > 0.2:
                         ekle(v, "girinti")
             slot_ara = []
-            for r in pencere:              # pencerenin iki kenarı
+            for r in [{"kutu": None, "slot": s_} for s_ in slot3] + pencere:
                 k = r["kutu"]
                 sl = r.get("slot")
                 if sl:
@@ -3079,7 +3338,9 @@ def konum_plani(o, gorunusler, ham, h, kenarlar=None, tol=0.05,
                     ara.append({"a": dat, "b": yakin, "metin": None,
                                 "kaynak": ["dizi"]})
                 ara.append({"a": r["bas"], "b": r["son"],
-                            "metin": f"{r['adet'] - 1} x {r['adim']:g}",
+                            # adım 0,01'e yuvarlanır, Türkçe yazılır: modelin
+                            # 0,0005'lik kayması "2 x 89.9995" yazdırıyordu
+                            "metin": f"{r['adet'] - 1} x {XL.tr(round(r['adim'], 2), 2)}",
                             "kaynak": ["dizi"], "adet": r["adet"],
                             "adim": r["adim"]})
                 if abs(oteki - uzak) > 0.2:
@@ -3087,8 +3348,13 @@ def konum_plani(o, gorunusler, ham, h, kenarlar=None, tol=0.05,
                                 "kaynak": ["dizi"]})
             # 2) Tekil delikler: HEPSİ AYNI DATUMDAN
             for x in sorted(tekil):
-                # Dizinin içindeki bir deliği ikinci kez ölçme.
-                if any(r["bas"] - 0.2 <= x <= r["son"] + 0.2 for r in dizi):
+                # Dizinin bir ELEMANINI ikinci kez ölçme. Yalnız eleman:
+                # dizinin aralığına düşen slot / pencere konumu atılmamalı
+                # (ölçtük: 63..243 delik dizisinin arasındaki slotlar 79,5 /
+                # 147,5 konumsuz kalıyordu).
+                if any(r["bas"] - 0.2 <= x <= r["son"] + 0.2 and r["adim"] > 0
+                       and abs((x - r["bas"]) - round((x - r["bas"]) / r["adim"])
+                               * r["adim"]) <= 0.2 for r in dizi):
                     continue
                 # HEPSİ AYNI KENARDAN. En yakın kenarı seçmek ölçüyü
                 # kısaltır ama görünüşte İKİ AYRI DATUM oluşturur:
@@ -3122,7 +3388,9 @@ def konum_plani(o, gorunusler, ham, h, kenarlar=None, tol=0.05,
                          "yatay_simetrik": cikti.get("yatay_simetrik", False),
                          "dusey_simetrik": cikti.get("dusey_simetrik", False),
                          "ozellik": ozel,
-                         "slot": [r["slot"] for r in pencere if r.get("slot")]}
+                         "slot": [{"c1": tuple(s_["c1"][:2]), "c2": tuple(s_["c2"][:2]),
+                                   "r": s_["r"]} for s_ in slot3]
+                         + [r["slot"] for r in pencere if r.get("slot")]}
     if rapor is not None:
         rapor.update(atlanan)
     return plan

@@ -139,7 +139,7 @@ def dxf_onizleme(dxf_yol, png_yol, gen=11.0, boy=7.5):
 
     segs = {"GORUNEN": [], "GIZLI": [], "OLCU": [], "EKSEN": [], "YAZI": [],
             "TARAMA": [], "DIGER": []}
-    yazi, tarama = [], []
+    yazi, tarama, dolgu = [], [], []
 
     def topla(e, ovr=None):
         k = ovr or (e.dxf.layer if e.dxf.layer in segs else "DIGER")
@@ -161,9 +161,13 @@ def dxf_onizleme(dxf_yol, png_yol, gen=11.0, boy=7.5):
                      for q in [a0 + (a1 - a0) * i / 32 for i in range(33)]]
                 segs[k].extend([a, b] for a, b in zip(p, p[1:]))
             elif t == "SOLID":
+                # dolu üçgen: ölçü OKU (dolu ok ucu)
                 v = [e.dxf.vtx0, e.dxf.vtx1, e.dxf.vtx2]
-                segs[k].append([(v[0].x, v[0].y), (v[1].x, v[1].y)])
-                segs[k].append([(v[1].x, v[1].y), (v[2].x, v[2].y)])
+                dolgu.append(([(q.x, q.y) for q in v], k))
+            elif t == "INSERT":
+                # blok içindekiler (ölçünün ok blokları) yerine oturtulmuş hâlde
+                for v in e.virtual_entities():
+                    topla(v, ovr)
             elif t == "HATCH":
                 for yol in e.paths:
                     try:
@@ -182,6 +186,8 @@ def dxf_onizleme(dxf_yol, png_yol, gen=11.0, boy=7.5):
     d = ezdxf.readfile(dxf_yol)
     for e in d.modelspace():
         if e.dxftype() == "DIMENSION":
+            # ölçü bloğu: çizgiler, yazı ve OK UÇLARI (ok bir blok INSERT'idir;
+            # önceden çizilmiyordu - önizlemede ölçüler oksuz görünüyordu)
             try:
                 for e2 in d.blocks.get(e.dxf.geometry):
                     topla(e2, "OLCU")
@@ -215,6 +221,9 @@ def dxf_onizleme(dxf_yol, png_yol, gen=11.0, boy=7.5):
     for k, v in segs.items():
         if v:
             ax.add_collection(LineCollection(v, colors=renk[k][0], linewidths=renk[k][1]))
+    for q, k in dolgu:
+        ax.add_patch(Polygon(q, closed=True, facecolor=renk.get(k, renk["DIGER"])[0],
+                             edgecolor="none"))
     ax.set_xlim(x0, x1); ax.set_ylim(y0, y1); ax.set_aspect("equal")
     ax.set_position([0, 0, 1, 1]); ax.axis("off")
     pb = gen * 72.0 / (x1 - x0)                 # veri birimi başına punto

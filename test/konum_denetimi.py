@@ -530,6 +530,47 @@ def main():
         dogru(f"{ad_}: plan slot merkez çizgisini taşıyor",
               len(pl12["UST"].get("slot") or []) == 1)
 
+    print("\n-- dış hat: TERS YÖNDE gelen kopya kenar, T birleşimi")
+    # 100 x 50 dikdörtgen; sol kenar iki kez, ters yönlerde (HLR böyle
+    # veriyor: K0 TELEVRE ON KOSE_SOL'da dış hat hiç kurulmuyordu); alt
+    # kenarın ortasına T biçiminde binen dikey bir çizgi.
+    ken_t = {"GORUNEN": [[(0.0, 0.0), (100.0, 0.0)], [(100.0, 0.0), (100.0, 50.0)],
+                         [(100.0, 50.0), (0.0, 50.0)], [(0.0, 50.0), (0.0, 0.0)],
+                         [(0.0, 0.0), (0.0, 50.0)],
+                         [(40.0, 0.0), (40.0, 50.0)]], "GIZLI": []}
+    dk = O.dis_kontur(ken_t)
+    dogru("ters kopyalı + T birleşimli görünüşte dış hat kuruldu", bool(dk))
+    if dk:
+        esit("dış hattın kutusu",
+             [round(v, 1) for v in (min(p[0] for p in dk), min(p[1] for p in dk),
+                                    max(p[0] for p in dk), max(p[1] for p in dk))],
+             [0.0, 0.0, 100.0, 50.0])
+
+    print("\n-- slot 3B'den (gizli kalsa da) + delik dizisinin aralığında")
+    # 200 x 60 plaka: 20 / 100 / 180'de Ø8 delik dizisi (y=15), arasında
+    # R5 slot (merkezler x=45 / 60, y=40). Slot konumu (45) dizinin
+    # aralığında diye ATILMAMALI; dizi adımı "2 x 80".
+    from OCP.BRepAlgoAPI import BRepAlgoAPI_Fuse
+    kes = BRepPrimAPI_MakeBox(gp_Pnt(45.0, 35.0, -1), 15.0, 10.0, 7).Shape()
+    for cx in (45.0, 60.0):
+        kes = BRepAlgoAPI_Fuse(kes, BRepPrimAPI_MakeCylinder(
+            gp_Ax2(gp_Pnt(cx, 40.0, -1), gp_Dir(0, 0, 1)), 5.0, 7).Shape()).Shape()
+    ds = BRepAlgoAPI_Cut(plaka(200.0, 60.0, 5.0, [(20.0, 15.0, 4.0), (100.0, 15.0, 4.0),
+                                                  (180.0, 15.0, 4.0)]), kes).Shape()
+    s13, o13 = O.komponent_olcu(ds, P)
+    esit("3B'den bir slot (R5, merkezler arası 15)",
+         [(sl["yaricap_mm"], sl["boy_mm"]) for sl in o13.get("slotlar", [])], [(5.0, 15.0)])
+    ken13 = O.hlr(s13, *O.GORUNUS["UST"], gizli=False)
+    pl13 = O.konum_plani(o13, ("UST",), {"UST": O._kenar_kutusu(ken13)}, 4.0, {"UST": ken13})
+    hep13 = {yon: sorted(round(abs(r["b"] - r["a"]), 2) for r in pl13["UST"][yon])
+             for yon in ("yatay", "dusey")}
+    print("     ", hep13)
+    tum13 = hep13["yatay"] + hep13["dusey"]
+    dogru("slot konumu (45) dizinin aralığında atılmadı", 45.0 in tum13, str(tum13))
+    dogru("slot merkezler arası (15)", 15.0 in tum13, str(tum13))
+    metin13 = [r["metin"] for yon in ("yatay", "dusey") for r in pl13["UST"][yon] if r["metin"]]
+    esit("dizi adımı yuvarlak ve Türkçe", metin13, ["2 x 80"])
+
     print("\n-- eğri siluet: her eğik çizgi kesim değildir")
     import math
     # 20 kenarlı çokgen = aslında bir EĞRİ. Kenarlarının her birine

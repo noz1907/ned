@@ -50,6 +50,11 @@ BU SÜRÜMDE NE VAR
   helis. 5 gerçek modelde 4 yay (adsız COMPOUND burulma yayı dahil)
   doğru, yay olmayan parçaya yay kararı yok.
 
+  DETAY RESMİ: bükümlü sacın dış hattı kuruluyor (ters kopya kenar, T
+  birleşimi, köprü) -> slot / girinti / pencere konumları artık var;
+  slot 3B'den (gizli slot da), Ø / R yazısı elemanın yanında, dizi adımı
+  "2 x 90", önizlemede ölçü okları. 5 modelde 4.933 konum ölçüsü, hatalı 0.
+
   SATIN ALINAN ÜRÜN TEK KALEM: gömme sallama (yük bağlama halkası),
   menteşe, adsız tedarikçi kilidi... içindeki parçalar ona bağlı, ayrı
   kalem değil (kopyalar dahil sayılır); katısız (yüzey modeli) standart

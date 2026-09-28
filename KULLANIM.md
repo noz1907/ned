@@ -1458,14 +1458,43 @@ içindeki yuva / pencere de konumlanır:
   merkezine konum + **iki merkez arası** (slot boyu), dik yönde slotun
   **merkez çizgisine** konum; genişlik `2x R5,5` ile. Slotta eksen çizgisi
   ve iki merkezde dik kısa çizgi çizilir (ölçünün gittiği yer görünsün).
-  Slot tanıma: iç halka iki EŞİT yarıçaplı ~180° yay + düz kenarlardan
-  oluşur. Delikler zaten her zaman merkezlerinden ölçülür.
+  Slot **3B modelden** bulunur (delik gibi): aynı yarıçaplı, paralel
+  eksenli iki yarım silindir. Görünüşte gizli kalan slot da (üst flanşın
+  altındaki) göründüğü ilk görünüşte konum alır. Delik dizisinin
+  aralığına düşen slotun konumu atılmaz (yalnız dizinin kendi elemanları
+  tekrar ölçülmez). Delikler zaten her zaman merkezlerinden ölçülür; bir
+  çizginin ikiye böldüğü delik (flanş çizgisi deliğin üstünden geçiyor)
+  "pencere" sayılıp kenarlarından ölçülmez.
 
   ```
   eskisi (yanlış)                    şimdi
   |--52--| slotun alt kenarı          |--34,5--| birinci yay merkezi
   |----64----| slotun üst kenarı      |--34,5--|--11--| merkezler arası
   ```
+
+**Bükümlü sacın dış hattı.** Girinti, pencere ve slot ölçüsü görünüşün
+DIŞ HATTI kurulabilirse verilir. Bükümlü saclarda dış hat üç sebeple
+kurulamıyordu, üçü de düzeltildi: HLR aynı kenarı **ters yönde** iki kez
+veriyordu (kopya sayılmıyordu), flanş çizgileri dış hatta **T biçiminde**
+biniyordu (uç, öbür kenarın ortasına değiyor: kenar orada bölünür),
+**köprü** kenar (iki yanında aynı yüz) yüzü bütünüyle attırıyordu (köprü
+ayıklanır). Ölçüldü: 5 modelde resme giren konum ölçüsü 4.220'den
+4.933'e çıktı (slot 292 → 618, girinti 604 → 773, pencere 498 → 624),
+3B doğrulamada **hatalı 0**.
+
+**Dizi adımı** 0,01'e yuvarlanır ve Türkçe yazılır: `2 x 90` (modelin
+0,0005 mm'lik kayması `2 x 89.9995` yazdırıyordu).
+
+**Ø / R yazısı elemanın yanına** konur: yer denetlenirken görünüşün
+KUTUSU değil gerçek ÇİZGİLERİ (görünüş, gizli, eksen, ölçü çizgileri) ve
+yazılar dolu sayılır; yazı parçanın içindeki boş alana, deliğin ya da
+slotun hemen yanına gelebilir. Önceden kutu dolu sayıldığı için her yazı
+görünüşün dışına, uzun kılavuzla gidiyordu. Yakında yer yoksa yine
+görünüşün üstüne çıkar.
+
+**Ölçü okları:** DXF'te her ölçünün iki ucunda dolu ok vardır (AutoCAD
+kendi çizer). Programın önizlemesi ok bloklarını çizmiyordu; artık
+çiziyor.
 
 **Sanal köşe.** Çentiğin ağzı yuvarlatılmışsa ölçü yayın teğet
 noktasına değil, doğru kenarın uzantısının kesiştiği **sanal keskin
