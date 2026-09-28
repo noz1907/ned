@@ -297,7 +297,9 @@ def step_oku(yol, malzeme=False, agac=None):
 
     agac bir listeyse, montaj ağacı oraya konur: iç içe sözlükler
     {"ad", "kod", "adet", "montaj", "alt": [...], "katilar": [kayıt indeksi]}.
-    Aynı alt montajın kopyaları tek düğümde toplanır, adet'i artar."""
+    Aynı alt montajın kopyaları tek düğümde toplanır, adet'i artar.
+    "katilar" yalnız İLK kopyanın, "tum" bütün kopyaların katılarıdır;
+    katı taşımayan (yüzey modeli) yaprağa "katisiz" konur."""
     try:
         app = XCAFApp_Application.GetApplication_s()
         doc = TDocStd_Document(TCollection_ExtendedString("d"))
@@ -369,12 +371,21 @@ def step_oku(yol, malzeme=False, agac=None):
                     sh = BRepBuilderAPI_Transform(sh, loc.Transformation(), True).Shape()
                 mal = _malzeme(mt, lab, mtab) if malzeme else None
                 ex = TopExp_Explorer(sh, TopAbs_SOLID)
+                bulundu = False
                 while ex.More():
                     k = TopoDS.Solid_s(ex.Current())
                     out.append((ad, k, mal) if malzeme else (ad, k))
                     if bu is not None and say:
                         bu["katilar"].append(len(out) - 1)
+                    # "tum": KOPYALAR dahil bütün katılar - satın alınan bir
+                    # ürünün her kopyasının içi de ona bağlanabilsin
+                    if bu is not None:
+                        bu.setdefault("tum", []).append(len(out) - 1)
+                    bulundu = True
                     ex.Next()
+                if not bulundu and bu is not None:
+                    # katısız (yüzey modeli) parça: BOM'dan düşmesin diye işaret
+                    bu["katisiz"] = True
 
         kok = _dugum(os.path.splitext(os.path.basename(yol))[0])
         kok["montaj"] = True

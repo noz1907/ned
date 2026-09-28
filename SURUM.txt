@@ -50,6 +50,11 @@ BU SÜRÜMDE NE VAR
   helis. 5 gerçek modelde 4 yay (adsız COMPOUND burulma yayı dahil)
   doğru, yay olmayan parçaya yay kararı yok.
 
+  SATIN ALINAN ÜRÜN TEK KALEM: gömme sallama (yük bağlama halkası),
+  menteşe, adsız tedarikçi kilidi... içindeki parçalar ona bağlı, ayrı
+  kalem değil (kopyalar dahil sayılır); katısız (yüzey modeli) standart
+  eleman BOM'a girer. Adsız ürün ve katısız eleman onay listesinde.
+
   SLOT ÖLÇÜSÜ MERKEZDEN: konum yay merkezine, iki merkez arası ve R;
   kenar (teğet) çizgisine ölçü verilmez; slotta eksen çizgisi.
 

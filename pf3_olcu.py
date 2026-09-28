@@ -333,7 +333,8 @@ def benzerden_sinifla(kayit, komp, kural=None, log=print):
         return 0
     n = 0
     for k in komp:
-        if _kural(kural, k) or (ad_bilgili(k["ad"]) and not k.get("geometri")):
+        if _kural(kural, k) or (ad_bilgili(k["ad"]) and not k.get("geometri")) \
+                or not k["indeks"] or k.get("satin_alinan_montaj"):
             continue
         if "imza" not in k:
             k["imza"] = TN.bicim_imzasi(kayit[k["indeks"][0]][1])
@@ -503,6 +504,174 @@ def sinifla(ad, kural=None):
     if eleman:
         return "standart", "kaynak elemanı"
     return "parca", ""
+
+
+URUN_EN_BUYUK = 250.0      # adsız satın alınan ürün (kilit, mandal): gabari sınırı, mm
+URUN_PARCA_EN_BUYUK = 150.0
+
+
+def satin_alinan_montajlar(agac, komp, kayit=None, kural=None, log=print):
+    """SATIN ALINAN ÜRÜN TEK KALEMDİR; içindeki / ona bağlı parçalar ONA
+    AİTTİR (gömme sallamanın sacı, halkası, yayı bir bütündür).
+
+    "153-02-10-004 - GOMME SALLAMA" bir tedarikçi ürünüdür; STEP'te kendi
+    alt montajı olarak gelir. Önceden BOM'a ürünün kendisi değil İÇİNDEKİ
+    parçalar ayrı ayrı giriyordu. Şimdi:
+
+      1) ADIYLA standart / ticari (sinifla) EN DIŞ alt montaj tek kalem
+         olur: kod addan, adet = ağaçtaki toplam kopya sayısı.
+      2) ADSIZ ÜRÜN (tedarikçi kodlu kilit "001_T573679..."): küçük (en
+         çok URUN_EN_BUYUK) alt montaj; içinde YALNIZ standart ya da adsız
+         küçük parçalar var, en az biri tanınmış bir standart eleman (yay,
+         pul, somun...), hiçbiri adıyla üretim parçası ya da dikiş değil.
+         Tek kalem olur ama KONTROL listesine "onaylayın" diye düşer.
+      3) KATISIZ (yüzey modeli) yaprak adıyla standartsa (yaprak menteşe)
+         BOM'a kalem olarak girer; önceden hiç görünmüyordu.
+
+    İçindeki komponentler ("icerik") BOM'a girmez; aynı parça ürünün
+    DIŞINDA da kullanılıyorsa yalnız dıştaki adedi kalır. Kopyalar dahil
+    sayılır (okuyucu her düğüme bütün kopyaların katılarını "tum" diye
+    bağlar). Adında standart sözcük geçen grubun içinde ADIYLA üretim
+    parçası varsa (..SACI, ..BRAKETI) birleştirilmez, günlüğe yazılır.
+    Döner: tek kaleme inen ürün sayısı."""
+    if not agac:
+        return 0
+    kati_komp = {}
+    for i, k in enumerate(komp):
+        for j in k["indeks"]:
+            kati_komp[j] = i
+
+    def tum(d):
+        out = list(d.get("tum") or d.get("katilar") or [])
+        for a in d.get("alt") or []:
+            out += tum(a)
+        return out
+
+    def gabari(kl):
+        if kayit is None or not kl:
+            return []
+        b = Bnd_Box()
+        for j in kl:
+            BRepBndLib.Add_s(kayit[j][1], b)
+        x0, y0, z0, x1, y1, z1 = b.Get()
+        return sorted(round(t, 1) for t in (x1 - x0, y1 - y0, z1 - z0))
+
+    def uretim_adli(k):
+        # ADINA bakılır, sınıfına değil: agactan_sinifla adı standart grubun
+        # çocuklarını zaten "standart" yapmış olur
+        return ad_bilgili(k["ad"]) and sinifla(k["ad"], kural)[0] == "parca"
+
+    def adsiz_urun(d, kl, say):
+        """Adsız ürün mü: gerekçe ya da None."""
+        ad = d.get("ad") or ""
+        if ad_bilgili(ad) or len(kl) < 3 or kayit is None:
+            return None
+        olc = gabari(kl)
+        if not olc or olc[-1] > URUN_EN_BUYUK:
+            return None
+        # içinde en az bir ADSIZ parça olmalı (ürünün bilinmeyen içi); hepsi
+        # adıyla standartsa (4 x "M6 KAYNAK SOMUNU") grup bir klasördür,
+        # elemanlar zaten kendi adlarıyla kalem olur
+        if all(ad_bilgili(komp[i]["ad"]) for i in say):
+            return None
+        std = []
+        for i in say:
+            k = komp[i]
+            if k["sinif"] == "kaynak" or uretim_adli(k):
+                return None
+            if k["sinif"] == "parca" and ad_bilgili(k["ad"]):
+                return None
+            if max(k.get("olc") or [0]) > URUN_PARCA_EN_BUYUK:
+                return None
+            if k["sinif"] == "standart":
+                std.append((k.get("tip") or "standart").replace(" (geometri)", ""))
+        if not std:
+            return None
+        oz = Counter(t.split(" (")[0] for t in std)
+        return (f"yapı: {len(kl)} katılı küçük alt montaj ({' x '.join(XL.tr(v, 0) for v in olc)}), "
+                f"içinde yalnız standart / adsız küçük parça ("
+                + ", ".join(f"{t}" for t, _n in oz.most_common(4))
+                + "); adıyla üretim parçası yok: satın alınan ürün")
+
+    gruplar, katisiz = [], []
+
+    def gez(d, carpan, kok):
+        adet = d.get("adet", 1) * carpan
+        if not kok and d.get("alt"):
+            kl = tum(d)
+            say = Counter(kati_komp[j] for j in kl if j in kati_komp)
+            if sinifla(d.get("ad") or "", kural)[0] == "standart":
+                uretim = [komp[i]["ad"] for i in say if uretim_adli(komp[i])]
+                if uretim:
+                    log(f"! '{_ad_sade(d['ad'])[:50]}' adı standart ama içinde üretim "
+                        f"parçası var ({', '.join(u[:30] for u in uretim[:3])}): tek "
+                        "kaleme İNDİRİLMEDİ")
+                else:
+                    gruplar.append((d, adet, kl, say, None))
+                    return
+            else:
+                g = adsiz_urun(d, kl, say)
+                if g:
+                    gruplar.append((d, adet, kl, say, g))
+                    return
+        if not kok and not d.get("alt") and d.get("katisiz") and \
+                sinifla(d.get("ad") or "", kural)[0] == "standart":
+            katisiz.append((d, adet))
+        for a in d.get("alt") or []:
+            gez(a, adet, False)
+    gez(agac, 1, True)
+    if not gruplar and not katisiz:
+        return 0
+    yeni = []
+    ic_sayi = Counter()
+    for d, adet, kl, say, gerekce in gruplar:
+        for i, c in say.items():
+            ic_sayi[i] += c
+        ad = _ad_sade(d.get("ad") or "")
+        if gerekce:
+            tip = "satın alınan ürün (adsız)"
+        else:
+            tip = sinifla(ad, kural)[1] or "satın alınan montaj"
+        k = {"ad": ad, "kod": kod_cikar(ad), "adet": adet, "indeks": kl,
+             "hacim_mm3": round(sum(komp[i]["hacim_mm3"] * c for i, c in say.items())
+                                / max(adet, 1), 1),
+             "olc": gabari(d.get("katilar") or kl[:1]) or gabari(kl),
+             "sinif": "standart", "tip": tip, "malzeme_data": None,
+             "malzeme_yogunluk": None, "satin_alinan_montaj": True,
+             "icerik": sorted({_ad_sade(komp[i]["ad"]) for i in say})}
+        if gerekce:
+            k["geometri"] = gerekce
+        yeni.append(k)
+        d["satin_alinan"] = True
+    for d, adet in katisiz:
+        ad = _ad_sade(d.get("ad") or "")
+        yeni.append({"ad": ad, "kod": kod_cikar(ad), "adet": adet, "indeks": [],
+                     "hacim_mm3": 0.0, "olc": [], "sinif": "standart",
+                     "tip": sinifla(ad, kural)[1] or "satın alınan",
+                     "malzeme_data": None, "malzeme_yogunluk": None, "katisiz": True,
+                     # STEP'te katı yok: adet montaj ağacından - onaylansın
+                     "geometri": "katı yok (yüzey modeli): adıyla standart, adet montaj "
+                                 "ağacından; CAD'de katı olarak dışa aktarılmamış"})
+    kalan = []
+    for i, k in enumerate(komp):
+        c = ic_sayi.get(i, 0)
+        if c >= k["adet"]:
+            continue                    # bütünüyle ürünün içinde
+        if c:
+            k["adet"] -= c              # ürünün dışında da kullanılıyor
+        kalan.append(k)
+    cikan = len(komp) - len(kalan)
+    komp[:] = kalan + yeni
+    if gruplar:
+        log(f"satın alınan ürün: {len(gruplar)} grup tek kalem oldu ("
+            + ", ".join(_ad_sade(g[0].get('ad') or '')[:36] for g in gruplar[:4])
+            + f"); içindeki {cikan} komponent ona bağlandı, ayrı kalem değil"
+            + (f"; {sum(1 for g in gruplar if g[4])} adsız ürün kontrol listesinde"
+               if any(g[4] for g in gruplar) else ""))
+    if katisiz:
+        log(f"katısız (yüzey modeli) satın alınan {len(katisiz)} eleman BOM'a eklendi: "
+            + ", ".join(_ad_sade(d.get('ad') or '')[:36] for d, _a in katisiz[:4]))
+    return len(gruplar)
 
 
 def agactan_sinifla(agac, komp, kural=None, log=print):
@@ -6747,6 +6916,9 @@ def step_komponentleri(step, P, log=print):
         katalogdan_sinifla(kayit, komp, kural, log=log)
     except Exception as ex:
         log(f"! katalog kullanılamadı: {type(ex).__name__}: {ex}")
+    if agac:
+        # geometri tanındıktan SONRA: adsız ürünü içindeki yay / pul / somun ele verir
+        satin_alinan_montajlar(agac, komp, kayit, kural, log)
     profilden_tanimla(kayit, komp, log)
     standart_denetimi(kayit, komp, kural, log)
     sayim = Counter(k["sinif"] for k in komp)
@@ -6797,6 +6969,11 @@ def agac_bom(agac, komp, satirlar):
                "tur": "montaj" if montaj else "parca",
                "malzeme_ad": "", "malzeme_kaynak": "", "olcu": "",
                "kg_adet": "", "toplam_kg": ""}
+        if d.get("satin_alinan"):
+            # satın alınan montaj: TEK kalem, içi açılmaz (parçaları ona bağlı)
+            sat["tur"], sat["kod"] = "standart", kod_cikar(d["ad"])
+            out.append(sat)
+            return
         # Yaprak düğüm: hangi komponente denk geldiğini katı indeksinden bul.
         if not montaj and d.get("katilar"):
             ki = kati_komp.get(d["katilar"][0])

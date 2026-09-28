@@ -370,9 +370,20 @@ o yoksa program bunu ADDAN, MONTAJ AĞACINDAN ve BİÇİMDEN çıkarır:
 | norm numarası | `DIN 912`, `ISO 7090` | standart |
 | **üretim ismi** geçiyor | `CIVATA LAMASI`, `SOMUN SACI`, `KAMERA BRAKETI` | **parça** — Türkçe tamlamada asıl isim sondadır: cıvata lamaSI bir lamadır |
 | standart / satın alınan | cıvata, somun (`FL SOMUN_2` dahil), pul, perçin, rulman, menteşe, kamera, sensör, yük bağlama halkası, kauçuk takoz/stoper | standart |
-| satın alınan grubun içi | `153-02-10-004 - GOMME SALLAMA ...` grubunun altındaki `151B-02-10-004` | standart |
+| **satın alınan ürün = TEK KALEM** | `153-02-10-004 - GOMME SALLAMA ...` (gömme yük bağlama halkası: sac, halka, taşı, pim...) | ürünün kendisi tek satır (`153-02-10-004` × kopya sayısı); içindeki parçalar **ona bağlıdır**, ayrı kalem değildir — aynı parça ürünün dışında da kullanılıyorsa yalnız dıştaki adedi kalır |
+| adsız satın alınan ürün | `001_T573679C8D002kh5` (toolbox kilidi: 23 adsız katı — yay, pul, somun, o-ring) | küçük (≤ 250 mm) alt montaj, içinde en az bir adsız parça, yalnız standart / adsız küçük parçalar, en az biri tanınmış standart eleman, adıyla üretim parçası yok → tek kalem, **kontrol listesinde onay ister** |
+| katısız (yüzey modeli) standart | `153-13-05-20_YAPRAK MENTESE` × 2 | STEP'te katı yok ama adıyla standart: BOM'a girer (önceden hiç görünmüyordu), kontrol listesinde onay ister |
 | dikiş grubunun içi | `K0 KAYNAKLAR` altındaki `ARA DIKME` | dikiş |
 | `KAYNAKLI ...` | kaynaklı montaj / parça | **dikiş değil** |
+
+Tek kaleme İNMEYENLER: adı standart ama içinde **adıyla üretim parçası**
+olan grup (`..SACI`, `..BRAKETI`: adı yanıltıcı bir üretim montajı
+olabilir, günlüğe yazılır); içindekilerin HEPSİ adıyla belli olan grup
+(`K0 DIS TRIM ARKA AYAR GRUBU` = 4 x `M6 KAYNAK SOMUNU`: bir klasördür,
+somunlar kendi adlarıyla kalem olur). Ölçüldü: kaynaklı kasada gömme
+sallama ve kilit tek kalem oldu, kontrol listesi 22 belirsiz parçadan 4'e
+indi (kilidin 23 adsız katısı artık ayrı ayrı sorulmuyor); televrede kilit
+ve iki menteşe tek kalem, 4 katısız standart eleman BOM'a girdi.
 
 #### Adı bilgi taşımayan katılar: GEOMETRİDEN tanıma
 

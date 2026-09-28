@@ -110,6 +110,74 @@ esit("dikiş grubunun içi", komp[1]["sinif"], "kaynak")
 esit("KAYNAKLI grubun içi parça kalır", komp[2]["sinif"], "parca")
 esit("CIVATA LAMASI montajının içi parça kalır", komp[3]["sinif"], "parca")
 
+print("\n-- SATIN ALINAN MONTAJ tek kalem; içindekiler ona bağlı")
+# Gömme sallama (yük bağlama halkası) 2 kopya; içinde taşı + 2 kodlu parça.
+# 150-01-06-040 grubun dışında da 3 kez kullanılıyor. "tum": okuyucunun
+# verdiği, KOPYALAR dahil katılar (ağaçta yalnız ilk kopya "katilar"da).
+agac = {"ad": "KOK", "alt": [
+    {"ad": "153-02-10-004 - GOMME SALLAMA KUCUK", "montaj": True, "adet": 2,
+     "alt": [{"ad": "GOMME SALLAMA TASI", "katilar": [0], "tum": [0, 10]},
+             {"ad": "151B-02-10-004", "katilar": [1], "tum": [1, 11]},
+             {"ad": "150-01-06-040", "katilar": [2], "tum": [2, 12]}]},
+    {"ad": "150-01-06-040", "katilar": [5], "tum": [5, 6, 7]},
+    {"ad": "K0 PLAKA", "katilar": [8]}]}
+
+
+def kp(ad, sinif, indeks):
+    return {"ad": ad, "kod": M.kod_cikar(ad), "sinif": sinif, "tip": "", "indeks": indeks,
+            "adet": len(indeks), "hacim_mm3": 10.0, "olc": [1, 2, 3]}
+
+
+komp = [kp("GOMME SALLAMA TASI", "standart", [0, 10]),
+        kp("151B-02-10-004", "parca", [1, 11]),
+        kp("150-01-06-040", "parca", [2, 12, 5, 6, 7]),
+        kp("K0 PLAKA", "parca", [8])]
+M.agactan_sinifla(agac, komp, {}, log=lambda t: None)
+n = M.satin_alinan_montajlar(agac, komp, None, {}, log=lambda t: None)
+adlar = {k["ad"]: k for k in komp}
+esit("bir grup tek kalem oldu", n, 1)
+g = adlar.get("153-02-10-004 - GOMME SALLAMA KUCUK")
+esit("grup: standart, kod addan, 2 adet",
+     (g["sinif"], g["kod"], g["adet"]) if g else None, ("standart", "153-02-10-004", 2))
+esit("taşı ve 151B ayrı kalem DEĞİL",
+     ["GOMME SALLAMA TASI" in adlar, "151B-02-10-004" in adlar], [False, False])
+esit("dışarıda da kullanılan parça yalnız dıştaki adetle kalır",
+     adlar["150-01-06-040"]["adet"], 3)
+esit("üretim parçası yerinde", adlar["K0 PLAKA"]["sinif"], "parca")
+esit("grubun içeriği ona bağlı", sorted(g["icerik"]),
+     ["150-01-06-040", "151B-02-10-004", "GOMME SALLAMA TASI"])
+sat = M.agac_bom(agac, komp, [])
+esit("hiyerarşik BOM'da grup tek satır, içi açılmıyor",
+     [(r["poz"], r["tur"], r["kod"]) for r in sat if r["poz"].startswith("1.1")],
+     [("1.1", "standart", "153-02-10-004")])
+# adı standart ama içinde ADIYLA üretim parçası: birleştirilmez
+agac2 = {"ad": "KOK", "alt": [{"ad": "M10 CIVATA BAGLANTI", "montaj": True,
+                               "alt": [{"ad": "K0 BAGLANTI SACI", "katilar": [0]}]}]}
+komp2 = [kp("K0 BAGLANTI SACI", "parca", [0])]
+log2 = []
+esit("içinde SACI olan 'standart adlı' grup tek kaleme inmez",
+     M.satin_alinan_montajlar(agac2, komp2, None, {}, log=log2.append), 0)
+esit("sac parça yerinde kalır", [k["ad"] for k in komp2], ["K0 BAGLANTI SACI"])
+# adı standart grup (ağaç çocuğu önceden standart yapmış olsa da) içinde SACI
+agac3 = {"ad": "KOK", "alt": [{"ad": "K0 MENTESE GRUBU", "montaj": True,
+                               "alt": [{"ad": "K0 MENTESE BAGLANTI SACI", "katilar": [0]},
+                                       {"ad": "M6 SOMUN", "katilar": [1]}]}]}
+komp3 = [kp("K0 MENTESE BAGLANTI SACI", "parca", [0]), kp("M6 SOMUN", "standart", [1])]
+M.agactan_sinifla(agac3, komp3, {}, log=lambda t: None)
+esit("adı standart grupta SACI: ağaç çocuğu standart yapsa da tek kaleme inmez",
+     M.satin_alinan_montajlar(agac3, komp3, None, {}, log=lambda t: None), 0)
+# katısız (yüzey modeli) standart yaprak BOM'a girer, kontrol listesine düşer
+agac4 = {"ad": "KOK", "alt": [{"ad": "153-13-05-20_YAPRAK MENTESE", "adet": 2,
+                               "katisiz": True, "katilar": []},
+                              {"ad": "K0 PLAKA", "katilar": [0]}]}
+komp4 = [kp("K0 PLAKA", "parca", [0])]
+M.satin_alinan_montajlar(agac4, komp4, None, {}, log=lambda t: None)
+mt = [k for k in komp4 if "MENTESE" in k["ad"]]
+esit("katısız menteşe BOM'da, 2 adet, standart",
+     [(k["adet"], k["sinif"]) for k in mt], [(2, "standart")])
+esit("katısız kalem kontrol listesinde",
+     any("MENTESE" in r[2] for r in M.kontrol_listesi(komp4)), True)
+
 print("\n-- kullanıcının kuralı önce gelir")
 kural = {M.kural_anahtari("K0 KAMERA"): "parca",
          M.kural_anahtari("COMPOUND"): "standart"}
