@@ -401,6 +401,14 @@ def konum_hesapla(d, parca_sh):
     T0, T1 = _sinir(ic, tm, -1), _sinir(ic, tm, +1)
     if T0 is None or T1 is None or T1 - T0 < 0.5 * (w1 - w0):
         return None
+    # kök çizgisi dikişin kendi uçlarından geçmeli (bacak yüzü yanlış
+    # seçildiyse çizgi kayar): değilse sonuç verilmez
+    z = (d["olcu"].get("a_mm") or 2.0) * math.sqrt(2)
+    for p_, w_ in ((d["p0"], None), (d["p1"], None)):
+        q_ = np.array(p_)
+        r_ = q_ - k - u * float((q_ - k) @ u)
+        if np.linalg.norm(r_) > max(3.0, 2.0 * z):
+            return None
     s0, s1 = w0 - T0, T1 - w1
     # dikiş ucu parça kenarını geçebilir (kenarı döner) ya da kenara bir-iki
     # mm kala biter: atölyede ikisi de "uçtan başlar"
@@ -417,10 +425,16 @@ def konum_hesapla(d, parca_sh):
 def _konum_olcusu(msp, R, d, h):
     """Kenardan dikiş başına ölçü (kâğıtta; yazı gerçek mm)."""
     k = d.get("konum")
-    if not k or not k.get("uc"):
-        return
+    if not k or not k.get("uc") or not k.get("gorunur", True):
+        return                             # değer listede kalır
     if abs(sum(x * y for x, y in zip(d["yon"], R.goz))) > 0.25:
         return                             # eksen görünüşe eğik: boy kısalır
+    if R.kirpik:                           # detay: ölçünün ucu pencerede olmalı
+        x0, y0, x1, y1 = R.kutu
+        for p in (k["uc"], k["bas"]):
+            q = _izdusum(p, R.goz, R.xr)
+            if not (x0 <= q[0] <= x1 and y0 <= q[1] <= y1):
+                return                     # değer listede kalır
     a, b = R.p3(k["uc"]), R.p3(k["bas"])
     L = math.dist(a, b)
     if L < 1.5:
@@ -752,6 +766,7 @@ class _Resim:
             x1, y1 = max(p[0] for p in pts), max(p[1] for p in pts)
         self.cizgi = cizgi
         self.kutu = (x0, y0, x1, y1)
+        self.kirpik = bool(pencere)
         self.ox = self.oy = 0.0
 
     def boyut(self):
@@ -912,6 +927,8 @@ def kaynak_resmi(O, kayit, komp, grup, satirlar, yol, P=None, log=print):
         for gad, _ in ata(dikisler, isin_tum):
             if gad not in ana:
                 ana.append(gad)
+        for d in dikisler:
+            d["_isin"] = isin_tum
     else:
         cap = min(max(L / 6.0, 80.0), 300.0)
         harf = iter("ABCDEFGHJKLMNPRSTUVYZ" + "".join(f"{a}{b}" for a in "ABCDEFGH"
@@ -930,6 +947,8 @@ def kaynak_resmi(O, kayit, komp, grup, satirlar, yol, P=None, log=print):
                 isin = _Isin(Y._Ag(ucg=ag.u[sec])) if sec.any() else None
             else:
                 isin = None
+            for d in bolge:
+                d["_isin"] = isin
             for gad, bu in ata(bolge, isin):
                 detaylar.append({"harf": next(harf), "gad": gad, "dikis": bu, "k3": k3,
                                  "parca": yakin})
@@ -957,6 +976,15 @@ def kaynak_resmi(O, kayit, komp, grup, satirlar, yol, P=None, log=print):
         k = d["konum"] or {}
         if k.get("bas") and math.dist(k["bas"], d["p1"]) < math.dist(k["bas"], d["p0"]):
             d["p0"], d["p1"] = d["p1"], d["p0"]     # başlangıç = ölçülen uç
+        if k.get("uc") and d.get("_isin") is not None:
+            # ölçünün iki ucu da o görünüşte görünmeli (önde parça yoksa);
+            # nokta birleşme köşesinden dikişe doğru biraz içeri alınır
+            goz, _ = _gorunus(O, d["gorunus"])
+            v = [d["orta"][i] - k["bas"][i] for i in range(3)]
+            n = math.sqrt(sum(x * x for x in v)) or 1.0
+            ic_ = [x / n * min(0.5, n) for x in v]
+            k["gorunur"] = all(d["_isin"].acik_mi(tuple(p[i] + ic_[i] for i in range(3)), goz)
+                               for p in (k["uc"], k["bas"]))
     # ---- tablo satırları
     def kk_(p):
         return "; ".join(XL.tr(XL.tam(p[i] - datum[i]), 0) for i in range(3))
@@ -994,6 +1022,7 @@ def kaynak_resmi(O, kayit, komp, grup, satirlar, yol, P=None, log=print):
     for d in dikisler:
         d.pop("sh", None)
         d.pop("_ornek", None)
+        d.pop("_isin", None)
     return dikisler
 
 

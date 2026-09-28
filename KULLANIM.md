@@ -477,7 +477,10 @@ sürdüğü aralık (birleşme çizgisi) 0,01 mm'ye bölünerek bulunur.
   görünür.
 - Ölçü çizgisi yalnız dikiş görünüş düzlemine paralelken çizilir.
   Eğik görünüşte boy kısa görünür ve yanıltır; o zaman değer yalnız
-  listededir.
+  listededir. Ölçünün iki ucu da görünmüyorsa (önde bir parça varsa ya
+  da uç detay penceresinin dışındaysa) çizilmez; değer yine listededir.
+- Kök çizgisi dikişin uçlarından geçmiyorsa (bacak yüzü seçilemediyse)
+  sonuç verilmez: `?`.
 - Tek parçaya değen dikişte kök çizgisi yoktur: `?`.
 
 Kaynak YÖNTEMİ ve dikişin hangi tarafa yapılacağı (ok tarafı / karşı
