@@ -652,6 +652,7 @@ def _cokgen(yan):
 # dışbükey örtüsündeki cepler (L'de 1 köşe cebi, U'da 1 yan cebi, I'da 2
 # karşılıklı yan cebi, T'de 2 komşu köşe cebi...).
 PROFIL_NARIN = 3.0          # boy / kesit en büyük ölçüsü alt sınırı
+PROFIL_KISA_EKSTRUZYON = 1.0  # EKSTRÜZYON kesitinde (çok hücre, kanal...) alt sınır
 PROFIL_ISTASYON = 9
 
 
@@ -1023,8 +1024,14 @@ def _profil_eksen(sh, V, d):
     kb = _kutu(t)
     L = kb[5] - kb[2]
     B = max(kb[3] - kb[0], kb[4] - kb[1])
-    if L <= 0 or B <= 0 or L < PROFIL_NARIN * B:
+    # KISA parça (boy < 3 x kesit) yalnız kesiti EKSTRÜZYON kadar karmaşıksa
+    # profildir: çok hücreli, kanallı kesit 9 istasyonda birebir aynıysa
+    # kısa kesilmiş bir ekstrüzyondur (ölçtük: TIRSAN_Ray 112,5 - 200 mm'lik
+    # ray, kesit 125,5; parça diye kesitine konum ölçüsü veriliyordu).
+    # Basit kesitli kısa parça (plaka, blok, lama parçası) profil değil.
+    if L <= 0 or B <= 0 or L < PROFIL_KISA_EKSTRUZYON * B:
         return None
+    kisa = L < PROFIL_NARIN * B
     istasyon = []
     for i in range(PROFIL_ISTASYON):
         z = kb[2] + L * (0.08 + 0.84 * i / (PROFIL_ISTASYON - 1))
@@ -1082,6 +1089,16 @@ def _profil_eksen(sh, V, d):
                f"hacim/(kesit x boy) = {dolu:.2f}")
 
     def sonuc(tur, ad, kesit, **ek):
+        if kisa:
+            # kısa parçada ekstrüzyon için GÜÇLÜ kanıt: kapalı hücre, T-kanal
+            # ya da vida kanalı ve en az 3 öğe (yalnız "2 oluk" lama / bükümlü
+            # sac da olabilir: K0 CIVATA LAMASI_3 ekstrüzyon sanılıyordu)
+            y_ = ek.get("yapi") or {}
+            guclu = (y_.get("hucre", 0) + y_.get("t_kanal", 0) + y_.get("vida", 0) >= 1
+                     and y_.get("hucre", 0) + y_.get("t_kanal", 0) + y_.get("vida", 0)
+                     + y_.get("oluk", 0) >= 3)
+            if tur != "ekstrüzyon" or not guclu:
+                return None               # kısa + basit kesit: profil değil
         r = dict(temel, tur=tur, ad=ad, kesit=kesit,
                  gerekce=f"{ad}: {gerekce}")
         r.update(ek)

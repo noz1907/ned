@@ -6657,7 +6657,13 @@ def profilden_tanimla(kayit, komp, log=print):
         if not r or max(r["W"], r["H"]) < 5.0 or r["boy"] < 20.0:
             continue
         sac = ""
-        if r["tur"] not in KAPALI_PROFIL:
+        y_ = r.get("yapi") or {}
+        # kapalı hücre / T-kanal / vida kanalı olan ekstrüzyon bükülerek
+        # yapılamaz: ince eşit cidarı sac taramasına "bükümlü sac" dedirtse de
+        # profildir (TIRSAN_Ray 112,5: 3 hücre + 2 T-kanal)
+        ekstruzyon = (r["tur"] == "ekstrüzyon"
+                      and y_.get("hucre", 0) + y_.get("t_kanal", 0) + y_.get("vida", 0) >= 2)
+        if r["tur"] not in KAPALI_PROFIL and not ekstruzyon:
             try:
                 sac = sac_taramasi(sh)["tip"]
             except Exception:

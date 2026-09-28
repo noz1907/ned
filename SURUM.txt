@@ -50,6 +50,9 @@ BU SÜRÜMDE NE VAR
   helis. 5 gerçek modelde 4 yay (adsız COMPOUND burulma yayı dahil)
   doğru, yay olmayan parçaya yay kararı yok.
 
+  KISA EKSTRÜZYON (boy < 3 x kesit, çok hücreli / kanallı kesit) profil
+  sayılır: TIRSAN_Ray 112,5.
+
   DETAY RESMİ: bükümlü sacın dış hattı kuruluyor (ters kopya kenar, T
   birleşimi, köprü) -> slot / girinti / pencere konumları artık var;
   slot 3B'den (gizli slot da), Ø / R yazısı elemanın yanında, dizi adımı

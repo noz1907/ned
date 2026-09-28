@@ -591,6 +591,24 @@ for ad, (sh, tur, kesit) in PR.items():
         if not ok:
             HATA.append("profil " + ad)
 
+print("\n-- KISA ekstrüzyon (boy < 3 x kesit): yalnız kesit güçlüyse profil")
+# TIRSAN_Ray 112,5 gibi: 150 mm boyunda 100 x 80 kesit, 3 hücre + T-kanal
+kx = cut(cut(cut(kutu_(0, 0, 0, 100, 80, 150), kutu_(4, 4, -1, 28, 72, 152)),
+             kutu_(36, 4, -1, 28, 72, 152)), kutu_(68, 4, -1, 28, 72, 152))
+kx = cut(cut(kx, kutu_(44, 74, -1, 12, 7, 152)), kutu_(40, 76, -1, 20, 2, 152))
+r = T.profil(kx)
+ok = bool(r) and r["tur"] == "ekstrüzyon"
+print(f"  {'tamam' if ok else 'HATA '} 150 mm, 3 hücreli kesit ekstrüzyon     {r['ad'] if r else '(yok)'}")
+if not ok:
+    HATA.append("kısa ekstrüzyon")
+# 17 x 99 x 100 lama, iki oluk: kısa + zayıf kanıt -> profil DEĞİL
+lm = cut(cut(kutu_(0, 0, 0, 99, 17, 100), kutu_(20, 14, -1, 6, 4, 102)), kutu_(73, 14, -1, 6, 4, 102))
+r = T.profil(lm)
+ok = not r
+print(f"  {'tamam' if ok else 'HATA '} 17 x 99 x 100 oluklu lama profil değil  {r['ad'] if r else '(yok)'}")
+if not ok:
+    HATA.append("kısa lama")
+
 print("\n-- benzerinden öğrenme (biçim imzası)")
 import pf3_olcu as M                                             # noqa: E402
 

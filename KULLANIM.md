@@ -635,6 +635,16 @@ tanınır. Elle verdiğiniz sınıf bundan da önce gelir.
 
 #### Profiller: kutu, boru, köşebent, U, lama, ekstrüzyon
 
+**Kısa ekstrüzyon da profildir.** Boyu kesitinin 3 katından kısa parça
+normalde profil sayılmaz (plaka, blok); ama kesiti ekstrüzyon kanıtı
+taşıyorsa (kapalı hücre, T-kanal ya da vida kanalı ve en az 3 öğe) ve 9
+istasyonda birebir aynıysa kısa kesilmiş ekstrüzyondur. Böyle bir kesit
+bükülerek yapılamayacağı için sac taraması da onu "bükümlü sac"
+saymaz. Ölçüldü: `TIRSAN_Ray 112,5` (200 mm, kesit 125,5 x 112,5, 3 hücre
++ 2 T-kanal) artık PROFIL listesinde; yalnız "2 oluk" taşıyan kısa lama
+ve saclar (K0 CIVATA LAMASI_3, tente saç parçaları) eskisi gibi profil
+değil.
+
 Program adına bakmadan **profilleri** bulur. Parça boyuna 9 yerden kesilir:
 kesitlerin çoğu aynıysa, hiçbiri ondan büyük değilse (delik yalnız
 küçültür; büyükse kademeli ya da flanşlıdır) ve hacim ≈ kesit × boy ise
