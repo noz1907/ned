@@ -2915,8 +2915,36 @@ class Uygulama(ttk.Frame):
         klasor_ac(y)
         return False
 
+    def _profil_malzeme_sor(self):
+        """EKSTRÜZYON profilin malzemesi CAD'den / dosyadan gelmiyorsa SORAR
+        (program çelik ya da alüminyum varsaymaz - kullanıcı kararı). Cevap
+        o profillerin koduna yazılır, klasör ayarında saklanır: bir daha
+        sorulmaz. True: devam."""
+        if not (self.M and self.komp) or not hasattr(self.M, "malzemesi_sorulacak"):
+            return True
+        ek = self.M.malzemesi_sorulacak(self.komp, dict(self.malzemeler))
+        if not ek:
+            return True
+        ornek = "\n".join(f"  • {k['ad'][:40]}  x{k['adet']}" for k in ek[:5])
+        cvp = messagebox.askyesnocancel(
+            "Ekstrüzyon profil malzemesi",
+            f"{len(ek)} ekstrüzyon profilin malzemesi CAD'de tanımlı değil:\n\n{ornek}"
+            + ("\n  ..." if len(ek) > 5 else "")
+            + "\n\nEVET  →  Alüminyum (2,70 g/cm³)\nHAYIR →  Çelik (7,85 g/cm³)\n"
+              "İPTAL →  vazgeç (malzemeyi 2. adımda kendiniz verin)")
+        if cvp is None:
+            return False
+        m = "aluminyum" if cvp else "celik"
+        for k in ek:
+            self.malzemeler[self.M._tr_sade(k["kod"])] = m
+        self._yaz(f"ekstrüzyon profil malzemesi: {len(ek)} profil -> "
+                  f"{self.M.MALZEME[m][0]} (kullanıcı seçti)")
+        return True
+
     def bom_cikart(self):
         if not self._standart_kontrol():
+            return
+        if not self._profil_malzeme_sor():
             return
         self._basla("BOM çıkarılıyor…", "BOM çıkarma")
         threading.Thread(target=self._bom_is, args=(self._is_girdisi(),), daemon=True).start()
@@ -3007,6 +3035,8 @@ class Uygulama(ttk.Frame):
                 "deyin. (Pafta ve PDF için gerekmez.)")
             return
         if not self._standart_kontrol():
+            return
+        if not self._profil_malzeme_sor():
             return
         asama = [2] + ([3] if self.v_montaj.get() else [])
         eksik = bool(self.v_eksik.get())

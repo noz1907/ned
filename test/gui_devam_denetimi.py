@@ -162,6 +162,27 @@ def ikinci_oturum(cikti):
     dogru("belirsiz parça yoksa hiç sorulmaz", u._standart_kontrol() is True
           and len(soru) == n)
 
+    print("-- ekstrüzyon profilin malzemesi verilmediyse SORULUR (varsayılmaz)")
+    u.komp = [{"kod": "TIRSAN_Ray 112,5", "ad": "TIRSAN_Ray 112,5", "adet": 1,
+               "sinif": "parca", "tip": "", "indeks": [0], "hacim_mm3": 1.0,
+               "olc": [112.5, 125.5, 200.0], "malzeme_data": None,
+               "profil": {"tur": "ekstrüzyon", "ad": "ekstrüzyon profil 125,5x112,5"}},
+              {"kod": "K0 KUTU", "ad": "K0 KUTU", "adet": 1, "sinif": "parca", "tip": "",
+               "indeks": [1], "hacim_mm3": 1.0, "olc": [30, 30, 500], "malzeme_data": None,
+               "profil": {"tur": "kare kutu"}}]
+    u.malzemeler.clear()
+    soru.clear()
+    cvp[0] = None
+    dogru("İPTAL: iş durur, malzeme yazılmaz", u._profil_malzeme_sor() is False
+          and not u.malzemeler and len(soru) == 1)
+    cvp[0] = True
+    dogru("EVET: alüminyum yazıldı (yalnız ekstrüzyona)", u._profil_malzeme_sor() is True
+          and u.malzemeler == {u.M._tr_sade("TIRSAN_Ray 112,5"): "aluminyum"},
+          str(u.malzemeler))
+    n = len(soru)
+    dogru("cevap verilince bir daha sorulmaz", u._profil_malzeme_sor() is True
+          and len(soru) == n)
+
     print("-- AI önerisi: onaylanınca uygulanır, öğrenilir; aynı numaralı sac etkilenmez")
     u.komp = [
         {"kod": "55460008672", "ad": "55460008672", "adet": 6, "sinif": "parca", "tip": "",

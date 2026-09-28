@@ -52,6 +52,8 @@ BU SÜRÜMDE NE VAR
 
   KISA EKSTRÜZYON (boy < 3 x kesit, çok hücreli / kanallı kesit) profil
   sayılır: TIRSAN_Ray 112,5.
+  Ekstrüzyonun resmi sade (kalıbın iç ölçüleri ve gizli çizgileri yok,
+  işleme delikleri var); malzemesi verilmemişse SORULUR.
 
   DETAY RESMİ: bükümlü sacın dış hattı kuruluyor (ters kopya kenar, T
   birleşimi, köprü) -> slot / girinti / pencere konumları artık var;

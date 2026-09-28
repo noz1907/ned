@@ -635,6 +635,22 @@ tanınır. Elle verdiğiniz sınıf bundan da önce gelir.
 
 #### Profiller: kutu, boru, köşebent, U, lama, ekstrüzyon
 
+**Ekstrüzyonun resmi SADEDİR.** Kesit tedarikçinin kalıbıdır; atölye
+onu ölçüsüyle değil profil kodu + kesim boyuyla ister. Kesitin göründüğü
+uç görünüşlerde kalıbın iç ayrıntısı (R0,97 gibi iç radüsler, iç duvar /
+pencere konumları, pahlar) ölçülmez, yalnız gabari; boy görünüşlerinde
+iç duvarların gizli çizgileri çizilmez; başlığa `kesit: ekstrüzyon profil
+125,5x112,5 (3 hücre, 2 T-kanal, 2 oluk) - kesit ölçüleri tedarikçi
+kataloğundan` yazılır. Profil eksenine DİK delikler (işleme) ve
+konumları aynen ölçülür.
+
+**Ekstrüzyonun malzemesi SORULUR.** Malzeme CAD'den, malzeme dosyasından
+ya da parça adından ("AlMg3") gelmiyorsa program çelik de alüminyum da
+varsaymaz: BOM ve Tümünü Üret'ten önce "Evet = Alüminyum, Hayır = Çelik,
+İptal = vazgeç" diye sorar; cevap o profillerin koduna yazılır, klasör
+ayarında saklanır, bir daha sorulmaz. Komut satırında terminal varsa
+sorar, yoksa uyarı yazar.
+
 **Kısa ekstrüzyon da profildir.** Boyu kesitinin 3 katından kısa parça
 normalde profil sayılmaz (plaka, blok); ama kesiti ekstrüzyon kanıtı
 taşıyorsa (kapalı hücre, T-kanal ya da vida kanalı ve en az 3 öğe) ve 9

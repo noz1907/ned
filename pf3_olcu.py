@@ -6205,6 +6205,25 @@ def _tablo(msp, satirlar, x, y_ust, h, sat_h):
     return max((len(t) + 2) * 0.72 * th for t, th in satirlar)
 
 
+def sade_profil(s2, o, k, P):
+    """EKSTRÜZYON profilin SADE resmi için (P, o): profil ekseni resmin
+    çerçevesinde bulunur; o eksene paralel delik / radüs / slot (kalıbın
+    iç ayrıntısı) resimden çıkarılır, eksene dik olanlar (işleme) kalır.
+    Ekstrüzyon değilse (P, o) aynen döner."""
+    r = k.get("profil") or {}
+    if r.get("tur") != "ekstrüzyon":
+        return P, o
+    kb = kutu(s2)
+    ext = (kb[3] - kb[0], kb[4] - kb[1], kb[5] - kb[2])
+    eks = "XYZ"[min(range(3), key=lambda i: abs(ext[i] - float(r.get("boy") or 0)))]
+    o2 = dict(o)
+    for a in ("delikler", "radusler", "slotlar"):
+        o2[a] = [d for d in (o.get(a) or []) if d.get("eksen") != eks]
+    return (dict(P, sade_eksen=eks,
+                 sade_not=f"kesit: {r.get('ad', 'ekstrüzyon profil')[:70]} - kesit ölçüleri "
+                          "tedarikçi kataloğundan"), o2)
+
+
 def dxf_komponent(s, o, k, yol, P):
     """Bir komponentin detay resmi: seçili görünüşler + ölçüler + tablolar."""
     doc = dxf_kur(); msp = doc.modelspace()
@@ -6220,9 +6239,15 @@ def dxf_komponent(s, o, k, yol, P):
     # Konum ölçüleri ÖNCE planlanır: gabari ölçüsünün ne kadar dışarı
     # iteleneceği kaç seviye konum ölçüsü gireceğine bağlı.
     # Görünüşler BİR KEZ hesaplanır; plan da bu izdüşümlere dayanır.
-    kenarlar = {gad: hlr(s, *GORUNUS[gad], gizli=P.get("gizli", True))
+    # SADE resim (ekstrüzyon profil): gizli çizgi yok; kesitin göründüğü uç
+    # görünüşlerde kalıbın iç ayrıntısı (radüs, iç duvar, pencere, pah)
+    # ölçülmez - kesit tedarikçinin kalıbıdır. İşleme (delik) ölçüleri kalır.
+    sade = P.get("sade_eksen")
+    uc_gor = set(DELIK_GOR.get(sade, ())) if sade else set()
+    kenarlar = {gad: hlr(s, *GORUNUS[gad], gizli=P.get("gizli", True) and not sade)
                 for gad in gorunusler}
     ham = {gad: _kenar_kutusu(k) for gad, k in kenarlar.items()}
+    kenar_olcu = {gad: k for gad, k in kenarlar.items() if gad not in uc_gor}
     # 3B tasarım seviyeleri: görünüşten bulunan her konum modelde bir
     # karşılığa denk gelmedikçe yazılmaz (bkz. tasarim_seviyeleri).
     try:
@@ -6230,7 +6255,7 @@ def dxf_komponent(s, o, k, yol, P):
     except Exception:
         seviye = [[], [], []]      # ölçülemezse hiçbir konum geçmez
     atlanan = Counter()
-    kplan = (konum_plani(o, gorunusler, ham, h, kenarlar, seviye=seviye,
+    kplan = (konum_plani(o, gorunusler, ham, h, kenar_olcu, seviye=seviye,
                          rapor=atlanan)
              if P.get("konum", True) else {})
     ust, kaydir, gkutu = {}, {}, {}
@@ -6252,7 +6277,7 @@ def dxf_komponent(s, o, k, yol, P):
     if kplan:
         girinti_olculeri(msp, kplan, kaydir, gkutu, h)
     if P.get("capraz", True):
-        pah_notlari(msp, kenarlar, kaydir, gkutu, h)
+        pah_notlari(msp, kenar_olcu, kaydir, gkutu, h)
     gabari_olculeri(msp, gkutu, sinir, h)
     ust, sag = cap_olculeri(msp, o, yer, kaydir, gkutu, h, ust)
     if P.get("kesit"):
@@ -6277,6 +6302,7 @@ def dxf_komponent(s, o, k, yol, P):
         (f"adet: {k['adet']}", 1.1 * h),
         (f"BOY x EN x KALINLIK : {o['boy_mm']} x {o['en_mm']} x {o['kalinlik_mm']} mm", 1.1 * h),
         (f"kutle {o['kutle_kg']} kg   malzeme: {k.get('malzeme_ad', '-')}", 1.1 * h),
+    ] + ([(P["sade_not"], 1.1 * h)] if P.get("sade_not") else []) + [
         # Ölçek ve birim resmin üstünde yazsın: DXF başka bir çizime
         # eklendiğinde ölçek kaymışsa bu satırdan anlaşılır.
         ("olcek 1:1   birim: mm", 1.1 * h),
@@ -7129,6 +7155,22 @@ def malzeme_sor(komp):
     return esl, VARSAYILAN_MALZEME
 
 
+def malzemesi_sorulacak(komp, esl):
+    """Malzemesi SORULMASI gereken komponentler: EKSTRÜZYON profil (çok
+    hücreli / kanallı kesit - çoğu alüminyumdur ama çelik de olabilir) ve
+    malzemesi ne CAD'den (data) ne eşlemeden (dosya / kullanıcı) geliyor.
+    Program burada çelik ya da alüminyum VARSAYMAZ, sorar (kullanıcı
+    kararı)."""
+    out = []
+    for k in komp:
+        if k.get("sinif") != "parca" or (k.get("profil") or {}).get("tur") != "ekstrüzyon":
+            continue
+        _m, kaynak = malzeme_ata(k, esl, VARSAYILAN_MALZEME)
+        if kaynak == "genel":
+            out.append(k)
+    return out
+
+
 def malzeme_ata(k, esl, genel, data_oncelik=True):
     """Bir komponentin malzemesi ve nereden geldiği.
 
@@ -7477,7 +7519,8 @@ def calistir(step, on, kayit, komp, P, asama=(1, 2, 3), esl=None, agac=None,
                     ilerleme(sira, toplam)
                 continue
             try:
-                dxf_komponent(s2, o, sat, os.path.join(dxf_kl, dosya), P)
+                P_, o_ = sade_profil(s2, o, k, P)
+                dxf_komponent(s2, o_, sat, os.path.join(dxf_kl, dosya), P_)
                 IS.cizim_kaydet(on, "dxf", dosya, imza=im, kod=k["kod"],
                                 step_ozet=step_oz)
                 sat["dxf"] = dosya
@@ -7668,6 +7711,19 @@ def main():
     elif a.malzeme_sor or (not esl and not a.yogunluk and sys.stdin.isatty()):
         esl2, genel = malzeme_sor(komp)
         esl.update(esl2)
+    # EKSTRÜZYON profilin malzemesi verilmediyse SORULUR (varsayılmaz)
+    ek = malzemesi_sorulacak(komp, esl) if not a.malzeme and not a.yogunluk else []
+    if ek:
+        print(f"! {len(ek)} ekstrüzyon profilin malzemesi verilmedi: "
+              + ", ".join(k["ad"][:30] for k in ek[:4]))
+        if sys.stdin.isatty():
+            c = input("  malzemesi ne? (aluminyum / celik / baska ad; bos = celik): ").strip()
+            m = malzeme_coz(c) or VARSAYILAN_MALZEME
+            for k in ek:
+                esl[_tr_sade(k["kod"])] = m
+            print(f"  -> {MALZEME[m][0]}")
+        else:
+            print("  terminal yok: çelik sayıldı - --malzeme-dosya ile ya da arayüzden verin")
     elif not esl and not a.yogunluk:
         sab = malzeme_sablonu(komp, os.path.join(on, "malzeme.csv"))
         print(f"! malzeme belirtilmedi -> hepsi '{VARSAYILAN_MALZEME}' "

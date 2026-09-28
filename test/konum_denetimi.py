@@ -571,6 +571,35 @@ def main():
     metin13 = [r["metin"] for yon in ("yatay", "dusey") for r in pl13["UST"][yon] if r["metin"]]
     esit("dizi adımı yuvarlak ve Türkçe", metin13, ["2 x 80"])
 
+    print("\n-- EKSTRÜZYON sade resim: kalıbın iç ayrıntısı yok, işleme deliği var")
+    import pf8_tani as TNx
+    def kt(x, y, z, a, b_, c):
+        return BRepPrimAPI_MakeBox(gp_Pnt(x, y, z), a, b_, c).Shape()
+    ex = BRepAlgoAPI_Cut(kt(0, 0, 0, 100, 80, 400), kt(4, 4, -1, 28, 72, 402)).Shape()
+    ex = BRepAlgoAPI_Cut(ex, kt(36, 4, -1, 28, 72, 402)).Shape()
+    ex = BRepAlgoAPI_Cut(ex, kt(68, 4, -1, 28, 72, 402)).Shape()
+    ex = BRepAlgoAPI_Cut(ex, kt(44, 74, -1, 12, 7, 402)).Shape()
+    ex = BRepAlgoAPI_Cut(ex, kt(40, 76, -1, 20, 2, 402)).Shape()
+    # kalıbın iç radüsü (profil ekseni boyunca) + bir işleme deliği (eksene dik)
+    ex = BRepAlgoAPI_Cut(ex, BRepPrimAPI_MakeCylinder(
+        gp_Ax2(gp_Pnt(50.0, -1.0, 200.0), gp_Dir(0, 1, 0)), 3.0, 6.0).Shape()).Shape()
+    pr = TNx.profil(ex)
+    dogru("deneme kesiti ekstrüzyon", bool(pr) and pr["tur"] == "ekstrüzyon",
+          str(pr and pr.get("ad")))
+    Pd = dict(P, gorunusler=("ON", "UST", "SAG"))
+    s14, o14 = O.komponent_olcu(ex, Pd)
+    P_, o_ = O.sade_profil(s14, o14, {"profil": pr}, Pd)
+    dogru("sade resim: profil ekseni bulundu", bool(P_.get("sade_eksen")), str(P_.get("sade_eksen")))
+    dogru("işleme deliği (Ø6, eksene dik) resimde kalıyor",
+          any(abs(d["cap_mm"] - 6.0) < 0.01 for d in o_["delikler"]), str(o_["delikler"]))
+    dogru("başlıkta kesit notu", "tedarikçi kataloğundan" in P_.get("sade_not", ""))
+    yol14 = os.path.join(kl, "ekstruzyon.dxf")
+    O.dxf_komponent(s14, o_, {"poz": 1, "kod": "EX", "ad": "EX", "adet": 1,
+                              "malzeme_ad": "Aluminyum"}, yol14, P_)
+    d14 = ezdxf.readfile(yol14)
+    gizli14 = sum(1 for e in d14.modelspace() if e.dxf.layer == "GIZLI")
+    dogru("sade resimde gizli çizgi yok", gizli14 == 0, str(gizli14))
+
     print("\n-- eğri siluet: her eğik çizgi kesim değildir")
     import math
     # 20 kenarlı çokgen = aslında bir EĞRİ. Kenarlarının her birine
