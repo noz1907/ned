@@ -1108,7 +1108,9 @@ class Uygulama(ttk.Frame):
             elif ad in neden:
                 self.ac_agac.set(s, "durum",
                                  "açınım yok: " + neden[ad].splitlines()[0])
-        self.v_durum.set(f"açınım: {len(sonuc)} parça üretildi, "
+        n_lz = sum(1 for r in sonuc if r.get("kontur_dis"))
+        self.v_durum.set(f"açınım: {len(sonuc)} büküm resmi (ACINIM/..._acinim.dxf), "
+                         f"{n_lz} lazer kesim (LZR/..._acinim_lzr.dxf), "
                          f"{len(hata)} parça yapılamadı")
         self.lazer_doldur()                # açınımı çıkanlar seçili gelsin
         if hata and not sonuc:

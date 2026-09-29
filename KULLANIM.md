@@ -271,15 +271,16 @@ düğme gizli kalmaz (`test/gui_ekran_denetimi.py`).
 <çıktı klasörü>/
     BOM.csv  BOM.md  BOM_AGAC.csv  BOM_AGAC.md  olculer.*  rapor.md
     DXF/       detay resimleri + 00_MONTAJ.dxf  (paftaları içlerinde)
-    ACINIM/    ..._acinim.dxf + ACINIM.csv
-    LZR/       ..._Lzr.dxf   + LAZER.csv       (lazer kesim; paftaya girmez)
+    ACINIM/    ..._acinim.dxf + ACINIM.csv     (BÜKÜM RESMİ)
+    LZR/       ..._acinim_lzr.dxf / ..._Lzr.dxf + LAZER.csv
+                                               (lazer kesim; paftaya girmez)
     PDF/       basılmış paftalar  ..._A3.pdf
     pi3d_is.json   iş durumu: hangi çizim hangi model ve ayarla, ne zaman
                    üretildi; yapılan işlemler ve süreleri
 ```
 
 Eski sürümlerin her şeyi tek klasöre yazdığı çıktılar da okunur (dosyanın
-türü adından anlaşılır: `_acinim.dxf`, `_Lzr.dxf`).
+türü adından anlaşılır: `_acinim.dxf`, `_acinim_lzr.dxf`, `_Lzr.dxf`).
 
 `ACINIM.csv` ve `LAZER.csv` artık **birleştirilir**: 2 parçanın açınımını
 yeniden üretince tablodaki diğer parçaların satırları silinmez.
@@ -1062,6 +1063,31 @@ sonunu iki çizgi olarak çiziyordu; iki çizgi büküm ekseni sanılıyordu.
 Büküm **yönü** (yukarı / aşağı) resme yazılmaz: yalnız bükümlerin birbirine
 göre yönü bilinir, resmin baktığı yüze göre mutlak yönü güvenilir değil.
 
+**Profil görünüşü (yön).** Büküm resminin sağında parçanın **büküm
+ekseni yönünden bakışı** (profil) çizilir; kanatlar **K1 …** (dış
+ölçüsüyle) ve bükümler **B1 …** açınımdaki numaralarla işaretlidir.
+Hangi kanadın hangi yöne büküldüğü buradan okunur – program yönü
+tahmin etmez, gösterir.
+
+**ABKANT (CNC) tablosu – kanat DIŞ ölçüleri.** CNC abkant (Baysal,
+Delem ünite vb.) büküm çizgisine göre değil **dayamaya** göre büker:
+usta parçanın profilini kanat **dış** ölçüleriyle girer, dayamanın
+yerini tezgâh kendisi hesaplar. Açınım resminde bu yüzden her kanadın
+dış ölçüsü **sanal köşeye** (dış yüzlerin uzantılarının kesiştiği yere)
+kadar verilir: K1, K2 … ve aralarındaki büküm (B1 …), iç açı, iç R.
+
+- Düz kısımlar açınımdaki büküm bölgeleri arasındaki gerçek duvar
+  boylarıdır. Her büküm, iki yanındaki kanada (iç R + t)·tan(büküm/2)
+  kadar dış pay ekler; 90° bükümde bu iç R + t'dir.
+- Bu ölçü **K-faktöründen bağımsızdır**: atölyenin gerçek K'sı farklı
+  olsa da değişmez. Büküm ekseninin açınımdaki yeri ise K'ya bağlıdır.
+- Kenarlar açınımın en dış kenarlarıdır (en geniş yer).
+- Aynı ölçüler `ACINIM.csv / .xlsx` listesinde `kanat_dis_olculeri_mm`
+  sütunundadır.
+- Doğrulama: K0_ON KILIT SACI_IC → 13 – 26 – 53 – 26 – 13; parçanın 3B
+  gabarisi 26 × 53 (omega profil). L sacta (100 + R3 + t2) 105 – 105,
+  K 0,33 / 0,4 / 0,5'te aynı.
+
 **Bükümü kesen pencere tek deliktir.** Pencere ya da kesik büküm
 bölgesine taşıyorsa duvar ve büküm ayrı açılır; aralarında kesilemeyecek
 incelikte (sac kalınlığının dörtte birinden dar, en az 0,2 en çok 0,5 mm)
@@ -1687,10 +1713,19 @@ sayabilir. Resmin üstündeki bir yazı ya da ölçü çizgisi sacın üstüne
 kesilir. Parçanın kimliği **dosya adındadır**:
 
 ```
-P05_01_050_000_01_U-Blech.dxf          detay resmi (ölçülü, paftalı)
-P05_01_050_000_01_U-Blech_acinim.dxf   açınım (büküm çizgileri, tablo)
-P05_01_050_000_01_U-Blech_Lzr.dxf      LAZER: yalnız kontur
+P05_01_050_000_01_U-Blech.dxf              detay resmi (ölçülü, paftalı)
+P05_01_050_000_01_U-Blech_acinim.dxf       BÜKÜM RESMİ (açınım, büküm
+                                           eksenleri, ABKANT tablosu, profil)
+P05_01_050_000_01_U-Blech_acinim_lzr.dxf   LAZER (bükümlü): yalnız kontur
+P07_09_020_000_03_Plaka_Lzr.dxf            LAZER (düz sac): yalnız kontur
 ```
+
+**Kural: açınımı çıkan her parçanın iki dosyası vardır.** Açınım (6.
+adım) çalışınca büküm resmi `ACINIM/..._acinim.dxf` ile birlikte lazer
+kesim dosyası `LZR/..._acinim_lzr.dxf` de **kendiliğinden** yazılır ve
+`LAZER.csv`'ye girer. Lazer dosyasında büküm eksenleri yoktur. Açınımı
+çıkıp da kesim konturu çıkarılamayan parça (yalnız blank ölçüsü)
+`LAZER_yapilamayanlar.txt`'de sebebiyle yazılır.
 
 #### Listede kimler var
 

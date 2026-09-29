@@ -132,6 +132,13 @@ def main():
     dogru("tarama açınımdan hızlı", tara < ac,
           f"tarama {tara:.3f}s, açınım {ac:.3f}s")
 
+    print("\n-- ABKANT (CNC): kanat DIŞ ölçüsü sanal köşeye (K-faktöründen bağımsız)")
+    # L sac: kanat 100 düz + iç R 3 + t 2 -> dış köşeye 105 (her iki kanat)
+    for k in (0.33, 0.4, 0.5):
+        a = M.sac_acilim(bukumlu_sac(), k_faktor=k)
+        kd = [round(v, 2) for v in M.kanat_dis_olculeri(a)]
+        esit(f"L sac kanat dış ölçüleri, K={k}", kd, [105.0, 105.0])
+
     print("\n-- bükümü kesen pencere: açınımda TEK delik (lazerde fazladan kesim yok)")
     # K0_ON KILIT SACI_IC: pencere bükümün içine taşıyor; duvar ve büküm
     # parçası ayrı açılınca aralarında 0,06 mm şerit kalıyor, lazer

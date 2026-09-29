@@ -4889,7 +4889,30 @@ def acilim_kesim(sh, t, k_faktor, hacim=None, en_cok_sapma=0.03):
         [bukumler[bi]["r_ic"] for bi in b_harita],
         [b["aci"] for b in b_harita.values()],
         max((d["z"][1] - d["z"][0] for d in duvarlar), default=0.0))
+    # PROFİL: büküm ekseni yönünden bakış (parça burada zaten eksen Z
+    # olacak şekilde döndürülmüş). Kanat ve büküm etiketleri açınımdaki
+    # sırayla (alt kenardan yukarı) eşlenir: K1 açınımın alt kenarındaki
+    # kanat, B1 ilk büküm. Büküm yönü tahmin edilmez, resimden okunur.
+    profil = None
+    try:
+        hl = hlr(sh, (0.0, 0.0, 1.0), (1.0, 0.0, 0.0), gizli=False)["GORUNEN"]
+        kan = []
+        for wi, (A, B) in harita.items():
+            w = duvarlar[wi]
+            pm = (w["p"][0] + w["p"][1]) / 2.0
+            n, u = w["n"], w["u"]
+            kan.append((A + B * pm, (n[0] * w["d0"] + u[0] * pm, n[1] * w["d0"] + u[1] * pm),
+                        (n[0], n[1])))
+        kan.sort(key=lambda x: x[0])
+        buk = sorted(((min(b["s"], b["s_son"]), tuple(bukumler[bi]["m"]))
+                      for bi, b in b_harita.items()), key=lambda x: x[0])
+        if hl:
+            profil = {"cizgi": hl, "kanat": [(p, n) for _, p, n in kan],
+                      "bukum": [m for _, m in buk]}
+    except Exception:
+        profil = None
     return {"yontem": yon,
+            "profil": profil,
             "kontur_dis": [kay(w) for w in dis],
             "kontur_delik": [kay(w) for w in ic],
             "delik_adedi": len(ic),
@@ -5777,6 +5800,30 @@ def dxf_lazer(kontur_dis, kontur_delik, yol, P=None):
     return yol
 
 
+def kanat_dis_olculeri(r):
+    """ABKANT (CNC) için kanatların DIŞ ölçüsü - sanal köşeye (dış yüzlerin
+    uzantılarının kesiştiği yere) kadar. CNC abkant (Delem vb.) parçanın
+    profilini böyle ister, dayamanın yerini kendisi hesaplar.
+
+    Düz kısımlar açınımdaki büküm bölgeleri ARASIDIR (modelin gerçek duvar
+    boyları; K-faktöründen bağımsız). Her büküm, iki yanındaki kanada dış
+    payını (r_iç + t)·tan(büküm/2) ekler (90° bükümde r_iç + t).
+    Kenarlar açınımın en dış kenarlarıdır (en geniş yer).
+    Döner: [dış ölçü, ...] (kanat sayısı = büküm sayısı + 1) ya da []."""
+    bk = sorted(r.get("bukumler") or [], key=lambda b: b["acinimda_bas_mm"])
+    if not bk:
+        return []
+    t = float(r["kalinlik_mm"])
+    gen = float(r["acinim_genislik_mm"])
+    pay = [(b["r_ic"] + t) * math.tan(math.radians(b["aci_derece"]) / 2.0) for b in bk]
+    sinir = [0.0] + [x for b in bk for x in (b["acinimda_bas_mm"], b["acinimda_son_mm"])] + [gen]
+    out = []
+    for i in range(len(bk) + 1):
+        duz = sinir[2 * i + 1] - sinir[2 * i]
+        out.append(duz + (pay[i - 1] if i > 0 else 0.0) + (pay[i] if i < len(bk) else 0.0))
+    return out
+
+
 def dxf_acilim(r, k, yol, P=None):
     """Açınım resmi: kesim konturu, delikler ve büküm çizgileri.
 
@@ -5853,6 +5900,49 @@ def dxf_acilim(r, k, yol, P=None):
                   f"{XL.tr(b['acinimda_bas_mm'], 2, False)} - "
                   f"{XL.tr(b['acinimda_son_mm'], 2, False)}", x, y, h)
         y -= 1.8 * h
+    kanat = kanat_dis_olculeri(r)
+    if kanat:
+        # ABKANT (CNC): usta profili kanat DIŞ ölçüsüyle girer; dayamayı
+        # tezgâh hesaplar. Büküm ekseni tezgâh için dayanak değildir.
+        bk = sorted(r["bukumler"], key=lambda b: b["acinimda_bas_mm"])
+        y -= 1.2 * h
+        _yaz(msp, "ABKANT (CNC) - kanat DIŞ ölçüleri (sanal köşeye), 3B modelden", x, y, h)
+        y -= 2.0 * h
+        _yaz(msp, "KANAT  DIŞ ÖLÇÜ   BÜKÜM  İÇ AÇI   İÇ R", x, y, h)
+        y -= 2.0 * h
+        for i, kd in enumerate(kanat, 1):
+            b = bk[i - 1] if i <= len(bk) else None
+            _yaz(msp, f"K{i:<5d} {XL.tr(kd, 1, False):>8s}   "
+                      + (f"B{i:<5d} {XL.tr(180.0 - b['aci_derece'], 1, False):>6s}  "
+                         f"{XL.tr(b['r_ic'], 2, False):>6s}" if b else "-"), x, y, h)
+            y -= 1.8 * h
+    pr = r.get("profil")
+    if pr and pr.get("cizgi"):
+        # PROFİL görünüşü: bükümlerin yönü buradan okunur (K / B etiketleri
+        # açınımdaki kanat ve bükümlerle aynı numara).
+        pts = [p for q in pr["cizgi"] for p in q]
+        px0, py0 = min(p[0] for p in pts), min(p[1] for p in pts)
+        px1, py1 = max(p[0] for p in pts), max(p[1] for p in pts)
+        y -= 1.5 * h
+        _yaz(msp, "PROFİL - büküm ekseni yönünden bakış (K: kanat, B: büküm)", x, y, h)
+        y -= 2.5 * h
+        ox, oy = x + 3.0 * h - px0, y - (py1 - py0) - 2.0 * h - py0
+        for q in pr["cizgi"]:
+            msp.add_lwpolyline([(a + ox, b + oy) for a, b in q],
+                               dxfattribs={"layer": "GORUNEN"})
+        cx, cy = (px0 + px1) / 2.0, (py0 + py1) / 2.0
+        kdo = kanat_dis_olculeri(r)
+        for i, (p, n) in enumerate(pr["kanat"], 1):
+            sg = 1.0 if (p[0] - cx) * n[0] + (p[1] - cy) * n[1] >= 0 else -1.0
+            tx = p[0] + sg * n[0] * (t / 2.0 + 1.2 * yazi_h) + ox
+            ty = p[1] + sg * n[1] * (t / 2.0 + 1.2 * yazi_h) + oy
+            et = f"K{i}" + (f" {XL.tr(kdo[i - 1], 1)}" if len(kdo) == len(pr["kanat"]) else "")
+            _yaz(msp, et, tx - 0.36 * len(et) * yazi_h, ty - 0.45 * yazi_h, yazi_h, kat="OLCU")
+        for i, m in enumerate(pr["bukum"], 1):
+            msp.add_circle((m[0] + ox, m[1] + oy), 0.25 * yazi_h, dxfattribs={"layer": "EKSEN"})
+            _yaz(msp, f"B{i}", m[0] + ox + 0.4 * yazi_h, m[1] + oy + 0.2 * yazi_h,
+                 0.8 * yazi_h, kat="EKSEN")
+        y = oy + py0 - 2.0 * h
     if len(r["bukumler"]) <= 4:
         # Sol tarafa, genel genişlik ölçüsünün dışına diz: sağda büküm
         # etiketleri ve çizelge var.
@@ -5949,7 +6039,8 @@ def resim_dosyasi(poz, kod, ad=None, acinim=False, lazer=False):
     except (TypeError, ValueError):
         p = "P00"
     return (f"{p}_{k}" + (f"_{a}" if a else "")
-            + ("_acinim" if acinim else "") + ("_Lzr" if lazer else "")
+            + ("_acinim_lzr" if acinim and lazer else "_acinim" if acinim
+               else "_Lzr" if lazer else "")
             + ".dxf")
 
 
@@ -5987,6 +6078,11 @@ def acilim_yaz(kayit, komp, P, klasor, kodlar=None, k_faktor=K_FAKTOR,
                log=print, ilerleme=None, iptal=None, eksik=False):
     """Seçilen parçaların açınımını hesaplar, DXF ve tablo yazar.
 
+    KURAL: açınımı çıkan her parça için iki dosya olur -
+      ACINIM/..._acinim.dxf   BÜKÜM RESMİ: açınım, büküm eksenleri, büküm
+                              ve ABKANT (kanat dış ölçüsü) tablosu, profil
+      LZR/..._acinim_lzr.dxf  LAZER KESİM: yalnız kesim konturu
+
     klasor: ÇIKTI KÖK KLASÖRÜ; dosyalar onun ACINIM alt klasörüne yazılır,
     ACINIM.csv eskisiyle BİRLEŞTİRİLİR (başka parçaların satırı silinmez).
     eksik: aynı modelden aynı K-faktörüyle üretilmiş açınım atlanır.
@@ -5995,8 +6091,10 @@ def acilim_yaz(kayit, komp, P, klasor, kodlar=None, k_faktor=K_FAKTOR,
     hangi parçanın neden açılamadığını tek tek söyler."""
     kok = klasor
     klasor = IS.alt_klasor(kok, "acinim", olustur=True)
+    lz_klasor = IS.alt_klasor(kok, "lazer", olustur=True)
     step_oz = IS.durum_oku(kok).get("step_ozet", "")
     sonuc, hata, denenen = [], [], set()
+    lz_sonuc, lz_hata, lz_denenen = [], [], set()
     pozlar = poz_numaralari(komp)
     secili = [(pozlar[i], k) for i, k in enumerate(komp)
               if kodlar is None or (k.get("kod") or k.get("ad")) in kodlar]
@@ -6006,8 +6104,11 @@ def acilim_yaz(kayit, komp, P, klasor, kodlar=None, k_faktor=K_FAKTOR,
         ad = k.get("kod") or k.get("ad") or "?"
         if ilerleme:
             ilerleme(i, len(secili), ad)
+        # güncel açınım atlanır - lazer dosyası da varsa (eski sürüm
+        # açınımın yanına lazer yazmıyordu)
         if eksik and IS.onceden_uretilmis(kok, "acinim", ad, step_oz,
-                                          k_faktor=k_faktor):
+                                          k_faktor=k_faktor) \
+                and IS.onceden_uretilmis(kok, "lazer", ad, step_oz, k_faktor=k_faktor):
             log(f"  {ad}: açınım güncel (aynı model, K={k_faktor}) - atlandı")
             continue
         denenen.add(ad)
@@ -6038,6 +6139,24 @@ def acilim_yaz(kayit, komp, P, klasor, kodlar=None, k_faktor=K_FAKTOR,
         log(f"  {os.path.basename(dosya)}  {XL.tr(r['acinim_genislik_mm'])} x "
             f"{XL.tr(r['acinim_boy_mm'])} mm, t={XL.tr(r['kalinlik_mm'])}, "
             f"{r['bukum_sayisi']} büküm")
+        # KURAL: açınım varsa LAZER KESİM dosyası da vardır (xxxx_acinim_lzr):
+        # yalnız kesim konturu, büküm ekseni / yazı / ölçü yok.
+        lz_denenen.add(ad)
+        if r.get("kontur_dis"):
+            try:
+                lz_sonuc.append(_lazer_dosyasi(
+                    kok, lz_klasor, poz or (i + 1), k, r["kontur_dis"],
+                    r.get("kontur_delik") or [], r["kalinlik_mm"], "açınım",
+                    step_oz, k_faktor, log))
+            except Exception as e:
+                lz_hata.append((ad, f"lazer dosyası yazılamadı: {e}"))
+        else:
+            lz_hata.append((ad, "açınım var ama kesim konturu çıkarılamadı "
+                                "(yalnız blank ölçüsü): lazer kesim dosyası yok. "
+                                + (r.get("kontur_notu") or "")[:200]))
+            log(f"  {ad}: lazer kesim dosyası yok - açınımın kesim konturu çıkarılamadı")
+    if lz_denenen:
+        _lazer_tablosu(lz_klasor, lz_sonuc, lz_hata, lz_denenen, log)
     if denenen:
         yeni = []
         for r in sonuc:
@@ -6055,6 +6174,7 @@ def acilim_yaz(kayit, komp, P, klasor, kodlar=None, k_faktor=K_FAKTOR,
                                        f"pay{XL.tr(b['pay_mm'])} eksen@"
                                        f"{XL.tr(round((b['acinimda_bas_mm'] + b['acinimda_son_mm']) / 2, 2))}"
                                        for b in r["bukumler"]),
+                            " - ".join(XL.tr(v, 1, sade=False) for v in kanat_dis_olculeri(r)),
                             r["dxf"]])
         n = IS.csv_birlestir(
             os.path.join(klasor, "ACINIM.csv"),
@@ -6062,7 +6182,8 @@ def acilim_yaz(kayit, komp, P, klasor, kodlar=None, k_faktor=K_FAKTOR,
              "acinim_genislik_mm", "acinim_boy_mm", "bukum_sayisi",
              "yontem", "en_kisa_kanat_mm", "en_kisa_kanat_t",
              "en_kucuk_r_t", "yontem_nedeni", "uyari",
-             "k_faktor", "bukumler", "dxf"], yeni, denenen, klasor)
+             "k_faktor", "bukumler", "kanat_dis_olculeri_mm", "dxf"], yeni, denenen,
+            klasor)
         if sonuc:
             log(f"  ACINIM/ACINIM.csv  ({len(sonuc)} yeni, tabloda {n} parça)")
         h = IS.hata_birlestir(os.path.join(klasor, "ACINIM_yapilamayanlar.txt"),
@@ -6131,21 +6252,36 @@ def lazer_yaz(kayit, komp, klasor, kodlar=None, k_faktor=K_FAKTOR,
             hata.append((ad, f"beklenmeyen hata: {type(e).__name__}: {e}"))
             log(f"  {ad}: hata - {type(e).__name__}: {e}")
             continue
-        dosya = resim_dosyasi(poz or (i + 1), ad, k.get("ad"), lazer=True)
-        IS.eskiyi_kaldir(kok, "lazer", ad, dosya, log)
-        dxf_lazer(dis, ic, os.path.join(klasor, dosya))
-        xs = [q[0] for w in dis for q in w]
-        ys = [q[1] for w in dis for q in w]
-        kayd = {"poz": poz, "kod": ad, "ad": k.get("ad", ""),
-                "adet": k.get("adet", 1), "kalinlik_mm": t,
-                "boy_mm": round(max(ys) - min(ys), 2),
-                "en_mm": round(max(xs) - min(xs), 2),
-                "delik_adedi": len(ic), "kaynak": nere, "dxf": dosya}
-        sonuc.append(kayd)
-        IS.cizim_kaydet(kok, "lazer", ad, dxf=dosya, step_ozet=step_oz,
-                        k_faktor=k_faktor)
-        log(f"  {dosya}  {XL.tr(kayd['en_mm'])} x {XL.tr(kayd['boy_mm'])} mm, "
-            f"t={XL.tr(t)}, {len(ic)} delik  ({nere})")
+        sonuc.append(_lazer_dosyasi(kok, klasor, poz or (i + 1), k, dis, ic, t, nere,
+                                    step_oz, k_faktor, log))
+    _lazer_tablosu(klasor, sonuc, hata, denenen, log)
+    return sonuc, hata
+
+
+def _lazer_dosyasi(kok, klasor, poz, k, dis, ic, t, nere, step_oz, k_faktor, log=print):
+    """Bir parçanın lazer kesim dosyasını yazar ve kaydeder; LAZER tablosu
+    satırını döndürür. Açınımdan gelen kontur '_acinim_lzr.dxf', düz sac
+    '_Lzr.dxf' adını alır. Yalnız kesim konturu: büküm çizgisi, yazı,
+    ölçü YOK."""
+    ad = k.get("kod") or k.get("ad") or "?"
+    dosya = resim_dosyasi(poz, ad, k.get("ad"), acinim=(nere == "açınım"), lazer=True)
+    IS.eskiyi_kaldir(kok, "lazer", ad, dosya, log)
+    dxf_lazer(dis, ic, os.path.join(klasor, dosya))
+    xs = [q[0] for w in dis for q in w]
+    ys = [q[1] for w in dis for q in w]
+    kayd = {"poz": poz, "kod": ad, "ad": k.get("ad", ""),
+            "adet": k.get("adet", 1), "kalinlik_mm": t,
+            "boy_mm": round(max(ys) - min(ys), 2),
+            "en_mm": round(max(xs) - min(xs), 2),
+            "delik_adedi": len(ic), "kaynak": nere, "dxf": dosya}
+    IS.cizim_kaydet(kok, "lazer", ad, dxf=dosya, step_ozet=step_oz, k_faktor=k_faktor)
+    log(f"  LZR/{dosya}  {XL.tr(kayd['en_mm'])} x {XL.tr(kayd['boy_mm'])} mm, "
+        f"t={XL.tr(t)}, {len(ic)} delik  ({nere})")
+    return kayd
+
+
+def _lazer_tablosu(klasor, sonuc, hata, denenen, log=print):
+    """LZR/LAZER.csv (+ .xlsx) ve yapılamayanlar listesi, eskisiyle birleşik."""
     if denenen:
         alan = ("poz", "kod", "ad", "adet", "kalinlik_mm", "en_mm", "boy_mm",
                 "delik_adedi", "kaynak", "dxf")

@@ -86,6 +86,16 @@ BU SÜRÜMDE NE VAR
   ilerleme çubuğu + kalan süre + grup grup günlük, İptal çalışır.
   Komut satırı: --kaynak-resmi.
 
+  AÇINIM = BÜKÜM RESMİ + LAZER: açınımı çıkan her parça için büküm
+  resmi (ACINIM/..._acinim.dxf) ve lazer kesim (LZR/..._acinim_lzr.dxf,
+  yalnız kontur, büküm ekseni yok) birlikte, kendiliğinden. Büküm
+  resmine PROFİL görünüşü (büküm ekseni yönünden; K1.. kanat dış
+  ölçüsüyle, B1.. büküm) - yön resimden okunur.
+
+  ABKANT (CNC) TABLOSU: açınım resminde her kanadın DIŞ ölçüsü sanal
+  köşeye (CNC abkant profili böyle girer, dayamayı kendisi hesaplar);
+  K-faktöründen bağımsız. ACINIM listesinde kanat_dis_olculeri_mm.
+
   AÇINIM / LAZER: bükümü kesen pencere tek delik (duvar ve büküm ayrı
   açılınca aradaki 0,06 mm şerit lazerde boşluğun içinde fazladan kesim
   yapıyordu - K0_ON KILIT SACI_IC ve simetriği). Açınımda her büküm için

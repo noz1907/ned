@@ -150,6 +150,36 @@ def main():
           len(p["birebir"]) + len(p["olcekli"]) + len(p["sigmayan"]) == 1,
           "dosya okunamadı")
 
+    print("\n-- açınım varsa büküm resmi + LAZER (xxxx_acinim_lzr.dxf) kendiliğinden")
+    sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+    from sac_tarama_denetimi import bukumlu_sac
+    import pf7_is as IS
+    sh = bukumlu_sac()
+    kayit = [("L_SAC", sh)]
+    komp = [{"kod": "L_SAC", "ad": "L_SAC", "indeks": [0], "adet": 2, "sinif": "parca"}]
+    with tempfile.TemporaryDirectory() as kok:
+        son, hat = O.acilim_yaz(kayit, komp, {}, kok, log=lambda t: None)
+        ac = os.listdir(IS.alt_klasor(kok, "acinim"))
+        lz = os.listdir(IS.alt_klasor(kok, "lazer"))
+        dogru("büküm resmi ACINIM/..._acinim.dxf", any(a.endswith("_acinim.dxf") for a in ac), ac)
+        lzr = [a for a in lz if a.endswith("_acinim_lzr.dxf")]
+        dogru("lazer LZR/..._acinim_lzr.dxf kendiliğinden", len(lzr) == 1, lz)
+        dogru("LAZER.csv yazıldı", "LAZER.csv" in lz, lz)
+        esit("dosya türü: lazer", IS.dosya_turu(lzr[0]) if lzr else None, "lazer")
+        if lzr:
+            d = ezdxf.readfile(os.path.join(IS.alt_klasor(kok, "lazer"), lzr[0]))
+            turler = {e.dxftype() for e in d.modelspace()}
+            esit("lazerde yalnız kesim konturu (büküm ekseni / yazı yok)", turler,
+                 {"LWPOLYLINE"})
+        acd = ezdxf.readfile(os.path.join(IS.alt_klasor(kok, "acinim"),
+                                          [a for a in ac if a.endswith("_acinim.dxf")][0]))
+        yazi = " ".join(e.dxf.text for e in acd.modelspace() if e.dxftype() == "TEXT")
+        dogru("büküm resminde ABKANT tablosu", "ABKANT (CNC)" in yazi)
+        dogru("büküm resminde PROFİL görünüşü", "PROFİL" in yazi)
+        dogru("profilde kanat dış ölçüsü (K1 105)", "K1 105" in yazi, yazi[-300:])
+        eks = [e for e in acd.modelspace() if e.dxftype() == "LINE" and e.dxf.layer == "EKSEN"]
+        esit("tek büküm için tek büküm ekseni", len(eks), 1)
+
     print("\nSONUC: " + ("TUM DENETIMLER GECTI" if not HATA
                          else f"{len(HATA)} DENETIM KALDI: " + ", ".join(HATA)))
     return 1 if HATA else 0
