@@ -5,21 +5,28 @@ Montaj ağacında içinde dikiş yaprağı olan en yakın düğüm bir KAYNAKLI
 GRUPTUR ("K0 CIVATA LAMASI_2_MONTAJ", "K0 ON PANEL KAYNAK_SAG"). Her grup
 kendi resmini alır:
 
-  * PARÇALAR: dikişe fiziksel olarak DEĞEN katılar (0,2 mm) + aynı
-    düğümdeki kardeş parçalar. Dikişler ayrı "KAYNAKLAR" ağacında dursa da
-    birleştirdikleri parçalar böylece bulunur.
-  * GÖRÜNÜŞLER: ÖN, ÜST, SAĞ + iki izometrik (ön-sağ-üst, arka-sol-üst).
-    Dikiş kenarları kırmızı, kalın çizilir.
+  * PARÇALAR: dikişe fiziksel olarak DEĞEN katılar (0,2 mm; ikinci parça
+    bulunamazsa CAD boşluğu payı 2,5 mm). Dikişin grubu bu parçaların
+    montaj ağacındaki ortak üst düğümüdür.
+  * GENEL GÖRÜNÜŞ: yalnız DÖRT İZOMETRİK - üstten ve alttan, ön-sağ ve
+    ön-sol; sayfada biri üstte biri altta. Dikişler kırmızı. Dikişler
+    yakınlığa göre BÖLGELERE ayrılır; her bölge TEK harf (A..Z), göründüğü
+    izometriklerde daire içinde işaretli.
+  * DETAYLAR: bölge bölge, büyütülmüş; önce İZOMETRİK (dik görünüşte bir
+    sacın iki yüzündeki dikiş aynı çizgiye düşer, içte mi dışta mı
+    anlaşılmaz). Bölge birden çok yönden gösterilirse A1, A2 ...
   * GÖRÜNÜRLÜK ÖLÇÜLÜR: dikiş boyunca 5 noktadan göze doğru ışın (parça
     ağında): ışın bir parçaya çarpıyorsa o noktada dikiş gizlidir. Her dikiş
-    NET göründüğü ve boyunun en uzun göründüğü TEK görünüşte işaretlenir;
-    dik görünüşlerde görünmüyorsa izometrikte.
+    NET göründüğü TEK detayda işaretlenir.
   * SEMBOL (ISO 2553): ok + referans çizgisi + köşe kaynağı üçgeni +
-    "a2" (boğaz) + "25" (boy) + K numarası balonu. Punta: daire sembolü.
-  * TABLO: K no, tip, a, boy, başlangıç / bitiş koordinatı (grubun sınır
-    kutusunun köşesine göre, mm), birleştirdiği pozlar, işaretlendiği
-    görünüş. Görünüş ne kadar kalabalık olursa olsun ölçü ve yer buradan
-    KESİN okunur.
+    "a2" (boğaz) + "25" (boy) + K numarası balonu. Kenardan dikiş başına
+    konum ölçüsü; izometrikte eksen boyunca, gerçek değer.
+  * KAYNAK LİSTESİ: K no, tip, a, z, boy, kenardan, başlangıç / bitiş
+    koordinatı (grubun sınır kutusunun köşesine göre, mm), birleştirdiği
+    pozlar, detay. Resim ne kadar kalabalık olursa olsun ölçü ve yer
+    buradan KESİN okunur.
+  * ÖLÇEK serbesttir (1:13 gibi): görünüş sayfayı doldurur, ölçüler
+    gerçek değerle yazılır.
 
 Kaynak YÖNTEMİ (gazaltı, TIG) geometriden anlaşılmaz; yazılmaz.
 """
@@ -33,17 +40,19 @@ import pf8_tani as TN
 import pf9_excel as XL
 
 DEGME_TOL = 0.2            # mm: dikişe bu kadar yakın katı onun parçasıdır
+BOSLUK_TOL = 2.5           # mm: ikinci parça bulunamazsa CAD boşluğu payı
 GORUNUR_ORAN = 0.6         # dikiş noktalarının bu kadarı görünüyorsa "net"
 # izometrik yönler: göz yönü; X ekseni yatay (-b, a, 0) -> Z hep yukarı
 ISO_YON = {"ISO1": (1.0, -1.0, 1.0), "ISO2": (-1.0, 1.0, 1.0),
            "ISO3": (-1.0, -1.0, 1.0), "ISO4": (1.0, 1.0, 1.0),
-           "ISO5": (1.0, -1.0, -1.0), "ISO6": (-1.0, 1.0, -1.0)}
+           "ISO5": (1.0, -1.0, -1.0), "ISO6": (-1.0, 1.0, -1.0),
+           "ISO7": (-1.0, -1.0, -1.0), "ISO8": (1.0, 1.0, -1.0)}
 ISO_GOR = {k: (g, (-g[1], g[0], 0.0)) for k, g in ISO_YON.items()}
 GOR_AD = {"ON": "ÖN", "UST": "ÜST", "SAG": "SAĞ", "ARKA": "ARKA", "SOL": "SOL",
           "ALT": "ALT", "ISO1": "İZOMETRİK ÖN-SAĞ", "ISO2": "İZOMETRİK ARKA-SOL",
           "ISO3": "İZOMETRİK ÖN-SOL", "ISO4": "İZOMETRİK ARKA-SAĞ",
-          "ISO5": "İZOMETRİK ALTTAN ÖN-SAĞ", "ISO6": "İZOMETRİK ALTTAN ARKA-SOL"}
-SIRA = ("ON", "UST", "SAG", "ISO1", "ISO2")
+          "ISO5": "İZOMETRİK ALTTAN ÖN-SAĞ", "ISO6": "İZOMETRİK ALTTAN ARKA-SOL",
+          "ISO7": "İZOMETRİK ALTTAN ÖN-SOL", "ISO8": "İZOMETRİK ALTTAN ARKA-SAĞ"}
 
 
 def _birim(v):
@@ -126,6 +135,8 @@ def kaynakli_gruplar(kayit, komp, agac=None, log=print, ilerleme=None, iptal=Non
         if ilerleme:
             ilerleme(n, len(dikisler))
         dg = degen_katilar(kayit[j][1], parca_aday, kayit, kutular, sinif)
+        if len(dg) < 2:
+            dg = dg + ikinci_parca(kayit[j][1], parca_aday, kayit, kutular, dg)
         degen[j] = dg
         yollar = [_yol(yaprak[p], ust) for p in dg if p in yaprak]
         if yollar:
@@ -252,6 +263,32 @@ def degen_katilar(sh, adaylar, kayit, kutular, siniflayici=None):
         except Exception:
             continue
     return out
+
+
+def ikinci_parca(sh, adaylar, kayit, kutular, degen):
+    """Kaynak İKİ parçayı birleştirir. CAD'de dikiş gövdesi parçaya her
+    zaman tam oturtulmaz: kasa modelinde yakıt dolum braketini traverse
+    bağlayan üç dikişten biri iki parçaya değiyor, biri traversten 1,1 mm,
+    biri braketten 2 mm uzakta çizilmiş. DEGME_TOL (0,2) ile bu dikişler
+    tek parçaya (ya da hiçbir parçaya) bağlanıyor, üç ayrı gruba
+    dağılıyordu ve konumu "?" çıkıyordu.
+
+    Değen parça ikiden azsa eksik olan, BOSLUK_TOL içindeki EN YAKIN
+    parça(lar)dan tamamlanır (kesin uzaklık). Döner: eklenecek katılar."""
+    from OCP.BRepExtrema import BRepExtrema_DistShapeShape
+    kb = TN._kutu(sh)
+    aday = []
+    for j in adaylar:
+        if j in degen or not _kutu_yakin(kb, kutular[j], BOSLUK_TOL):
+            continue
+        try:
+            d = BRepExtrema_DistShapeShape(sh, kayit[j][1])
+            if d.IsDone() and d.Value() <= BOSLUK_TOL:
+                aday.append((d.Value(), j))
+        except Exception:
+            continue
+    aday.sort()
+    return [j for _v, j in aday[:2 - len(degen)]]
 
 
 # ------------------------------------------------------------ konum
@@ -439,8 +476,12 @@ def _konum_olcusu(msp, R, d, h):
     k = d.get("konum")
     if not k or not k.get("uc") or not k.get("gorunur", True):
         return                             # değer listede kalır
-    if abs(sum(x * y for x, y in zip(d["yon"], R.goz))) > 0.25:
-        return                             # eksen görünüşe eğik: boy kısalır
+    c = abs(sum(x * y for x, y in zip(d["yon"], R.goz)))
+    # Dik görünüşte eğik eksen boyu kısaltır. İZOMETRİKTE ölçü eksenin
+    # izdüşümü boyunca çizilir, üstünde GERÇEK değer yazar (ISO 128-30
+    # aksonometrik ölçülendirme); yalnız bakışa neredeyse dik eksen olmaz.
+    if c > (0.9 if R.gad in ISO_GOR else 0.25):
+        return
     if R.kirpik:                           # detay: ölçünün ucu pencerede olmalı
         x0, y0, x1, y1 = R.kutu
         for p in (k["uc"], k["bas"]):
@@ -588,16 +629,15 @@ def gorunurluk(d, isin, goz, n=5):
 
 # ------------------------------------------------------------ resim
 YONLER = ("ON", "UST", "SAG", "ARKA", "SOL", "ALT", "ISO1", "ISO2", "ISO3", "ISO4",
-          "ISO5", "ISO6")
+          "ISO5", "ISO6", "ISO7", "ISO8")
+# GENEL GÖRÜNÜŞ: bölgeleri tanıtmak için dört izometrik yeter (kullanıcı:
+# "izometrik üst sağ-sol, alt sağ-sol yeterli, daha fazla görüntüye gerek
+# yok"). Dik görünüşler genel sayfada yok; kaynak bilgisi detaylarda.
+GENEL = ("ISO1", "ISO3", "ISO5", "ISO7")
 ANA = ("ON", "UST", "SAG", "ISO1")
-# detay çerçevesinin gösterildiği ana görünüş
-CERCEVE_GOR = {"ON": "ON", "ARKA": "ON", "UST": "UST", "ALT": "UST", "SAG": "SAG",
-               "SOL": "SAG", "ISO1": "ISO1", "ISO2": "ISO1", "ISO3": "ISO1",
-               "ISO4": "ISO1", "ISO5": "ISO1", "ISO6": "ISO1"}
-DETAYSIZ_EN_COK = 8       # bu kadar dikişe kadar etiketler ana görünüşlerde
 DETAY_EN_COK = 8          # bir detay görünüşünde en çok dikiş
 TABLO_BAS = ("K", "tip", "a", "z", "boy", "kenardan", "başlangıç (x; y; z)",
-             "bitiş (x; y; z)", "birleştirdiği", "görünüş")
+             "bitiş (x; y; z)", "birleştirdiği", "detay / görünüş")
 
 
 def _gorunus(O, gad):
@@ -681,21 +721,58 @@ def _bilesik(katilar):
     return c
 
 
-def _bolgele(dikisler, cap):
-    """Dikişleri en çok DETAY_EN_COK'lu, çapı ~cap olan yakın kümelere
-    ayırır (açgözlü: en uçtaki dikişten başla, en yakınları ekle)."""
-    kalan = sorted(dikisler, key=lambda d: (d["orta"][0], d["orta"][1], d["orta"][2]))
-    out = []
-    while kalan:
-        tohum = kalan.pop(0)
-        grp = [tohum]
-        kalan.sort(key=lambda d: math.dist(d["orta"], tohum["orta"]))
-        while kalan and len(grp) < DETAY_EN_COK:
-            d = kalan[0]
-            if max(math.dist(d["orta"], g["orta"]) for g in grp) > cap:
-                break
-            grp.append(kalan.pop(0))
-        out.append(grp)
+HARFLER = "ABCDEFGHIJKLMNOPRSTUVYZ"   # bölge adları (Q, W, X yok: Türkçede yok)
+
+
+def genel_gorunus(O, kutu3):
+    """Bölgelerin kümelendiği düzlem: grubun en GENİŞ göründüğü dik görünüş
+    (izdüşüm alanı en büyük) - şasede ÜST, dik duran duvarda ÖN. Bu
+    düzlemde yakın kaynaklar aynı bölgeye girer; bölge harfleri de bu
+    düzlemde soldan sağa, yukarıdan aşağı sıralanır."""
+    en = None
+    for gad in ("UST", "ON", "SAG"):
+        goz, xr = _gorunus(O, gad)
+        pts = [_izdusum((a, b, c), goz, xr) for a in (kutu3[0], kutu3[3])
+               for b in (kutu3[1], kutu3[4]) for c in (kutu3[2], kutu3[5])]
+        alan = ((max(p[0] for p in pts) - min(p[0] for p in pts))
+                * (max(p[1] for p in pts) - min(p[1] for p in pts)))
+        if en is None or alan > en[0] * 1.05:
+            en = (alan, gad)
+    return en[1]
+
+
+def bolgeler(dikisler, goz, xr, L):
+    """Kaynakları genel_gorunus düzleminde yakınlığa göre kümeler; küme
+    sayısı harf sayısını (A..Z) aşmayana kadar bölge büyütülür. Bölgeler
+    planda soldan sağa, yukarıdan aşağı sıralı döner (A sol üstte)."""
+    for d in dikisler:
+        q = _izdusum(d["orta"], goz, xr)
+        d["_q"] = (q[0], q[1], 0.0)
+    en_cok = max(DETAY_EN_COK, math.ceil(len(dikisler) / (len(HARFLER) - 2)))
+    cap = min(max(L / 6.0, 80.0), 300.0)
+    while True:
+        kalan = sorted(dikisler, key=lambda d: (d["_q"][0], -d["_q"][1]))
+        out = []
+        while kalan:
+            tohum = kalan.pop(0)
+            grp = [tohum]
+            kalan.sort(key=lambda d: math.dist(d["_q"], tohum["_q"]))
+            while kalan and len(grp) < en_cok:
+                d = kalan[0]
+                if max(math.dist(d["_q"], g["_q"]) for g in grp) > cap:
+                    break
+                grp.append(kalan.pop(0))
+            out.append(grp)
+        if len(out) <= len(HARFLER) or cap > 4 * L:
+            break
+        cap *= 1.25
+        en_cok += 1
+    # okuma sırası: planda yukarıdan aşağı satırlar, satırda soldan sağa
+    def mrk(g):
+        return (sum(d["_q"][0] for d in g) / len(g), sum(d["_q"][1] for d in g) / len(g))
+    ys = sorted(mrk(g)[1] for g in out)
+    bant = max(cap, (ys[-1] - ys[0]) / 4.0 if ys else 1.0)
+    out.sort(key=lambda g: (-round(mrk(g)[1] / bant), mrk(g)[0]))
     return out
 
 
@@ -881,7 +958,6 @@ def kaynak_resmi(O, kayit, komp, grup, satirlar, yol, P=None, log=print,
     datum = gk[:3]
     L = max(gk[3] - gk[0], gk[4] - gk[1], gk[5] - gk[2], 1.0)
     ag = Y._Ag(_bilesik(parca_sh)) if parca_sh else None
-    detayli = len(dikisler) > DETAYSIZ_EN_COK
 
     def yon_sec(ds, isin, adaylar):
         """ds için en iyi yön: (görünen sayısı, ana görünüş, dik görünüş,
@@ -895,7 +971,10 @@ def kaynak_resmi(O, kayit, komp, grup, satirlar, yol, P=None, log=print,
                 if oran >= GORUNUR_ORAN:
                     gor += 1
                     boy += math.dist(_izdusum(d["p0"], goz, xr), _izdusum(d["p1"], goz, xr))
-            puan = (gor, gad in ANA, gad not in ISO_GOR, boy)
+            # İZOMETRİK ÖNCE: dik görünüşte bir sacın iki yüzündeki ya da
+            # arka arkaya duran kaynaklar aynı çizgiye düşer, okunmaz
+            # (kullanıcı: "üst üste kaynak çizgisi anlaşılmaz").
+            puan = (gor > 0 and gad in ISO_GOR, gor, gad in ANA, boy)
             if en is None or puan > en[0]:
                 en = (puan, gad)
         return en[1]
@@ -934,38 +1013,37 @@ def kaynak_resmi(O, kayit, komp, grup, satirlar, yol, P=None, log=print,
 
     isin_tum = _Isin(ag) if ag is not None else None
     # ---- ana görünüşler
-    ana = list(ANA)
+    ana = list(GENEL)
     # ---- etiket planı
     detaylar = []                          # [(harf, yön, [dikiş], pencere3B)]
-    if not detayli:
-        for gad, _ in ata(dikisler, isin_tum):
-            if gad not in ana:
-                ana.append(gad)
-        for d in dikisler:
-            d["_isin"] = isin_tum
-    else:
-        cap = min(max(L / 6.0, 80.0), 300.0)
-        harf = iter("ABCDEFGHJKLMNPRSTUVYZ" + "".join(f"{a}{b}" for a in "ABCDEFGH"
-                                                        for b in "ABCDEFGHJKLMNPRSTUVYZ"))
-        for bolge in _bolgele(dikisler, cap):
-            kb = TN._kutu(_bilesik([d["sh"] for d in bolge]))
-            pay = max(15.0, 0.25 * max(kb[3] - kb[0], kb[4] - kb[1], kb[5] - kb[2]))
-            k3 = (kb[0] - pay, kb[1] - pay, kb[2] - pay, kb[3] + pay, kb[4] + pay, kb[5] + pay)
-            yakin = [j for j in parcalar if _kutu_yakin(TN._kutu(kayit[j][1]), k3, 0.0)]
-            if ag is not None:
-                # detayda yalnız bölgeye giren parçalar çizilir; görünürlük
-                # de onlarla ölçülür (önde duran uzak parça detayda yok)
-                sec = ((ag.xmax >= k3[0]) & (ag.xmin <= k3[3]) &
-                       (ag.ymax >= k3[1]) & (ag.ymin <= k3[4]) &
-                       (ag.zmax >= k3[2]) & (ag.zmin <= k3[5]))
-                isin = _Isin(Y._Ag(ucg=ag.u[sec])) if sec.any() else None
-            else:
-                isin = None
-            for d in bolge:
-                d["_isin"] = isin
-            for gad, bu in ata(bolge, isin):
-                detaylar.append({"harf": next(harf), "gad": gad, "dikis": bu, "k3": k3,
-                                 "parca": yakin})
+    bolge_l = []
+    plan_gad = genel_gorunus(O, gk)
+    goz_p, xr_p = _gorunus(O, plan_gad)
+    adlar = iter(list(HARFLER) + [f"{a}{b}" for a in HARFLER for b in HARFLER])
+    for bolge in bolgeler(dikisler, goz_p, xr_p, L):
+        harf = next(adlar)
+        kb = TN._kutu(_bilesik([d["sh"] for d in bolge]))
+        pay = max(15.0, 0.25 * max(kb[3] - kb[0], kb[4] - kb[1], kb[5] - kb[2]))
+        k3 = (kb[0] - pay, kb[1] - pay, kb[2] - pay, kb[3] + pay, kb[4] + pay, kb[5] + pay)
+        yakin = [j for j in parcalar if _kutu_yakin(TN._kutu(kayit[j][1]), k3, 0.0)]
+        if ag is not None:
+            # detayda yalnız bölgeye giren parçalar çizilir; görünürlük
+            # de onlarla ölçülür (önde duran uzak parça detayda yok)
+            sec = ((ag.xmax >= k3[0]) & (ag.xmin <= k3[3]) &
+                   (ag.ymax >= k3[1]) & (ag.ymin <= k3[4]) &
+                   (ag.zmax >= k3[2]) & (ag.zmin <= k3[5]))
+            isin = _Isin(Y._Ag(ucg=ag.u[sec])) if sec.any() else None
+        else:
+            isin = None
+        for d in bolge:
+            d["_isin"] = isin
+            d["bolge"] = harf
+        yonler_ = ata(bolge, isin)
+        bolge_l.append({"harf": harf, "k3": k3, "dikis": bolge})
+        for m, (gad, bu) in enumerate(yonler_, 1):
+            detaylar.append({"harf": harf if len(yonler_) == 1 else f"{harf}{m}",
+                             "bolge": harf, "gad": gad, "dikis": bu, "k3": k3,
+                             "parca": yakin})
     # numaralar: detay / görünüş sırasına, görünüşte yukarıdan aşağı
     sira = []
     if detaylar:
@@ -1016,7 +1094,7 @@ def kaynak_resmi(O, kayit, komp, grup, satirlar, yol, P=None, log=print,
         z = o["a_mm"] * math.sqrt(2) if o.get("a_mm") else None
         yer = (f"DETAY {d['detay']}" if d.get("detay") else _ad(d["gorunus"])) \
             + ("" if d["gorunur"] else " (gizli)")
-        tab.append((d["no"], (o.get("tip") or "-")[:34],
+        tab.append((d["no"], (o.get("tip") or "-").replace("dikiş", "kaynak")[:34],
                     str(XL.tam(o["a_mm"])) if o.get("a_mm") else "-",
                     str(XL.tam(z)) if z else "-",
                     XL.tr(XL.tam(o["boy_mm"]), 0) if o.get("boy_mm") else "-",
@@ -1038,7 +1116,17 @@ def kaynak_resmi(O, kayit, komp, grup, satirlar, yol, P=None, log=print,
     toplam_boy = sum(d["olcu"].get("boy_mm") or 0 for d in dikisler)
     bilgi = {"ad": grup["ad"], "adet": grup["adet"], "dikis": len(dikisler),
              "boy": toplam_boy}
-    sayfalar = _sayfalar(O, bilgi, tab, ana_r, dikisler, detaylar, det_r, detayli)
+    # bölge, dikişlerinin en az biri NET göründüğü genel görünüşlerde
+    # işaretlenir; hiçbirinde görünmüyorsa en çok göründüğü birinde
+    for b in bolge_l:
+        say = {}
+        for gad in GENEL:
+            goz, _ = _gorunus(O, gad)
+            say[gad] = sum(1 for d in b["dikis"] if isin_tum is not None
+                           and gorunurluk(d, isin_tum, goz)[0] >= GORUNUR_ORAN)
+        b["gorunen"] = {g for g, n in say.items() if n} or {max(say, key=say.get)}
+    bilgi["genel"] = (bolge_l, ana_r)
+    sayfalar = _sayfalar(O, bilgi, tab, detaylar, det_r)
     adim(0.9)
     pdf_yaz(sayfalar, yol)
     for d in dikisler:
@@ -1057,15 +1145,22 @@ UCTAN_PAY = 2.0             # dikiş uca bundan yakınsa "uçtan başlar" (0)
 KISA_TABLO = 10             # bu kadar dikişe kadar tablo genel görünüş sayfasında
 ETIKET_PAY = 50.0           # görünüşün iki yanında etiket sütunu
 # ISO 5455 ölçekleri (kâğıt / gerçek)
-OLCEKLER = (1 / 500, 1 / 200, 1 / 100, 1 / 50, 1 / 20, 1 / 10, 1 / 5, 1 / 2, 1.0,
-            2.0, 5.0, 10.0, 20.0, 50.0)
 KATMAN_RENK = {"GORUNEN": 7, "KAYNAK": 1, "OLCU": 5, "YAZI": 7, "CERCEVE": 7,
-               "DETAY": 6, "EKSEN": 6}
+               "DETAY": 6, "EKSEN": 6, "BOLGE": 6}
 
 
 def olcek_sec(ideal):
-    """ideal'den büyük olmayan en büyük standart ölçek."""
-    return max([v for v in OLCEKLER if v <= ideal * 1.0001] or [OLCEKLER[0]])
+    """ideal'den büyük olmayan en büyük TAM SAYILI ölçek (1:n ya da n:1).
+
+    Kaynak resminde ölçek standart olmak zorunda değil (kullanıcı: "kaynak
+    resimlerinde ölçek çok önemli değil; pozisyon, uzunluk ve kaynak
+    bilgisi önemli"). Standart ölçeğe (1:10 / 1:20) yuvarlamak görünüşü
+    sayfanın yarısına küçültüyordu; 1:13 sayfayı doldurur. Ölçüler zaten
+    gerçek değerle yazılır."""
+    ideal = max(ideal, 1e-4)
+    if ideal >= 1.0:
+        return float(min(10, math.floor(ideal * 1.0001)))
+    return 1.0 / math.ceil(1.0 / ideal - 1e-6)
 
 
 def olcek_yazisi(v):
@@ -1101,7 +1196,7 @@ def _antet(msp, bilgi, no, toplam):
         msp.add_line((x, KENAR), (x, y1), dxfattribs=kat)
     _yaz(msp, "KAYNAK RESMİ", KENAR + 3, KENAR + 10.5, 4.0)
     _yaz(msp, bilgi["ad"][:95], KENAR + 3, KENAR + 3.5, YH)
-    _yaz(msp, f"adet {bilgi['adet']}   -   {bilgi['dikis']} dikiş, toplam boy "
+    _yaz(msp, f"adet {bilgi['adet']}   -   {bilgi['dikis']} kaynak, toplam boy "
               f"{XL.tr(XL.tam(bilgi['boy']), 0)} mm", KENAR + 253, KENAR + 10.5, YH)
     _yaz(msp, "a: boğaz, z: kenar boyu (z = a·√2); ölçüler mm", KENAR + 253, KENAR + 3.5,
          YH)
@@ -1123,6 +1218,8 @@ def _hucreler(n, y_ust):
     W = KAGIT[0]
     x0, x1 = KENAR + 5, W - KENAR - 5
     y0 = KENAR + ANTET_Y + 5
+    if n == 1:                             # tek görünüş: bütün sayfa
+        return [(x0, y0, x1, y_ust)]
     satir = max(1, (n + 1) // 2)
     hh = (y_ust - y0) / satir
     ww = (x1 - x0) / 2
@@ -1142,53 +1239,20 @@ def _hucreye_koy(msp, R, hucre, etiketli, baslik):
     _yaz(msp, baslik, bx, R.p(R.kutu[2:])[1] + 3.0, 3.0)
 
 
-def _sayfalar(O, bilgi, tab, ana_r, dikisler, detaylar, det_r, detayli):
-    """Sayfa listesi (her biri ezdxf belgesi, kâğıt mm)."""
+def _sayfalar(O, bilgi, tab, detaylar, det_r):
+    """Sayfa listesi (her biri ezdxf belgesi, kâğıt mm): genel görünüş
+    (dört izometrik, bölge harfleri), kaynak listesi, bölge detayları."""
     sayfalar = []
     W, H = KAGIT
     ust = H - KENAR - 5
-    kisa = not detayli and len(tab) <= KISA_TABLO
-    # 1. genel görünüş(ler); kısa tablo ilk sayfanın üstünde
-    for i0 in range(0, len(ana_r), 4):
-        grp = ana_r[i0:i0 + 4]
-        doc = _yeni_sayfa(O)
-        msp = doc.modelspace()
-        y_h = ust - 8
-        if kisa and i0 == 0:
-            _, th = _tablo_ciz(msp, [TABLO_BAS] + list(tab), KENAR + 5, ust - 9, YH)
-            y_h = ust - 9 - th - 4
-        hucre = _hucreler(len(grp), y_h)
-        _yaz(msp, "GENEL GÖRÜNÜŞ" + ("" if detayli else "  -  dikiş sembolleri ve numaraları")
-             + ("  -  harfli çerçeveler detay sayfalarındadır" if detayli else ""),
-             KENAR + 5, ust - 4, 3.5)
-        pay = 0.0 if detayli else ETIKET_PAY
-        ideal = min(min((c[2] - c[0] - 2 * pay - 6) / max(R.boyut()[0], 1e-6),
-                        (c[3] - c[1] - 14) / max(R.boyut()[1], 1e-6))
-                    for R, c in zip(grp, hucre))
-        s = olcek_sec(ideal)
-        for R, c in zip(grp, hucre):
-            R.olcek = s
-            _hucreye_koy(msp, R, c, not detayli, f"{_ad(R.gad)}   ({olcek_yazisi(s)})")
-            if not detayli:
-                _etiketle(msp, R, [d for d in dikisler if d["gorunus"] == R.gad], YH)
-            else:
-                for dt in detaylar:
-                    if CERCEVE_GOR.get(dt["gad"]) != R.gad:
-                        continue
-                    k3 = dt["k3"]
-                    pts = [R.p3((a, b, c_)) for a in (k3[0], k3[3]) for b in (k3[1], k3[4])
-                           for c_ in (k3[2], k3[5])]
-                    ax0, ay0 = min(p[0] for p in pts), min(p[1] for p in pts)
-                    ax1, ay1 = max(p[0] for p in pts), max(p[1] for p in pts)
-                    msp.add_lwpolyline([(ax0, ay0), (ax1, ay0), (ax1, ay1), (ax0, ay1)],
-                                       close=True, dxfattribs={"layer": "DETAY"})
-                    _yaz(msp, dt["harf"], ax1 + 0.5, ay1 + 0.5, YH, kat="DETAY")
-        sayfalar.append(doc)
+    # kısa liste, az bölgeli grupta genel görünüş sayfasının üstünde
+    kisa = len(tab) <= KISA_TABLO and len(bilgi["genel"][0]) <= 4
+    sayfalar += _genel_sayfalari(O, bilgi, tab if kisa else None)
     # 2. dikiş tablosu
     for parca in ([] if kisa else _tablo_sayfalari(tab)):
         doc = _yeni_sayfa(O)
         msp = doc.modelspace()
-        _yaz(msp, "DİKİŞ LİSTESİ  -  koordinatlar grubun sınır kutusunun en küçük "
+        _yaz(msp, "KAYNAK LİSTESİ  -  koordinatlar grubun sınır kutusunun en küçük "
                   "köşesine göre (x; y; z), mm", KENAR + 5, ust - 4, 3.5)
         _tablo_ciz(msp, [TABLO_BAS] + list(parca), KENAR + 5, ust - 9, YH)
         sayfalar.append(doc)
@@ -1203,7 +1267,8 @@ def _sayfalar(O, bilgi, tab, ana_r, dikisler, detaylar, det_r, detayli):
             R.olcek = olcek_sec(min((c[2] - c[0] - 2 * ETIKET_PAY - 6) / w1,
                                     (c[3] - c[1] - 14) / h1))
             _hucreye_koy(msp, R, c, True,
-                         f"DETAY {dt['harf']}   ({_ad(dt['gad'])}, {olcek_yazisi(R.olcek)})")
+                         f"DETAY {dt['harf']}   -   BÖLGE {dt['bolge']}   "
+                         f"({_ad(dt['gad'])}, {olcek_yazisi(R.olcek)})")
             x0, y0 = R.p(R.kutu[:2])
             x1, y1 = R.p(R.kutu[2:])
             msp.add_lwpolyline([(x0, y0), (x1, y0), (x1, y1), (x0, y1)], close=True,
@@ -1213,6 +1278,78 @@ def _sayfalar(O, bilgi, tab, ana_r, dikisler, detaylar, det_r, detayli):
     for i, doc in enumerate(sayfalar, 1):
         _antet(doc.modelspace(), bilgi, i, len(sayfalar))
     return sayfalar
+
+
+def _cakisik(k, dolu, pay=0.8):
+    return any(not (k[2] + pay < b[0] or b[2] + pay < k[0] or k[3] + pay < b[1]
+                    or b[3] + pay < k[1]) for b in dolu)
+
+
+def _genel_sayfalari(O, bilgi, tab=None):
+    """GENEL GÖRÜNÜŞ: dört izometrik (üstten ön-sağ, ön-sol; alttan ön-sağ,
+    ön-sol). Her bölge, göründüğü görünüşlerde daire içinde TEK harfle,
+    bölgenin ortasına kısa bir çizgiyle bağlı. Az bölgeli grupta dördü
+    tek sayfada (tablo da üstte); çok bölgelide her biri ayrı sayfada,
+    büyük."""
+    bolge_l, ana_r = bilgi["genel"]
+    W, H = KAGIT
+    ust = H - KENAR - 5
+    tek_sayfa = len(bolge_l) <= 6
+    out = []
+    # çok bölgelide sayfa başına İKİ görünüş, biri üstte biri altta
+    # (üstten + alttan aynı taraf): ISO1+ISO5 sağ, ISO3+ISO7 sol
+    gruplar = [ana_r] if tek_sayfa else [[ana_r[0], ana_r[2]], [ana_r[1], ana_r[3]]]
+    for grp in gruplar:
+        doc = _yeni_sayfa(O)
+        msp = doc.modelspace()
+        y_h = ust - 8
+        if tab is not None and not out:
+            _, th = _tablo_ciz(msp, [TABLO_BAS] + list(tab), KENAR + 5, ust - 9, YH)
+            y_h = ust - 9 - th - 4
+        _yaz(msp, "GENEL GÖRÜNÜŞ  -  bölgeler (harf); her bölgenin kaynakları DETAY "
+                  "sayfalarında (A, B1, B2 ...)", KENAR + 5, ust - 4, 3.5)
+        if tek_sayfa:
+            hucre = _hucreler(len(grp), y_h)
+        else:
+            x0, x1, y0 = KENAR + 5, W - KENAR - 5, KENAR + ANTET_Y + 5
+            hh = (y_h - y0) / 2
+            hucre = [(x0, y_h - hh, x1, y_h), (x0, y0, x1, y_h - hh)]
+        s_ = olcek_sec(min(min((c[2] - c[0] - 16) / max(R.kutu[2] - R.kutu[0], 1e-6),
+                               (c[3] - c[1] - 16) / max(R.kutu[3] - R.kutu[1], 1e-6))
+                           for R, c in zip(grp, hucre)))
+        dolu = []
+        r = 3.0
+        for R, c in zip(grp, hucre):
+            R.olcek = s_
+            _hucreye_koy(msp, R, c, False, f"{_ad(R.gad)}   ({olcek_yazisi(s_)})")
+            for b in bolge_l:
+                if R.gad not in b["gorunen"]:
+                    continue
+                pts = [R.p3(d["orta"]) for d in b["dikis"]]
+                cx = sum(p[0] for p in pts) / len(pts)
+                cy = sum(p[1] for p in pts) / len(pts)
+                for dx, dy in ((0, 0), (0, 7), (0, -7), (7, 0), (-7, 0), (7, 7), (-7, -7),
+                               (7, -7), (-7, 7), (0, 14), (0, -14), (14, 0), (-14, 0),
+                               (14, 14), (-14, -14), (14, -14), (-14, 14)):
+                    kk = (cx + dx - r, cy + dy - r, cx + dx + r, cy + dy + r)
+                    if not _cakisik(kk, dolu, 0.6):
+                        break
+                dolu.append(kk)
+                mx, my = cx + dx, cy + dy
+                if (dx, dy) != (0, 0):
+                    n = math.hypot(dx, dy)
+                    msp.add_line((cx, cy), (mx - dx / n * r, my - dy / n * r),
+                                 dxfattribs={"layer": "BOLGE"})
+                msp.add_circle((mx, my), r, dxfattribs={"layer": "BOLGE"})
+                e = _yaz(msp, b["harf"], mx, my, 3.2 if len(b["harf"]) == 1 else 2.3,
+                         kat="BOLGE")
+                try:
+                    from ezdxf.enums import TextEntityAlignment
+                    e.set_placement((mx, my), align=TextEntityAlignment.MIDDLE_CENTER)
+                except Exception:
+                    pass
+        out.append(doc)
+    return out
 
 
 def pdf_yaz(sayfalar, yol):
@@ -1279,7 +1416,7 @@ def kaynak_resimleri(on, kayit, komp, agac, satirlar, log=print, iptal=None,
     def bildir(y):
         if ilerleme:
             ilerleme(int(min(y, toplam)), toplam)
-    log(f"  kaynaklı alt gruplar bulunuyor ({n_dikis} dikişin değdiği parçalar)...")
+    log(f"  kaynaklı alt gruplar bulunuyor ({n_dikis} kaynağın değdiği parçalar)...")
     try:
         gruplar = kaynakli_gruplar(kayit, komp, agac, log=log, iptal=iptal,
                                    ilerleme=lambda y, t: bildir(y * n_dikis / max(t, 1)))
@@ -1301,17 +1438,17 @@ def kaynak_resimleri(on, kayit, komp, agac, satirlar, log=print, iptal=None,
             return yazilan
         ad = dosya_adi(g["dugum_ad"], kullanilan)
         pay = n_dikis * len(g["dikis"]) / tum_dikis
-        log(f"  [{i}/{len(gruplar)}] KAYNAK/{ad}  ({len(g['dikis'])} dikiş) çiziliyor...")
+        log(f"  [{i}/{len(gruplar)}] KAYNAK/{ad}  ({len(g['dikis'])} kaynak) çiziliyor...")
         try:
             d = kaynak_resmi(O, kayit, komp, g, satirlar, os.path.join(kl, ad), log=log,
                              iptal=iptal,
                              ilerleme=lambda o, b=yapilan, p=pay: bildir(b + o * p))
             yazilan.append(ad)
             gizli = sum(1 for x in d if not x.get("gorunur"))
-            log(f"        tamam: {len(d)} dikiş"
+            log(f"        tamam: {len(d)} kaynak"
                 + (f", {len(set(x.get('detay') for x in d) - {None})} detay"
                    if any(x.get("detay") for x in d) else "")
-                + (f", {gizli} dikiş hiçbir yönden net görünmüyor (tabloda)" if gizli else ""))
+                + (f", {gizli} kaynak hiçbir yönden net görünmüyor (tabloda)" if gizli else ""))
         except IptalEdildi:
             log("! iptal edildi")
             return yazilan

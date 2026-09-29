@@ -431,29 +431,54 @@ değil, **birleştirdiği parçalara** göre bulunur. CAD'de dikişler çoğu
 zaman ayrı bir `K0 KAYNAKLAR` ağacında durur ve kamyonun dört bir yanına
 dağılır. Program her dikişe **değen** parçaları ölçer (0,2 mm). O
 parçaların montaj ağacındaki en yakın ortak üst grubu dikişin grubudur.
+Kaynak her zaman **iki** parçayı birleştirir. CAD'de dikiş gövdesi
+parçaya her zaman tam oturtulmaz. Kasa modelinde yakıt dolum braketini
+traverse bağlayan dikişlerden biri traversten 1,1 mm, biri braketten
+2 mm uzakta çizilmişti. Değen parça ikiden azsa, eksik parça **2,5 mm'ye
+kadar** boşlukta en yakın parçadan tamamlanır. Böylece bu dikişler tek
+parçaya bağlanıp üç ayrı resme dağılmaz, konumları "?" çıkmaz.
 Braketin kendi dikişleri braketin grubunda kalır; braketi şasiye
 bağlayan dikiş bir üst grupta kalır. Aynı gruptaki birbirinden kopuk
 kümeler ayrı resim olur. Aynı biçimli kopyalar tek resim ve adet olur.
 Dosya adı grubun adıdır: `K0 DIS TRIM BAGLANTI_GRUP 6_SOL_kaynak.pdf`.
 
-**Sayfalar** (A3 yatay, gerçek ISO 5455 ölçekleri, her sayfada antet ve
-sayfa numarası):
+**Sayfalar** (A3 yatay, her sayfada antet ve sayfa numarası). Düzen
+kullanıcıyla denenip onaylandı:
 
-1. **Genel görünüş:** ÖN, ÜST, SAĞ ve izometrik.
-   - Az dikişli grupta (8'e kadar) semboller buradadır. Dikiş listesi
-     de kısaysa (10 satıra kadar) bu sayfanın üstündedir.
-   - Çok dikişli grupta dikişler bölgelere ayrılır. Genel görünüşte
-     her bölge harfli bir çerçevedir (A, B, C...).
-2. **Dikiş listesi:** K no, tip, a, z, boy, **kenardan** ve başlangıç /
+1. **Genel görünüş: yalnız dört izometrik.** Üstten ön-sağ, üstten
+   ön-sol, alttan ön-sağ, alttan ön-sol; sayfada biri üstte biri altta
+   (sağ taraf bir sayfada, sol taraf öbüründe). Dik görünüş (ÖN, ÜST,
+   SAĞ) genel sayfada yoktur; bölgeleri tanıtmak için izometrikler
+   yeter.
+   - Dikişler yakınlığa göre **bölgelere** ayrılır. Her bölgenin **tek
+     harfi** vardır (A..Z; Q, W, X yok). Harf, bölgenin dikişlerinden en
+     az biri açıkça göründüğü izometriklerde daire içinde, bölgenin
+     ortasına kısa bir çizgiyle bağlı durur. Harfler grubun en geniş
+     göründüğü düzlemde soldan sağa, yukarıdan aşağı sıralanır.
+   - Bölge sayısı harf sayısını aşmasın diye çok dikişli grupta
+     bölgeler büyütülür (250 dikişli şasi 23 bölge).
+   - Az bölgeli grupta (6'ya kadar) dört izometrik tek sayfadadır; dikiş
+     listesi de kısaysa (10 satıra kadar) bu sayfanın üstündedir.
+2. **Kaynak listesi:** K no, tip, a, z, boy, **kenardan** ve başlangıç /
    bitiş koordinatları. Koordinatlar grubun sınır kutusunun en küçük
    köşesine göre, mm'dir. Listede ayrıca birleştirdiği pozlar
-   (P12 + P31) ve dikişin gösterildiği görünüş ya da detay yer alır.
-   Resim ne kadar kalabalık olursa olsun yer ve ölçü buradan kesin
-   okunur.
-3. **Detay sayfaları** (sayfa başına 4 detay). Her bölge, dikişlerinin
-   **en çok göründüğü** yönden çizilir. Aday yönler altı dik görünüş
-   ve altı izometriktir (alttan bakanlar dahil). Bölge kendi
-   ölçeğinde büyütülür (ör. `DETAY B (SOL, 2:1)`).
+   (P12 + P31) ve dikişin gösterildiği detay yer alır. Resim ne kadar
+   kalabalık olursa olsun yer ve ölçü buradan kesin okunur.
+3. **Detay sayfaları** (sayfa başına 4 detay), bölge bölge. Başlıkta
+   detay ve bölge: `DETAY D2 - BÖLGE D (İZOMETRİK ALTTAN ÖN-SAĞ, 1:9)`.
+   Bölge birden çok yönden gösterilirse A1, A2 ... diye gider.
+   - **Önce izometrik:** dik görünüşte bir sacın iki yüzündeki ya da
+     arka arkaya duran dikişler aynı çizgiye düşer; dikişin içte mi
+     dışta mı olduğu anlaşılmaz. Dikişi gören bir izometrik varsa detay
+     ondan çizilir (sekiz izometrik: üstten ve alttan, dört köşe). Hiçbir
+     izometrikte görünmeyen dikiş dik görünüşe kalır.
+   - Konum ölçüsü izometrikte de verilir: dikiş ekseni boyunca çizilir,
+     üstünde **gerçek** değer yazar.
+
+**Ölçek serbesttir.** Kaynak resminde ölçek standart olmak zorunda
+değil; görünüş sayfayı dolduracak tam sayılı ölçekle çizilir (1:17,
+1:9, 2:1). Standart ölçeğe (1:20) yuvarlamak görünüşü sayfanın yarısına
+küçültüyordu. Ölçüler gerçek değerle yazılır.
 
 **Görünürlük ölçülür, tahmin edilmez.** Dikiş boyunca 5 dilimden,
 dikişin göze bakan yüzeyinden göze doğru ışın gönderilir. Işın bir

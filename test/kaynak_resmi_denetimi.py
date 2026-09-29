@@ -146,6 +146,61 @@ def main():
     dogru("numaralar K1, K2", sorted(d["no"] for d in ds) == ["K1", "K2"],
           [d["no"] for d in ds])
 
+    # RESMİN DÜZENİ (kullanıcıyla denenip onaylandı): genel görünüş yalnız
+    # dört izometrik, bölgeler tek harf, detaylar izometrik, "dikiş" yok
+    import pf3_olcu as O
+    yakala = []
+    asil = KR.pdf_yaz
+    KR.pdf_yaz = lambda sayfalar, yol: yakala.extend(sayfalar)
+    try:
+        KR.kaynak_resmi(O, kayit, komp, govde, satirlar, "x_kaynak.pdf")
+    finally:
+        KR.pdf_yaz = asil
+    yazi = [e.dxf.text for doc in yakala for e in doc.modelspace().query("TEXT")]
+    basliklar = [t for t in yazi if "(" in t and ":" in t]
+    for ad in ("İZOMETRİK ÖN-SAĞ", "İZOMETRİK ÖN-SOL", "İZOMETRİK ALTTAN ÖN-SAĞ",
+               "İZOMETRİK ALTTAN ÖN-SOL"):
+        dogru(f"genel görünüşte {ad}", any(t.startswith(ad + " ") for t in basliklar),
+              basliklar)
+    dogru("genel görünüşte dik görünüş yok",
+          not any(t.split("  ")[0].strip() in ("ÖN", "ÜST", "SAĞ") for t in basliklar),
+          basliklar)
+    dogru("detay başlığında bölge harfi", any(t.startswith("DETAY A") and "BÖLGE A" in t
+                                              for t in yazi), basliklar)
+    dogru("kâğıtta 'dikiş' kelimesi yok", not any("dikiş" in t.lower() for t in yazi),
+          [t for t in yazi if "dikiş" in t.lower()])
+
+    # bölgeler: 250 kaynak -> en çok 23 bölge, her kaynak tek bölgede,
+    # harfler tek
+    import random
+    rnd = random.Random(1)
+    sahte = [{"orta": (rnd.uniform(0, 2500), rnd.uniform(0, 900), rnd.uniform(0, 300))}
+             for _ in range(250)]
+    goz, xr = O.GORUNUS["UST"]
+    bl = KR.bolgeler(sahte, goz, xr, 2500.0)
+    dogru("250 kaynak harf sayısı kadar bölgeye sığdı", len(bl) <= len(KR.HARFLER), len(bl))
+    dogru("her kaynak tek bölgede", sorted(id(d) for b in bl for d in b)
+          == sorted(id(d) for d in sahte))
+
+    # serbest ölçek: sayfayı doldurur
+    dogru("ölçek 1:17 (standart 1:20'ye küçültülmez)",
+          abs(KR.olcek_sec(1 / 16.4) - 1 / 17) < 1e-12, KR.olcek_sec(1 / 16.4))
+    dogru("büyütme 2:1", KR.olcek_sec(2.4) == 2.0, KR.olcek_sec(2.4))
+
+    # CAD BOŞLUĞU: dikiş ikinci parçaya 1,2 mm uzak çizilmiş -> yine iki
+    # parçayı birleştirir; 4 mm uzaktaki parça bağlanmaz
+    k2 = [("A", kutu(0, 0, 0, 100, 40, 4)), ("B", kutu(0, 0, 5.2, 4, 40, 44)),
+          ("UZAK", kutu(10, 0, 8, 14, 40, 44)),
+          ("KAYNAK_B", ucgen_prizma((4, 4), (7, 4), (4, 7), 0, 40))]
+    komp2 = [{"kod": ad, "ad": ad, "indeks": [i], "adet": 1, "hacim_mm3": 1.0,
+              "sinif": "kaynak" if ad.startswith("KAYNAK") else "parca", "tip": ""}
+             for i, (ad, _) in enumerate(k2)]
+    agac2 = {"ad": "M", "montaj": True, "alt": [
+        {"ad": ad, "katilar": [i], "tum": [i], "alt": []} for i, (ad, _) in enumerate(k2)]}
+    g2 = KR.kaynakli_gruplar(k2, komp2, agac2, log=lambda t: None)
+    dg = g2[0]["degen"][3] if g2 else []
+    dogru("1,2 mm boşluklu dikiş iki parçaya bağlandı", sorted(dg) == [0, 1], dg)
+
     # kaynakta ondalık yok: 2,7 -> 3, 1,77 -> 2, 24,6 -> 25
     import pf3_olcu as O
     import pf9_excel as XL

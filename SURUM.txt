@@ -1,6 +1,6 @@
 Pi3D  –  3B modelden parça listesi ve teknik resim
 
-Sürüm   : v1.0.2  (29.09.2026)
+Sürüm   : v1.0.3  (29.09.2026)
 Kaynak  : github.com/noz1907/ned   dal: claude/fikstur-parca-stp-57hwc1
 
 KURULUM
@@ -106,6 +106,22 @@ BU SÜRÜMDE NE VAR
       gabari. İki kanat eşitse simetri ile tek ölçü.
     - referans yüzey (datum) işareti küçüldü: üçgen ve harf çerçevesi
       yarı yarıya; harf ölçü yazısının 0,72'si.
+
+  v1.0.3: KAYNAK RESMİ yeni düzen (kullanıcıyla denenip onaylandı):
+    - genel görünüş yalnız DÖRT İZOMETRİK (üstten / alttan, ön-sağ /
+      ön-sol; sayfada biri üstte biri altta). Dik görünüş yok.
+    - bölgeler TEK HARF (A..Z), izometriklerde daire içinde; birbirine
+      giren harfli çerçeveler kalktı. Detaylar A, B1, B2 ...; başlıkta
+      "DETAY D2 - BÖLGE D".
+    - detaylar önce İZOMETRİK: dik görünüşte dikişin içte mi dışta mı
+      olduğu anlaşılmıyordu. Konum ölçüsü izometrikte de (gerçek değer).
+    - ölçek serbest (1:17, 1:9): görünüş sayfayı doldurur.
+    - kâğıtta "dikiş" yerine "kaynak" (KAYNAK LİSTESİ).
+    - CAD boşluğu: dikiş ikinci parçaya 2,5 mm'ye kadar uzak çizilmişse
+      yine iki parçayı birleştirir. Yakıt dolum braketinin traverse
+      kaynakları üç ayrı resme dağılıyordu, biri tek başına "KASA
+      MONTAJ" resmi oluyordu; artık TELEVRE MONTAJ resmindeler (travers
+      o montajda).
 
   AÇINIM = BÜKÜM RESMİ + LAZER: açınımı çıkan her parça için büküm
   resmi (ACINIM/..._acinim.dxf) ve lazer kesim (LZR/..._acinim_lzr.dxf,
