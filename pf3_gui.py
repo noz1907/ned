@@ -2805,7 +2805,7 @@ class Uygulama(ttk.Frame):
             return
         y = filedialog.askopenfilename(
             title="Malzeme listesi  (kendi şablonumuz ya da CAD'in parça listesi)",
-            filetypes=[("Malzeme listesi", "*.csv *.txt *.tsv *.xlsx *.json"),
+            filetypes=[("Malzeme listesi", "*.csv *.txt *.tsv *.xlsx *.xls *.htm *.html *.json"),
                        ("Tümü", "*.*")])
         if not y:
             return
@@ -3363,7 +3363,7 @@ class MalzemeSihirbazi:
             return
         y = filedialog.askopenfilename(
             title="CAD'in parça listesi", parent=self.w,
-            filetypes=[("Parça listesi", "*.csv *.txt *.tsv *.xlsx *.json"),
+            filetypes=[("Parça listesi", "*.csv *.txt *.tsv *.xlsx *.xls *.htm *.html *.json"),
                        ("Tümü", "*.*")])
         if not y:
             return

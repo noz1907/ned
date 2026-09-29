@@ -23,8 +23,12 @@ aktarabilir; **Material** bunlardan biridir.
 3. *Hidden Properties* listesinden **Material**'i seçip **>** ile
    *Displayed Properties* tarafına atın. **Source**'u da ekleyin (aşağıya bakın).
    *Part Number* zaten görünür listede olmalı; değilse onu da ekleyin.
-4. **OK** → **Save As…** → tür olarak **Text (\*.txt)** ya da
-   **Excel (\*.xls)** seçip kaydedin
+4. **OK** → **Save As…** → tür olarak **Excel (\*.xls)** ya da
+   **Text (\*.txt)** seçip kaydedin. **CSV'ye çevirmeniz gerekmez:**
+   Pi3D CATIA'nın Excel kaydını doğrudan okur. Kuruluma göre bu dosya
+   sekmeli metin ya da HTML tablo olur; ikisi de okunur. Pi3D "eski Excel
+   biçimi" derse dosyayı Excel'de açıp **Farklı kaydet ▸ Excel Çalışma
+   Kitabı (.xlsx)** ile kaydedin; `.xlsx` de doğrudan okunur.
 
 Elinizde şuna benzer, sekmeyle ayrılmış bir dosya olur:
 

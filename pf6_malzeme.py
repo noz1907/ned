@@ -176,10 +176,11 @@ SISTEM = [
          "'>' ile Displayed Properties tarafına alın. 'Source' (Made / "
          "Bought) alanını da alın: Pi3D satın alınan parçaları buradan "
          "kesin olarak tanır. 'Part Number' görünür listede olmalı.",
-         "OK ▸ Save As ▸ tür: Text (*.txt). ('Excel' seçeneği bazı "
-         "kurulumlarda gerçek Excel değil sekmeli metin yazar; Pi3D ikisini "
-         "de okur. Gerçek eski .xls ise Excel'de .xlsx ya da CSV olarak "
-         "yeniden kaydedin.)",
+         "OK ▸ Save As ▸ tür: Excel (*.xls) ya da Text (*.txt). CSV "
+         "gerekmez: Pi3D CATIA'nın Excel kaydını doğrudan okur (kuruluma "
+         "göre sekmeli metin ya da HTML tablodur). Pi3D 'eski Excel "
+         "biçimi' derse dosyayı Excel'de açıp 'Farklı kaydet ▸ Excel "
+         "Çalışma Kitabı (.xlsx)' ile yeniden kaydedin.",
          "Bu sihirbazın 4. adımında dosyayı seçin."],
      "makro": CATIA_MAKRO_ADI,
      "makro_adimlar": [

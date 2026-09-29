@@ -193,6 +193,19 @@ def main():
         dogru("eski .xls reddedildi", False, "hata çıkmadı")
     except O.MalzemeDosyaHatasi as ex:
         dogru("eski .xls anlaşılır hatayla reddedildi", ".xlsx" in str(ex), str(ex))
+    # CATIA Bill of Material > Save As > Excel: kuruluma göre .xls uzantılı
+    # HTML tablo ya da sekmeli metin yazar; ikisi de okunmalı
+    html = yaz(kl, "catia.xls",
+               "<html><body><table border=1><tr><th>Quantity</th><th>Part Number</th>"
+               "<th>Material</th><th>Source</th></tr><tr><td>2</td><td>CT-1</td>"
+               "<td>Aluminium&nbsp;6061</td><td>Made</td></tr><tr><td>4</td>"
+               "<td>CT-2</td><td>Steel</td><td>Bought</td></tr></table></body></html>")
+    esl, _ = O.malzeme_dosya_oku(html)
+    esit("CATIA .xls (HTML tablo): alüminyum", esl.get("ct-1"), "aluminyum")
+    esit("CATIA .xls (HTML tablo): çelik", esl.get("ct-2"), "celik")
+    sek = yaz(kl, "catia_sekme.xls", "Quantity\tPart Number\tMaterial\n2\tCT-3\tBrass\n")
+    esl, _ = O.malzeme_dosya_oku(sek)
+    esit("CATIA .xls (sekmeli metin): pirinç", esl.get("ct-3"), "pirinc")
 
     print("\n-- 4. tanınmayan ad + yoğunluk çeliğe DÜŞMÜYOR")
     k = {"kod": "4711-01", "ad": "Welle", "sinif": "parca"}

@@ -6866,6 +6866,19 @@ def _xlsx_satirlari(ham):
     return satirlar
 
 
+def _html_satirlari(metin):
+    """HTML tablo (<tr><td>/<th>) -> satır listesi."""
+    import html as H
+    out = []
+    for tr in re.findall(r"<tr\b.*?>(.*?)</tr\s*>", metin, re.I | re.S):
+        hucre = re.findall(r"<t[dh]\b.*?>(.*?)</t[dh]\s*>", tr, re.I | re.S)
+        sat = [H.unescape(re.sub(r"<[^>]+>", "", h)).replace("\xa0", " ").strip()
+               for h in hucre]
+        if any(sat):
+            out.append(sat)
+    return out
+
+
 def _tablo_satirlari(yol):
     """Tablo dosyası (CSV / TXT / TSV / XLSX) -> satır listesi (str)."""
     with open(yol, "rb") as f:
@@ -6878,6 +6891,9 @@ def _tablo_satirlari(yol):
             "okunamıyor. Excel'de açıp 'Farklı kaydet' ile ya .xlsx ya da "
             "'CSV (noktalı virgülle ayrılmış)' olarak kaydedin.")
     metin = _metin_coz(ham)
+    if re.search(r"<\s*(table|tr)\b", metin[:20000], re.I):
+        # CATIA'nın "Excel" kaydı bazı kurulumlarda .xls uzantılı HTML tablodur
+        return _html_satirlari(metin)
     dolu = [x for x in metin.splitlines() if x.strip()]
     if not dolu:
         return []

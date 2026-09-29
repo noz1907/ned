@@ -1731,7 +1731,9 @@ belgede anlattım: **`CATIA_MALZEME.md`**. Özeti:
 
 1. CATIA'da `.CATProduct` açıkken **Analyze ▸ Bill of Material**
 2. **Define formats** ile *Material* sütununu görünür listeye ekleyin
-3. **Save As…** ile `.txt` olarak kaydedin
+3. **Save As…** ile **Excel (`.xls`)** ya da `.txt` olarak kaydedin — CSV
+   gerekmez, Pi3D CATIA'nın Excel kaydını (sekmeli metin ya da HTML tablo)
+   ve `.xlsx`'i doğrudan okur
 4. Pi3D'de **Yardım ▸ Malzemeyi CAD'den al** → 4. adımda o dosyayı seçin
    (ya da 2. adımda → **malzeme.csv yükle…**)
 
