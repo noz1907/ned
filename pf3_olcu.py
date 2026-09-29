@@ -4619,6 +4619,24 @@ def sac_acilim(sh, o=None, k_faktor=K_FAKTOR, istasyon=11,
              "orta_cizgi_mm": round(orta, 2),
              "bukum_yerleri": yer,
              "bukumler": bilgi}
+    # PROFİL görünüşü (büküm ekseni yönünden): kesitin kendisi. Kesim
+    # konturu çıkmasa da (yalnız blank ölçüsü) büküm yönü resimden okunsun.
+    # K / B etiketleri zincir sırasıyla = açınımdaki sırayla.
+    try:
+        tel = _tel_dizisi(BRepTools.OuterWire_s(yuz))
+        cizgi = [[(p.X(), p.Y()) for p in tel]]
+        if cizgi[0] and cizgi[0][0] != cizgi[0][-1]:
+            cizgi[0].append(cizgi[0][0])
+        kanat = []
+        for z in zincir:
+            if z["tip"] == "duz":
+                ux, uy = z["yon"]
+                kanat.append((((z["p"][0] + z["q"][0]) / 2.0, (z["p"][1] + z["q"][1]) / 2.0),
+                              (-uy, ux)))
+        sonuc["profil"] = {"cizgi": cizgi, "kanat": kanat,
+                           "bukum": [tuple(z["m"]) for z in bkm]}
+    except Exception:
+        pass
     # Parça hangi yöntemle bükülmüş? Kanat uzunlukları ve iç yarıçaplar
     # buna karar vermeye yeter; tasarımcıya "bu abkantta yapılamaz"
     # demek, yanlış tezgâha gönderilmesini önler.
@@ -5920,18 +5938,31 @@ def dxf_acilim(r, k, yol, P=None):
     if pr and pr.get("cizgi"):
         # PROFİL görünüşü: bükümlerin yönü buradan okunur (K / B etiketleri
         # açınımdaki kanat ve bükümlerle aynı numara).
+        kdo = kanat_dis_olculeri(r)
+        # Kısa kanat yazıya göre küçükse profil büyütülür (etiketler
+        # binmesin); ölçek başlıkta yazar.
+        en_kisa = min(kdo) if kdo else 0.0
+        olc = 1.0
+        if en_kisa > 0:
+            for v in (1.0, 2.0, 2.5, 4.0, 5.0, 10.0):
+                olc = v
+                if en_kisa * v >= 5.0 * yazi_h:
+                    break
+        pr = dict(pr, cizgi=[[(a * olc, b * olc) for a, b in q] for q in pr["cizgi"]],
+                  kanat=[((p[0] * olc, p[1] * olc), n) for p, n in pr["kanat"]],
+                  bukum=[(m[0] * olc, m[1] * olc) for m in pr["bukum"]])
         pts = [p for q in pr["cizgi"] for p in q]
         px0, py0 = min(p[0] for p in pts), min(p[1] for p in pts)
         px1, py1 = max(p[0] for p in pts), max(p[1] for p in pts)
         y -= 1.5 * h
-        _yaz(msp, "PROFİL - büküm ekseni yönünden bakış (K: kanat, B: büküm)", x, y, h)
+        _yaz(msp, "PROFİL - büküm ekseni yönünden bakış (K: kanat, B: büküm)"
+             + (f"   ölçek {XL.tr(olc)}:1" if olc != 1.0 else ""), x, y, h)
         y -= 2.5 * h
         ox, oy = x + 3.0 * h - px0, y - (py1 - py0) - 2.0 * h - py0
         for q in pr["cizgi"]:
             msp.add_lwpolyline([(a + ox, b + oy) for a, b in q],
                                dxfattribs={"layer": "GORUNEN"})
         cx, cy = (px0 + px1) / 2.0, (py0 + py1) / 2.0
-        kdo = kanat_dis_olculeri(r)
         for i, (p, n) in enumerate(pr["kanat"], 1):
             sg = 1.0 if (p[0] - cx) * n[0] + (p[1] - cy) * n[1] >= 0 else -1.0
             tx = p[0] + sg * n[0] * (t / 2.0 + 1.2 * yazi_h) + ox
