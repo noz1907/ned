@@ -166,6 +166,33 @@ def main():
     alan = sorted(abs(M._cokgen_alani(w)) for w in bir)
     dogru("birleşen deliğin alanı = iki delik + şerit (90)", abs(alan[-1] - 90.0) < 0.1, alan)
 
+    print("\n-- detay resmi: bükümlü sacın kalınlığı ve kesit ölçüleri")
+    # C profil (K0 TELEVRE ARA TRAVERS): başlık "BOY x EN x KALINLIK:
+    # 1.854 x 78 x 40" diyordu (sac 1,5); kesitte 38 / 39,5 / 4 / 63
+    # gibi sac kalınlığından ve büküm radüsünden doğan ölçüler vardı.
+    P = {"gizli": True, "en_az_delik": 1.0, "yogunluk": 7.85e-6}
+    s2, o = M.komponent_olcu(bukumlu_sac(), P)
+    esit("bükümlü sacın kalınlığı taramadan", o["sac_kalinlik_mm"], 2.0)
+    esit("büküm ekseni X", o["bukum_ekseni"], [1.0, 0.0, 0.0])
+    g = M.gabari_satiri(o)
+    dogru("başlık GABARİ + sac kalınlığı diyor",
+          g.startswith("GABARİ") and "sac kalınlığı 2 mm" in g and "KALINLIK" not in g, g)
+    _s, od = M.komponent_olcu(kutu(0, 0, 0, 200, 100, 3), P)
+    esit("düz sacta başlık yine boy x en x kalınlık", M.gabari_satiri(od),
+         "BOY x EN x KALINLIK: 200 x 100 x 3 mm")
+    gor = M.gorunus_sec(None)
+    ken = {a: M.hlr(s2, *M.GORUNUS[a], gizli=True) for a in gor}
+    ham = {a: M._kenar_kutusu(k) for a, k in ken.items()}
+    sev = M.tasarim_seviyeleri(s2)
+    sk = M.sac_kesit_gorunusleri(s2, o, gor)
+    esit("kesit görünüşleri (büküm eksenine bakan)", sorted(sk), ["SAG", "SOL"])
+    once = M.konum_plani(o, gor, ham, 2.5, ken, seviye=sev)
+    sonra = M.konum_plani(o, gor, ham, 2.5, ken, seviye=sev, sac_kesit=sk)
+    olc = lambda pl: sorted(round(r["b"] - r["a"], 2) for v in pl.values()
+                            for y in ("yatay", "dusey") for r in v.get(y, []))
+    dogru("süzgeçsiz planda iç yüz ölçüsü vardı (105 - t = 103)", 103.0 in olc(once), olc(once))
+    esit("kesitte sac kalınlığından doğan ölçü kalmadı", olc(sonra), [])
+
     print("\nSONUC: " + ("TUM DENETIMLER GECTI" if not HATA
                          else f"{len(HATA)} DENETIM KALDI: " + ", ".join(HATA)))
     return 1 if HATA else 0

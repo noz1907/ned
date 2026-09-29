@@ -1,6 +1,6 @@
 Pi3D  –  3B modelden parça listesi ve teknik resim
 
-Sürüm   : v1.0.1  (29.09.2026)
+Sürüm   : v1.0.2  (29.09.2026)
 Kaynak  : github.com/noz1907/ned   dal: claude/fikstur-parca-stp-57hwc1
 
 KURULUM
@@ -92,6 +92,20 @@ BU SÜRÜMDE NE VAR
   Komut satırı: --kaynak-resmi.
 
   v1.0.1: büküm resmine küçük PERSPEKTİF (izometrik) görünüş.
+
+  v1.0.2: PROFİL / BÜKÜMLÜ SAC DETAY RESMİ düzeltmeleri (C profil,
+  K0 TELEVRE ARA TRAVERS):
+    - başlıkta "BOY x EN x KALINLIK: 1.854 x 78 x 40" yazıyordu; 40
+      kalınlık değil. Artık "GABARİ (boy x en x yükseklik): 1.854 x 78
+      x 40 mm   sac kalınlığı 1,5 mm". Düz sacta eskisi gibi boy x en x
+      kalınlık. olculer.csv'de sütun "yukseklik_mm"; sac_kalinlik_mm
+      bükümlü sacta da dolu (büküm taramasından).
+    - kesit görünüşünde (büküm eksenine bakan) sac kalınlığından ve
+      büküm radüsünden doğan anlamsız ölçüler (38 / 39,5 / 4 / 63)
+      yazılmıyor; yalnız kanat genişliği (serbest uca kadar, 15) +
+      gabari. İki kanat eşitse simetri ile tek ölçü.
+    - referans yüzey (datum) işareti küçüldü: üçgen ve harf çerçevesi
+      yarı yarıya; harf ölçü yazısının 0,72'si.
 
   AÇINIM = BÜKÜM RESMİ + LAZER: açınımı çıkan her parça için büküm
   resmi (ACINIM/..._acinim.dxf) ve lazer kesim (LZR/..._acinim_lzr.dxf,

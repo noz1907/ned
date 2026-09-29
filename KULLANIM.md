@@ -2005,10 +2005,23 @@ Başlık bloğunda yalnız parça kimliği ve genel ölçüler vardır:
 ```
 POZ 5   01.050.000.01   01.050.000.01 U-Blech-Mechanismus
 adet: 1
-BOY x EN x KALINLIK : 483.04 x 76.5 x 32.0 mm
-hacim 163651.2 mm3   kutle 1.2847 kg   yuzey 114694.7 mm2
-malzeme: Celik (S235JR / St37)   yogunluk 7.85 g/cm3   [varsayilan]
+GABARİ (boy x en x yükseklik): 483,04 x 76,5 x 32 mm   sac kalınlığı 3 mm
+kütle 1,285 kg   malzeme: Celik
+ölçek 1:1   birim: mm
 ```
+
+Üç kutu ölçüsü yalnız **düz sacta** `BOY x EN x KALINLIK` diye yazılır.
+Öbür parçalarda satır **GABARİ**dir: C profilde en küçük kutu ölçüsü
+40 mm'dir, sac 1,5 mm — ona "kalınlık" demek yanlış olurdu. Bükümlü
+sacta sac kalınlığı büküm taramasından ölçülür ve ayrıca yazılır
+(`olculer.csv`: `yukseklik_mm` gabari, `sac_kalinlik_mm` sac).
+
+**Bükümlü sacın kesit görünüşü** (büküm eksenine bakan, ör. C profilde
+SAĞ/SOL): sac kalınlığından ve büküm radüsünden doğan seviyeler (iç
+yüz, radüs teğeti: 38 / 39,5 / 4 / 63 gibi) ölçülmez. Kesitte yalnız
+gabari ve **kanat genişliği** (dış yüzden sacın serbest ucuna, ör. 15)
+verilir; iki kanat eşitse simetri işaretiyle tek ölçü. Sac kalınlığı
+başlıkta yazar.
 
 Çizimde tablo yoktur: delikler görünüşlerde `2x Ø9`, kenar yuvarlamaları
 `4x R3` olarak ölçülendirilir; yazı deliğin hemen yanına, kısa bir kılavuz

@@ -1013,11 +1013,24 @@ def komponent_olcu(sh, P):
         "hacim_mm3": round(v, 1), "kutle_kg": round(v * P["yogunluk"], 4),
         "yuzey_mm2": round(yuzey_alani(s), 1),
         "sac_kalinlik_mm": sac_kalinligi(s, k),
+        "sac_tip": None, "bukum_ekseni": None,
         "agirlik_merkezi": [round(q, 2) for q in agirlik_merkezi(s)],
         "delikler": None, "radusler": None,
         "dis_capler": dis_capler(s),
         "hizalama": [[round(q, 4) for q in r] for r in R],
     }
+    # BÜKÜMLÜ SAC: gabarinin en küçük ölçüsü sac kalınlığı DEĞİLDİR (C
+    # profilde 40 mm; sac 1,5 mm). Kalınlık büküm taramasından gelir.
+    try:
+        tr_ = sac_taramasi(s, k)
+    except Exception:
+        tr_ = {"sac": False}
+    if tr_.get("sac"):
+        o["sac_tip"] = tr_["tip"]
+        if tr_["tip"] == "bukumlu sac":
+            o["sac_kalinlik_mm"] = tr_["kalinlik_mm"]
+            if tr_.get("eksen"):
+                o["bukum_ekseni"] = [round(q, 6) for q in tr_["eksen"]]
     o["slotlar"] = []
     o["delikler"], o["radusler"] = delik_ve_radus(s, P.get("en_az_delik", 1.0),
                                                   slot_listesi=o["slotlar"])
@@ -3030,6 +3043,66 @@ def tasarim_seviyeleri(s):
     return [sorted(duz[i] | ek[i]) for i in range(3)]
 
 
+def sac_uc_seviyeleri(s, eksen, t, tol=0.05):
+    """Bükümlü sacın KESİTİNDE ölçüye değer seviyeler: sacın SERBEST
+    UÇLARI (kanat ucu, dudak ucu).
+
+    Kesit görünüşünde (büküm eksenine bakan görünüş) sac, kalınlığı t
+    olan bir şerittir. Görünüşten bulunan girinti/pencere seviyelerinin
+    çoğu bu şeridin kendisinden gelir ve anlamsızdır: iç yüz (dış yüz ±
+    t), büküm radüsünün teğet çizgisi (dış yüz ± (R + t)). C profilde
+    38 / 39,5 / 4 / 63 böyle çıkıyordu. Atölyenin istediği kanat
+    genişliği + kalınlıktır; kanat genişliği gabariden (dış yüz) serbest
+    uca kadardır. Serbest uç: büküm eksenine paralel, eksene dik yönde
+    genişliği t olan ve parça BOYUNCA uzanan düz yüz. Boy şartı olmazsa
+    uçtaki büküm boşaltma kesiği (C profilin iki ucunda 4 mm) ve slotun
+    yan duvarı da "serbest uç" sayılıyordu: ikisi de sac kalınlığı
+    genişliğinde ama kısa; yerleri kesitte değil ÜST görünüşte ölçülür.
+
+    eksen: büküm ekseninin model ekseni (0/1/2).
+    Döner: [set] x 3 - her model ekseninde serbest uç seviyeleri."""
+    kb = kutu(s)
+    boy_ = max(kb[3] - kb[0], kb[4] - kb[1], kb[5] - kb[2], 1.0)
+    et = 1e-6 * boy_ + 1e-7
+    uc = [set() for _ in range(3)]
+    ex = TopExp_Explorer(s, TopAbs_FACE)
+    while ex.More():
+        pts = _yuz_ornekle(ex.Current())
+        ex.Next()
+        if not pts:
+            continue
+        for i in range(3):
+            if i == eksen:
+                continue
+            c = [q[i] for q in pts]
+            if max(c) - min(c) >= 10 * et:
+                continue
+            j = 3 - i - eksen
+            gen = max(q[j] for q in pts) - min(q[j] for q in pts)
+            uzun = max(q[eksen] for q in pts) - min(q[eksen] for q in pts)
+            if abs(gen - t) <= tol and uzun >= 0.5 * (kb[eksen + 3] - kb[eksen]):
+                uc[i].add(round(sum(c) / len(c), 5))
+    return uc
+
+
+def sac_kesit_gorunusleri(s, o, gorunusler):
+    """Bükümlü sacın kesitinin göründüğü görünüşler ve serbest uç
+    seviyeleri: {görünüş: [set] x 3}. Büküm ekseni bir model eksenine
+    oturmuyorsa ya da sac değilse boş."""
+    e = o.get("bukum_ekseni")
+    t = o.get("sac_kalinlik_mm")
+    if not e or not t or o.get("sac_tip") != "bukumlu sac":
+        return {}
+    a = max(range(3), key=lambda i: abs(e[i]))
+    if abs(e[a]) < 0.999:
+        return {}
+    try:
+        uc = sac_uc_seviyeleri(s, a, float(t))
+    except Exception:
+        return {}
+    return {g: uc for g in DELIK_GOR["XYZ"[a]] if g in gorunusler}
+
+
 def seviyede(liste, v, tol=SEVIYE_TOL):
     """v, sıralı listedeki bir seviyenin tol kadar yakınında mı?"""
     i = bisect.bisect_left(liste, v - tol)
@@ -3071,7 +3144,7 @@ def ham_model(gad, yon, v):
 
 
 def konum_plani(o, gorunusler, ham, h, kenarlar=None, tol=0.05,
-                seviye=None, rapor=None):
+                seviye=None, rapor=None, sac_kesit=None):
     """Konum ölçülerinin planı - HİÇBİR ŞEY ÇİZMEDEN.
 
     YÖNTEM: DATUMDAN ÖLÇÜLENDİRME (baseline / parallel dimensioning).
@@ -3098,9 +3171,14 @@ def konum_plani(o, gorunusler, ham, h, kenarlar=None, tol=0.05,
     sadeleştirmesidir; 124 deliğin her birine ayrı ölçü koymak resmi
     okunmaz yapar ve hiçbir şey eklemez.
 
+    BÜKÜMLÜ SACIN KESİT GÖRÜNÜŞÜ (sac_kesit, bkz. sac_kesit_gorunusleri):
+    şeridin iç yüzü ve büküm teğetleri ölçülmez; girinti/pencere
+    seviyelerinden yalnız sacın serbest uçları (kanat genişliği) kalır.
+
     Döner: {gorunus: {"yatay": [...], "dusey": [...]}}
     Her kayıt: {"a","b","metin","seviye"}; HAM izdüşüm koordinatında."""
     plan = {}
+    sac_kesit = sac_kesit or {}
     atlanan = Counter()      # 3B'de karşılığı olmadığı için yazılmayanlar
     # AYNA GÖRÜNÜŞLER (ÖN/ARKA, SAĞ/SOL, ÜST/ALT) aynı dış hattı iki
     # yandan gösterir. Girinti birinde ölçülür; öbüründe tekrarı ISO
@@ -3172,6 +3250,12 @@ def konum_plani(o, gorunusler, ham, h, kenarlar=None, tol=0.05,
         # zaten alanına göre sıralı); tam liste olculer.csv'de.
         # Derinlik de 3B'de karşılığı olan bir seviyeye inmeli: çentiğin
         # dibi. İnmiyorsa derinlik yazılmaz (konumlar yine denetlenir).
+        sk = sac_kesit.get(gad)
+        if sk is not None:
+            for r in ozel:             # şeridin derinliği = t ya da R + t
+                if r.get("derinlik") is not None:
+                    r["derinlik"] = None
+                    atlanan["sac_kesit"] += 1
         if seviye is not None:
             for r in ozel:
                 if r.get("derinlik") is None:
@@ -3258,6 +3342,11 @@ def konum_plani(o, gorunusler, ham, h, kenarlar=None, tol=0.05,
                 if v is None:
                     atlanan[tur] += 1
                     return
+                if sk is not None and tur in ("girinti", "pencere", "kesim"):
+                    i_, m_ = ham_model(gad, ad, v)
+                    if not any(abs(m_ - u) <= 0.01 for u in sk[i_]):
+                        atlanan["sac_kesit"] += 1
+                        return
                 v = round(v, 4)
                 tekil.add(v)
                 kaynak[v].add(tur)
@@ -3474,7 +3563,13 @@ def _datum_ciz(msp, gk, yon, uc, harf, h):
     # Üçgenin TABANI datum yüzeyinin çizgisine oturur; varlık kutusuyla
     # bakmak her yeri dolu gösterirdi. Bakılacak olan yazılardır.
     dolu = _yazi_kutulari(msp)
-    t = 0.6 * h                        # üçgenin yarı tabanı = yüksekliği
+    # Simge ölçü yazısından KÜÇÜK olmalı; ilk sürümde çerçeve 1,2 h,
+    # üçgen 1,2 h tabanlıydı - küçük görünüşte (C profilin kesiti)
+    # görünüşün kendisi kadar yer tutuyordu. Kullanıcı: "referans yüzey
+    # işaretini küçült". Harf 0,72 h kalır: kâğıtta okunur en küçük yazı
+    # sınırının (pf4_pafta.EN_AZ_YAZI_MM) altına inmesin.
+    t = 0.3 * h                        # üçgenin yarı tabanı
+    c = 0.46 * h                       # harf çerçevesinin yarısı
     d = 1.0 if uc else -1.0            # parçadan DIŞARI bakan yön
     # Ölçü rakamları ölçünün ORTASINDA durur; simge kenarın uçlarına
     # yakın dursun ki ilk denemede yerini bulsun.
@@ -3483,28 +3578,29 @@ def _datum_ciz(msp, gk, yon, uc, harf, h):
             x = gk[2] if uc else gk[0]
             y = gk[1] + pay * (gk[3] - gk[1])
             taban = ((x, y - t), (x, y + t))
-            ucu = (x + d * 1.4 * t, y)
-            mrk = (ucu[0] + d * 1.9 * t, y)
+            ucu = (x + d * 1.6 * t, y)
+            mrk = (ucu[0] + d * (c + 0.3 * h), y)
         else:                          # yatay kenar -> simge altta/üstte
             y = gk[3] if uc else gk[1]
             x = gk[0] + pay * (gk[2] - gk[0])
             taban = ((x - t, y), (x + t, y))
-            ucu = (x, y + d * 1.4 * t)
-            mrk = (x, ucu[1] + d * 1.9 * t)
+            ucu = (x, y + d * 1.6 * t)
+            mrk = (x, ucu[1] + d * (c + 0.3 * h))
         nokta = [taban[0], taban[1], ucu,
-                 (mrk[0] - t, mrk[1] - t), (mrk[0] + t, mrk[1] + t)]
+                 (mrk[0] - c, mrk[1] - c), (mrk[0] + c, mrk[1] + c)]
         kutu_ = (min(q[0] for q in nokta), min(q[1] for q in nokta),
                  max(q[0] for q in nokta), max(q[1] for q in nokta))
         if _cakisiyor(kutu_, dolu, 0.2 * h):
             continue
         msp.add_solid([taban[0], taban[1], ucu],
                       dxfattribs={"layer": "OLCU"})
-        msp.add_line(ucu, mrk, dxfattribs={"layer": "OLCU"})
+        ic = (mrk[0] - d * c, mrk[1]) if yon == "yatay" else (mrk[0], mrk[1] - d * c)
+        msp.add_line(ucu, ic, dxfattribs={"layer": "OLCU"})
         msp.add_lwpolyline(
-            [(mrk[0] - t, mrk[1] - t), (mrk[0] + t, mrk[1] - t),
-             (mrk[0] + t, mrk[1] + t), (mrk[0] - t, mrk[1] + t)],
+            [(mrk[0] - c, mrk[1] - c), (mrk[0] + c, mrk[1] - c),
+             (mrk[0] + c, mrk[1] + c), (mrk[0] - c, mrk[1] + c)],
             close=True, dxfattribs={"layer": "OLCU"})
-        e = _yaz(msp, harf, mrk[0], mrk[1], 1.2 * t, kat="OLCU")
+        e = _yaz(msp, harf, mrk[0], mrk[1], 0.72 * h, kat="OLCU")
         ky = _yazi_siniri(e)
         if ky:                         # harf kutunun ortasına otursun
             e.set_placement((mrk[0] - (ky[2] - ky[0]) / 2.0,
@@ -4144,12 +4240,13 @@ def sac_taramasi(sh, kb=None):
                         neden=f"gabari kalınlığa göre küçük "
                               f"({XL.tr(olc[2], 0, sade=False)} mm / t={XL.tr(t, 1, sade=False)} mm): sac değil")
         try:
-            bukum_ekseni(ciftler)
+            eksen = bukum_ekseni(ciftler)
             paralel = True
         except AcilimYok:
-            paralel = False
+            eksen, paralel = None, False
         return {"sac": True, "tip": "bukumlu sac", "kalinlik_mm": round(t, 2),
                 "bukum_sayisi": len(ciftler), "eksen_paralel": paralel,
+                "eksen": eksen,
                 "neden": ("" if paralel else
                           "büküm eksenleri paralel değil; açınım "
                           "denenecek ama çıkmayabilir")}
@@ -6542,6 +6639,23 @@ def sade_profil(s2, o, k, P):
                           "tedarikçi kataloğundan"), o2)
 
 
+def gabari_satiri(o):
+    """Başlıktaki ölçü satırı.
+
+    Üç kutu ölçüsü yalnız DÜZ SACTA "boy x en x kalınlık"tır. C profilde
+    en küçük kutu ölçüsü 40 mm'dir, sac 1,5 mm; "KALINLIK 40" yazmak
+    yanlıştı. Öbür parçalarda satır GABARİ'dir, sac kalınlığı ayrıca
+    yazılır."""
+    L, W, T = (XL.tr(o[a], 2) for a in ("boy_mm", "en_mm", "kalinlik_mm"))
+    t = o.get("sac_kalinlik_mm")
+    if o.get("sac_tip") == "duz sac" and t and abs(float(t) - float(o["kalinlik_mm"])) < 0.01:
+        return f"BOY x EN x KALINLIK: {L} x {W} x {T} mm"
+    satir = f"GABARİ (boy x en x yükseklik): {L} x {W} x {T} mm"
+    if t:
+        satir += f"   sac kalınlığı {XL.tr(t, 2)} mm"
+    return satir
+
+
 def dxf_komponent(s, o, k, yol, P):
     """Bir komponentin detay resmi: seçili görünüşler + ölçüler + tablolar."""
     doc = dxf_kur(); msp = doc.modelspace()
@@ -6573,8 +6687,9 @@ def dxf_komponent(s, o, k, yol, P):
     except Exception:
         seviye = [[], [], []]      # ölçülemezse hiçbir konum geçmez
     atlanan = Counter()
+    sac_kesit = sac_kesit_gorunusleri(s, o, gorunusler)
     kplan = (konum_plani(o, gorunusler, ham, h, kenar_olcu, seviye=seviye,
-                         rapor=atlanan)
+                         rapor=atlanan, sac_kesit=sac_kesit)
              if P.get("konum", True) else {})
     ust, kaydir, gkutu = {}, {}, {}
     for gad in gorunusler:
@@ -6618,8 +6733,7 @@ def dxf_komponent(s, o, k, yol, P):
     satir = [
         (f"{poz}{k['kod']}   {k['ad'][:60]}", 1.5 * h),
         (f"adet: {k['adet']}", 1.1 * h),
-        (f"BOY x EN x KALINLIK: {XL.tr(o['boy_mm'], 2)} x {XL.tr(o['en_mm'], 2)} x "
-         f"{XL.tr(o['kalinlik_mm'], 2)} mm", 1.1 * h),
+        (gabari_satiri(o), 1.1 * h),
         (f"kütle {XL.tr(o['kutle_kg'], 3)} kg   malzeme: {k.get('malzeme_ad', '-')}", 1.1 * h),
     ] + ([(P["sade_not"], 1.1 * h)] if P.get("sade_not") else []) + [
         # Ölçek ve birim resmin üstünde yazsın: DXF başka bir çizime
@@ -7867,6 +7981,9 @@ def calistir(step, on, kayit, komp, P, asama=(1, 2, 3), esl=None, agac=None,
         sat.update({q: o[q] for q in ("boy_mm", "en_mm", "kalinlik_mm", "hacim_mm3",
                                       "kutle_kg", "yuzey_mm2", "sac_kalinlik_mm",
                                       "delik_adedi", "radus_adedi")})
+        # Tabloda üçüncü kutu ölçüsü "yükseklik"tir: C profilde 40 mm'ye
+        # "kalınlık" demek yanlıştı (sac 1,5 mm, sac_kalinlik_mm sütunu).
+        sat["yukseklik_mm"] = o["kalinlik_mm"]
         sat["delikler"], sat["radusler"] = o["delikler"], o["radusler"]
         sat["dis_capler"] = o["dis_capler"]
         sat["malzeme"] = mal
@@ -7985,7 +8102,7 @@ def calistir(step, on, kayit, komp, P, asama=(1, 2, 3), esl=None, agac=None,
             log(f"  BOM_AGAC.csv, BOM_AGAC.md  ({len(ags)} satır, "
                 f"{agac_derinlik(agac)} kademe)")
     alan = ["poz", "kod", "ad", "adet", "sinif", "tip", "malzeme_ad", "yogunluk_g_cm3",
-            "boy_mm", "en_mm", "kalinlik_mm", "sac_kalinlik_mm", "hacim_mm3",
+            "boy_mm", "en_mm", "yukseklik_mm", "sac_kalinlik_mm", "hacim_mm3",
             "kutle_kg", "toplam_kg", "yuzey_mm2", "delik_adedi", "radus_adedi", "dxf"]
     XL.tablo_yaz(os.path.join(on, "olculer.csv"), alan,
                  XL.sozlukten(alan, satirlar), "olculer")
@@ -8341,8 +8458,8 @@ def rapor_yaz(on, step, kayit, komp, satirlar, montaj):  # noqa: C901
         L.append(f"**Montaj gabarisi:** {XL.tr(montaj['boy_mm'])} x {XL.tr(montaj['en_mm'])} x "
                  f"{XL.tr(montaj['yukseklik_mm'])} mm (boy x en x yükseklik)\n")
     L.append("## Çizilen parçalar\n")
-    L.append("| poz | kod | adet | malzeme | boy | en | kalınlık | sac | kg | delik | radüs | dxf |")
-    L.append("|-----|-----|------|---------|-----|----|----------|-----|----|-------|-------|-----|")
+    L.append("| poz | kod | adet | malzeme | boy | en | yükseklik | sac kalınlığı | kg | delik | radüs | dxf |")
+    L.append("|-----|-----|------|---------|-----|----|-----------|---------------|----|-------|-------|-----|")
     for r in satirlar:
         if r["sinif"] != "parca":
             continue
