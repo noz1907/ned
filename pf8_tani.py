@@ -281,12 +281,12 @@ def _tani(sh, V):
     if all(y["tip"] == "kure" for y in yz):
         R = max(y["r"] for y in yz)
         return ("standart", "bilye",
-                f"bilye: yalnız küre yüzü, Ø{2 * R:.2f}".replace(".", ","))
+                f"bilye: yalnız küre yüzü, Ø{XL.tr(2 * R, 2, sade=False)}")
     # O-ring / halka conta: yalnız tor yüzlerinden oluşan katı
     if all(y["tip"] == "tor" for y in yz):
         R = max(y["r"] for y in yz)
         return ("standart", "o-ring",
-                f"o-ring: yalnız tor yüzü, orta çap Ø{2 * R:.1f}".replace(".", ","))
+                f"o-ring: yalnız tor yüzü, orta çap Ø{XL.tr(2 * R, 1, sade=False)}")
     e = _ana_eksen(yz)
     if e:
         r = _donel(sh, e, V) or _donel_isin(sh, e)
@@ -307,8 +307,8 @@ def _kaynak_dikisi(yz, toplam, V):
     if k:
         ba, bb, L = k
         return ("kaynak", "",
-                f"köşe kaynağı: dik iki bacak {ba:.1f} x {bb:.1f} mm, "
-                f"boy {L:.0f} mm")
+                f"köşe kaynağı: dik iki bacak {XL.tr(ba, 1, sade=False)} x {XL.tr(bb, 1, sade=False)} mm, "
+                f"boy {XL.tr(L, 0, sade=False)} mm")
     return None
 
 
@@ -1087,7 +1087,7 @@ def _profil_eksen(sh, V, d):
     temel = {"boy": round(boy, 1), "alan": round(A, 1), "W": round(W, 2),
              "H": round(H, 2), "dolu": round(dolu, 3)}
     gerekce = (f"{len(ayni)}/{PROFIL_ISTASYON} kesit aynı ({_m(A)} mm²), "
-               f"hacim/(kesit x boy) = {dolu:.2f}")
+               f"hacim/(kesit x boy) = {XL.tr(dolu, 2, sade=False)}")
 
     def sonuc(tur, ad, kesit, **ek):
         if kisa:
@@ -1526,7 +1526,7 @@ def yay_mi(sh, V):
     eksik = sum(1 for r in m if r[1] is None)
     if eksik < 0.3 * len(m):
         return None
-    return f"helis yay biçimi: Ø{XL.tr(2 * R, 1)} x {XL.tr(H, 1)}, doluluk %{100 * dol:.0f}"
+    return f"helis yay biçimi: Ø{XL.tr(2 * R, 1)} x {XL.tr(H, 1)}, doluluk %{XL.tr(100 * dol, 0, sade=False)}"
 
 
 def aday_isaretleri(sh, V=None):
@@ -1568,10 +1568,10 @@ def aday_isaretleri(sh, V=None):
             pass
         d = donel_mi(sh)
         if d:
-            out.append(("donel", f"dönel küçük parça (en büyük ölçü {B:.0f} mm)"))
+            out.append(("donel", f"dönel küçük parça (en büyük ölçü {XL.tr(B, 0, sade=False)} mm)"))
             if d[1] >= 0.2:
                 out.append(("dis", "diş / helis / tırtıl modelli (serbest yüz "
-                                   f"%{100 * d[1]:.0f})"))
+                                   f"%{XL.tr(100 * d[1], 0, sade=False)})"))
         else:
             y = yay_mi(sh, V)
             if y:

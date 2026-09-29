@@ -269,5 +269,5 @@ def kontrol_et(parcalar, baglam=None, goruntu=None, oncelik=(), anahtar=None,
         return XL.tr(v)
     log(f"AI: {sayac['istek']} istek, {sayac['resim']} resim, {bin_(sayac['girdi'])} girdi "
         f"(önbellek fiyatıyla) + {bin_(sayac['cikti'])} çıktı token ≈ "
-        f"${sayac['usd']:.2f} ({model})")
+        f"${XL.tr(sayac['usd'], 2, sade=False)} ({model})")
     return sonuc, sayac

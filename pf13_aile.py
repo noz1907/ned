@@ -263,13 +263,13 @@ def segman(sh, yz):
         else:
             tip, dis_ic = "delik segmanı (DIN 472)", f"dış Ø{_m(2 * h['rout'])}"
         return ("standart", tip,
-                f"yapı: düz açık halka (s={_m(s, 2)}), boşluk {h['bosluk']:.0f}°, iki kulak "
+                f"yapı: düz açık halka (s={_m(s, 2)}), boşluk {XL.tr(h['bosluk'], 0, sade=False)}°, iki kulak "
                 f"deliği Ø{_m(2 * del_[0][2])} boşluğa simetrik; {dis_ic}"
                 + ("" if seride else "; kalınlık standart seride değil"), True)
     if not del_ and 60 <= h["bosluk"] <= 150 and D <= 60:
         kesin = seride and D <= 50 and s <= 3
         return ("standart", "E-segman (DIN 6799)",
-                f"yapı: düz açık halka (s={_m(s, 2)}), deliksiz, ağız {h['bosluk']:.0f}°, "
+                f"yapı: düz açık halka (s={_m(s, 2)}), deliksiz, ağız {XL.tr(h['bosluk'], 0, sade=False)}°, "
                 f"dış Ø{_m(2 * h['rout_max'])}"
                 + ("" if kesin else " - büyük / seri dışı: C biçimli sac da olabilir"), kesin)
     return None
@@ -298,7 +298,7 @@ def yayli_pim(sh, yz):
     tip = ("yaylı pim (ISO 8752 / DIN 1481, ağır tip)" if s >= 0.15 * d
            else "yaylı pim (ISO 13337 / DIN 7346, hafif tip)")
     return ("standart", tip,
-            f"yapı: ince cidarlı tüp, boydan boya yarık ({h['bosluk']:.0f}°); Ø{_m(d)} x "
+            f"yapı: ince cidarlı tüp, boydan boya yarık ({XL.tr(h['bosluk'], 0, sade=False)}°); Ø{_m(d)} x "
             f"{_m(L)}, et {_m(s, 2)}" + (", uçları pahlı" if pah >= 2 else ""), True)
 
 
@@ -373,7 +373,7 @@ def konik_pim(sh, yz):
         return None
     d = D - L / 50.0                       # küçük uç çapı
     return ("standart", "konik pim (ISO 2339 / DIN 1)",
-            f"yapı: koni yüzü, koniklik 1:50 (yarım açı {aci:.3f}°); küçük uç Ø{_m(d)} x "
+            f"yapı: koni yüzü, koniklik 1:50 (yarım açı {XL.tr(aci, 3, sade=False)}°); küçük uç Ø{_m(d)} x "
             f"{_m(L)}".replace(".", ","), True)
 
 
@@ -407,7 +407,7 @@ def gres_nipeli(sh, yz):
     if not delik:
         return None
     return ("standart", "gres nipeli (DIN 71412 A)",
-            f"yapı: küre baş Ø{_m(2 * kure[0]['r'])} + altıköşe SW{sw[0]:g} + eksenel "
+            f"yapı: küre baş Ø{_m(2 * kure[0]['r'])} + altıköşe SW{XL.tr(sw[0])} + eksenel "
             f"yağ deliği Ø{_m(2 * delik[0]['r'])}; boy {_m(B)}", True)
 
 

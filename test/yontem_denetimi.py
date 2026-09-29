@@ -80,7 +80,7 @@ esit("r 25xt", yontem(2.0, [200.0, 200.0], [50.0]), "silindir bükümü")
 
 print("\n-- sebep yazılıyor mu")
 r = M.bukum_yontemi(3.0, [0.8, 90.0], [1.5], [1.57], 1940)
-for kelime in ("kanat", "0.8", "kalıb"):
+for kelime in ("kanat", "0,8", "kalıb"):   # Türkçe ondalık virgül
     if kelime not in r["neden"]:
         hata.append(f"sebepte '{kelime}' yok")
         print(f"  HATA  sebepte {kelime!r} geçmiyor: {r['neden'][:70]}")

@@ -581,8 +581,8 @@ def bukulmus_cubuk(sh):
     if ayni < 0.6 * top or all(y["tip"] == "tor" for y in yz):
         return None                         # yalnız tor: o-ring
     return (f"bükülmüş Ø{_m(2 * r)} çubuk (U / J cıvata, kulp, kanca)",
-            f"yapı: yüzeyin %{100 * ayni / top:.0f}'i aynı Ø{_m(2 * r)} silindir + büküm"
-            + (f", uçlarda diş (%{100 * serbest:.0f})" if serbest >= 0.08 else ""),
+            f"yapı: yüzeyin %{XL.tr(100 * ayni / top, 0, sade=False)}'i aynı Ø{_m(2 * r)} silindir + büküm"
+            + (f", uçlarda diş (%{XL.tr(100 * serbest, 0, sade=False)})" if serbest >= 0.08 else ""),
             serbest >= 0.08)
 
 
@@ -1104,7 +1104,7 @@ def _yay(sh, V):
     eksen_tasma = max(za - b[2], b[5] - zb)
     yan_tasma = max(-b[0], b[3], -b[1], b[4]) - Do / 2
     olcu = (f"tel ~Ø{XL.tr(kal, 1)}, dış Ø{XL.tr(Do, 1)}, adım {XL.tr(adim, 1)}, "
-            f"~{(zb - za) / adim:.0f} sarım, {yon} helis")
+            f"~{XL.tr((zb - za) / adim, 0, sade=False)} sarım, {yon} helis")
     if yan_tasma > 0.3 * Do:
         tip = "burulma yayı (bacaklı)"
         uc = f"uçlar yana {XL.tr(yan_tasma, 1)} taşıyor (bacak)"

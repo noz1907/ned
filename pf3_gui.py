@@ -1569,10 +1569,10 @@ class Uygulama(ttk.Frame):
                     d += (f"  ({PF.kagit_adi(di[0])} kâğıtta "
                           f"{PF.olcek_metni(di[1])} olurdu)")
             if 0 < s.get("yazi_mm", 0) < PF.EN_AZ_YAZI_MM:
-                d += f"  –  DİKKAT: yazılar kâğıtta {s['yazi_mm']:.1f} mm kalıyor"
+                d += f"  –  DİKKAT: yazılar kâğıtta {XL.tr(s['yazi_mm'], 1, sade=False)} mm kalıyor"
             i = self.pf_agac.insert("", "end", values=(
                 os.path.basename(s["dosya"]), self._resim_tipi(s["dosya"]),
-                f"{s['olcu'][0]:.0f} x {s['olcu'][1]:.0f}",
+                f"{XL.tr(s['olcu'][0], 0, sade=False)} x {XL.tr(s['olcu'][1], 0, sade=False)}",
                 PF.kagit_adi(s.get("kagit") or kagit),
                 PF.olcek_metni(s["olcek"]), d))
             # Yönü de birlikte saklıyoruz: üretimde aynı yön kullanılsın,
@@ -1584,7 +1584,7 @@ class Uygulama(ttk.Frame):
                             for k, o in s["secenek"][:4])
             i = self.pf_agac.insert("", "end", values=(
                 os.path.basename(s["dosya"]), self._resim_tipi(s["dosya"]),
-                f"{s['olcu'][0]:.0f} x {s['olcu'][1]:.0f}", kagit, "-",
+                f"{XL.tr(s['olcu'][0], 0, sade=False)} x {XL.tr(s['olcu'][1], 0, sade=False)}", kagit, "-",
                 f"{kagit} kâğıda sığmıyor  –  " + (sec or "hiçbir kâğıda sığmıyor")))
             self.pf_satir[i] = None
         for y, e in p["hata"]:
@@ -1756,7 +1756,7 @@ class Uygulama(ttk.Frame):
                     d += f"  (+{v['yazi_duzeltildi']} yazı Türkçe stile alındı)"
                 if v.get("yazi_kucuk"):
                     d += (f"  –  DİKKAT: yazılar kâğıtta "
-                          f"{v['yazi_mm']:.1f} mm")
+                          f"{XL.tr(v['yazi_mm'], 1, sade=False)} mm")
                 self.pf_agac.set(s, "durum", d)
                 self.pafta_dosya[s] = (v["dosya"],
                                        v.get("kagit_adi") or "A3")
@@ -2007,7 +2007,7 @@ class Uygulama(ttk.Frame):
     def _bitir(self, sonuc=None):
         if self.calisiyor:
             g = time.time() - getattr(self, "is_basi", time.time())
-            self._yaz(f"  ({g:.1f} saniye sürdü)")
+            self._yaz(f"  ({XL.tr(g, 1, sade=False)} saniye sürdü)")
             sonuc = sonuc or ("iptal" if self.iptal_istendi else "tamam")
             ad = getattr(self, "is_islem", "") or "işlem"
             self._sure_satiri(ad, g, sonuc)
@@ -2121,7 +2121,7 @@ class Uygulama(ttk.Frame):
         t.pack(fill="both", expand=True)
         sat = ["Pi3D'nin malzeme tablosu (kütle = hacim x yoğunluk):", ""]
         for k, (ad, r) in self.M.MALZEME.items():
-            sat.append(f"  {k:22s} {r:6.2f} g/cm3   {ad}")
+            sat.append(f"  {k:22s} {XL.tr(r, 2, sade=False):>6s} g/cm3   {ad}")
         sat += ["", "Parça listelerinde tanınan adlar (Türkçe, İngilizce, "
                 "Almanca, Fransızca), örnek:",
                 "  Steel, Stahl, S235, S355, St37, C45, 42CrMo4, AISI 1020, "
@@ -2167,7 +2167,7 @@ class Uygulama(ttk.Frame):
         """Malzeme kutusunu MALZEME tablosundan yeniden doldurur - CAD'den
         gelen özel malzemeler ("cad:...") de listede görünsün."""
         M = self.M
-        adlar = [f"{k} – {t} ({r} g/cm³)" for k, (t, r) in M.MALZEME.items()]
+        adlar = [f"{k} – {t} ({XL.tr(r)} g/cm³)" for k, (t, r) in M.MALZEME.items()]
         self.cb_mal.configure(values=adlar)
         if not self.v_mal.get():
             self.v_mal.set(next(a for a in adlar
@@ -2483,7 +2483,7 @@ class Uygulama(ttk.Frame):
                     continue               # aşağıda tek satırda toplanır
                 t = ("std",) if r["sinif"] == "standart" else \
                     ("data",) if r.get("malzeme_kaynak") == "data'dan" else ()
-                kg = f"{r['kg_adet']:.3f}" if r.get("kg_adet") else "-"
+                kg = f"{XL.tr(r['kg_adet'], 3, sade=False)}" if r.get("kg_adet") else "-"
                 self.ag.insert("", "end", tags=t,
                                values=(r["poz"], r["kod"][:40], r["ad"][:60], r["adet"],
                                        self._sinif_metni(r["sinif"], r["kod"]),
@@ -2582,7 +2582,10 @@ class Uygulama(ttk.Frame):
                                        else r["tur"],
                                        (r["malzeme_ad"] or "-")[:28],
                                        r.get("kaynak") or r.get("malzeme_kaynak") or "-",
-                                       r["olcu"] or "-", r["kg_adet"] or "-"))
+                                       r["olcu"] or "-",
+                                       XL.tr(r["kg_adet"], 3, sade=False)
+                                       if isinstance(r["kg_adet"], (int, float))
+                                       and r["kg_adet"] else (r["kg_adet"] or "-")))
                 # Kaynak özeti kapalı gelir; açılınca türleri görünür.
                 for j, (tur, a) in enumerate(r.get("kaynak_turleri") or []):
                     self.ag.insert(r["poz"], "end", iid=f"{r['poz']}#{j}",
@@ -2714,7 +2717,7 @@ class Uygulama(ttk.Frame):
                 "Gönderilen: ad, kod, adet, ölçü, programın bulguları, resim. "
                 "CAD dosyası GÖNDERİLMEZ. Veri Anthropic'e gider: firmanızın izni "
                 "olmalı.\n\n"
-                f"Model: {model}\nTahmini maliyet: ≈ ${tahmin:.2f} (işlem sonunda "
+                f"Model: {model}\nTahmini maliyet: ≈ ${XL.tr(tahmin, 2, sade=False)} (işlem sonunda "
                 "gerçek tutar günlüğe yazılır)\n\nDevam edilsin mi?"):
             return
         self._basla("AI kontrol ediyor…", "AI malzeme tanımlama")
@@ -2764,14 +2767,14 @@ class Uygulama(ttk.Frame):
         self._agac_doldur()
         ozet = (f"AI: {len(sonuc)} parça kontrol edildi — {len(duzelt)} düzeltme önerisi, "
                 f"{len(dogrula)} belirsiz parça doğrulandı, {len(belirsiz)} emin değil; "
-                f"maliyet ≈ ${sayac['usd']:.2f}")
+                f"maliyet ≈ ${XL.tr(sayac['usd'], 2, sade=False)}")
         self._yaz(ozet)
         if not (duzelt or dogrula):
             messagebox.showinfo("AI", ozet + "\n\nUygulanacak öneri yok.")
             return
         satir = "\n".join(f"  • {k['ad'][:26]} x{k['adet']}: {k['sinif']} → {r['sinif']}"
                           + (f" ({r['tip']})" if r["tip"] else "")
-                          + f" %{100 * r['guven']:.0f}"
+                          + f" %{XL.tr(100 * r['guven'], 0, sade=False)}"
                           + (" [resimle]" if r.get("goruntu") else "")
                           for k, r in duzelt[:10])
         if not messagebox.askyesno(
@@ -2993,7 +2996,7 @@ class Uygulama(ttk.Frame):
         self._bitir()
         self._agac_doldur()
         kg = sum((r.get("toplam_kg") or 0.0) for r in sonuc["bom"])
-        self.v_bom_ozet.set(f"{len(sonuc['bom'])} poz, toplam {kg:.3f} kg – BOM.csv yazıldı")
+        self.v_bom_ozet.set(f"{len(sonuc['bom'])} poz, toplam {XL.tr(kg, 3, sade=False)} kg – BOM.csv yazıldı")
         # örnek parça adayları: en çok çeşit delik + radüs taşıyan önce
         self._ornek_adaylari()
         self._adim_ac(2)
@@ -3097,7 +3100,7 @@ class Uygulama(ttk.Frame):
         d = self._cikti_listesi()
         kg = sum((r.get("toplam_kg") or 0.0) for r in sonuc["bom"])
         at = sonuc.get("atlanan") or 0
-        self.v_sonuc.set(f"{d} DXF, {len(sonuc['bom'])} poz, toplam {kg:.3f} kg"
+        self.v_sonuc.set(f"{d} DXF, {len(sonuc['bom'])} poz, toplam {XL.tr(kg, 3, sade=False)} kg"
                          + (f"  –  {at} çizim güncel olduğu için yeniden "
                             "üretilmedi" if at else "") + f"\n{on}")
         self._durum_ipucu = "bitti – ZIP oluşturabilirsiniz"
@@ -3338,7 +3341,7 @@ class MalzemeSihirbazi:
             sat.append("STEP'ten gelenler (ilk 15):")
             for kod, ad, y in r["stepten"][:15]:
                 sat.append(f"   {kod[:34]:34s}  {ad[:30]:30s}"
-                           + (f"  {y:g}" if y else ""))
+                           + (f"  {XL.tr(y)}" if y else ""))
             sat.append("")
         if r["eksik"] == 0:
             sat.append("Bütün parçaların malzemesi belli - bu sihirbaza gerek "
@@ -3473,8 +3476,7 @@ class MalzemeSihirbazi:
             pi3d = M.MALZEME[s["anahtar"]][0] if s["anahtar"] else "-"
             self.ag.insert("", "end", tags=(etiket,), values=(
                 s["kod"], s["malzeme"] or "-",
-                f"{s['yogunluk']:.3f}".rstrip("0").rstrip(".")
-                if s["yogunluk"] else "-", pi3d, durum))
+                XL.tr(s["yogunluk"], 3) if s["yogunluk"] else "-", pi3d, durum))
         n_parca = (len(r["eslesen"]) + len(r["eslesmeyen"])
                    + len(r["adi_taninmayan"]))
         t = (f"{os.path.basename(r['yol'])}: {len(r['satir'])} satır.  "

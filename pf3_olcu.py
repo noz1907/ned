@@ -3961,30 +3961,30 @@ def bukum_yontemi(t, kanatlar, yaricaplar, aciler=(), boy_mm=0.0):
     if min(yaricaplar) / t >= sil_k:
         return dict(olcu, yontem="silindir bükümü", kesinlik="olası",
                     neden=(f"En küçük iç yarıçap kalınlığın "
-                           f"{en_kucuk_r / t:.0f} katı; bu kadar geniş "
+                           f"{XL.tr(en_kucuk_r / t, 0, sade=False)} katı; bu kadar geniş "
                            f"yarıçap abkantta değil silindirde (kalender) "
                            f"yapılır."))
     uyari = ""
     if en_kucuk_r / t < r_k:
-        uyari = (f"En küçük iç yarıçap {en_kucuk_r:.2f} mm = kalınlığın "
-                 f"{en_kucuk_r / t:.2f} katı ({r_k:g} katın altında). "
+        uyari = (f"En küçük iç yarıçap {XL.tr(en_kucuk_r, 2, sade=False)} mm = kalınlığın "
+                 f"{XL.tr(en_kucuk_r / t, 2, sade=False)} katı ({XL.tr(r_k)} katın altında). "
                  f"Bükülebilir ama çatlama riski var: malzeme kalitesine, "
                  f"hadde yönüne ve kalıbın keskinliğine bakın.")
     if kanatlar and en_kisa / t < kanat_k:
         return dict(olcu, yontem="rollform", kesinlik="olası", uyari=uyari,
                     neden=(f"Abkantta yapılamaz: en kısa kanat "
-                           f"{en_kisa:.1f} mm = kalınlığın {en_kisa / t:.1f} "
-                           f"katı; abkant için en az {kanat_k:g} kat gerekir, "
+                           f"{XL.tr(en_kisa, 1, sade=False)} mm = kalınlığın {XL.tr(en_kisa / t, 1, sade=False)} "
+                           f"katı; abkant için en az {XL.tr(kanat_k)} kat gerekir, "
                            f"daha kısa kanat V kalıbın ağzını tutmaz, parça "
                            f"kalıbın içine düşer. Rollform ya da başka bir "
                            f"yöntemle üretilmiş olmalı."))
     ek = ""
     if len(yaricaplar) >= 8 and boy_mm >= 1000:
-        ek = (f" ({len(yaricaplar)} büküm ve {boy_mm:.0f} mm boy rollform "
+        ek = (f" ({len(yaricaplar)} büküm ve {XL.tr(boy_mm, 0, sade=False)} mm boy rollform "
               f"için de tipiktir; seri büyükse orayı da değerlendirin.)")
     return dict(olcu, yontem="abkant", kesinlik="kesin", uyari=uyari,
-                neden=(f"Bütün kanatlar en az kalınlığın {kanat_k:g} katı "
-                       f"(en kısası {en_kisa / t:.1f} kat): abkantta "
+                neden=(f"Bütün kanatlar en az kalınlığın {XL.tr(kanat_k)} katı "
+                       f"(en kısası {XL.tr(en_kisa / t, 1, sade=False)} kat): abkantta "
                        f"bükülür." + ek))
 
 
@@ -4142,7 +4142,7 @@ def sac_taramasi(sh, kb=None):
         if olc[2] < 4.0 * t:
             return dict(bos, kalinlik_mm=round(t, 2),
                         neden=f"gabari kalınlığa göre küçük "
-                              f"({olc[2]:.0f} mm / t={t:.1f} mm): sac değil")
+                              f"({XL.tr(olc[2], 0, sade=False)} mm / t={XL.tr(t, 1, sade=False)} mm): sac değil")
         try:
             bukum_ekseni(ciftler)
             paralel = True
@@ -4496,8 +4496,8 @@ def _serit_genisligi(sh, kb, t, alan, boy, sebep, k_faktor=K_FAKTOR,
                    "kesinlik": "olası", "bukum_sayisi": len(ry),
                    "en_kucuk_r_t": round(min(ry) / t, 2),
                    "neden": (f"{len(ry)} büküm yüzeyi var, yarıçapları "
-                             f"{min(ry) / t:.2f}..{max(ry) / t:.2f} x kalınlık; "
-                             f"{kucuk} tanesi abkant sınırı {r_k:g} katın "
+                             f"{XL.tr(min(ry) / t, 2, sade=False)}..{XL.tr(max(ry) / t, 2, sade=False)} x kalınlık; "
+                             f"{kucuk} tanesi abkant sınırı {XL.tr(r_k)} katın "
                              f"altında. Kanat uzunlukları ölçülemedi.")}
             if not yon["yontem"]:
                 yon = {}
@@ -4517,13 +4517,13 @@ def _serit_genisligi(sh, kb, t, alan, boy, sebep, k_faktor=K_FAKTOR,
             "kontur_notu": (
                 f"ŞERİT GENİŞLİĞİDİR, açınım resmi değildir. Orta çizgi "
                 f"kurulamadı ({sebep}) Parça boy boyunca aynı kesitte; "
-                f"genişlik = kesit alanı / kalınlık = {a:.1f} / {t:.2f} = "
-                f"{gen_orta:.1f} mm (orta yüzey, K=0,50). Hacimle "
-                f"doğrulandı: {a:.0f} x {boy:.0f} = {a * boy:.0f} mm3, "
-                f"parçanın hacmi {hac:.0f} mm3."
-                + (f" K={k_faktor:g} icin {ic_say} bukumun toplam "
-                   f"{math.degrees(ic_aci):.0f} derecesinden {duzelt:+.1f} mm "
-                   f"duzeltme: {gen:.1f} mm." if ic_say else "")
+                f"genişlik = kesit alanı / kalınlık = {XL.tr(a, 1, sade=False)} / {XL.tr(t, 2, sade=False)} = "
+                f"{XL.tr(gen_orta, 1, sade=False)} mm (orta yüzey, K=0,50). Hacimle "
+                f"doğrulandı: {XL.tr(a, 0, sade=False)} x {XL.tr(boy, 0, sade=False)} = {XL.tr(a * boy, 0, sade=False)} mm3, "
+                f"parçanın hacmi {XL.tr(hac, 0, sade=False)} mm3."
+                + (f" K={XL.tr(k_faktor)} icin {ic_say} bukumun toplam "
+                   f"{XL.tr(math.degrees(ic_aci), 0, sade=False)} derecesinden {('+' if (duzelt) >= 0 else '') + XL.tr(duzelt, 1, sade=False)} mm "
+                   f"duzeltme: {XL.tr(gen, 1, sade=False)} mm." if ic_say else "")
                 + " Büküm YERLERİ ve kesim konturu VERİLMEDİ.")}
 
 
@@ -4588,8 +4588,8 @@ def sac_acilim(sh, o=None, k_faktor=K_FAKTOR, istasyon=11,
     orta = sum(z["uz"] for z in duzler) + sum(z["aci"] * z["r_orta"] for z in bkm)
     if abs(orta - alan / t) > max(0.5, 0.01 * orta):
         raise AcilimYok(
-            f"Açınım denetimi tutmadı: orta çizgi {orta:.1f} mm, kesit "
-            f"alanından çıkan {alan / t:.1f} mm. Aradaki fark, kesitin sac "
+            f"Açınım denetimi tutmadı: orta çizgi {XL.tr(orta, 1, sade=False)} mm, kesit "
+            f"alanından çıkan {XL.tr(alan / t, 1, sade=False)} mm. Aradaki fark, kesitin sac "
             f"şeridi gibi çözülemediğini gösteriyor; bu parçanın açınımı "
             f"verilemez.")
 
@@ -4652,8 +4652,8 @@ def sac_acilim(sh, o=None, k_faktor=K_FAKTOR, istasyon=11,
             # orta çizgi hesabı ile yüzeyden açılan konturun genişliği.
             if abs(ac["acinim_genislik_mm"] - gen) > max(0.5, 0.01 * gen):
                 sonuc["kontur_notu"] = (
-                    f"Not: kesitten çıkan açınım genişliği {gen:.1f} mm, "
-                    f"yüzeyden açılan kontur {ac['acinim_genislik_mm']:.1f} mm. "
+                    f"Not: kesitten çıkan açınım genişliği {XL.tr(gen, 1, sade=False)} mm, "
+                    f"yüzeyden açılan kontur {XL.tr(ac['acinim_genislik_mm'], 1, sade=False)} mm. "
                     f"Fark, parçanın kesitinin boy boyunca değişmesinden "
                     f"gelir; kontur ölçüsü geçerlidir.")
         except AcilimYok as e:
@@ -4746,8 +4746,8 @@ def acilim_kesim(sh, t, k_faktor, hacim=None, en_cok_sapma=0.03):
         if abs(sapma) > en_cok_sapma:
             raise AcilimYok(
                 f"Açınım denetimi tutmadı: düzlemdeki alan x kalınlık "
-                f"{alan * t + duzelt:.0f} mm3, parçanın hacmi {hacim:.0f} "
-                f"mm3 (%{100 * sapma:+.1f}). Açma haritası bu parçada "
+                f"{XL.tr(alan * t + duzelt, 0, sade=False)} mm3, parçanın hacmi {XL.tr(hacim, 0, sade=False)} "
+                f"mm3 (%{('+' if (100 * sapma) >= 0 else '') + XL.tr(100 * sapma, 1, sade=False)}). Açma haritası bu parçada "
                 f"doğru kurulamamış; kontur verilmiyor.")
     # Sınırı topolojiden çıkar: paylaşılan kenarlar iç dikiştir.
     dis, ic = _dis_halkalar(taban)
@@ -4761,7 +4761,7 @@ def acilim_kesim(sh, t, k_faktor, hacim=None, en_cok_sapma=0.03):
         raise AcilimYok(
             f"Açınım düzlemde {len(dis)} ayrı parça çıktı; duvarlar uç uca "
             f"oturmadı. Parça alanları: "
-            + ", ".join(f"{a:.0f} mm2" for a in ayri[:4])
+            + ", ".join(f"{XL.tr(a, 0, sade=False)} mm2" for a in ayri[:4])
             + ". Kesim konturu verilmiyor.")
     xs = [p[0] for w in dis for p in w]; ys = [p[1] for w in dis for p in w]
     dx, dy = -min(xs), -min(ys)
@@ -5330,18 +5330,18 @@ def _bagsiz_duvar_raporu(duvarlar, bukumler, disarda, t, en_cok=6):
             if en_iyi is None or puan < en_iyi[0]:
                 en_iyi = (puan, uz, hedef, ort[1] - ort[0])
         if en_iyi is None:
-            sat.append(f"  alan {w['alan']:8.0f} mm2 - hiç büküm yok")
+            sat.append(f"  alan {XL.tr(w['alan'], 0):>8s} mm2 - hiç büküm yok")
             continue
         _, uz, hedef, ort = en_iyi
         if ort < 0.5:
-            neden = f"boy boyunca hiç örtüşmüyor ({ort:.1f} mm)"
+            neden = f"boy boyunca hiç örtüşmüyor ({XL.tr(ort, 1, sade=False)} mm)"
         elif abs(uz - hedef) > 0.15:
-            neden = (f"teğet değil: bükümden uzaklık {uz:.2f} mm, "
-                     f"olması gereken {hedef:.2f} mm")
+            neden = (f"teğet değil: bükümden uzaklık {XL.tr(uz, 2, sade=False)} mm, "
+                     f"olması gereken {XL.tr(hedef, 2, sade=False)} mm")
         else:
             neden = "ağacın kopuk bir dalında kalmış"
-        sat.append(f"  alan {w['alan']:8.0f} mm2  boy [{w['z'][0]:.0f}, "
-                   f"{w['z'][1]:.0f}]  ->  {neden}")
+        sat.append(f"  alan {XL.tr(w['alan'], 0):>8s} mm2  boy [{XL.tr(w['z'][0], 0, sade=False)}, "
+                   f"{XL.tr(w['z'][1], 0, sade=False)}]  ->  {neden}")
     if len(sirali) > en_cok:
         sat.append(f"  ... ve {len(sirali) - en_cok} duvar daha")
     return "\n".join(sat)
@@ -5400,7 +5400,7 @@ def _acma_haritasi(duvarlar, bukumler, t, k_faktor):
     if alan > 0.03 * toplam:
         raise AcilimYok(
             f"Duvarların {len(disarda)} tanesi büküm ağacına bağlanamadı "
-            f"(sac yüzeyinin %{100 * alan / toplam:.0f}'i). Parça tek bir "
+            f"(sac yüzeyinin %{XL.tr(100 * alan / toplam, 0, sade=False)}'i). Parça tek bir "
             f"sac şeridi değil; kaynaklı ya da çok yönlü bükülmüş olabilir."
             + _bagsiz_duvar_raporu(duvarlar, bukumler, disarda, t))
     if len(b_harita) > len(harita) - 1:
@@ -5613,13 +5613,13 @@ def duz_sac_konturu(sh, en_cok_sapma=0.03):
     kb = kutu(sh)
     ince = min(kb[3] - kb[0], kb[4] - kb[1], kb[5] - kb[2])
     if t <= 0 or t > 25.0:
-        raise AcilimYok(f"Sac kalınlığı makul değil: {t:.2f} mm.")
+        raise AcilimYok(f"Sac kalınlığı makul değil: {XL.tr(t, 2, sade=False)} mm.")
     # Gabarinin en ince yönü ile hacimden çıkan kalınlık tutmalı.
     # Tutmuyorsa parça düz bir plaka değildir (cep, çıkıntı, kademe).
     if abs(ince - t) > max(0.05, en_cok_sapma * t):
         raise AcilimYok(
-            f"Parça düz plaka değil: gabarinin en ince yönü {ince:.2f} mm, "
-            f"hacim/alan {t:.2f} mm veriyor. Cebi, çıkıntısı ya da "
+            f"Parça düz plaka değil: gabarinin en ince yönü {XL.tr(ince, 2, sade=False)} mm, "
+            f"hacim/alan {XL.tr(t, 2, sade=False)} mm veriyor. Cebi, çıkıntısı ya da "
             f"kademesi olan bir parçanın kesim konturu tek düzlemden "
             f"çıkarılamaz; kontur verilmiyor.")
 
@@ -5939,9 +5939,9 @@ def acilim_yaz(kayit, komp, P, klasor, kodlar=None, k_faktor=K_FAKTOR,
                             (r.get("yontem") or {}).get("neden", ""),
                             (r.get("yontem") or {}).get("uyari", ""),
                             r["k_faktor"],
-                            " | ".join(f"{b['aci_derece']:g}d R{b['r_ic']:g} "
-                                       f"pay{b['pay_mm']:g} @"
-                                       f"{b['acinimda_bas_mm']:g}"
+                            " | ".join(f"{XL.tr(b['aci_derece'])}d R{XL.tr(b['r_ic'])} "
+                                       f"pay{XL.tr(b['pay_mm'])} @"
+                                       f"{XL.tr(b['acinimda_bas_mm'])}"
                                        for b in r["bukumler"]),
                             r["dxf"]])
         n = IS.csv_birlestir(
@@ -6534,7 +6534,7 @@ def kontrol_listesi(komp):
         if a:
             out[-1][6] = (f"AI ({a.get('karar', '')}): {a['sinif']}"
                           + (f" ({a['tip']})" if a["tip"] else "")
-                          + f" %{100 * a['guven']:.0f}")
+                          + f" %{XL.tr(100 * a['guven'], 0, sade=False)}")
             out[-1][7] = f"{out[-1][7]} | AI: {a['gerekce']}"
     return out
 
@@ -6954,7 +6954,7 @@ def malzeme_ozel(ad, yogunluk, taban=None):
     ad = (str(ad or "").strip() or "CAD malzemesi")[:60]
     anahtar = _tr_sade(f"cad:{ad}@{yogunluk:.3f}")
     if anahtar not in MALZEME:
-        gor = f"{ad}  (CAD: {yogunluk:.2f} g/cm3)"
+        gor = f"{ad}  (CAD: {XL.tr(yogunluk, 2, sade=False)} g/cm3)"
         MALZEME[anahtar] = (gor, float(yogunluk))
     return anahtar
 
@@ -7991,12 +7991,12 @@ def bom_yaz(on, bom, satirlar):
     XL.tablo_yaz(os.path.join(on, "BOM.csv"), alan, XL.sozlukten(alan, bom), "BOM")
     agir = sum((r.get("toplam_kg") or 0.0) for r in bom)
     L = ["# BOM – parça listesi\n",
-         f"{len(bom)} poz, toplam kütle {agir:.3f} kg\n",
+         f"{len(bom)} poz, toplam kütle {XL.tr(agir, 3, sade=False)} kg\n",
          "| poz | kod | tanım | adet | malzeme | ölçü BxExK | kg/adet | toplam kg | dxf |",
          "|-----|-----|-------|------|---------|------------|---------|-----------|-----|"]
     for r in bom:
-        ka = f"{r['kg_adet']:.3f}" if r.get("kg_adet") else "-"
-        tk = f"{r['toplam_kg']:.3f}" if r.get("toplam_kg") else "-"
+        ka = f"{XL.tr(r['kg_adet'], 3, sade=False)}" if r.get("kg_adet") else "-"
+        tk = f"{XL.tr(r['toplam_kg'], 3, sade=False)}" if r.get("toplam_kg") else "-"
         L.append(f"| {r['poz']} | {r['kod'][:28]} | {r['ad'][:40]} | {r['adet']} | "
                  f"{r.get('malzeme_ad') or '-'} | {r.get('olcu') or '-'} | {ka} | {tk} | "
                  f"{r['dxf'] or '-'} |")
@@ -8113,7 +8113,7 @@ def rapor_yaz(on, step, kayit, komp, satirlar, montaj):  # noqa: C901
         for k in prf:
             p_ = k["profil"]
             L.append(f"| {k['ad'][:30]} | {k['adet']} | {p_['ad']} | "
-                     f"{p_['boy']:g} | {p_['gerekce'].split(': ', 1)[-1]} |")
+                     f"{XL.tr(p_['boy'])} | {p_['gerekce'].split(': ', 1)[-1]} |")
     L.append("\n## Delik ve radüs tabloları\n")
     L.append("Çap yalnız TAM ÇEMBER delikler için verilir. Kenar yuvarlamaları "
              "(fillet) delik değildir, ayrı tabloda yarıçap olarak listelenir.\n")

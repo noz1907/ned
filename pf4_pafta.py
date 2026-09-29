@@ -40,6 +40,7 @@ import os
 
 import ezdxf
 import ezdxf.bbox
+import pf9_excel as XL
 import ezdxf.enums          # ezdxf sürümüne göre kendiliğinden gelmeyebilir
 
 # ---------------------------------------------------------------- kâğıt
@@ -914,7 +915,7 @@ def pafta_kur(kaynak_dxf, cikti_dxf=None, kagit=VARSAYILAN_KAGIT, olcek=None,
             yer = tek
             if not yer:
                 raise PaftaYok(
-                    f"{os.path.basename(kaynak_dxf)}: {gx:.0f}x{gy:.0f} mm "
+                    f"{os.path.basename(kaynak_dxf)}: {XL.tr(gx, 0, sade=False)}x{XL.tr(gy, 0, sade=False)} mm "
                     f"çizim {kagit_boyu(istenen)} paftaya (yatay ya da "
                     f"dikey) standart bir ölçekle sığmıyor. "
                     "Daha büyük kâğıt seçin.")
@@ -934,9 +935,9 @@ def pafta_kur(kaynak_dxf, cikti_dxf=None, kagit=VARSAYILAN_KAGIT, olcek=None,
             # Ölçeği kullanıcı verdiyse de kâğıda sığmayan pafta yazılmaz:
             # taşan çizim, olmayan çizimden beterdir.
             raise PaftaYok(
-                f"{os.path.basename(kaynak_dxf)}: {gx:.0f}x{gy:.0f} mm çizim "
+                f"{os.path.basename(kaynak_dxf)}: {XL.tr(gx, 0, sade=False)}x{XL.tr(gy, 0, sade=False)} mm çizim "
                 f"{olcek_metni(olcek)} ölçekte "
-                f"{gx * olcek:.0f}x{gy * olcek:.0f} mm yer ister; {kagit} "
+                f"{XL.tr(gx * olcek, 0, sade=False)}x{XL.tr(gy * olcek, 0, sade=False)} mm yer ister; {kagit} "
                 f"paftada en büyük boşluk {_en_buyuk_alan_metni(kagit, sablon)}. "
                 "Ölçeği küçültün ya da kâğıdı büyütün.")
     alan = yer["alan"]
@@ -1080,7 +1081,7 @@ def pafta_kur(kaynak_dxf, cikti_dxf=None, kagit=VARSAYILAN_KAGIT, olcek=None,
 
 def _en_buyuk_alan_metni(kagit, sablon=None):
     a = cizim_alanlari(kagit, sablon)
-    return "  /  ".join(f"{(v[2] - v[0]):.0f}x{(v[3] - v[1]):.0f} mm"
+    return "  /  ".join(f"{XL.tr((v[2] - v[0]), 0, sade=False)}x{XL.tr((v[3] - v[1]), 0, sade=False)} mm"
                         for v in a.values())
 
 
@@ -1293,19 +1294,19 @@ def _cli():
     p = kagit_plani(dosya, n.kagit)
     for s in p["birebir"]:
         print(f"  {n.kagit}  1:1   {os.path.basename(s['dosya'])}"
-              f"   ({s['olcu'][0]:.0f}x{s['olcu'][1]:.0f})")
+              f"   ({XL.tr(s['olcu'][0], 0, sade=False)}x{XL.tr(s['olcu'][1], 0, sade=False)})")
     for s in p["olcekli"]:
         di = s.get("daha_iyi")
         ek = f"   [{di[0]} olsa {olcek_metni(di[1])}]" if di else ""
         if 0 < s.get("yazi_mm", 0) < EN_AZ_YAZI_MM:
-            ek += f"   [DIKKAT yazilar kagitta {s['yazi_mm']:.1f} mm kaliyor]"
+            ek += f"   [DIKKAT yazilar kagitta {XL.tr(s['yazi_mm'], 1, sade=False)} mm kaliyor]"
         print(f"  {n.kagit}  {olcek_metni(s['olcek'])}   "
               f"{os.path.basename(s['dosya'])}"
-              f"   ({s['olcu'][0]:.0f}x{s['olcu'][1]:.0f}){ek}")
+              f"   ({XL.tr(s['olcu'][0], 0, sade=False)}x{XL.tr(s['olcu'][1], 0, sade=False)}){ek}")
     for s in p["sigmayan"]:
         sec = ", ".join(f"{k} {olcek_metni(o)}" for k, o in s["secenek"][:4])
         print(f"  SIĞMADI  {os.path.basename(s['dosya'])}"
-              f"   ({s['olcu'][0]:.0f}x{s['olcu'][1]:.0f})  ->  "
+              f"   ({XL.tr(s['olcu'][0], 0, sade=False)}x{XL.tr(s['olcu'][1], 0, sade=False)})  ->  "
               + (sec or "hiçbir kâğıda sığmıyor"))
     for y, e in p["hata"]:
         print(f"  HATA  {os.path.basename(y)}: {e}")
