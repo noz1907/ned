@@ -132,6 +132,33 @@ def main():
     dogru("tarama açınımdan hızlı", tara < ac,
           f"tarama {tara:.3f}s, açınım {ac:.3f}s")
 
+    print("\n-- bükümü kesen pencere: açınımda TEK delik (lazerde fazladan kesim yok)")
+    # K0_ON KILIT SACI_IC: pencere bükümün içine taşıyor; duvar ve büküm
+    # parçası ayrı açılınca aralarında 0,06 mm şerit kalıyor, lazer
+    # boşluğun içinde fazladan kesim yapıyordu.
+    sh = bukumlu_sac(r_ic=1.0, t=1.5, boy=200.0, kanat=60.0)
+    pencere = kutu(50, -2, -30, 100, 1.0 + 1.5 + 4, 30 + 1.0)   # z<=1: büküme girer
+    sh = BRepAlgoAPI_Cut(sh, pencere).Shape()
+    a = M.sac_acilim(sh)
+    esit("tek delik", len(a["kontur_delik"]), 1)
+    s = M.ince_serit(1.5)
+    dogru("delik ile dış kenar arasında ince şerit yok",
+          all(M._halka_uzakligi(w, a["kontur_dis"][0]) >= s for w in a["kontur_delik"]))
+    w = a["kontur_delik"][0] if a["kontur_delik"] else [(0, 0)]
+    gx = max(p[0] for p in w) - min(p[0] for p in w)
+    gy = max(p[1] for p in w) - min(p[1] for p in w)
+    dogru("pencere 100 mm boyunda", abs(max(gx, gy) - 100.0) < 0.05, (gx, gy))
+    dogru("pencere duvar boyu (30) + büküme giren kadar",
+          30.0 < min(gx, gy) < 32.5, (gx, gy))
+    # birleştirme yalnız YAKIN deliklere dokunur
+    iki = [[(0, 0), (10, 0), (10, 5), (0, 5)], [(0, 5.05), (10, 5.05), (10, 9), (0, 9)],
+           [(20, 0), (25, 0), (25, 5), (20, 5)]]
+    bir = M.delikleri_birlestir(iki, M.ince_serit(1.5))
+    esit("0,05 mm şeritli iki delik birleşti, uzaktaki aynen kaldı", len(bir), 2)
+    dogru("uzaktaki delik değişmedi", iki[2] in bir)
+    alan = sorted(abs(M._cokgen_alani(w)) for w in bir)
+    dogru("birleşen deliğin alanı = iki delik + şerit (90)", abs(alan[-1] - 90.0) < 0.1, alan)
+
     print("\nSONUC: " + ("TUM DENETIMLER GECTI" if not HATA
                          else f"{len(HATA)} DENETIM KALDI: " + ", ".join(HATA)))
     return 1 if HATA else 0

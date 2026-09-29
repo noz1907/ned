@@ -86,6 +86,14 @@ BU SÜRÜMDE NE VAR
   ilerleme çubuğu + kalan süre + grup grup günlük, İptal çalışır.
   Komut satırı: --kaynak-resmi.
 
+  AÇINIM / LAZER: bükümü kesen pencere tek delik (duvar ve büküm ayrı
+  açılınca aradaki 0,06 mm şerit lazerde boşluğun içinde fazladan kesim
+  yapıyordu - K0_ON KILIT SACI_IC ve simetriği). Açınımda her büküm için
+  TEK büküm ekseni (-.-.-, payın ortası); ölçüler ve çizelge eksene,
+  BÖLGE sütunu teğetler. Önce bölgenin iki kenarı çiziliyordu.
+  Açınım ve detay resmi başlıklarında da Türkçe sayı (121,4 x 135 mm,
+  kütle 5,123 kg).
+
   TÜRKÇE SAYI HER YERDE: ekrandaki kg (BOM tablosu, montaj ağacı, "toplam
   ... kg" özeti), rapor.md, malzeme listesindeki yoğunluk, açınım ve
   yöntem uyarıları, parça tanım notları, pafta iletileri, AI maliyeti:

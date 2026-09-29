@@ -1052,6 +1052,24 @@ ve bükümler bir ağaç oluşturur, ağaç gezilerek hepsi yerine oturtulur.
 Parçanın kesiti boy boyunca değişiyorsa – bir bölümünde fazladan flanş
 varsa – bu yöntem onu da doğru açar.
 
+**Büküm ekseni (B1, B2 …).** Her büküm için resimde **tek** bir
+noktalı-çizgili (-.-.-) çizgi vardır: **büküm ekseni**, yani büküm
+bölgesinin (büküm payının) ortası. Abkantta bıçak bu çizgiye gelir.
+Kenar ölçüleri ve çizelgedeki **EKSEN** sütunu bu çizgiye verilir;
+**BÖLGE** sütunu yarıçapın başladığı ve bittiği yerdir (iki teğet
+çizgisi, resimde çizilmez). Eski sürüm her büküm için bölgenin başını ve
+sonunu iki çizgi olarak çiziyordu; iki çizgi büküm ekseni sanılıyordu.
+Büküm **yönü** (yukarı / aşağı) resme yazılmaz: yalnız bükümlerin birbirine
+göre yönü bilinir, resmin baktığı yüze göre mutlak yönü güvenilir değil.
+
+**Bükümü kesen pencere tek deliktir.** Pencere ya da kesik büküm
+bölgesine taşıyorsa duvar ve büküm ayrı açılır; aralarında kesilemeyecek
+incelikte (sac kalınlığının dörtte birinden dar, en az 0,2 en çok 0,5 mm)
+malzeme şeridi kalırsa iki delik tek delik yapılır. Yoksa lazer boşluğun
+içinde fazladan kesim yapar (K0_ON KILIT SACI_IC ve simetriğinde 0,06 mm
+şerit vardı; birleşen pencerenin alanı, bükümsüz öbür pencereyle birebir
+aynı: 1.057,9 mm²). Uzak deliklere dokunulmaz.
+
 **2. BLANK ÖLÇÜSÜ** – yalnız açınım genişliği, boy ve büküm çizgilerinin
 yerleri. Kesim konturu çıkarılamadığında verilir ve **sebebi resmin
 üstüne yazılır**. Büküm tezgâhı için yeter, lazer için yetmez.

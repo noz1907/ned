@@ -984,7 +984,7 @@ class Uygulama(ttk.Frame):
                 kod_ = (self.komp[i_].get("kod") or self.komp[i_].get("ad")
                         if i_ is not None else None)
                 if r["kalinlik_mm"]:
-                    self.ac_agac.set(s, "kalinlik", f"{r['kalinlik_mm']} mm")
+                    self.ac_agac.set(s, "kalinlik", f"{XL.tr(r['kalinlik_mm'])} mm")
                 if kod_ in onceki:
                     # Aynı modelden zaten üretilmiş: seçili gelmez, isterseniz
                     # seçip yeniden üretirsiniz.
@@ -1096,9 +1096,9 @@ class Uygulama(ttk.Frame):
             ad = self.komp[i].get("kod") or self.komp[i].get("ad")
             if ad in olan:
                 r = olan[ad]
-                self.ac_agac.set(s, "kalinlik", f"{r['kalinlik_mm']} mm")
+                self.ac_agac.set(s, "kalinlik", f"{XL.tr(r['kalinlik_mm'])} mm")
                 self.ac_agac.set(s, "acinim",
-                                 f"{r['acinim_genislik_mm']} x {r['acinim_boy_mm']}")
+                                 f"{XL.tr(r['acinim_genislik_mm'])} x {XL.tr(r['acinim_boy_mm'])}")
                 yn = r.get("yontem") or {}
                 self.ac_agac.set(s, "yontem", yn.get("yontem", ""))
                 d = f"{r['bukum_sayisi']} büküm  –  {r['dxf']}"
@@ -1413,8 +1413,8 @@ class Uygulama(ttk.Frame):
             ad = self.komp[i].get("kod") or self.komp[i].get("ad")
             if ad in olan:
                 r = olan[ad]
-                self.lz_agac.set(s, "kalinlik", f"{r['kalinlik_mm']} mm")
-                self.lz_agac.set(s, "olcu", f"{r['en_mm']} x {r['boy_mm']}")
+                self.lz_agac.set(s, "kalinlik", f"{XL.tr(r['kalinlik_mm'])} mm")
+                self.lz_agac.set(s, "olcu", f"{XL.tr(r['en_mm'])} x {XL.tr(r['boy_mm'])}")
                 self.lz_agac.set(s, "durum",
                                  f"{r['delik_adedi']} delik  –  {r['dxf']}")
             elif ad in neden:

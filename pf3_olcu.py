@@ -4681,6 +4681,105 @@ def _nokta_icinde(p, halka):
     return ic
 
 
+def ince_serit(t):
+    """Lazerde kesilemeyecek şerit: bundan dar malzeme köprüsü açınımın
+    hatasıdır (duvar ve büküm parçası uç uca tam oturmaz), tasarım değil."""
+    return min(0.5, max(0.2, 0.25 * t))
+
+
+def _halka_uzakligi(a, b):
+    """İki kapalı çokgen arasındaki en kısa uzaklık (kenar-kenar)."""
+    import numpy as np
+    A, B = np.asarray(a, float), np.asarray(b, float)
+
+    def nokta_kenar(P, Q):
+        q0, q1 = Q, np.roll(Q, -1, axis=0)
+        d = q1 - q0
+        L2 = np.maximum((d * d).sum(1), 1e-18)
+        v = P[:, None, :] - q0[None, :, :]
+        t = np.clip((v * d[None]).sum(2) / L2[None], 0.0, 1.0)
+        yak = q0[None] + t[..., None] * d[None]
+        return float(np.sqrt(((P[:, None, :] - yak) ** 2).sum(2)).min())
+    return min(nokta_kenar(A, B), nokta_kenar(B, A))
+
+
+def delikleri_birlestir(ic, serit):
+    """Aralarında `serit`ten dar malzeme kalan delikleri tek delik yapar
+    (morfolojik kapama: yalnız bu delikler serit/2 büyütülür, birleştirilir,
+    geri küçültülür; köşeler aynen döner, öbür deliklere dokunulmaz)."""
+    if len(ic) < 2:
+        return ic
+    kutu_ = [(min(p[0] for p in w), min(p[1] for p in w),
+              max(p[0] for p in w), max(p[1] for p in w)) for w in ic]
+    ata = list(range(len(ic)))
+
+    def bul(i):
+        while ata[i] != i:
+            ata[i] = ata[ata[i]]
+            i = ata[i]
+        return i
+    for i in range(len(ic)):
+        for j in range(i + 1, len(ic)):
+            a, b = kutu_[i], kutu_[j]
+            if a[0] - serit > b[2] or b[0] - serit > a[2] or \
+                    a[1] - serit > b[3] or b[1] - serit > a[3]:
+                continue
+            if _halka_uzakligi(ic[i], ic[j]) < serit:
+                ata[bul(i)] = bul(j)
+    gruplar = {}
+    for i in range(len(ic)):
+        gruplar.setdefault(bul(i), []).append(i)
+    out = []
+    for g in gruplar.values():
+        if len(g) == 1:
+            out.append(ic[g[0]])
+            continue
+        w = _halkalari_kapat([ic[i] for i in g], serit / 2.0 + 0.01)
+        out.extend(w if w else [ic[i] for i in g])
+    return out
+
+
+def _halkalari_kapat(halkalar, r):
+    """Halkaları r büyüt, birleştir, r küçült -> yeni halka(lar)."""
+    from OCP.BRepOffsetAPI import BRepOffsetAPI_MakeOffset
+    from OCP.GeomAbs import GeomAbs_Arc
+
+    def ofset(yuz, d):
+        o = BRepOffsetAPI_MakeOffset(yuz, GeomAbs_Arc)
+        o.Perform(d)
+        if not o.IsDone():
+            return None
+        yuzler = []
+        ex = TopExp_Explorer(o.Shape(), TopAbs_WIRE)
+        while ex.More():
+            f = BRepBuilderAPI_MakeFace(TopoDS.Wire_s(ex.Current()), True)
+            ex.Next()
+            if f.IsDone():
+                yuzler.append(f.Face())
+        return yuzler
+    try:
+        buyuk = []
+        for h in halkalar:
+            y = _cokgen_yuzu(h)
+            if y is None:
+                return None
+            buyuk += ofset(y, r) or []
+        bir = _birlestir(buyuk)
+        out = []
+        ex = TopExp_Explorer(bir, TopAbs_FACE)
+        while ex.More():
+            f = TopoDS.Face_s(ex.Current())
+            ex.Next()
+            for k in ofset(f, -r) or []:
+                p = _tel_dizisi(BRepTools.OuterWire_s(k))
+                n = [(q.X(), q.Y()) for q in p]
+                if len(n) > 2:
+                    out.append(n)
+        return out or None
+    except Exception:
+        return None
+
+
 def _dis_halkalar(sekil, sapma=0.02):
     """Birleştirilmiş bölgenin sınır halkalarını çıkarır.
 
@@ -4753,6 +4852,11 @@ def acilim_kesim(sh, t, k_faktor, hacim=None, en_cok_sapma=0.03):
     dis, ic = _dis_halkalar(taban)
     if not dis:
         raise AcilimYok("Açınımın sınırı çıkarılamadı.")
+    # Bükümü kesen pencere duvar ve büküm parçasından ayrı ayrı açılır;
+    # aralarında kesilemeyecek incelikte (0,06 mm) şerit kalırsa lazer
+    # boşluğun içinde FAZLADAN kesim yapar (K0_ON KILIT SACI_IC). Böyle
+    # yakın delikler tek delik olur.
+    ic = delikleri_birlestir(ic, ince_serit(t))
     # Açınım TEK PARÇA olmak zorundadır. Parçalı çıkıyorsa duvarlar
     # düzlemde uç uca oturmamış demektir; o zaman aradaki dikişler
     # kesim çizgisi gibi görünür ve lazerde parça ikiye ayrılır.
@@ -5703,9 +5807,12 @@ def dxf_acilim(r, k, yol, P=None):
     kul = []                                   # ölçülmüş dolu kutular
     etiket_sag = boy
     for i, b in enumerate(r["bukumler"], 1):
-        for y in (b["acinimda_bas_mm"], b["acinimda_son_mm"]):
-            msp.add_line((0, y), (boy, y), dxfattribs={"layer": "EKSEN"})
+        # BÜKÜM EKSENİ: büküm bölgesinin (payın) ortası - abkantta bıçağın
+        # geldiği çizgi. Önce bölgenin başı ve sonu (iki teğet çizgisi)
+        # çiziliyordu; iki çizgi büküm ekseni sanılıyordu. Bölge sınırları
+        # çizelgede yazılıdır.
         orta = (b["acinimda_bas_mm"] + b["acinimda_son_mm"]) / 2.0
+        msp.add_line((0, orta), (boy, orta), dxfattribs={"layer": "EKSEN"})
         ey = orta - 0.45 * yazi_h
         ex = boy + 0.6 * h
         # Yazının yeri TAHMİN EDİLMEZ, ÖLÇÜLÜR: yaz, sınırını ölç,
@@ -5735,13 +5842,15 @@ def dxf_acilim(r, k, yol, P=None):
     x = max(boy + 4.0 * h, etiket_sag + 2.0 * h)
     y = gen
     if r["bukumler"]:
-        _yaz(msp, "BUKUM  ACI      IC R   PAY      ALT KENARDAN", x, y, h)
+        _yaz(msp, "BÜKÜM  AÇI      İÇ R   PAY    EKSEN (alt kenardan)   BÖLGE", x, y, h)
     y -= 2.0 * h
     for i, b in enumerate(r["bukumler"], 1):
+        eks = (b["acinimda_bas_mm"] + b["acinimda_son_mm"]) / 2.0
         _yaz(msp, f"B{i:<5d} {XL.tr(b['aci_derece'], 1, False):>6s}  "
                   f"{XL.tr(b['r_ic'], 2, False):>6s} "
                   f"{XL.tr(b['pay_mm'], 2, False):>6s}  "
-                  f"{XL.tr(b['acinimda_bas_mm'], 2, False):>8s} - "
+                  f"{XL.tr(eks, 2, False):>10s}             "
+                  f"{XL.tr(b['acinimda_bas_mm'], 2, False)} - "
                   f"{XL.tr(b['acinimda_son_mm'], 2, False)}", x, y, h)
         y -= 1.8 * h
     if len(r["bukumler"]) <= 4:
@@ -5749,21 +5858,24 @@ def dxf_acilim(r, k, yol, P=None):
         # etiketleri ve çizelge var.
         for i, b in enumerate(r["bukumler"], 1):
             msp.add_linear_dim(base=(-d - i * 3.5 * h, 0), p1=(boy, 0),
-                               p2=(boy, b["acinimda_bas_mm"]), angle=90,
+                               p2=(boy, (b["acinimda_bas_mm"] + b["acinimda_son_mm"]) / 2.0),
+                               angle=90,
                                dimstyle=OLCU_STILI,
                                dxfattribs={"layer": "OLCU"}).render()
     poz = f"POZ {k['poz']}   " if k.get("poz") else ""
     sat = [(f"{poz}{k.get('kod','')}   {(k.get('ad') or '')[:60]}   AÇINIM", 1.5 * h),
            (f"adet: {k.get('adet','-')}", 1.1 * h),
-           (f"ACINIM : {gen} x {boy} mm   sac kalinlik {t} mm", 1.1 * h),
-           ((f"{r['bukum_sayisi']} bukum   K-faktoru {r['k_faktor']}"
-             + (f"   {r.get('delik_adedi', 0)} delik" if kesim else ""))
+           (f"AÇINIM: {XL.tr(gen, 1)} x {XL.tr(boy, 1)} mm   sac kalınlığı {XL.tr(t, 2)} mm",
+            1.1 * h),
+           ((f"{r['bukum_sayisi']} büküm   K-faktörü {XL.tr(r['k_faktor'], 2)}"
+             + (f"   {len(r.get('kontur_delik') or [])} delik" if kesim else ""))
             if r.get("k_faktor") is not None
-            else "bukum yerleri verilmedi", 1.1 * h),
-           ("olcek 1:1   birim: mm", 1.1 * h)]
+            else "büküm yerleri verilmedi", 1.1 * h),
+           ("ölçek 1:1   birim: mm   -.-.- büküm ekseni (büküm bölgesinin ortası)",
+            1.1 * h)]
     yn = r.get("yontem") or {}
     if yn.get("yontem"):
-        sat.append((f"BUKUM YONTEMI: {yn['yontem'].upper()}"
+        sat.append((f"BÜKÜM YÖNTEMİ: {yn['yontem'].upper()}"
                     + (f"  ({yn['kesinlik']})" if yn.get("kesinlik") else ""),
                     1.2 * h))
         for p in textwrap.wrap(yn.get("neden", ""), 108):
@@ -5771,12 +5883,12 @@ def dxf_acilim(r, k, yol, P=None):
         for p in textwrap.wrap("DIKKAT: " + yn["uyari"], 108) if yn.get("uyari") else []:
             sat.append((p, 1.0 * h))
     if kesim:
-        sat.append(("KESIM KONTURUDUR: dis kontur ve delikler gercek "
+        sat.append(("KESİM KONTURUDUR: dış kontur ve delikler gerçek "
                     "yerlerinde.", 1.1 * h))
     else:
-        sat.append(("SERIT GENISLIGIDIR: bukum yerleri ve kesim konturu yok."
+        sat.append(("ŞERİT GENİŞLİĞİDİR: büküm yerleri ve kesim konturu yok."
                     if r.get("serit_genisligi") else
-                    "BLANK OLCUSUDUR: dis kontur kesikleri ve delikler "
+                    "BLANK ÖLÇÜSÜDÜR: dış kontur kesikleri ve delikler "
                     "bu resimde YOKTUR.", 1.1 * h))
         if r.get("kontur_notu"):
             # Sebebi KESME, SARDIR. Eskiden 110 karakterde kesiliyordu ve
@@ -5923,9 +6035,9 @@ def acilim_yaz(kayit, komp, P, klasor, kodlar=None, k_faktor=K_FAKTOR,
         sonuc.append(r)
         IS.cizim_kaydet(kok, "acinim", ad, dxf=r["dxf"], step_ozet=step_oz,
                         k_faktor=k_faktor)
-        log(f"  {os.path.basename(dosya)}  {r['acinim_genislik_mm']} x "
-            f"{r['acinim_boy_mm']} mm, t={r['kalinlik_mm']}, "
-            f"{r['bukum_sayisi']} bükum")
+        log(f"  {os.path.basename(dosya)}  {XL.tr(r['acinim_genislik_mm'])} x "
+            f"{XL.tr(r['acinim_boy_mm'])} mm, t={XL.tr(r['kalinlik_mm'])}, "
+            f"{r['bukum_sayisi']} büküm")
     if denenen:
         yeni = []
         for r in sonuc:
@@ -5940,8 +6052,8 @@ def acilim_yaz(kayit, komp, P, klasor, kodlar=None, k_faktor=K_FAKTOR,
                             (r.get("yontem") or {}).get("uyari", ""),
                             r["k_faktor"],
                             " | ".join(f"{XL.tr(b['aci_derece'])}d R{XL.tr(b['r_ic'])} "
-                                       f"pay{XL.tr(b['pay_mm'])} @"
-                                       f"{XL.tr(b['acinimda_bas_mm'])}"
+                                       f"pay{XL.tr(b['pay_mm'])} eksen@"
+                                       f"{XL.tr(round((b['acinimda_bas_mm'] + b['acinimda_son_mm']) / 2, 2))}"
                                        for b in r["bukumler"]),
                             r["dxf"]])
         n = IS.csv_birlestir(
@@ -6032,8 +6144,8 @@ def lazer_yaz(kayit, komp, klasor, kodlar=None, k_faktor=K_FAKTOR,
         sonuc.append(kayd)
         IS.cizim_kaydet(kok, "lazer", ad, dxf=dosya, step_ozet=step_oz,
                         k_faktor=k_faktor)
-        log(f"  {dosya}  {kayd['en_mm']} x {kayd['boy_mm']} mm, "
-            f"t={t}, {len(ic)} delik  ({nere})")
+        log(f"  {dosya}  {XL.tr(kayd['en_mm'])} x {XL.tr(kayd['boy_mm'])} mm, "
+            f"t={XL.tr(t)}, {len(ic)} delik  ({nere})")
     if denenen:
         alan = ("poz", "kod", "ad", "adet", "kalinlik_mm", "en_mm", "boy_mm",
                 "delik_adedi", "kaynak", "dxf")
@@ -6300,12 +6412,13 @@ def dxf_komponent(s, o, k, yol, P):
     satir = [
         (f"{poz}{k['kod']}   {k['ad'][:60]}", 1.5 * h),
         (f"adet: {k['adet']}", 1.1 * h),
-        (f"BOY x EN x KALINLIK : {o['boy_mm']} x {o['en_mm']} x {o['kalinlik_mm']} mm", 1.1 * h),
-        (f"kutle {o['kutle_kg']} kg   malzeme: {k.get('malzeme_ad', '-')}", 1.1 * h),
+        (f"BOY x EN x KALINLIK: {XL.tr(o['boy_mm'], 2)} x {XL.tr(o['en_mm'], 2)} x "
+         f"{XL.tr(o['kalinlik_mm'], 2)} mm", 1.1 * h),
+        (f"kütle {XL.tr(o['kutle_kg'], 3)} kg   malzeme: {k.get('malzeme_ad', '-')}", 1.1 * h),
     ] + ([(P["sade_not"], 1.1 * h)] if P.get("sade_not") else []) + [
         # Ölçek ve birim resmin üstünde yazsın: DXF başka bir çizime
         # eklendiğinde ölçek kaymışsa bu satırdan anlaşılır.
-        ("olcek 1:1   birim: mm", 1.1 * h),
+        ("ölçek 1:1   birim: mm", 1.1 * h),
     ]
     tepe = y0 + len(satir) * sat_h
     onceki = {e.dxf.handle for e in msp}
@@ -6408,9 +6521,9 @@ def _bom_metin(r):
 
 def bom_satirlari(bom, h, en_cok=40):
     """BOM tablosunu DXF yazı satırlarına çevirir."""
-    st = [("BOM - PARCA LISTESI", 1.3 * h),
-          (f"{'poz':>3} {'kod':<22s} {'tanim':<30s} {'adet':>4} {'malzeme':<22s} "
-           f"{'olcu (BxExK)':<22s} {'kg/adet':>9s} {'toplam kg':>9s}", 1.05 * h)]
+    st = [("BOM - PARÇA LİSTESİ", 1.3 * h),
+          (f"{'poz':>3} {'kod':<22s} {'tanım':<30s} {'adet':>4} {'malzeme':<22s} "
+           f"{'ölçü (BxExK)':<22s} {'kg/adet':>9s} {'toplam kg':>9s}", 1.05 * h)]
     for r in bom[:en_cok]:
         st.append((_bom_metin(r), 1.05 * h))
     if len(bom) > en_cok:
@@ -7589,9 +7702,9 @@ def calistir(step, on, kayit, komp, P, asama=(1, 2, 3), esl=None, agac=None,
                 IS.cizim_kaydet(on, "dxf", dosya, imza=im, kod=k["kod"],
                                 step_ozet=step_oz)
                 sat["dxf"] = dosya
-                log(f"  {dosya}  {o['boy_mm']}x{o['en_mm']}x{o['kalinlik_mm']} mm, "
+                log(f"  {dosya}  {XL.tr(o['boy_mm'])}x{XL.tr(o['en_mm'])}x{XL.tr(o['kalinlik_mm'])} mm, "
                     f"{o['delik_adedi']} delik, {sat['malzeme_ad'].split(' (')[0]}, "
-                    f"{o['kutle_kg']} kg")
+                    f"{XL.tr(o['kutle_kg'])} kg")
             except Exception as ex:
                 sat["dxf"] = f"HATA: {ex}"[:80]
                 log(f"  {dosya}: HATA {ex}"[:110])
@@ -7642,8 +7755,8 @@ def calistir(step, on, kayit, komp, P, asama=(1, 2, 3), esl=None, agac=None,
                             step_ozet=step_oz,
                             gabari=[montaj["boy_mm"], montaj["en_mm"],
                                     montaj["yukseklik_mm"]])
-            log(f"  DXF/00_MONTAJ.dxf   gabari {montaj['boy_mm']} x "
-                f"{montaj['en_mm']} x {montaj['yukseklik_mm']} mm")
+            log(f"  DXF/00_MONTAJ.dxf   gabari {XL.tr(montaj['boy_mm'])} x "
+                f"{XL.tr(montaj['en_mm'])} x {XL.tr(montaj['yukseklik_mm'])} mm")
         if ilerleme:
             ilerleme(toplam, toplam)
 
@@ -8016,8 +8129,8 @@ def rapor_yaz(on, step, kayit, komp, satirlar, montaj):  # noqa: C901
             "dikişi (parça değil)" if any(k["sinif"] == "kaynak" for k in komp)
             else "") + ".\n"]
     if montaj:
-        L.append(f"**Montaj gabarisi:** {montaj['boy_mm']} x {montaj['en_mm']} x "
-                 f"{montaj['yukseklik_mm']} mm (boy x en x yükseklik)\n")
+        L.append(f"**Montaj gabarisi:** {XL.tr(montaj['boy_mm'])} x {XL.tr(montaj['en_mm'])} x "
+                 f"{XL.tr(montaj['yukseklik_mm'])} mm (boy x en x yükseklik)\n")
     L.append("## Çizilen parçalar\n")
     L.append("| poz | kod | adet | malzeme | boy | en | kalınlık | sac | kg | delik | radüs | dxf |")
     L.append("|-----|-----|------|---------|-----|----|----------|-----|----|-------|-------|-----|")
@@ -8025,9 +8138,9 @@ def rapor_yaz(on, step, kayit, komp, satirlar, montaj):  # noqa: C901
         if r["sinif"] != "parca":
             continue
         L.append(f"| {r['poz']} | {r['kod'][:26]} | {r['adet']} | "
-                 f"{(r.get('malzeme_ad') or '-').split(' (')[0]} | {r.get('boy_mm')} | "
-                 f"{r.get('en_mm')} | {r.get('kalinlik_mm')} | {r.get('sac_kalinlik_mm') or '-'} | "
-                 f"{r.get('kutle_kg')} | {r.get('delik_adedi')} | {r.get('radus_adedi')} | "
+                 f"{(r.get('malzeme_ad') or '-').split(' (')[0]} | {XL.tr(r.get('boy_mm'))} | "
+                 f"{XL.tr(r.get('en_mm'))} | {XL.tr(r.get('kalinlik_mm'))} | {XL.tr(r.get('sac_kalinlik_mm')) or '-'} | "
+                 f"{XL.tr(r.get('kutle_kg'))} | {r.get('delik_adedi')} | {r.get('radus_adedi')} | "
                  f"{r['dxf'] or '-'} |")
     std = [r for r in satirlar if r["sinif"] == "standart"]
     if std:
@@ -8125,13 +8238,13 @@ def rapor_yaz(on, step, kayit, komp, satirlar, montaj):  # noqa: C901
             L.append("| çap | adet | eksen | derinlik |")
             L.append("|-----|------|-------|----------|")
             for d in r["delikler"][:20]:
-                L.append(f"| Ø{d['cap_mm']} | {d['adet']} | {d['eksen']} | {d['derinlik_mm']} |")
+                L.append(f"| Ø{XL.tr(d['cap_mm'])} | {d['adet']} | {d['eksen']} | {XL.tr(d['derinlik_mm'])} |")
         if r.get("radusler"):
             L.append("")
             L.append("| radüs | adet | eksen | uzunluk |")
             L.append("|-------|------|-------|---------|")
             for d in r["radusler"][:20]:
-                L.append(f"| R{d['yaricap_mm']} | {d['adet']} | {d['eksen']} | {d['uzunluk_mm']} |")
+                L.append(f"| R{XL.tr(d['yaricap_mm'])} | {d['adet']} | {d['eksen']} | {XL.tr(d['uzunluk_mm'])} |")
     open(os.path.join(on, "rapor.md"), "w", encoding="utf-8").write("\n".join(L) + "\n")
 
 
