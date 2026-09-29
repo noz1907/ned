@@ -709,9 +709,9 @@ class Uygulama(ttk.Frame):
                    command=lambda: self.malzeme_uygula(False)).grid(row=0, column=1, sticky="ew")
         ttk.Button(mf, text="Seçili satırlara",
                    command=lambda: self.malzeme_uygula(True)).grid(row=1, column=1, sticky="ew", pady=(3, 0))
-        ttk.Button(mf, text="malzeme.csv yükle…",
+        ttk.Button(mf, text="Malzeme listesi yükle (Excel / CSV)…",
                    command=self.malzeme_dosya).grid(row=0, column=2, sticky="ew", padx=(6, 0))
-        ttk.Button(mf, text="malzeme.csv yaz…",
+        ttk.Button(mf, text="Malzeme şablonu yaz (Excel)…",
                    command=self.malzeme_sablon).grid(row=1, column=2, sticky="ew", padx=(6, 0), pady=(3, 0))
         ttk.Button(mf, text="Malzemeyi CAD'den al  (adım adım)…",
                    command=self.malzeme_sihirbazi).grid(
@@ -821,6 +821,16 @@ class Uygulama(ttk.Frame):
         self.b_tumu = ttk.Button(uf, text="ÇİZİMLERİ ÜRET  ▸", style="Bas.TButton",
                                  command=self.tumunu_uret, state="disabled")
         self.b_tumu.pack(side="right", ipadx=12, ipady=4)
+        # Kaynak resimleri AYRI iş: büyük kaynaklı modelde dakikalar sürer;
+        # çizimlerin sonuna eklenince program takılmış gibi görünüyordu.
+        kf = ttk.Frame(f); kf.pack(fill="x", pady=(0, 6))
+        ttk.Label(kf, foreground="#555", text=(
+            "Kaynak resimleri: her kaynaklı alt grup için KAYNAK/<grup>_kaynak.pdf "
+            "(yalnız PDF). Çok dikişli modelde uzun sürer; ilerleme aşağıda "
+            "görünür, İptal ile durdurulabilir.")).pack(side="left")
+        self.b_kaynak = ttk.Button(kf, text="KAYNAK RESİMLERİ (PDF)  ▸",
+                                   command=self.kaynak_resimleri_uret, state="disabled")
+        self.b_kaynak.pack(side="right", ipadx=12, ipady=4)
         af = ttk.Frame(f); af.pack(fill="x")
         self.b_zip = ttk.Button(af, text="ZIP OLUŞTUR", command=self.zip_olustur, state="disabled")
         self.b_zip.pack(side="left")
@@ -1855,6 +1865,8 @@ class Uygulama(ttk.Frame):
                     self._ornek_geldi(veri)
                 elif tip == "tumu":
                     self._tumu_geldi(veri)
+                elif tip == "kaynak":
+                    self._kaynak_geldi(veri)
                 elif tip == "tarama":
                     self._tarama_geldi(veri)
                 elif tip == "lazer":
@@ -1910,7 +1922,8 @@ class Uygulama(ttk.Frame):
         self.is_islem = islem or durum.rstrip("… .")
         self._sayaci_isle()
         for b in (self.b_incele, self.b_bom, self.b_ornek, self.b_onay,
-                  getattr(self, "b_tumu", None), getattr(self, "b_devam", None)):
+                  getattr(self, "b_tumu", None), getattr(self, "b_devam", None),
+                  getattr(self, "b_kaynak", None)):
             if b is not None:
                 b.configure(state="disabled")
         self.b_iptal.configure(state="normal")
@@ -1927,6 +1940,7 @@ class Uygulama(ttk.Frame):
                ("Pafta planı", "pafta"),
                ("Pafta", "PDF basımı"),
                ("PDF basımı", "ZIP"),
+               ("Kaynak resimleri", "KAYNAK klasörü / ZIP"),
                ("AI malzeme", "BOM'u gözden geçir, TÜMÜNÜ ÜRET"))
 
     def _bitti_bildir(self, ad, g, sonuc):
@@ -2023,6 +2037,9 @@ class Uygulama(ttk.Frame):
         self.b_onay.configure(state="normal" if self.ornek_dxf else "disabled")
         if hasattr(self, "b_tumu"):
             self.b_tumu.configure(state="normal" if self.komp else "disabled")
+        if hasattr(self, "b_kaynak"):
+            self.b_kaynak.configure(state="normal" if any(
+                k.get("sinif") == "kaynak" for k in (self.komp or [])) else "disabled")
         self.b_iptal.configure(state="disabled")
 
     def iptal(self):
@@ -2817,7 +2834,21 @@ class Uygulama(ttk.Frame):
             harita = self.M.cad_kaynagi_oku(y)
         except Exception:
             harita = {}
-        if harita and not self.M.malzeme_sutunu_var(y):
+        malzemeli = self.M.malzeme_sutunu_var(y)
+        if not malzemeli and not harita:
+            bas = self.M.tablo_basliklari(y)
+            messagebox.showwarning(
+                "Malzeme sütunu yok",
+                f"{os.path.basename(y)} okundu ama içinde MALZEME sütunu yok"
+                + (f".\nBulunan sütunlar: {', '.join(bas[:8])}" if bas else ".")
+                + "\n\nCATIA'da: Analyze ▸ Bill of Material ▸ Define formats ▸ "
+                "'Hidden Properties' listesinden Material'i (ve Source'u) seçip "
+                "'>' ile görünür tarafa alın ▸ OK ▸ Save As ▸ Excel.\n\n"
+                "Ayrıntı: Yardım ▸ Malzemeyi CAD'den al (adım adım).")
+            self._yaz(f"! {os.path.basename(y)}: malzeme sütunu yok"
+                      + (f" (sütunlar: {', '.join(bas[:8])})" if bas else ""))
+            return
+        if harita and not malzemeli:
             esl, bilinmeyen = {}, []
         else:
             try:
@@ -2859,8 +2890,9 @@ class Uygulama(ttk.Frame):
     def malzeme_sablon(self):
         if not (self.M and self.komp):
             messagebox.showinfo("Şablon", "Önce STEP inceleyin."); return
-        y = filedialog.asksaveasfilename(title="malzeme şablonu", defaultextension=".csv",
-                                         initialfile="malzeme.csv", filetypes=[("CSV", "*.csv")])
+        y = filedialog.asksaveasfilename(
+            title="malzeme şablonu", defaultextension=".xlsx", initialfile="malzeme.xlsx",
+            filetypes=[("Excel", "*.xlsx"), ("CSV", "*.csv")])
         if y:
             self.M.malzeme_sablonu(self.komp, y)
             self._yaz(f"şablon yazıldı: {y}")
@@ -2891,7 +2923,7 @@ class Uygulama(ttk.Frame):
             + "\n\nEVET  →  olduğu gibi kabul et ve devam et\n"
               "HAYIR →  listeyi Excel'e yaz ve DUR: tasarımcı CAD'de düzeltsin "
               "(Source = Made/Bought ya da parça adı) veya 'kaynak' sütununu "
-              "doldurup 2. adımda 'malzeme.csv yükle…' ile geri verin\n"
+              "doldurup 2. adımda 'Malzeme listesi yükle…' ile geri verin\n"
               "İPTAL →  vazgeç")
         on = (self.v_out.get() or "").strip()
         if cvp is None:
@@ -3070,6 +3102,50 @@ class Uygulama(ttk.Frame):
                             "üretilmedi" if at else "") + f"\n{on}")
         self._durum_ipucu = "bitti – ZIP oluşturabilirsiniz"
         self.v_durum.set(self._durum_ipucu)
+
+    def kaynak_resimleri_uret(self):
+        """Kaynak resimleri (pf14_kaynak): ayrı iş, ilerlemeli, iptal edilebilir."""
+        if not self.komp:
+            messagebox.showinfo("Kaynak resimleri", "Önce 1. sayfada modeli inceleyin.")
+            return
+        n = sum(len(k["indeks"]) for k in self.komp if k.get("sinif") == "kaynak")
+        if not n:
+            messagebox.showinfo("Kaynak resimleri", "Modelde kaynak dikişi yok.")
+            return
+        on = (self.v_out.get() or "").strip()
+        if not on:
+            messagebox.showinfo("Kaynak resimleri", "Çıktı klasörü seçilmedi.")
+            return
+        self._basla(f"kaynak resimleri üretiliyor ({n} dikiş)…", "Kaynak resimleri")
+        self.ilerleme.configure(mode="determinate", maximum=1, value=0)
+        # poz numaraları BOM'dan; BOM çıkarılmadıysa komponent sırası
+        sat = list(getattr(self, "satirlar", None) or [])
+        if not sat:
+            poz = 0
+            for k in self.komp:
+                if k.get("sinif") != "kaynak":
+                    poz += 1
+                    sat.append({"kod": k["kod"], "poz": poz})
+        threading.Thread(target=self._kaynak_is, args=(on, sat), daemon=True).start()
+
+    def _kaynak_is(self, on, sat):
+        try:
+            import pf14_kaynak as KR
+            os.makedirs(on, exist_ok=True)
+            y = KR.kaynak_resimleri(
+                on, self.kayit, self.komp, self.agac, sat, log=self._yaz,
+                iptal=lambda: self.iptal_istendi,
+                ilerleme=lambda a, b: self.kuyruk.put(("ilerleme", (a, b))))
+            self.kuyruk.put(("kaynak", y))
+        except Exception:
+            self.kuyruk.put(("hata", "Kaynak resimleri üretilirken hata:\n\n"
+                             + traceback.format_exc(limit=4)))
+
+    def _kaynak_geldi(self, yazilan):
+        self._bitir()
+        self._cikti_listesi()
+        self.v_sonuc.set(f"{len(yazilan)} kaynak resmi (PDF)  –  "
+                         f"{os.path.join(self.v_out.get(), 'KAYNAK')}")
 
     def _cikti_listesi(self):
         """5. sayfadaki liste: klasördeki çizimler, türüne göre klasörüyle

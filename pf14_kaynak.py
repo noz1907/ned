@@ -82,7 +82,16 @@ def _yol(d, ust):
     return out[::-1]
 
 
-def kaynakli_gruplar(kayit, komp, agac=None, log=print):
+class IptalEdildi(Exception):
+    """Kullanıcı İPTAL dedi."""
+
+
+def _dur(iptal):
+    if iptal and iptal():
+        raise IptalEdildi()
+
+
+def kaynakli_gruplar(kayit, komp, agac=None, log=print, ilerleme=None, iptal=None):
     """KAYNAKLI ALT GRUPLAR: [{ad, adet, dikis: [katı], parca: [katı]}].
 
     Dikişin grubu, modelde nerede durduğuna (ayrı "KAYNAKLAR" ağacı) göre
@@ -112,7 +121,10 @@ def kaynakli_gruplar(kayit, komp, agac=None, log=print):
     dugum_dikis = {}
     degen = {}
     sinif = {}
-    for j in dikisler:
+    for n, j in enumerate(dikisler):
+        _dur(iptal)
+        if ilerleme:
+            ilerleme(n, len(dikisler))
         dg = degen_katilar(kayit[j][1], parca_aday, kayit, kutular, sinif)
         degen[j] = dg
         yollar = [_yol(yaprak[p], ust) for p in dg if p in yaprak]
@@ -833,7 +845,8 @@ def _tablo_ciz(msp, satirlar, x, y_ust, h):
     return W, len(satirlar) * sat_h
 
 
-def kaynak_resmi(O, kayit, komp, grup, satirlar, yol, P=None, log=print):
+def kaynak_resmi(O, kayit, komp, grup, satirlar, yol, P=None, log=print,
+                 ilerleme=None, iptal=None):
     """Bir kaynaklı alt grubun kaynak resmi (DXF). Döner: dikiş listesi.
 
     Az dikişli grupta semboller ana görünüşlere konur. Çok dikişli grupta
@@ -894,6 +907,7 @@ def kaynak_resmi(O, kayit, komp, grup, satirlar, yol, P=None, log=print):
         en iyi yöne kalır."""
         out, kalan, yonler = [], list(ds), list(YONLER)
         while kalan and yonler:
+            _dur(iptal)
             gad = yon_sec(kalan, isin, yonler)
             yonler.remove(gad)
             goz, xr = _gorunus(O, gad)
@@ -968,7 +982,13 @@ def kaynak_resmi(O, kayit, komp, grup, satirlar, yol, P=None, log=print):
     dikisler = [d for _, d in sira]
     for no, d in enumerate(dikisler, 1):
         d["no"] = f"K{no}"
-    for d in dikisler:
+    def adim(oran):
+        _dur(iptal)
+        if ilerleme:
+            ilerleme(min(1.0, max(0.0, oran)))
+    adim(0.3)
+    for n, d in enumerate(dikisler):
+        adim(0.3 + 0.3 * n / max(1, len(dikisler)))
         try:
             d["konum"] = konum_hesapla(d, [kayit[j][1] for j in d["degen"]])
         except Exception:
@@ -1004,7 +1024,8 @@ def kaynak_resmi(O, kayit, komp, grup, satirlar, yol, P=None, log=print):
                     kk_(d["p0"]), kk_(d["p1"]), birl, yer))
     ana_r = [_Resim(O, parca_sh, [d["sh"] for d in dikisler], g) for g in ana]
     det_r = []
-    for dt in detaylar:
+    for n, dt in enumerate(detaylar):
+        adim(0.6 + 0.25 * n / max(1, len(detaylar)))
         goz, xr = _gorunus(O, dt["gad"])
         k3 = dt["k3"]
         pts = [_izdusum((a, b, c), goz, xr) for a in (k3[0], k3[3])
@@ -1018,6 +1039,7 @@ def kaynak_resmi(O, kayit, komp, grup, satirlar, yol, P=None, log=print):
     bilgi = {"ad": grup["ad"], "adet": grup["adet"], "dikis": len(dikisler),
              "boy": toplam_boy}
     sayfalar = _sayfalar(O, bilgi, tab, ana_r, dikisler, detaylar, det_r, detayli)
+    adim(0.9)
     pdf_yaz(sayfalar, yol)
     for d in dikisler:
         d.pop("sh", None)
@@ -1238,33 +1260,64 @@ def dosya_adi(ad, kullanilan):
     return a + "_kaynak.pdf"
 
 
-def kaynak_resimleri(on, kayit, komp, agac, satirlar, log=print, iptal=None):
+def kaynak_resimleri(on, kayit, komp, agac, satirlar, log=print, iptal=None,
+                     ilerleme=None):
     """Bütün kaynaklı alt grupların kaynak resimleri: KAYNAK/<grup>_kaynak.pdf.
     Artık karşılığı olmayan eski *_kaynak.pdf dosyaları silinir (yalnız bu
-    klasörde, yalnız bu programın ürettiği adlar). Döner: dosya listesi."""
+    klasörde, yalnız bu programın ürettiği adlar). Döner: dosya listesi.
+
+    ilerleme(yapilan, toplam): iş birimi dikiştir - önce gruplama (her
+    dikişin değdiği parçalar), sonra çizim (grubun dikiş sayısı kadar);
+    böylece büyük grup çizilirken de çubuk ilerler. İptal edilirse o ana
+    kadar yazılanlar kalır, eski dosyalar silinmez."""
     import pf3_olcu as O
     import pf7_is as IS
-    log("  kaynaklı alt gruplar bulunuyor (dikişlerin değdiği parçalar)...")
-    gruplar = kaynakli_gruplar(kayit, komp, agac, log=log)
-    if not gruplar:
+    n_dikis = sum(1 for k in komp if k["sinif"] == "kaynak" for _ in k["indeks"])
+    toplam = max(1, 2 * n_dikis)
+
+    def bildir(y):
+        if ilerleme:
+            ilerleme(int(min(y, toplam)), toplam)
+    log(f"  kaynaklı alt gruplar bulunuyor ({n_dikis} dikişin değdiği parçalar)...")
+    try:
+        gruplar = kaynakli_gruplar(kayit, komp, agac, log=log, iptal=iptal,
+                                   ilerleme=lambda y, t: bildir(y * n_dikis / max(t, 1)))
+    except IptalEdildi:
+        log("! iptal edildi")
         return []
+    if not gruplar:
+        log("  kaynaklı alt grup bulunamadı")
+        return []
+    log(f"  {len(gruplar)} kaynaklı alt grup; resimler çiziliyor "
+        "(büyük grup birkaç dakika sürebilir)")
     kl = IS.alt_klasor(on, "kaynak", olustur=True)
     kullanilan, yazilan = set(), []
+    yapilan = n_dikis
+    tum_dikis = max(1, sum(len(g["dikis"]) for g in gruplar))
     for i, g in enumerate(gruplar, 1):
         if iptal and iptal():
             log("! iptal edildi")
             return yazilan
         ad = dosya_adi(g["dugum_ad"], kullanilan)
+        pay = n_dikis * len(g["dikis"]) / tum_dikis
+        log(f"  [{i}/{len(gruplar)}] KAYNAK/{ad}  ({len(g['dikis'])} dikiş) çiziliyor...")
         try:
-            d = kaynak_resmi(O, kayit, komp, g, satirlar, os.path.join(kl, ad), log=log)
+            d = kaynak_resmi(O, kayit, komp, g, satirlar, os.path.join(kl, ad), log=log,
+                             iptal=iptal,
+                             ilerleme=lambda o, b=yapilan, p=pay: bildir(b + o * p))
             yazilan.append(ad)
             gizli = sum(1 for x in d if not x.get("gorunur"))
-            log(f"  KAYNAK/{ad}  {len(d)} dikiş"
+            log(f"        tamam: {len(d)} dikiş"
                 + (f", {len(set(x.get('detay') for x in d) - {None})} detay"
                    if any(x.get("detay") for x in d) else "")
                 + (f", {gizli} dikiş hiçbir yönden net görünmüyor (tabloda)" if gizli else ""))
+        except IptalEdildi:
+            log("! iptal edildi")
+            return yazilan
         except Exception as ex:
             log(f"  KAYNAK/{ad}: HATA {ex}"[:160])
+        yapilan += pay
+        bildir(yapilan)
     for a in os.listdir(kl):
         if a.lower().endswith("_kaynak.pdf") and a not in yazilan:
             try:

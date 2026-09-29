@@ -206,6 +206,36 @@ def main():
     sek = yaz(kl, "catia_sekme.xls", "Quantity\tPart Number\tMaterial\n2\tCT-3\tBrass\n")
     esl, _ = O.malzeme_dosya_oku(sek)
     esit("CATIA .xls (sekmeli metin): pirinç", esl.get("ct-3"), "pirinc")
+    # GERÇEK eski Excel (BIFF8, Excel 97-2003) - ek paket olmadan okunur.
+    # test/veri/catia_bom_ornek.xls: CATIA Bill of Material biçiminde
+    # (tarih, "Bill of Material:" bölüm satırı, başlık), Türkçe harfler,
+    # sayı hücresinde parça no, 400 uzun satır (paylaşılan yazı tablosu
+    # CONTINUE kaydıyla bölünür).
+    veri = os.path.join(os.path.dirname(os.path.abspath(__file__)), "veri",
+                        "catia_bom_ornek.xls")
+    esl, _ = O.malzeme_dosya_oku(veri)
+    esit("BIFF .xls: Türkçe 'Çelik'", esl.get("01.050.000.01"), "celik")
+    esit("BIFF .xls: 'Aluminium'", esl.get("braket_islem") or esl.get(O._tr_sade("BRAKET_İŞLEME")),
+         "aluminyum")
+    esit("BIFF .xls: sayı hücresindeki parça no", esl.get("505603099"), "paslanmaz")
+    esit("BIFF .xls: 'Pirinç'", esl.get(O._tr_sade("PİRİNÇ_BURÇ")), "pirinc")
+    dogru("BIFF .xls: 400 uzun satır (CONTINUE)", len(esl) >= 405, len(esl))
+    kay = O.cad_kaynagi_oku(veri)
+    esit("BIFF .xls: Source Bought -> standart", kay.get(O._tr_sade("M8X20 DIN 933")),
+         "standart")
+    esit("BIFF .xls: Source Made -> parça", kay.get("01.050.000.01"), "parca")
+    # Malzeme sütunu olmayan CATIA listesi: "Bill of Material: ..." bölüm
+    # satırı malzeme sütunu SANILMAMALI; açık hata verilmeli
+    yok = yaz(kl, "malzemesiz.xls",
+              "Tuesday, 29 September 2026\n\nBill of Material: KIT\n"
+              "Number\tPart Number\tDefinition\tQuantity\n\tPARCA_1\t \t1\n")
+    dogru("malzeme sütunu yok: 'var' denmiyor", not O.malzeme_sutunu_var(yok))
+    try:
+        O.malzeme_dosya_oku(yok)
+        dogru("malzeme sütunu yok: hata veriliyor", False, "hata çıkmadı")
+    except O.MalzemeDosyaHatasi as ex:
+        dogru("malzeme sütunu yok: açık hata + CATIA yolu",
+              "MALZEME sütunu yok" in str(ex) and "Define formats" in str(ex), str(ex))
 
     print("\n-- 4. tanınmayan ad + yoğunluk çeliğe DÜŞMÜYOR")
     k = {"kod": "4711-01", "ad": "Welle", "sinif": "parca"}

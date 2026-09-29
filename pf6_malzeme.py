@@ -177,8 +177,9 @@ SISTEM = [
          "Bought) alanını da alın: Pi3D satın alınan parçaları buradan "
          "kesin olarak tanır. 'Part Number' görünür listede olmalı.",
          "OK ▸ Save As ▸ tür: Excel (*.xls) ya da Text (*.txt). CSV "
-         "gerekmez: Pi3D CATIA'nın Excel kaydını doğrudan okur (kuruluma "
-         "göre sekmeli metin ya da HTML tablodur). Pi3D 'eski Excel "
+         "gerekmez: Pi3D .xls (Excel 97-2003), .xlsx, sekmeli metin ve "
+         "HTML tabloyu doğrudan okur. Material sütunu yoksa Pi3D bunu "
+         "söyler; 2. adıma dönün. Pi3D 'eski Excel "
          "biçimi' derse dosyayı Excel'de açıp 'Farklı kaydet ▸ Excel "
          "Çalışma Kitabı (.xlsx)' ile yeniden kaydedin.",
          "Bu sihirbazın 4. adımında dosyayı seçin."],
@@ -238,7 +239,7 @@ SISTEM = [
          "Yol: aynı modeli kaynak CAD'den (SolidWorks, NX, Solid Edge...) "
          "STEP AP214/AP242 olarak verin; malzemeyi o CAD'in parça "
          "listesinden alın - listeden o CAD'i seçin.",
-         "Hiçbir CAD'e erişiminiz yoksa: 2. adımdaki 'malzeme.csv yaz…' ile "
+         "Hiçbir CAD'e erişiminiz yoksa: 2. adımdaki 'Malzeme şablonu yaz (Excel)…' ile "
          "parça listesini şablon olarak alın, malzeme sütununu elle "
          "doldurun, burada yükleyin."]},
 ]

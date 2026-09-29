@@ -6622,7 +6622,7 @@ def _kontrol_komp(komp):
 def kontrol_yaz(on, komp):
     """STANDART_KONTROL.xlsx: tasarımcıya gönderilecek liste. 'kaynak'
     sütununa Bought (satın alınan) ya da Made (üretim) yazılıp dosya
-    2. adımda 'malzeme.csv yükle...' ile geri verilince sınıflar oradan
+    2. adımda 'Malzeme listesi yükle...' ile geri verilince sınıflar oradan
     alınır. Liste boşsa eski dosya silinir. Yazılan yolu döner."""
     y = os.path.join(on, KONTROL_DOSYASI)
     liste = kontrol_listesi(komp)
@@ -6638,7 +6638,7 @@ def kontrol_yaz(on, komp):
         ["Bu listedeki parçaların standart (satın alınan) mı üretim mi olduğu "
          "modelden kesin anlaşılamadı."],
         ["Kısa yol: 'kaynak' sütununa Bought (satın alınan) ya da Made (üretim) "
-         "yazın, dosyayı Pi3D'de 2. adımda 'malzeme.csv yükle...' ile verin."],
+         "yazın, dosyayı Pi3D'de 2. adımda 'Malzeme listesi yükle...' ile verin."],
         ["Kalıcı çözüm: CAD'de parçanın Source (Made / Bought) alanını doldurun "
          "ya da adını düzeltin (ör. 'ISO 7380 M8x16'). Pi3D bir kez düzeltilen "
          "parçanın biçimini öğrenir; benzerleri kendiliğinden tanınır."]]
@@ -6783,7 +6783,10 @@ def _sutun(basliklar, adaylar):
                 return i
     for a in adaylar:
         for i, x in enumerate(b):
-            if a in x:
+            # içinde geçen: yalnız BAŞLIK gibi kısa hücrede. CATIA'nın
+            # "Bill of Material: JMS_KIT_KARLUNA" bölüm satırı malzeme
+            # sütunu sanılıyordu.
+            if a in x and len(x) <= 40 and ":" not in x:
                 return i
     return None
 
@@ -6886,10 +6889,14 @@ def _tablo_satirlari(yol):
     if ham[:4] == b"PK\x03\x04":
         return _xlsx_satirlari(ham)
     if ham[:8] == b"\xd0\xcf\x11\xe0\xa1\xb1\x1a\xe1":
-        raise MalzemeDosyaHatasi(
-            "Bu dosya eski Excel biçiminde (.xls, Excel 97-2003) ve "
-            "okunamıyor. Excel'de açıp 'Farklı kaydet' ile ya .xlsx ya da "
-            "'CSV (noktalı virgülle ayrılmış)' olarak kaydedin.")
+        # eski Excel (.xls, Excel 97-2003): CATIA'nın Bill of Material >
+        # Save As > Excel kaydı. Ek paket gerekmeden okunur (pf9_excel).
+        try:
+            return [[str(h).strip() for h in r] for r in XL.xls_satirlari(ham)]
+        except Exception as ex:
+            raise MalzemeDosyaHatasi(
+                f"Bu eski Excel dosyası (.xls) okunamadı ({ex}). Excel'de açıp "
+                "'Farklı kaydet' ile .xlsx olarak kaydedip yeniden deneyin.")
     metin = _metin_coz(ham)
     if re.search(r"<\s*(table|tr)\b", metin[:20000], re.I):
         # CATIA'nın "Excel" kaydı bazı kurulumlarda .xls uzantılı HTML tablodur
@@ -6990,8 +6997,20 @@ def malzeme_tablosu(yol):
             if iy in (ik, im):
                 iy = None
             break
-    if bas is None:                     # başlık yok: kod;malzeme varsayılır
-        ik, im, bas = 0, 1, -1
+    if bas is None:
+        # Parça no başlığı var ama malzeme sütunu yok (CATIA'da Material
+        # görünür listeye alınmamış): "kod;malzeme" varsayımı burada YANLIŞ
+        # sonuç verir (Part Number malzeme sanılır) - açıkça söylenir.
+        for sat in tablo[:15]:
+            if _sutun(sat, KOD_BASLIK) is not None and \
+                    sum(1 for h in sat if str(h).strip()) >= 2:
+                raise MalzemeDosyaHatasi(
+                    "Dosyada MALZEME sütunu yok (bulunan sütunlar: "
+                    + ", ".join(str(h) for h in sat if str(h).strip())[:120]
+                    + "). CATIA'da: Analyze > Bill of Material > Define formats > "
+                    "'Hidden Properties' listesinden Material'i (ve Source'u) seçip "
+                    "'>' ile görünür tarafa alın > OK > Save As > Excel.")
+        ik, im, bas = 0, 1, -1          # başlık yok: kod;malzeme varsayılır
     ybas = tablo[bas][iy] if (bas >= 0 and iy is not None) else ""
     out = []
     for sat in tablo[bas + 1:]:
@@ -7093,7 +7112,11 @@ def malzeme_sutunu_var(yol):
         tablo = _tablo_satirlari(yol)
     except Exception:
         return False
-    return any(_sutun(sat, MAL_BASLIK) is not None for sat in tablo[:15])
+    for sat in tablo[:15]:
+        m = _sutun(sat, MAL_BASLIK)
+        if m is not None and _sutun(sat, KOD_BASLIK) not in (None, m):
+            return True
+    return False
 
 
 def cad_kaynagiyla_sinifla(komp, harita, kural=None, log=print):
@@ -7140,15 +7163,32 @@ def cad_kaynagiyla_sinifla(komp, harita, kural=None, log=print):
 
 
 def malzeme_sablonu(komp, yol):
-    """Kullanıcının doldurup --malzeme-dosya ile geri vereceği şablon."""
+    """Kullanıcının doldurup geri vereceği şablon: .xlsx (Excel) ya da
+    .csv - yolun uzantısına göre."""
+    sat = [[k["kod"], VARSAYILAN_MALZEME, k["ad"][:70]] for k in komp
+           if k["sinif"] != "kaynak"]
+    if yol.lower().endswith(".xlsx"):
+        XL.xlsx_yaz(yol, [("Malzeme", ["kod", "malzeme", "ad"], sat)])
+        return yol
     with open(yol, "w", newline="", encoding="utf-8-sig") as f:
         w = csv.writer(f, delimiter=";")
         w.writerow(["kod", "malzeme", "ad"])
-        for k in komp:
-            if k["sinif"] == "kaynak":
-                continue
-            w.writerow([k["kod"], VARSAYILAN_MALZEME, k["ad"][:70]])
+        w.writerows(sat)
     return yol
+
+
+def tablo_basliklari(yol, n=15):
+    """Dosyanın ilk satırlarındaki dolu hücreler (malzeme sütunu yoksa
+    kullanıcıya ne bulunduğunu söylemek için)."""
+    try:
+        tablo = _tablo_satirlari(yol)
+    except Exception:
+        return []
+    for sat in tablo[:n]:
+        dolu = [h for h in sat if str(h).strip()]
+        if len(dolu) >= 2 and _sutun(sat, KOD_BASLIK) is not None:
+            return dolu
+    return []
 
 
 def malzeme_sor(komp):
@@ -7534,6 +7574,15 @@ def calistir(step, on, kayit, komp, P, asama=(1, 2, 3), esl=None, agac=None,
                 if ilerleme:
                     ilerleme(sira, toplam)
                 continue
+            # Tek parça uzun sürerse (karmaşık yüzey, çok delik) ilerleme
+            # çubuğu durur: program takıldı sanılmasın diye hangi parçanın
+            # çizildiği günlüğe yazılır.
+            import threading
+            uzun = threading.Timer(15.0, lambda d=dosya: log(
+                f"  {d} çiziliyor... (karmaşık parça, uzun sürüyor - İptal ile "
+                "durdurulabilir)"))
+            uzun.daemon = True
+            uzun.start()
             try:
                 P_, o_ = sade_profil(s2, o, k, P)
                 dxf_komponent(s2, o_, sat, os.path.join(dxf_kl, dosya), P_)
@@ -7546,6 +7595,8 @@ def calistir(step, on, kayit, komp, P, asama=(1, 2, 3), esl=None, agac=None,
             except Exception as ex:
                 sat["dxf"] = f"HATA: {ex}"[:80]
                 log(f"  {dosya}: HATA {ex}"[:110])
+            finally:
+                uzun.cancel()
         satirlar.append(sat)
         if ilerleme:
             ilerleme(sira, toplam)
@@ -7555,9 +7606,12 @@ def calistir(step, on, kayit, komp, P, asama=(1, 2, 3), esl=None, agac=None,
         _eski_cizimleri_kaldir(on, dxf_kl, {r["dxf"] for r in satirlar
                                             if r.get("dxf")}, log)
     if (2 in asama and not tek and not en_cok and not tablo_yok and not dur()
-            and P.get("kaynak_resmi", True)
+            and P.get("kaynak_resmi", False)
             and any(k["sinif"] == "kaynak" for k in komp)):
-        # KAYNAK RESİMLERİ: her kaynaklı alt grup için ayrı PDF (KAYNAK/)
+        # KAYNAK RESİMLERİ: her kaynaklı alt grup için ayrı PDF (KAYNAK/).
+        # Kendiliğinden ÇALIŞMAZ: büyük kaynaklı modelde 10-15 dakika sürer
+        # ve çizimlerin sonuna eklenince program takılmış gibi görünüyordu.
+        # GUI'de ayrı düğme, komut satırında --kaynak-resmi.
         try:
             import pf14_kaynak as KR
             KR.kaynak_resimleri(on, kayit, komp, agac, satirlar, log=log, iptal=dur)
@@ -7636,8 +7690,8 @@ def main():
   1  komponent parcalarin detaylandirilmasi ve BOM cikarilmasi
   2  detay parcalarin cizilmesi ve olculendirilmesi
   3  montaj resmi ve olculendirilmesi
-Asama 2, model kaynak dikisi iceriyorsa her kaynakli alt grubun kaynak
-resmini de uretir: KAYNAK/<grup>_kaynak.pdf (yalniz PDF).
+--kaynak-resmi verilirse asama 2 her kaynakli alt grubun kaynak resmini de
+uretir: KAYNAK/<grup>_kaynak.pdf (yalniz PDF; buyuk modelde uzun surer).
 --asama ile tek tek ya da birlikte calistirilir (varsayilan: 1,2,3)""")
     ap.add_argument("step", nargs="?",
                     help="okunacak dosya: STEP (.stp/.step), IGES (.igs) ya da BREP")
@@ -7677,8 +7731,9 @@ resmini de uretir: KAYNAK/<grup>_kaynak.pdf (yalniz PDF).
     ap.add_argument("--eksik", action="store_true",
                     help="yalnız eksik ya da eskimiş çizimleri üret: aynı model "
                          "ve aynı ayarla üretildiği kayıtlı olanlar atlanır")
-    ap.add_argument("--kaynak-resmi-yok", action="store_true",
-                    help="kaynak resimlerini (KAYNAK/<grup>_kaynak.pdf) üretme")
+    ap.add_argument("--kaynak-resmi", action="store_true",
+                    help="aşama 2'de kaynak resimlerini de üret (KAYNAK/<grup>_kaynak.pdf; "
+                         "büyük kaynaklı modelde uzun sürer)")
     a = ap.parse_args()
     if a.malzeme_liste:
         malzeme_listele()
@@ -7692,7 +7747,7 @@ resmini de uretir: KAYNAK/<grup>_kaynak.pdf (yalniz PDF).
     gor = gorunus_sec([t.strip().upper() for t in a.gorunus.replace(";", ",").split(",")])
     P = {"gizli": a.gizli, "en_az_delik": a.en_az_delik, "yogunluk": RHO,
          "gorunusler": gor, "kesit": bool(a.kesit),
-         "kaynak_resmi": not a.kaynak_resmi_yok}
+         "kaynak_resmi": bool(a.kaynak_resmi)}
     print("görünüşler: " + ", ".join(GORUNUS_AD[g] for g in gor)
           + (" + " + KESIT_AD if a.kesit else ""))
 

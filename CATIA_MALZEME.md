@@ -25,10 +25,13 @@ aktarabilir; **Material** bunlardan biridir.
    *Part Number* zaten görünür listede olmalı; değilse onu da ekleyin.
 4. **OK** → **Save As…** → tür olarak **Excel (\*.xls)** ya da
    **Text (\*.txt)** seçip kaydedin. **CSV'ye çevirmeniz gerekmez:**
-   Pi3D CATIA'nın Excel kaydını doğrudan okur. Kuruluma göre bu dosya
-   sekmeli metin ya da HTML tablo olur; ikisi de okunur. Pi3D "eski Excel
-   biçimi" derse dosyayı Excel'de açıp **Farklı kaydet ▸ Excel Çalışma
-   Kitabı (.xlsx)** ile kaydedin; `.xlsx` de doğrudan okunur.
+   Pi3D CATIA'nın Excel kaydını doğrudan okur: gerçek eski Excel
+   (`.xls`, Excel 97-2003), `.xlsx`, sekmeli metin ya da HTML tablo -
+   hepsi, ek program kurmadan.
+
+   **Material sütunu listede yoksa** (yalnız Number, Part Number,
+   Definition, Quantity) dosyadan malzeme çıkmaz; Pi3D bunu söyler.
+   3. adıma dönüp Material'i görünür listeye alın.
 
 Elinizde şuna benzer, sekmeyle ayrılmış bir dosya olur:
 
@@ -41,7 +44,7 @@ Part Number	Nomenclature	Material	Quantity
 
 5. Pi3D'de **Yardım ▸ Malzemeyi CAD'den al** → 4. adımda bu dosyayı seçin
    (önizleme: hangi parça hangi malzemeyi alacak), ya da 2. adımda →
-   **malzeme.csv yükle…**
+   **Malzeme listesi yükle (Excel / CSV)…**
 
 ### Source (Made / Bought): hangi parça satın alınıyor?
 

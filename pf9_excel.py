@@ -283,3 +283,189 @@ def tablo_yaz(yol_csv, baslik, satirlar, sayfa=None):
                           baslik, xs)])
     except Exception:
         return None
+
+
+# ------------------------------------------------------------ eski .xls
+# CATIA'nın Bill of Material > Save As > Excel kaydı çoğu kurulumda GERÇEK
+# eski Excel'dir (BIFF8, Excel 97-2003). Okumak için ek paket (xlrd)
+# gerekmesin diye burada okunur: dosya bir OLE2 bileşik belgesidir, içindeki
+# "Workbook" akışı BIFF kayıtlarıdır. Yalnız İLK çalışma sayfasının hücre
+# DEĞERLERİ alınır (yazı, sayı); biçim, formül, grafik okunmaz.
+class XlsHatasi(Exception):
+    """Dosya okunabilir bir .xls değil."""
+
+
+def _ole_akis(ham, adlar=("Workbook", "Book")):
+    import struct
+    if ham[:8] != b"\xd0\xcf\x11\xe0\xa1\xb1\x1a\xe1":
+        raise XlsHatasi("OLE2 belgesi değil")
+    ss = 1 << struct.unpack_from("<H", ham, 0x1E)[0]
+    mss = 1 << struct.unpack_from("<H", ham, 0x20)[0]
+    n_fat, ilk_dizin = struct.unpack_from("<II", ham, 0x2C)
+    kesme, ilk_mini, n_mini, ilk_difat, n_difat = struct.unpack_from("<IIIII", ham, 0x38)
+
+    def sektor(i):
+        return ham[512 + i * ss: 512 + (i + 1) * ss]
+    difat = list(struct.unpack_from("<109I", ham, 0x4C))
+    s, say = ilk_difat, 0
+    while s < 0xFFFFFFFA and say < n_difat:
+        d = sektor(s)
+        k = ss // 4
+        difat += list(struct.unpack_from(f"<{k - 1}I", d))
+        s = struct.unpack_from("<I", d, (k - 1) * 4)[0]
+        say += 1
+    fat = []
+    for f in difat[:n_fat]:
+        d = sektor(f)
+        fat += list(struct.unpack_from(f"<{ss // 4}I", d))
+
+    def zincir(s, tablo, oku, en_cok=1 << 20):
+        out, n = [], 0
+        while s < 0xFFFFFFFA and n < en_cok:
+            out.append(oku(s))
+            s = tablo[s] if s < len(tablo) else 0xFFFFFFFE
+            n += 1
+        return b"".join(out)
+    dizin = zincir(ilk_dizin, fat, sektor)
+    girdiler = []
+    for i in range(0, len(dizin) - 127, 128):
+        e = dizin[i:i + 128]
+        ln = struct.unpack_from("<H", e, 0x40)[0]
+        ad = e[:max(0, ln - 2)].decode("utf-16-le", "ignore")
+        tip = e[0x42]
+        bas, boy = struct.unpack_from("<II", e, 0x74)
+        girdiler.append((ad, tip, bas, boy))
+    kok = next((g for g in girdiler if g[1] == 5), None)
+    hedef = next((g for g in girdiler if g[1] == 2 and g[0] in adlar), None)
+    if hedef is None:
+        raise XlsHatasi("çalışma kitabı akışı yok")
+    _, _, bas, boy = hedef
+    if boy < kesme and kok is not None:
+        mini_fat = []
+        if n_mini:
+            d = zincir(ilk_mini, fat, sektor)
+            mini_fat = list(struct.unpack_from(f"<{len(d) // 4}I", d))
+        mini = zincir(kok[2], fat, sektor)
+        veri = zincir(bas, mini_fat, lambda i: mini[i * mss:(i + 1) * mss])
+    else:
+        veri = zincir(bas, fat, sektor)
+    return veri[:boy]
+
+
+def _biff_yazi(parca, i, bolgeler=None):
+    """BIFF8 unicode yazı. parca: bayt, i: konum. bolgeler: CONTINUE ile
+    bölünmüş kaydın parça başlangıçları (bölünen karakter dizisinde yeni
+    bir bayrak baytı gelir). Döner: (yazı, yeni konum)."""
+    import struct
+    n = struct.unpack_from("<H", parca, i)[0]
+    fl = parca[i + 2]
+    i += 3
+    zengin = struct.unpack_from("<H", parca, i)[0] if fl & 0x08 else 0
+    i += 2 if fl & 0x08 else 0
+    ek = struct.unpack_from("<I", parca, i)[0] if fl & 0x04 else 0
+    i += 4 if fl & 0x04 else 0
+    genis = fl & 0x01
+    yazi = ""
+    while len(yazi) < n:
+        son = len(parca)
+        if bolgeler:
+            son = next((b for b in bolgeler if b > i), len(parca))
+        kalan = n - len(yazi)
+        if genis:
+            k = min(kalan, (son - i) // 2)
+            yazi += parca[i:i + 2 * k].decode("utf-16-le", "replace")
+            i += 2 * k
+        else:
+            k = min(kalan, son - i)
+            yazi += parca[i:i + k].decode("latin-1")
+            i += k
+        if len(yazi) < n:
+            if i >= len(parca) or k <= 0 and i not in (bolgeler or ()):
+                break                             # bozuk kayıt: sonsuz döngü olmasın
+            genis = parca[i] & 0x01               # CONTINUE: yeni bayrak baytı
+            i += 1
+    return yazi, i + 4 * zengin + ek
+
+
+def _rk(v):
+    import struct
+    if v & 0x02:
+        x = v >> 2
+        if x & (1 << 29):
+            x -= 1 << 30
+        x = float(x)
+    else:
+        x = struct.unpack("<d", struct.pack("<Q", (v & 0xFFFFFFFC) << 32))[0]
+    return x / 100.0 if v & 0x01 else x
+
+
+def xls_satirlari(ham):
+    """Eski Excel (.xls, BIFF8) -> ilk çalışma sayfasının satırları (str).
+    Tam sayı değerli sayılar ondalıksız yazılır (505603099.0 -> "505603099")."""
+    import struct
+    w = _ole_akis(ham)
+    kayit, i = [], 0
+    while i + 4 <= len(w):
+        k, ln = struct.unpack_from("<HH", w, i)
+        kayit.append((k, w[i + 4:i + 4 + ln]))
+        i += 4 + ln
+    sst, hucre, sayfa, derin = [], {}, False, 0
+
+    def sayi(x):
+        return str(int(x)) if float(x).is_integer() and abs(x) < 1e15 else repr(x)
+    j = 0
+    while j < len(kayit):
+        k, d = kayit[j]
+        if k == 0x0809:                                   # BOF
+            derin += 1
+            if len(d) >= 4 and struct.unpack_from("<H", d, 2)[0] == 0x0010 and not sayfa \
+                    and not hucre:
+                sayfa = True
+        elif k == 0x000A:                                 # EOF
+            derin -= 1
+            if sayfa:
+                break
+        elif k == 0x00FC:                                 # SST (+ CONTINUE)
+            parca, bolge = d, []
+            while j + 1 < len(kayit) and kayit[j + 1][0] == 0x003C:
+                j += 1
+                bolge.append(len(parca))
+                parca += kayit[j][1]
+            n = struct.unpack_from("<I", parca, 4)[0]
+            p = 8
+            for _ in range(n):
+                if p >= len(parca):
+                    break
+                t, p = _biff_yazi(parca, p, bolge)
+                sst.append(t)
+        elif sayfa:
+            if k == 0x00FD and len(d) >= 10:              # LABELSST
+                r, c, _, x = struct.unpack_from("<HHHI", d)
+                hucre[(r, c)] = sst[x] if x < len(sst) else ""
+            elif k == 0x0203 and len(d) >= 14:            # NUMBER
+                r, c, _, x = struct.unpack_from("<HHHd", d)
+                hucre[(r, c)] = sayi(x)
+            elif k == 0x027E and len(d) >= 10:            # RK
+                r, c, _, x = struct.unpack_from("<HHHI", d)
+                hucre[(r, c)] = sayi(_rk(x))
+            elif k == 0x00BD and len(d) >= 6:             # MULRK
+                r, c = struct.unpack_from("<HH", d)
+                m = (len(d) - 6) // 6
+                for q in range(m):
+                    x = struct.unpack_from("<I", d, 4 + q * 6 + 2)[0]
+                    hucre[(r, c + q)] = sayi(_rk(x))
+            elif k == 0x0204 and len(d) >= 8:             # LABEL
+                r, c = struct.unpack_from("<HH", d)
+                hucre[(r, c)] = _biff_yazi(d, 6)[0]
+            elif k == 0x0006 and len(d) >= 14:            # FORMULA: önbellekteki sayı
+                r, c = struct.unpack_from("<HH", d)
+                if d[12:14] != b"\xff\xff":
+                    hucre[(r, c)] = sayi(struct.unpack_from("<d", d, 6)[0])
+                elif d[6] == 0 and j + 1 < len(kayit) and kayit[j + 1][0] == 0x0207:
+                    hucre[(r, c)] = _biff_yazi(kayit[j + 1][1], 0)[0]
+        j += 1
+    if not hucre:
+        return []
+    R = max(r for r, _ in hucre) + 1
+    C = max(c for _, c in hucre) + 1
+    return [[hucre.get((r, c), "") for c in range(C)] for r in range(R)]

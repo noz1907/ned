@@ -81,6 +81,17 @@ BU SÜRÜMDE NE VAR
   pozlar). Çok dikişli grupta bölge başına büyütülmüş DETAY; her dikiş
   ışınla ölçülüp GÖRÜNDÜĞÜ yönden (6 dik + 6 izometrik) çizilir.
   KAYNAK ÖLÇÜLERİ ONDALIKSIZ (resim ve KAYNAK.xlsx): 2,7 -> a3, 1,77 -> a2.
+  Kaynak resimleri AYRI düğme (5. sayfa, KAYNAK RESİMLERİ): "tüm çizimler"
+  içinde kendiliğinden çalışıp programı takılmış gibi gösteriyordu. Şimdi
+  ilerleme çubuğu + kalan süre + grup grup günlük, İptal çalışır.
+  Komut satırı: --kaynak-resmi.
+
+  MALZEME LİSTESİ: eski Excel (.xls, Excel 97-2003 - CATIA'nın Bill of
+  Material > Save As > Excel kaydı), .xlsx, CSV, sekmeli metin, HTML
+  tablo ek paket olmadan okunur. Düğmeler: "Malzeme listesi yükle (Excel /
+  CSV)", "Malzeme şablonu yaz (Excel)". Malzeme sütunu olmayan listede
+  açık uyarı ve CATIA'da ne yapılacağı ("Bill of Material:" satırı artık
+  malzeme sütunu sanılmıyor).
 
   SETSKUR UÇ TİPİ (DIN 913 düz / 914 konik / 915 pim / 916 çanak),
   ÇEKMELİ PİM (ISO 8735 / DIN 7979, iç diş M), silindirik pim.

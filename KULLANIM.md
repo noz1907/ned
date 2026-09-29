@@ -407,8 +407,12 @@ buluyordu.
 
 #### Kaynak resimleri: `KAYNAK/<grup>_kaynak.pdf`
 
-Tüm çizimler üretilirken (4/5. adım) model kaynak dikişi içeriyorsa her
-**kaynaklı alt grup** için ayrı bir kaynak resmi çıkar. Resimler **yalnız
+5. sayfadaki **KAYNAK RESİMLERİ (PDF)** düğmesi her **kaynaklı alt grup**
+için ayrı bir kaynak resmi çıkarır. Bu **ayrı bir iştir**, "tüm çizimler"
+ile kendiliğinden çalışmaz: çok dikişli modelde uzun sürer (944 dikişli
+kasada ~13 dakika). Çalışırken ilerleme çubuğu, kalan süre ve günlükte
+hangi grubun çizildiği görünür; **İptal** ile durdurulur. Komut
+satırında: `--kaynak-resmi`. Resimler **yalnız
 PDF**'tir ve ayrı `KAYNAK` klasörüne yazılır (DXF üretilmez). Artık
 karşılığı olmayan eski `*_kaynak.pdf` dosyaları o klasörden silinir.
 
@@ -601,7 +605,7 @@ Soru penceresinde:
 - **HAYIR** – liste `STANDART_KONTROL.xlsx` olarak yazılır, iş durur.
   Tasarımcı CAD'de düzeltir (Source = Made/Bought ya da parça adı) **ya da**
   listedeki `kaynak` sütununa **Bought / Made** yazar; dosya 2. adımda
-  **malzeme.csv yükle…** ile geri verilince sınıflar oradan alınır (aynı
+  **Malzeme listesi yükle (Excel / CSV)…** ile geri verilince sınıflar oradan alınır (aynı
   numarayı taşıyan farklı parçalar ölçüleriyle ayrılır).
 - **İPTAL** – vazgeç.
 
@@ -704,7 +708,7 @@ addan ya da biçimden tahminden her zaman doğrudur. Pi3D'nin CATIA makrosu
 (`catia_malzeme_cikar.CATScript`, Yardım ▸ Malzemeyi CAD'den al) bunu
 `malzeme.csv`'nin 4. sütununa (`kaynak`) yazar; CATIA'nın Bill of Material
 listesine **Source** sütununu eklerseniz o da olur. Dosyayı 2. adımda
-**malzeme.csv yükle…** ile verince:
+**Malzeme listesi yükle (Excel / CSV)…** ile verince:
 
 - `Bought` → satın alınan (standart): BOM'a adediyle girer, resmi çizilmez;
 - `Made` → üretim parçası (adı "kamera" olsa bile);
@@ -808,8 +812,8 @@ Malzeme vermenin yolları:
 
 * Soldaki kutudan malzemeyi seçip **Hepsine uygula**
 * Tablodan satır(lar) seçip **Seçili satırlara** *(Ctrl ile çoklu seçim)*
-* **malzeme.csv yaz…** ile şablon çıkarıp Excel'de doldurun, sonra
-  **malzeme.csv yükle…** ile geri verin
+* **Malzeme şablonu yaz (Excel)…** ile şablon çıkarıp Excel'de doldurun, sonra
+  **Malzeme listesi yükle (Excel / CSV)…** ile geri verin
 * **CAD'inizin parça listesini** doğrudan yükleyin: CATIA'nın
   *Analyze ▸ Bill of Material* çıktısı, SolidWorks BOM'u ya da Excel'den
   kaydedilmiş bir CSV olur. `Part Number` ve `Material` sütunları
@@ -1732,10 +1736,10 @@ belgede anlattım: **`CATIA_MALZEME.md`**. Özeti:
 1. CATIA'da `.CATProduct` açıkken **Analyze ▸ Bill of Material**
 2. **Define formats** ile *Material* sütununu görünür listeye ekleyin
 3. **Save As…** ile **Excel (`.xls`)** ya da `.txt` olarak kaydedin — CSV
-   gerekmez, Pi3D CATIA'nın Excel kaydını (sekmeli metin ya da HTML tablo)
-   ve `.xlsx`'i doğrudan okur
+   gerekmez, Pi3D eski Excel (`.xls`), `.xlsx`, sekmeli metin ve HTML
+   tabloyu doğrudan okur
 4. Pi3D'de **Yardım ▸ Malzemeyi CAD'den al** → 4. adımda o dosyayı seçin
-   (ya da 2. adımda → **malzeme.csv yükle…**)
+   (ya da 2. adımda → **Malzeme listesi yükle (Excel / CSV)…**)
 
 Program `Part Number` ve `Material` sütunlarını başlıklarından bulur,
 ayırıcıyı (sekme / `;` / `,`) kendi anlar, `Steel` · `Aluminium` ·
