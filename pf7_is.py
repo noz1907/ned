@@ -41,6 +41,11 @@ ALT_KLASOR = {"dxf": "DXF", "acinim": "ACINIM", "lazer": "LZR", "pdf": "PDF",
 DURUM_DOSYASI = "pi3d_is.json"
 # Çizim kodu değişince eski resimler "eskimiş" sayılsın diye imzaya
 # girer. Ölçülendirme / görünüş kuralı değiştiğinde artırılır.
+# PROGRAMIN SÜRÜM NUMARASI - tek yer. Ekran başlığı, rapor.md, komut
+# satırı (--surum), kaynak resmi anteti ve paket adı buradan okur.
+# Her teslim edilen pakette artırılır: büyük.küçük.düzeltme
+PI3D_SURUM = "1.0.0"
+PI3D_SURUM_TARIHI = "29.09.2026"
 CIZIM_SURUMU = "2026.09.26"
 
 _kilit = threading.RLock()
@@ -226,12 +231,17 @@ def guncel_mi(on, dosya_adi, beklenen_imza, durum=None):
                 and dosya_bul(on, dosya_adi))
 
 
-def eskiyi_kaldir(on, tur, kod, yeni_ad, log=print):
+def eskiyi_kaldir(on, tur, kod, yeni_ad, log=print, korunan=()):
     """Aynı parçanın ESKİ adla üretilmiş açınım/lazer dosyası varsa
-    (poz numarası kaymış) <tür klasörü>/ESKI'ye taşır; silmez."""
+    (poz numarası kaymış) <tür klasörü>/ESKI'ye taşır; silmez.
+
+    korunan: BU TURDA yazılmış dosyalar - taşınmaz. Modelde aynı adı
+    taşıyan FARKLI parçalar olabilir ("PG A 023-alm-pls_objects" x 5);
+    kayıt koda göre tutulduğu için ikincisi birincinin dosyasını "poz
+    değişmiş" sanıp ESKI'ye taşıyordu."""
     r = durum_oku(on)[tur].get(kod) or {}
     eski = r.get("dxf")
-    if not eski or eski == yeni_ad:
+    if not eski or eski == yeni_ad or eski in korunan:
         return False
     k = alt_klasor(on, tur)
     y = os.path.join(k, eski)

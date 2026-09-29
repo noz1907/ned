@@ -85,7 +85,7 @@ def logo_var():
     return logo_baytlari("pi3d_64.png") is not None
 
 
-BASLIK = "Pi3D  –  3B modelden BOM ve teknik resim"
+BASLIK = f"Pi3D v{IS.PI3D_SURUM}  –  3B modelden BOM ve teknik resim"
 
 EKSIK_PAKET = """'{paket}' paketi bu Python kurulumunda yok.
 
@@ -608,7 +608,7 @@ class Uygulama(ttk.Frame):
                          ).pack(side="right", padx=(0, 14), pady=2 if k else 6)
         sag = tk.Frame(s, bg=ZEMIN)
         sag.pack(side="right", padx=(0, 10))
-        tk.Label(sag, text="Pi3D", bg=ZEMIN, fg=YAZI, bd=0,
+        tk.Label(sag, text=f"Pi3D  v{IS.PI3D_SURUM}", bg=ZEMIN, fg=YAZI, bd=0,
                  font=("Segoe UI", 14 if k else (17 if varmi else 26), "bold")
                  ).pack(anchor="e")
         tk.Label(sag, text="3B modelden parça listesi ve teknik resim",
@@ -2162,8 +2162,9 @@ class Uygulama(ttk.Frame):
                 except Exception:
                     pass
                 break
-        messagebox.showinfo("Hakkında", (surum or BASLIK) +
-                            "\n\nPiVision - Industrial Smart Vision System")
+        messagebox.showinfo("Hakkında", f"Pi3D v{IS.PI3D_SURUM}  ({IS.PI3D_SURUM_TARIHI})\n\n"
+                            + (surum or BASLIK)
+                            + "\n\nPiVision - Industrial Smart Vision System")
 
     def _malzeme_listesi_tazele(self):
         """Malzeme kutusunu MALZEME tablosundan yeniden doldurur - CAD'den

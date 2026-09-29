@@ -1,12 +1,17 @@
 Pi3D  –  3B modelden parça listesi ve teknik resim
 
-Sürüm   : profil-ogrenme-excel  (28.09.2026)
+Sürüm   : v1.0.0  (29.09.2026)
 Kaynak  : github.com/noz1907/ned   dal: claude/fikstur-parca-stp-57hwc1
 
 KURULUM
   Windows'ta  Pi3D_baslat.bat  dosyasına çift tıklayın. İlk açılışta
   .venv ortamını kurar (birkaç dakika), sonra programı açar.
   Ayrıntı ve elle kurulum: KULLANIM.md
+
+SÜRÜM NUMARASI
+  Program başlığında, Yardım > Hakkında'da, rapor.md'de ve kaynak resmi
+  antedinde yazar; komut satırında: python pf3_olcu.py --surum.
+  Her teslim edilen pakette artar (büyük.küçük.düzeltme).
 
 BU SÜRÜMDE NE VAR
   1 VERİ            STEP / IGES / BREP okur

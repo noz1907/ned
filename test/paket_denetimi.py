@@ -60,6 +60,12 @@ def main():
     # pf6_malzeme yalnız bir yöntemin İÇİNDE import ediliyor; spec'te
     # adıyla yazılı olmalı. Sihirbazın "Makroyu kaydet"i CATIA makrosunu,
     # Yardım > Kullanım kılavuzu KULLANIM.md'yi exe'nin içinde arar.
+    import re as _re
+    import pf7_is as _IS
+    dogru("sürüm numarası büyük.küçük.düzeltme",
+          bool(_re.fullmatch(r"\d+\.\d+\.\d+", _IS.PI3D_SURUM)), _IS.PI3D_SURUM)
+    dogru("SURUM.txt aynı sürüm numarasını yazıyor",
+          f"v{_IS.PI3D_SURUM}" in open(os.path.join(KOK, "SURUM.txt"), encoding="utf-8").read())
     dogru("pf6_malzeme spec'te yazılı", '"pf6_malzeme"' in spec)
     dogru("pf7_is (klasör düzeni / devam) spec'te yazılı", '"pf7_is"' in spec)
     dogru("pf8_tani (geometriden tanıma) spec'te yazılı", '"pf8_tani"' in spec)

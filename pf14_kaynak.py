@@ -1106,7 +1106,8 @@ def _antet(msp, bilgi, no, toplam):
     _yaz(msp, "a: boğaz, z: kenar boyu (z = a·√2); ölçüler mm", KENAR + 253, KENAR + 3.5,
          YH)
     _yaz(msp, f"SAYFA {no} / {toplam}", W - KENAR - 42, KENAR + 10.5, 3.5)
-    _yaz(msp, "Pi3D", W - KENAR - 42, KENAR + 3.5, YH)
+    import pf7_is as IS
+    _yaz(msp, f"Pi3D v{IS.PI3D_SURUM}", W - KENAR - 42, KENAR + 3.5, YH)
 
 
 def _tablo_sayfalari(tab):

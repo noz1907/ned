@@ -6095,6 +6095,7 @@ def acilim_yaz(kayit, komp, P, klasor, kodlar=None, k_faktor=K_FAKTOR,
     step_oz = IS.durum_oku(kok).get("step_ozet", "")
     sonuc, hata, denenen = [], [], set()
     lz_sonuc, lz_hata, lz_denenen = [], [], set()
+    yazilan_ac, yazilan_lz = set(), set()
     pozlar = poz_numaralari(komp)
     secili = [(pozlar[i], k) for i, k in enumerate(komp)
               if kodlar is None or (k.get("kod") or k.get("ad")) in kodlar]
@@ -6126,8 +6127,10 @@ def acilim_yaz(kayit, komp, P, klasor, kodlar=None, k_faktor=K_FAKTOR,
         dosya = os.path.join(klasor,
                              resim_dosyasi(poz or (i + 1), ad,
                                            k.get("ad"), acinim=True))
-        IS.eskiyi_kaldir(kok, "acinim", ad, os.path.basename(dosya), log)
+        IS.eskiyi_kaldir(kok, "acinim", ad, os.path.basename(dosya), log,
+                         korunan=yazilan_ac)
         dxf_acilim(r, dict(k, poz=poz), dosya, P)
+        yazilan_ac.add(os.path.basename(dosya))
         r["kod"] = ad
         r["ad"] = k.get("ad", "")
         r["poz"] = poz
@@ -6147,7 +6150,7 @@ def acilim_yaz(kayit, komp, P, klasor, kodlar=None, k_faktor=K_FAKTOR,
                 lz_sonuc.append(_lazer_dosyasi(
                     kok, lz_klasor, poz or (i + 1), k, r["kontur_dis"],
                     r.get("kontur_delik") or [], r["kalinlik_mm"], "açınım",
-                    step_oz, k_faktor, log))
+                    step_oz, k_faktor, log, korunan=yazilan_lz))
             except Exception as e:
                 lz_hata.append((ad, f"lazer dosyası yazılamadı: {e}"))
         else:
@@ -6212,7 +6215,7 @@ def lazer_yaz(kayit, komp, klasor, kodlar=None, k_faktor=K_FAKTOR,
     kok = klasor
     klasor = IS.alt_klasor(kok, "lazer", olustur=True)
     step_oz = IS.durum_oku(kok).get("step_ozet", "")
-    sonuc, hata, denenen = [], [], set()
+    sonuc, hata, denenen, yazilan = [], [], set(), set()
     pozlar = poz_numaralari(komp)
     haz = {a.get("kod"): a for a in (acilim or []) if a.get("kontur_dis")}
     secili = [(pozlar[i], k) for i, k in enumerate(komp)
@@ -6253,20 +6256,23 @@ def lazer_yaz(kayit, komp, klasor, kodlar=None, k_faktor=K_FAKTOR,
             log(f"  {ad}: hata - {type(e).__name__}: {e}")
             continue
         sonuc.append(_lazer_dosyasi(kok, klasor, poz or (i + 1), k, dis, ic, t, nere,
-                                    step_oz, k_faktor, log))
+                                    step_oz, k_faktor, log, korunan=yazilan))
     _lazer_tablosu(klasor, sonuc, hata, denenen, log)
     return sonuc, hata
 
 
-def _lazer_dosyasi(kok, klasor, poz, k, dis, ic, t, nere, step_oz, k_faktor, log=print):
+def _lazer_dosyasi(kok, klasor, poz, k, dis, ic, t, nere, step_oz, k_faktor, log=print,
+                   korunan=None):
     """Bir parçanın lazer kesim dosyasını yazar ve kaydeder; LAZER tablosu
     satırını döndürür. Açınımdan gelen kontur '_acinim_lzr.dxf', düz sac
     '_Lzr.dxf' adını alır. Yalnız kesim konturu: büküm çizgisi, yazı,
     ölçü YOK."""
     ad = k.get("kod") or k.get("ad") or "?"
     dosya = resim_dosyasi(poz, ad, k.get("ad"), acinim=(nere == "açınım"), lazer=True)
-    IS.eskiyi_kaldir(kok, "lazer", ad, dosya, log)
+    IS.eskiyi_kaldir(kok, "lazer", ad, dosya, log, korunan=korunan or ())
     dxf_lazer(dis, ic, os.path.join(klasor, dosya))
+    if korunan is not None:
+        korunan.add(dosya)
     xs = [q[0] for w in dis for q in w]
     ys = [q[1] for w in dis for q in w]
     kayd = {"poz": poz, "kod": ad, "ad": k.get("ad", ""),
@@ -7980,6 +7986,8 @@ uretir: KAYNAK/<grup>_kaynak.pdf (yalniz PDF; buyuk modelde uzun surer).
     ap.add_argument("--eksik", action="store_true",
                     help="yalnız eksik ya da eskimiş çizimleri üret: aynı model "
                          "ve aynı ayarla üretildiği kayıtlı olanlar atlanır")
+    ap.add_argument("--surum", "--version", action="version",
+                    version=f"Pi3D v{IS.PI3D_SURUM} ({IS.PI3D_SURUM_TARIHI})")
     ap.add_argument("--kaynak-resmi", action="store_true",
                     help="aşama 2'de kaynak resimlerini de üret (KAYNAK/<grup>_kaynak.pdf; "
                          "büyük kaynaklı modelde uzun sürer)")
@@ -8259,6 +8267,7 @@ def bom_yaz(on, bom, satirlar):
 
 def rapor_yaz(on, step, kayit, komp, satirlar, montaj):  # noqa: C901
     L = [f"# {os.path.basename(step)} – ölçü raporu\n",
+         f"_Pi3D v{IS.PI3D_SURUM} ({IS.PI3D_SURUM_TARIHI})_\n",
          f"{len(kayit)} katı, "
          f"{sum(1 for k in komp if k['sinif'] != 'kaynak')} komponent"
          + (f" + {sum(1 for k in komp if k['sinif'] == 'kaynak')} kaynak "
