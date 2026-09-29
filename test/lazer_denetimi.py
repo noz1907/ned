@@ -176,6 +176,7 @@ def main():
         yazi = " ".join(e.dxf.text for e in acd.modelspace() if e.dxftype() == "TEXT")
         dogru("büküm resminde ABKANT tablosu", "ABKANT (CNC)" in yazi)
         dogru("büküm resminde PROFİL görünüşü", "PROFİL" in yazi)
+        dogru("büküm resminde PERSPEKTİF", "PERSPEKTİF" in yazi)
         dogru("profilde kanat dış ölçüsü (K1 105)", "K1 105" in yazi, yazi[-300:])
         eks = [e for e in acd.modelspace() if e.dxftype() == "LINE" and e.dxf.layer == "EKSEN"]
         esit("tek büküm için tek büküm ekseni", len(eks), 1)

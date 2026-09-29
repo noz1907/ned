@@ -4637,6 +4637,13 @@ def sac_acilim(sh, o=None, k_faktor=K_FAKTOR, istasyon=11,
                            "bukum": [tuple(z["m"]) for z in bkm]}
     except Exception:
         pass
+    # Küçük PERSPEKTİF (izometrik): parçanın bükülmüş hâli bir bakışta.
+    # Büküm ekseni burada Z; göz üç eksenden eşit uzaklıkta.
+    try:
+        sonuc["izo"] = hlr(sh, _birim3((1.0, -1.0, 0.8)), _birim3((1.0, 1.0, 0.0)),
+                           gizli=False)["GORUNEN"]
+    except Exception:
+        pass
     # Parça hangi yöntemle bükülmüş? Kanat uzunlukları ve iç yarıçaplar
     # buna karar vermeye yeter; tasarımcıya "bu abkantta yapılamaz"
     # demek, yanlış tezgâha gönderilmesini önler.
@@ -5818,6 +5825,15 @@ def dxf_lazer(kontur_dis, kontur_delik, yol, P=None):
     return yol
 
 
+def olcek_yazisi_kisa(v):
+    return f"{XL.tr(v)}:1" if v >= 1 else f"1:{XL.tr(round(1 / v, 1))}"
+
+
+def _birim3(v):
+    n = math.sqrt(sum(a * a for a in v)) or 1.0
+    return tuple(a / n for a in v)
+
+
 def kanat_dis_olculeri(r):
     """ABKANT (CNC) için kanatların DIŞ ölçüsü - sanal köşeye (dış yüzlerin
     uzantılarının kesiştiği yere) kadar. CNC abkant (Delem vb.) parçanın
@@ -5974,6 +5990,23 @@ def dxf_acilim(r, k, yol, P=None):
             _yaz(msp, f"B{i}", m[0] + ox + 0.4 * yazi_h, m[1] + oy + 0.2 * yazi_h,
                  0.8 * yazi_h, kat="EKSEN")
         y = oy + py0 - 2.0 * h
+    izo = r.get("izo")
+    if izo:
+        pts = [p for q in izo for p in q]
+        ix0, iy0 = min(p[0] for p in pts), min(p[1] for p in pts)
+        ix1, iy1 = max(p[0] for p in pts), max(p[1] for p in pts)
+        hedef = 60.0 * yazi_h                  # küçük bir resim
+        ideal = hedef / max(ix1 - ix0, iy1 - iy0, 1e-6)
+        olc2 = max([v for v in (0.05, 0.1, 0.2, 0.25, 0.5, 1.0, 2.0) if v <= ideal] or [0.05])
+        y -= 1.5 * h
+        _yaz(msp, f"PERSPEKTİF (izometrik)   ölçek {olcek_yazisi_kisa(olc2)}", x, y, h)
+        y -= 2.0 * h
+        ox = x + 3.0 * h - ix0 * olc2
+        oy = y - (iy1 - iy0) * olc2 - 1.0 * h - iy0 * olc2
+        for q in izo:
+            msp.add_lwpolyline([(a * olc2 + ox, b * olc2 + oy) for a, b in q],
+                               dxfattribs={"layer": "GORUNEN"})
+        y = oy + iy0 * olc2 - 2.0 * h
     if len(r["bukumler"]) <= 4:
         # Sol tarafa, genel genişlik ölçüsünün dışına diz: sağda büküm
         # etiketleri ve çizelge var.

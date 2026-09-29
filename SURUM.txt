@@ -1,6 +1,6 @@
 Pi3D  –  3B modelden parça listesi ve teknik resim
 
-Sürüm   : v1.0.0  (29.09.2026)
+Sürüm   : v1.0.1  (29.09.2026)
 Kaynak  : github.com/noz1907/ned   dal: claude/fikstur-parca-stp-57hwc1
 
 KURULUM
@@ -90,6 +90,8 @@ BU SÜRÜMDE NE VAR
   içinde kendiliğinden çalışıp programı takılmış gibi gösteriyordu. Şimdi
   ilerleme çubuğu + kalan süre + grup grup günlük, İptal çalışır.
   Komut satırı: --kaynak-resmi.
+
+  v1.0.1: büküm resmine küçük PERSPEKTİF (izometrik) görünüş.
 
   AÇINIM = BÜKÜM RESMİ + LAZER: açınımı çıkan her parça için büküm
   resmi (ACINIM/..._acinim.dxf) ve lazer kesim (LZR/..._acinim_lzr.dxf,

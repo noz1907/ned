@@ -1070,6 +1070,8 @@ Hangi kanadın hangi yöne büküldüğü buradan okunur – program yönü
 tahmin etmez, gösterir. Kesim konturu çıkmayan (yalnız blank ölçüsü verilen)
 parçada da profil kesitten çizilir. Kısa kanatlar yazıya göre küçükse
 profil standart ölçekle büyütülür (2:1, 5:1 …; başlıkta yazar).
+Profilin altında parçanın küçük bir **perspektifi** (izometrik) vardır:
+bükülmüş hâli bir bakışta görünür.
 
 **ABKANT (CNC) tablosu – kanat DIŞ ölçüleri.** CNC abkant (Baysal,
 Delem ünite vb.) büküm çizgisine göre değil **dayamaya** göre büker:
