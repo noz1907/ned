@@ -834,6 +834,22 @@ geldiğini söyler:
 | `seçim` | siz verdiniz |
 | `varsayılan` | hiçbiri yoksa çelik kabul edildi |
 
+**Arama:** tablonun üstündeki **Ara (kod / tanım / poz)** kutusuna
+yazıp Enter'a (ya da **Bul ▸**'e) basın. Kod, tanım ya da pozunda o
+metin geçen satır seçilir ve gösterilir; kapalı alt montaj dalı kendisi
+açılır. Enter'a yeniden basınca sıradakine geçer, yanda `2 / 5` gibi
+sayaç yazar. Büyük-küçük harf ve Türkçe harf farkı yoktur: CAD adları
+çoğu zaman Türkçe harfsizdir (`DIK`, `KOSE`); `dik`, `dık` ya da `köşe`
+yazmak yeter. BOM çıkınca sıralama değişir; parçayı satır satır aramak
+gerekmez.
+
+**Seçili parçanın resmi:** tablodan bir satır seçince sağdaki **Seçili
+parça** kutusunda parçanın küçük izometrik resmi (görünen kenarlar) ve
+adı çıkar. Adından ne olduğu anlaşılmayan parçada malzeme / standart /
+üretim parçası kararını vermeyi kolaylaştırır. Resim ayrı iş
+parçacığında çizilir, program beklemez; aynı parça ikinci kez
+seçilince beklemeden gelir. Alt montaj satırında resim yoktur.
+
 Malzeme vermenin yolları:
 
 * Soldaki kutudan malzemeyi seçip **Hepsine uygula**

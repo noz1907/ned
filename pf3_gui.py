@@ -661,11 +661,41 @@ class Uygulama(ttk.Frame):
     # ------------------------------------------------------------ 2 BOM
     def _sayfa2(self):
         f = self.sayfa[1]
-        ttk.Label(f, text="Komponentler, BOM ve malzeme",
-                  style="Baslik.TLabel").pack(anchor="w", pady=(0, 6))
+        bf = ttk.Frame(f); bf.pack(fill="x", pady=(0, 6))
+        ttk.Label(bf, text="Komponentler, BOM ve malzeme",
+                  style="Baslik.TLabel").pack(side="left")
+        # ARAMA: BOM çıkınca sıralama değişir; yüzlerce satırda bir parçayı
+        # gözle bulmak zor (kullanıcı: "listede olduğundan eminim ama gözden
+        # kaçıyor"). Kod, tanım ya da poz içinde geçen her satır; Enter /
+        # Bul ile sıradakine gider, kapalı montaj dalı açılır.
+        self.v_ara_sonuc = tk.StringVar(value="")
+        ttk.Label(bf, textvariable=self.v_ara_sonuc, foreground="#555"
+                  ).pack(side="right", padx=(6, 0))
+        ttk.Button(bf, text="Bul ▸", command=self.ara_bul).pack(side="right")
+        self.v_ara = tk.StringVar()
+        self.e_ara = ttk.Entry(bf, textvariable=self.v_ara, width=28)
+        self.e_ara.pack(side="right", padx=(4, 4))
+        self.e_ara.bind("<Return>", lambda e: self.ara_bul())
+        self.v_ara.trace_add("write", lambda *a: self._ara_sifirla())
+        ttk.Label(bf, text="Ara (kod / tanım / poz):").pack(side="right")
+        self._ara_liste, self._ara_i = [], -1
         sut = ("poz", "kod", "tanim", "adet", "sinif", "malzeme", "kaynak", "olcu", "kg")
         gen = (40, 150, 220, 45, 140, 135, 75, 110, 65)
         cer = ttk.Frame(f); cer.pack(fill="both", expand=True)
+        # SEÇİLİ PARÇANIN RESMİ: malzeme / standart / parça kararı adla
+        # verilemiyorsa parçayı görmek yeter (kullanıcı isteği). Küçük
+        # izometrik, yalnız görünen kenarlar; ayrı iş parçacığında çizilir.
+        rf = ttk.LabelFrame(cer, text=" Seçili parça ", padding=4)
+        rf.pack(side="right", fill="y", padx=(6, 0))
+        # ad üstte: liste kısa kalınca (15 inç ekran) resmin altı kesilse de
+        # hangi parça olduğu okunur
+        self.v_parca_ad = tk.StringVar(value="listeden bir satır seçin")
+        ttk.Label(rf, textvariable=self.v_parca_ad, wraplength=230, justify="left",
+                  foreground="#333").pack(anchor="w", pady=(0, 4))
+        self.c_parca = tk.Canvas(rf, width=230, height=150, background="white",
+                                 highlightthickness=1, highlightbackground="#ccc")
+        self.c_parca.pack()
+        self._resim_onbellek, self._resim_istek = {}, None
         self.ag = ttk.Treeview(cer, columns=sut, show="tree headings",
                                selectmode="extended")
         self.ag.column("#0", width=150, stretch=False)
@@ -677,6 +707,7 @@ class Uygulama(ttk.Frame):
         kay = ttk.Scrollbar(cer, orient="vertical", command=self.ag.yview)
         self.ag.configure(yscrollcommand=kay.set)
         self.ag.pack(side="left", fill="both", expand=True); kay.pack(side="right", fill="y")
+        self.ag.bind("<<TreeviewSelect>>", lambda e: self.parca_resmi_goster())
         self.ag.tag_configure("std", foreground="#777")
         self.ag.tag_configure("kaynak", foreground="#b06")
         self.ag.tag_configure("data", foreground="#070")
@@ -1883,6 +1914,8 @@ class Uygulama(ttk.Frame):
                     self._baski_geldi(veri)
                 elif tip == "ai":
                     self._ai_geldi(veri)
+                elif tip == "parca_resmi":
+                    self._parca_resmi_geldi(*veri)
                 elif tip == "onizleme":
                     self.onizleme_png = veri
                     self._onizleme_ciz()
@@ -2367,6 +2400,8 @@ class Uygulama(ttk.Frame):
 
     def _komponent_geldi(self, kayit, komp, agac=None):
         self.kayit, self.komp, self.satirlar = kayit, komp, []
+        if hasattr(self, "_resim_onbellek"):
+            self._resim_onbellek.clear()      # yeni model: eski resimler geçersiz
         self.agac = agac
         self.ornek_dxf = None
         self.malzemeler = {}
@@ -2599,6 +2634,106 @@ class Uygulama(ttk.Frame):
                     self.ag.item(r["poz"], open=False)
             except Exception:
                 pass
+
+    # ------------------------------------------------------------ arama
+    _ASCII = str.maketrans("ıİIşŞğĞüÜöÖçÇ", "iiissgguuoocc")
+
+    @staticmethod
+    def _kucuk(t):
+        """Arama için sade yazı: büyük/küçük ve Türkçe harf farkı yok. CAD
+        adları çoğu zaman Türkçe harfsizdir (DIK, KOSE); "dik" de "dık"
+        da "köşe" de bulsun."""
+        return str(t).translate(Uygulama._ASCII).lower()
+
+    def _ara_sifirla(self):
+        self._ara_liste, self._ara_i = [], -1
+        self.v_ara_sonuc.set("")
+
+    def _tum_satirlar(self, ust=""):
+        for i in self.ag.get_children(ust):
+            yield i
+            yield from self._tum_satirlar(i)
+
+    def ara_bul(self):
+        """Arama kutusundaki metnin geçtiği SIRADAKİ satırı seçip gösterir."""
+        q = self._kucuk(self.v_ara.get().strip())
+        if not q:
+            return
+        if not self._ara_liste:
+            self._ara_liste = [i for i in self._tum_satirlar()
+                               if any(q in self._kucuk(v)
+                                      for v in (self.ag.item(i, "values") or ())[:3])]
+            self._ara_i = -1
+        if not self._ara_liste:
+            self.v_ara_sonuc.set("bulunamadı")
+            return
+        self._ara_i = (self._ara_i + 1) % len(self._ara_liste)
+        iid = self._ara_liste[self._ara_i]
+        self.ag.see(iid)                   # kapalı üst dallar açılır
+        self.ag.selection_set(iid)
+        self.ag.focus(iid)
+        self.v_ara_sonuc.set(f"{self._ara_i + 1} / {len(self._ara_liste)}")
+
+    # ------------------------------------------------------------ parça resmi
+    def parca_resmi_goster(self):
+        """Seçili satırın parçasını sağdaki küçük pencerede izometrik çizer."""
+        if not hasattr(self, "c_parca"):
+            return
+        sec = self._secili_kompler() if self.komp else []
+        c = self.c_parca
+        if not sec or not self.kayit:
+            c.delete("all")
+            sel = self.ag.selection()
+            v = self.ag.item(sel[0], "values") if sel else ()
+            self.v_parca_ad.set("alt montaj: resim için parçasını seçin"
+                                if v and str(v[2]).startswith("▸ ") else
+                                "listeden bir satır seçin")
+            return
+        k = sec[0]
+        self.v_parca_ad.set(f"{k['kod'][:50]}\n{k['ad'][:80]}\n"
+                            f"{self._sinif_metni(k['sinif'], k['kod'])}")
+        anahtar = id(k)
+        self._resim_istek = anahtar
+        if anahtar in self._resim_onbellek:
+            self._parca_resmi_ciz(self._resim_onbellek[anahtar])
+            return
+        c.delete("all")
+        c.create_text(115, 100, text="çiziliyor…", fill="#888")
+        sh = self.kayit[k["indeks"][0]][1]
+        threading.Thread(target=self._parca_resmi_is, args=(anahtar, sh),
+                         daemon=True).start()
+
+    def _parca_resmi_is(self, anahtar, sh):
+        try:
+            r3 = 1.0 / math.sqrt(3.0)
+            r2 = 1.0 / math.sqrt(2.0)
+            ken = self.M.hlr(sh, (r3, -r3, r3), (r2, r2, 0.0), gizli=False)["GORUNEN"]
+        except Exception:
+            ken = None
+        self.kuyruk.put(("parca_resmi", (anahtar, ken)))
+
+    def _parca_resmi_geldi(self, anahtar, ken):
+        self._resim_onbellek[anahtar] = ken
+        if anahtar == self._resim_istek:
+            self._parca_resmi_ciz(ken)
+
+    def _parca_resmi_ciz(self, ken):
+        c = self.c_parca
+        c.delete("all")
+        W, H, pay = int(c["width"]), int(c["height"]), 10
+        if not ken:
+            c.create_text(W / 2, H / 2, text="resim çıkarılamadı", fill="#888")
+            return
+        xs = [p[0] for q in ken for p in q]
+        ys = [p[1] for q in ken for p in q]
+        x0, x1, y0, y1 = min(xs), max(xs), min(ys), max(ys)
+        o = min((W - 2 * pay) / max(x1 - x0, 1e-6), (H - 2 * pay) / max(y1 - y0, 1e-6))
+        dx = (W - (x1 - x0) * o) / 2
+        dy = (H - (y1 - y0) * o) / 2
+        for q in ken:
+            c.create_line(*[v for p in q for v in (dx + (p[0] - x0) * o,
+                                                   H - dy - (p[1] - y0) * o)],
+                          fill="#222")
 
     def _secili_kompler(self):
         """Ağaçta seçili satırların komponentleri (düz ya da kademeli)."""
