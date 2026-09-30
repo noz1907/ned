@@ -4436,8 +4436,11 @@ def girinti_olculeri(msp, plan, kaydir, gkutu, h, en_cok_oran=0.5):
         G, Y = gk[2] - gk[0], gk[3] - gk[1]
         dolu = _yazi_kutulari(msp)
         pay_k = 6.0 * h
-        kont = _gorunen_parcalar(msp, (gk[0] - pay_k, gk[1] - pay_k,
-                                       gk[2] + pay_k, gk[3] + pay_k))
+        # yalnız görünen kontur değil: gizli, eksen, ölçü ve kılavuz
+        # çizgileri de (P15: "5,5" bir gizli çizginin üstündeydi)
+        kont = _cizgi_parcalari(msp, (gk[0] - pay_k, gk[1] - pay_k,
+                                      gk[2] + pay_k, gk[3] + pay_k),
+                                katman=("GORUNEN", "GIZLI", "EKSEN", "OLCU", "BOLGE"))
         # Bu görünüşte ZATEN yazılı değerler. Derinlik bunlardan biriyse
         # ikinci kez yazılmaz: ters T biçiminde kolun boyu, gövdenin
         # datumdan konumuyla aynı sayıdır (ölçtük: 01.050.000.02'de "36"
@@ -4495,7 +4498,9 @@ def girinti_olculeri(msp, plan, kaydir, gkutu, h, en_cok_oran=0.5):
                 ky = _olcu_yazi_kutusu(dim)
                 if ky is None or not (
                         _cakisiyor(ky, dolu, 0.2 * h)
-                        or any(_parca_kutuda(p, q, ky) for p, q in kont)):
+                        or _cizgi_kesiyor(ky, kont, 0.1 * h)
+                        or _kendi_ustunde(dim, ky, h)
+                        or _dim_yaziya_degiyor(dim, dolu, 0.1 * h)):
                     if ky:
                         dolu.append(ky)
                     yazili[dik].add(round(der, 1))
@@ -4575,6 +4580,17 @@ def _dim_cizgileri(dim):
         for v in dim.dimension.virtual_entities():
             if v.dxftype() == "LINE":
                 out.append(((v.dxf.start.x, v.dxf.start.y), (v.dxf.end.x, v.dxf.end.y)))
+            elif v.dxftype() == "ARC":
+                # açı ölçüsünün yayı ve rakama uzanan UZATMA YAYLARI da
+                # çizgidir: 60°'lik uzatma yayı komşu yazıların içinden
+                # geçiyordu (Karluna P16, tente P46)
+                c, r = v.dxf.center, v.dxf.radius
+                a0 = math.radians(v.dxf.start_angle)
+                sw = math.radians((v.dxf.end_angle - v.dxf.start_angle) % 360.0)
+                n = max(2, int(math.degrees(sw) / 10.0) + 1)
+                pts = [(c.x + r * math.cos(a0 + sw * i / n), c.y + r * math.sin(a0 + sw * i / n))
+                       for i in range(n + 1)]
+                out.extend(zip(pts, pts[1:]))
     except Exception:
         pass
     return out
@@ -4847,14 +4863,42 @@ def konum_olculeri(msp, plan, kaydir, gkutu, h, en_cok_kademe=8, rapor=None,
             # en yakın komşusundan (ya da datumdan) ölçülür.
             cizilmis = liste_[0] + liste_[1]
             for r in dusen:
-                ad_ = [(abs(q["deger"] - r["deger"]), q["deger"], q.get("dik") or [])
-                       for q in cizilmis] + [(abs(dat - r["deger"]), dat, [])]
+                # Komşu, resimde EN YAKIN ölçülü özellik (2B uzaklık): değerce
+                # en yakın seviye parçanın öbür ucunda olabiliyordu (Televre
+                # P04: 191'deki delik x=2408'de, kayıp 222,5 x=760'ta) - yanına
+                # konan ölçü de detay dairesi de bütün parçayı kaplıyordu.
+                rd = list(r.get("dik") or [])
+                ad_ = [(abs(dat - r["deger"]), dat, [])]
+                for q in cizilmis:
+                    qd = list(q.get("dik") or [])
+                    if not qd or not rd or abs(q["deger"] - r["deger"]) < 1e-6:
+                        continue
+                    pq = min(((u, w) for u in qd for w in rd), key=lambda t: abs(t[0] - t[1]))
+                    ad_.append((math.hypot(q["deger"] - r["deger"], pq[0] - pq[1]),
+                                q["deger"], [pq[0]]))
                 _d, dv, dd = min(ad_, key=lambda t: t[0])
                 # DIŞARIDAN yer yok: özelliğin YANINDA, en yakın ölçülü
                 # komşusundan (kullanıcı: "deliğin yanından ver, illa en
                 # dıştan verme")
                 if _yanina_koy(msp, yon, dv, r["deger"], dd or list(r.get("dik") or []),
                                list(r.get("dik") or []), None, kayd, dkay, h, yabanci):
+                    if rapor is not None:
+                        rapor["yer_yok"] -= 1
+                    continue
+                # Son çare (detaydan önce): REFERANSTAN PARALEL ölçü (0 -> B),
+                # hattın dışında ayrı bir kademede - yalnız uzatma çizgisi
+                # hiçbir deliğin / yuvanın üstünden geçmeyen yandan.
+                paralel = False
+                for t_ in sorted((0, 1), key=lambda t: (r.get("_engel") or [0, 0])[t]):
+                    if (r.get("_engel") or [0, 0])[t_] > 0:
+                        continue
+                    rr = {"a": dat, "b": r["deger"], "metin": None,
+                          "dik": list(r.get("dik") or []), "_taraf": t_}
+                    if _ara_yerlestir_yan(msp, yon, rr, t_, kayd, dkay, gk, h,
+                                          yabanci, en_cok_kademe):
+                        paralel = True
+                        break
+                if paralel:
                     if rapor is not None:
                         rapor["yer_yok"] -= 1
                     continue
@@ -5248,7 +5292,11 @@ def _egik_kenarlar(kenar, kutu_, h):
     """Görünüşün EĞİK DOĞRU kenarları: (P, Q, açı_sapma, referans ekseni).
     Eğri (çok noktalı, doğrusal olmayan) kenarlar alınmaz."""
     buyuk = max(kutu_[2] - kutu_[0], kutu_[3] - kutu_[1])
-    en_az = max(0.4 * h, 0.02 * buyuk)
+    # Yazıdan KISA kenara açı verilmez: yayın yarıçapı yazıdan küçük kalır,
+    # rakam açının dışına düşer ve uzatma yayı köşeyi dolaşır (1,6 mm'lik
+    # kenarlara 0,5° / 38° yazılıyordu). Çok kısa eğik kenar pah ya da
+    # kalıp ayrıntısıdır; pah notu ayrıca verilir.
+    en_az = max(1.5 * h, 0.02 * buyuk)
     out = []
     for p in kenar.get("GORUNEN", []):
         if len(p) < 2:
@@ -5369,6 +5417,29 @@ def aci_olculeri(msp, kenarlar, gorunusler, kaydir, gkutu, h):
     return sayi
 
 
+def _aci_dogru(dim, u1, u2):
+    """Çizilen açı ölçüsü DOĞRU mu: (1) yazılan değer kenarlar arasındaki
+    açı, (2) yayı KÜÇÜK açıyı tarıyor. Yalnız yazıya bakmak yetmiyordu:
+    ezdxf rakamı 5,1° yazıp yayı 354,9° boyunca, köşenin çevresinde
+    dolaştırabiliyordu - yay yakındaki yazıların üstünden geçiyordu
+    (Karluna P16, kasa P72: 18 resimde)."""
+    try:
+        ic = list(dim.dimension.virtual_entities())
+        yazilan = [v.text if v.dxftype() == "MTEXT" else v.dxf.text
+                   for v in ic if v.dxftype() in ("MTEXT", "TEXT")]
+        beklenen_d = math.degrees(math.acos(max(-1.0, min(1.0, u1[0] * u2[0] + u1[1] * u2[1]))))
+        beklenen = XL.tr(round(beklenen_d, 1), 1)
+        if not any(re.search(r"(^|[^0-9,])" + re.escape(beklenen) + "°", t or "")
+                   for t in yazilan):
+            return False
+        # yay yazı için bölünebilir: parçaların toplamı küçük açıyı aşmamalı
+        tarama = sum((v.dxf.end_angle - v.dxf.start_angle) % 360.0
+                     for v in ic if v.dxftype() == "ARC")
+        return tarama <= 180.0
+    except Exception:
+        return False
+
+
 def _aci_koy(msp, A, B, R, L, metin, h):
     """A köşesinde AB kenarı ile AR referansı arasına açı ölçüsü."""
     u1 = ((B[0] - A[0]) / L, (B[1] - A[1]) / L)
@@ -5391,26 +5462,25 @@ def _aci_koy(msp, A, B, R, L, metin, h):
             # ezdxf açıyı line2'den line1'e saat yönü tersine ölçer:
             # kenar referansın hangi yanındaysa sıra ona göre (yoksa 355°)
             capraz = u2[0] * u1[1] - u2[1] * u1[0]
-            l1, l2 = ((A, B), (A, R)) if capraz > 0 else ((A, R), (A, B))
-            try:
-                dim = msp.add_angular_dim_2l(
-                    base=base, line1=l1, line2=l2, location=yazi, text=metin,
-                    dimstyle=OLCU_STILI, override=ovr, dxfattribs={"layer": "OLCU"})
-                dim.render()
-            except Exception:
-                return False
-            # yazılan değer beklenenle aynı mı (yanlış ölçü asla)
-            try:
-                yazilan = [v.text for v in dim.dimension.virtual_entities()
-                           if v.dxftype() in ("MTEXT", "TEXT")]
-                beklenen = XL.tr(round(math.degrees(math.acos(max(-1.0, min(1.0, u1[0] * u2[0] + u1[1] * u2[1])))), 1), 1)
-                if not any(re.search(r"(^|[^0-9,])" + re.escape(beklenen) + "°", t or "")
-                           for t in yazilan):
-                    _olcu_sil(msp, dim)
-                    return False
-            except Exception:
+            siralar = (((A, B), (A, R)), ((A, R), (A, B)))
+            if capraz <= 0:
+                siralar = siralar[::-1]
+            dim = None
+            for l1, l2 in siralar:
+                try:
+                    dim = msp.add_angular_dim_2l(
+                        base=base, line1=l1, line2=l2, location=yazi, text=metin,
+                        dimstyle=OLCU_STILI, override=ovr, dxfattribs={"layer": "OLCU"})
+                    dim.render()
+                except Exception:
+                    dim = None
+                    continue
+                if _aci_dogru(dim, u1, u2):
+                    break
                 _olcu_sil(msp, dim)
-                return False
+                dim = None
+            if dim is None:
+                return False           # iki sırada da doğru çizilemedi
             ky = _olcu_yazi_kutusu(dim)
             if (ky and not _cakisiyor(ky, dolu, 0.15 * h)
                     and not _cizgi_kesiyor(ky, cizgi, 0.1 * h)
@@ -5472,7 +5542,15 @@ def detay_gorunusleri(msp, kenarlar, kaydir, gkutu, kayip, h):
         noktalar = []
         for k in lst:
             yat = k["yon"] == "yatay"
-            for v, dd in ((k["a"], k["dik_a"]), (k["b"], k["dik_b"])):
+            # İki ucun BİRBİRİNE EN YAKIN özellikleri: bir seviyede birkaç
+            # delik olabilir; ilkini almak bölgeyi görünüş boyu açıyordu
+            # (Televre P04: 2456 ile 760 -> 1700 mm'lik daire, hiçbir
+            # hücreye sığmadı, ölçü düştü).
+            da_, db_ = list(k["dik_a"] or []), list(k["dik_b"] or [])
+            if da_ and db_:
+                da_, db_ = map(lambda t: [t], min(((p, q) for p in da_ for q in db_),
+                                                  key=lambda t: abs(t[0] - t[1])))
+            for v, dd in ((k["a"], da_), (k["b"], db_)):
                 if not dd:
                     continue
                 d = dd[0]
@@ -5557,10 +5635,23 @@ def _bos_hucreler(gkutu, h):
     out = []
     if "UST" in gkutu:
         u = gkutu["UST"]
+        on = gkutu.get("ON")
         for yan in ("SAG", "SOL", "ARKA"):
             if yan in gkutu:
                 g = gkutu[yan]
-                out.append((g[0], u[1], g[2], u[3]))
+                x0, y0, x1, y1 = g[0], u[1], g[2], u[3]
+                # Hücre görünüşlerin arasındaki boşluğun YARISINA kadar
+                # büyür (ÖN'e doğru): SAĞ'ın eni x ÜST'ün boyu (105 x 105)
+                # detaya hiç yer bırakmıyordu, kâğıttaki boşluk ise çok
+                # daha büyüktü (Televre P04). Yer yine ölçülür.
+                if on is not None:
+                    if g[2] <= on[0]:
+                        x1 = max(x1, (g[2] + on[0]) / 2.0)
+                    elif g[0] >= on[2]:
+                        x0 = min(x0, (on[2] + g[0]) / 2.0)
+                    if u[3] <= on[1]:
+                        y1 = max(y1, (u[3] + on[1]) / 2.0)
+                out.append((x0, y0, x1, y1))
     return out
 
 
@@ -5631,8 +5722,10 @@ def _detay_olcu(msp, k, c, dc, olcek, Rd, h, yabanci):
     def don(v, d):
         x, y = (v + k["kayd"], d + k["dkay"]) if yat else (d + k["dkay"], v + k["kayd"])
         return ((x - c[0]) * olcek + dc[0], (y - c[1]) * olcek + dc[1])
-    da = (k["dik_a"] or k["dik_b"])[0]
-    db = (k["dik_b"] or k["dik_a"])[0]
+    # detay dairesinin İÇİNDEKİ özellikler (merkeze en yakın olanlar)
+    m_ = c[1] if yat else c[0]
+    da = min(k["dik_a"] or k["dik_b"], key=lambda d: abs(d + k["dkay"] - m_))
+    db = min(k["dik_b"] or k["dik_a"], key=lambda d: abs(d + k["dkay"] - m_))
     p1, p2 = don(k["a"], da), don(k["b"], db)
     dolu = _yazi_kutulari(msp)
     alan = (dc[0] - Rd - 10 * h, dc[1] - Rd - 10 * h, dc[0] + Rd + 10 * h, dc[1] + Rd + 10 * h)

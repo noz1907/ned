@@ -1,6 +1,6 @@
 Pi3D  –  3B modelden parça listesi ve teknik resim
 
-Sürüm   : v1.0.7  (30.09.2026)
+Sürüm   : v1.0.8  (30.09.2026)
 Kaynak  : github.com/noz1907/ned   dal: claude/fikstur-parca-stp-57hwc1
 
 KURULUM
@@ -149,6 +149,39 @@ BU SÜRÜMDE NE VAR
       6 yazı boyu), SİM. notu balonun altında.
     - kırmızı yalnız kaynağın kendisi (uzun sac kenarı artık kırmızı
       değil); kaynak ekseni ince mavi kesikli.
+
+  v1.0.8: DETAY RESMİ ÖLÇÜLENDİRME (kurallar: CLAUDE.md):
+    - DIŞ ÖLÇÜLER KESİNLİKLE VAR: ana görünüş (ÖN, en çok bilgi veren
+      yüz) boyunu ve yüksekliğini en dışta taşır; yan görünüş yalnız
+      derinliği (sac profili kesitte). Konamayan dış ölçü raporda
+      sayılır - 4 modelde 371 resimde 0.
+    - referanstan zincir (0 -> A -> B) ya da paralel; datum düz yüz ya
+      da eksen, radüs asla. Son delikten kenara fazla ölçü yok.
+    - ölçü / uzatma çizgisi delik, slot, pencere üstünden GEÇMEZ: temiz
+      yana alınır; iki yan kapalıysa deliğin YANINDAN, resimde en
+      yakın ölçülü komşusundan verilir.
+    - rakam kendi aralığının hizasında; düşey zincirde rakamlar aynı
+      yanda. Dar zincir halkasında ok yerine nokta, zincir tek hizada.
+    - SIĞMAYAN ÖLÇÜ ATILMAZ: öbür yan -> deliğin yanı -> referanstan
+      paralel -> slot notu ("3x SLOT 80x180") -> DETAY görünüşü.
+      4 modelde 371 resimde düşen ölçü 0.
+    - sacta delik pres / lazer: konum + özel ölçü; delikten deliğe
+      zincir yalnız düzenli desende; aynı desenler bir kez ("3x 70",
+      "9x SLOT 6", "10 x 20 = 200").
+    - bükümlü sac: her kanat dıştan dışa (ABKANT tablosuyla aynı), tek
+      hizada; "t 1,5"; ayna kanatlarda <1 mm fark "MODEL KONTROL".
+    - açılar: sacın iki yüzü tek duvar ("4x 30°", 8x değil); yay küçük
+      açıyı tarar; yazıdan kısa kenara açı verilmez.
+    - ızgara (sık lazer kesimi): kesik çizgili bölge, başı ve sonu.
+    - görünüş seçimi: en çok bilgi veren yüz ÖN; SAĞ = SOL, ÜST = ALT
+      ise biri; bilgisiz görünüş çizilmez (yalnız varsayılan görünüş
+      takımında - kullanıcı seçtiyse seçtiği çizilir).
+    - yazı çakışması 0: yazı yazıya, çizgiye (ölçü, uzatma, kılavuz,
+      eksen, gizli çizgi, açı yayı) binmez - 371 resimde 0.
+  PDF: sık ölçek merdiveni (1:9, 1:11, 1:13 ...), sığan EN BÜYÜK ölçek;
+    çizim kâğıdı doldurur, antet boş. "6x Ø45" gibi yazılar kenardan
+    kırpılmaz; "SAĞ", "ÜST" harf noktaları basılır. PDF okumak içindir,
+    ölçü 1:1 DXF'ten alınır.
 
   v1.0.7: YAZILAR ÜST ÜSTE BİNMEZ, PARÇAYA BİNMEZ (kaynak resimleri):
     - etiketin gerçek yüksekliği (balon, SİM. notu) kadar yer; çok

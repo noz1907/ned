@@ -2123,6 +2123,25 @@ gabari ve **kanat genişliği** (dış yüzden sacın serbest ucuna, ör. 15)
 verilir; iki kanat eşitse simetri işaretiyle tek ölçü. Sac kalınlığı
 başlıkta yazar.
 
+**Ölçülendirme kuralları** (ayrıntı ve gerekçe: `CLAUDE.md`):
+
+- **Dış ölçüler önce ve kesinlikle:** ana görünüş (ÖN — program parçanın
+  en çok bilgi veren yüzünü öne çevirir) boyunu ve yüksekliğini en dışta
+  taşır; derinlik yan görünüşte (sac profili kesitte) verilir.
+- **Referans:** her yönde tek referans (düz yüz ya da eksen). Konumlar
+  referanstan zincirle (0 → A → B) ya da paralel verilir.
+- **Ölçü çizgisi delik / slot üstünden geçmez:** geçecekse ölçü öbür
+  yana, o da kapalıysa deliğin yanına, en yakın ölçülü komşusundan
+  konur.
+- **Sığmayan ölçü atılmaz:** öbür yan, deliğin yanı, referanstan paralel
+  ölçü, slot notu (`3x SLOT 80x180`), en son büyütülmüş **DETAY**
+  görünüşü (`DETAY D (4:1)`).
+- **Aynı eleman bir kez:** `9x SLOT 6`, `3x 70`, `10 x 20 = 200`,
+  `4x 30°`.
+- **PDF okumak içindir**, üstünden ölçü alınmaz; ölçü 1:1 DXF'ten
+  alınır. PDF'te ölçek serbesttir (1:9, 1:11, 1:13 …): çizim kâğıdı
+  doldurur, antet boş kalır.
+
 Çizimde tablo yoktur: delikler görünüşlerde `2x Ø9`, kenar yuvarlamaları
 `4x R3` olarak ölçülendirilir; yazı deliğin hemen yanına, kısa bir kılavuz
 çizgisiyle konur. Tam delik ve radüs listeleri `rapor.md`, `olculer.csv` ve
