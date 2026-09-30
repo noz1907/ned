@@ -393,6 +393,19 @@ def _gorunus_kutulari(d, alanlar):
     return {k: tuple(v) for k, v in kutu.items()}
 
 
+def _serbest_mi(ad):
+    """DETAY görünüşü izdüşüm ızgarasının parçası değildir: kâğıdın boş
+    yerine SERBEST pencere olarak konur (bkz. _serbest_yerlestir)."""
+    return str(ad).startswith("DETAY")
+
+
+def _serbest_kutular(d, alanlar):
+    """Serbest pencerelerin (detaylar) gerçek model sınırları {ad: kutu}."""
+    if not any(_serbest_mi(a) for a in alanlar):
+        return {}
+    return {k: v for k, v in _gorunus_kutulari(d, alanlar).items() if _serbest_mi(k)}
+
+
 def _izgara(d, alanlar, kutu):
     """Görünüşleri satır/sütun ızgarasına oturtur.
 
@@ -403,7 +416,7 @@ def _izgara(d, alanlar, kutu):
     kayar ve resim teknik resim olmaktan çıkar.
 
     Döner: (sutun_gen, satir_boy, hucre) ya da None."""
-    dar = _gorunus_kutulari(d, alanlar)
+    dar = {k: v for k, v in _gorunus_kutulari(d, alanlar).items() if not _serbest_mi(k)}
     if len(dar) < 2:
         return None
     sut = _kumele([(v[0], v[2], k) for k, v in dar.items()])
@@ -604,7 +617,7 @@ def kagit_sec(gx, gy, adaylar=KAGIT_BOY, en_az_olcek=1.0, sablon=None):
 
 
 # --------------------------------------------------------------- pafta
-def cok_pencere_plani(d, kutu, alan_g, alan_y, olcek_zorla=None):
+def cok_pencere_plani(d, kutu, alan_g, alan_y, olcek_zorla=None, serbest_izin=False):
     """Görünüşleri kâğıda ORTADAN DIŞA, eşit aralıklarla dağıtan plan.
 
     Mantık: görünüşler resimde zaten izdüşüm ızgarasındadır (ÖN'ün solu
@@ -626,7 +639,11 @@ def cok_pencere_plani(d, kutu, alan_g, alan_y, olcek_zorla=None):
     baslik = alanlar.get(BASLIK_AD)
     bg = (baslik[2] - baslik[0]) if baslik else 0.0
     bb = (baslik[3] - baslik[1]) if baslik else 0.0
-    hepsi = [h[2] for h in hucre.values()] + ([baslik] if baslik else [])
+    serbest = _serbest_kutular(d, alanlar)
+    if serbest and not serbest_izin:
+        return None          # detaylar yalnız tam kâğıt planında yerleşir
+    hepsi = ([h[2] for h in hucre.values()] + ([baslik] if baslik else [])
+             + list(serbest.values()))
     if not _pencere_temiz_mi(d, hepsi):
         return None
 
@@ -652,6 +669,7 @@ def cok_pencere_plani(d, kutu, alan_g, alan_y, olcek_zorla=None):
     obek_g = ts * olcek + (nj - 1) * ax
     obek_y = tr * olcek + (ni - 1) * ay
     return {"olcek": olcek, "sutun": sutun, "satir": satir, "hucre": hucre,
+            "serbest": serbest,
             "baslik": baslik, "ara_x": ax, "ara_y": ay,
             "obek": (max(obek_g, bg * olcek),
                      obek_y + (bb * olcek + ARA_EN_AZ if baslik else 0)),
@@ -688,20 +706,22 @@ def tam_kagit_plani(d, kutu, kagit=VARSAYILAN_KAGIT, sablon=None):
     ic = (fx0 + IC_PAY, fy0 + IC_PAY, fx1 - IC_PAY, fy1 - IC_PAY)
     ant = antet_kutusu(kagit, sablon)
     ant = (ant[0] - IC_PAY, ant[1] - IC_PAY, ant[2] + IC_PAY, ant[3] + IC_PAY)
-    ilk = cok_pencere_plani(d, kutu, ic[2] - ic[0], ic[3] - ic[1])
+    ilk = cok_pencere_plani(d, kutu, ic[2] - ic[0], ic[3] - ic[1], serbest_izin=True)
     if not ilk:
         return None
     for k in KUCULTME:
         o = 1.0 / k
         if o > ilk["olcek"] + 1e-12:
             continue
-        p = cok_pencere_plani(d, kutu, ic[2] - ic[0], ic[3] - ic[1], olcek_zorla=o)
+        p = cok_pencere_plani(d, kutu, ic[2] - ic[0], ic[3] - ic[1], olcek_zorla=o,
+                              serbest_izin=True)
         if not p:
             continue
         pg, py = p["obek"]
         en_iyi = None
+        ust_yasla = bool(p.get("serbest"))      # detaylar öbeğin altına dizilir
         for fx in (0.0, 0.25, 0.5, 0.75, 1.0):
-            for fy in (1.0, 0.75, 0.5, 0.25, 0.0):
+            for fy in ((1.0,) if ust_yasla else (1.0, 0.75, 0.5, 0.25, 0.0)):
                 sol = ic[0] + fx * max(0.0, (ic[2] - ic[0]) - pg)
                 alt = ic[1] + fy * max(0.0, (ic[3] - ic[1]) - py)
                 kut = _hucre_kutulari(p, sol, alt)
@@ -711,15 +731,64 @@ def tam_kagit_plani(d, kutu, kagit=VARSAYILAN_KAGIT, sablon=None):
                 if any(k_[0] < ant[2] and k_[2] > ant[0] and k_[1] < ant[3] and k_[3] > ant[1]
                        for k_ in kut):
                     continue
+                sy = _serbest_yerlestir(p, kut, ic, ant)
+                if sy is None:
+                    continue           # detaylar bu yerleşimde kâğıda sığmıyor
                 cx, cy = sol + pg / 2.0, alt + py / 2.0
                 u = (cx - (fx0 + fx1) / 2.0) ** 2 + (cy - (fy0 + fy1) / 2.0) ** 2
                 if en_iyi is None or u < en_iyi[0]:
-                    en_iyi = (u, sol, alt)
+                    en_iyi = (u, sol, alt, sy)
         if en_iyi:
             p["sabit_yer"] = (en_iyi[1], en_iyi[2])
+            p["serbest_yer"] = en_iyi[3]
             p["yer"], p["alan"] = "tam", ic
             return p
     return None
+
+
+def _serbest_yerlestir(plan, dolu, ic, ant, adim=4.0):
+    """Serbest pencereleri (detaylar) kâğıdın BOŞ yerine koyar: çerçevenin
+    içinde, antete ve dolu pencerelere (görünüşler, başlık) ARA_EN_AZ
+    kadar yaklaşmadan. Büyükten küçüğe; her biri görünüşlere en yakın boş
+    yere (resim dağılmasın). Döner: {ad: (sol, alt)} ya da None (sığmadı)."""
+    serbest = plan.get("serbest") or {}
+    if not serbest:
+        return {}
+    o = plan["olcek"]
+    engel = [(k[0] - ARA_EN_AZ, k[1] - ARA_EN_AZ, k[2] + ARA_EN_AZ, k[3] + ARA_EN_AZ)
+             for k in dolu] + [ant]
+    out = {}
+    # Okuma sırası: resimdeki (DXF) sırayla - yukarıdan aşağı, soldan sağa;
+    # her detay görünüş öbeğinin ALTINDA, olabildiğince yukarıda ve solda
+    # (kâğıda saçılmaz, öbeğin altına sıra halinde dizilir). Altta yer
+    # yoksa kâğıdın başka boş yeri.
+    obek_alt = min(k[1] for k in dolu) - ARA_EN_AZ if dolu else ic[3]
+    for ad, b in sorted(serbest.items(), key=lambda t: (-round(t[1][3], -1), t[1][0])):
+        w, hh = (b[2] - b[0]) * o, (b[3] - b[1]) * o
+        en_iyi = None
+        for alt_sart in (True, False):
+            y = ic[1]
+            while y + hh <= ic[3] + 1e-6:
+                x = ic[0]
+                while x + w <= ic[2] + 1e-6:
+                    k = (x, y, x + w, y + hh)
+                    if alt_sart and k[3] > obek_alt + 1e-6:
+                        break
+                    if not any(k[0] < e[2] and k[2] > e[0] and k[1] < e[3] and k[3] > e[1]
+                               for e in engel):
+                        u = (-round(y + hh, 0), x)      # önce yukarı, sonra sola
+                        if en_iyi is None or u < en_iyi[0]:
+                            en_iyi = (u, x, y)
+                    x += adim
+                y += adim
+            if en_iyi is not None:
+                break
+        if en_iyi is None:
+            return None
+        _u, x, y = en_iyi
+        out[ad] = (x, y)
+        engel.append((x - ARA_EN_AZ, y - ARA_EN_AZ, x + w + ARA_EN_AZ, y + hh + ARA_EN_AZ))
+    return out
 
 
 def _cok_pencere_ciz(pafta, plan, sol, alt):
@@ -744,6 +813,15 @@ def _cok_pencere_ciz(pafta, plan, sol, alt):
         w, hh = plan["sutun"][j] * o, plan["satir"][i] * o
         pafta.add_viewport(
             center=(gx + w / 2.0, gy + hh / 2.0), size=(w, hh),
+            view_center_point=((c[0] + c[2]) / 2.0, (c[1] + c[3]) / 2.0),
+            view_height=(c[3] - c[1]))
+        say += 1
+    # serbest pencereler (detaylar): tam kâğıt planının bulduğu yerde
+    for ad, (x, y) in (plan.get("serbest_yer") or {}).items():
+        c = plan["serbest"][ad]
+        w, hh = (c[2] - c[0]) * o, (c[3] - c[1]) * o
+        pafta.add_viewport(
+            center=(x + w / 2.0, y + hh / 2.0), size=(w, hh),
             view_center_point=((c[0] + c[2]) / 2.0, (c[1] + c[3]) / 2.0),
             view_height=(c[3] - c[1]))
         say += 1

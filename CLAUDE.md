@@ -63,17 +63,32 @@ değil, belirli bir mantığa göre verilir; her kuralın gerekçesi yazılıdı
     Çizgiler ince, ölçü çizgisi kalın asla.
     **Ölçü / uzatma çizgisi delik, slot, pencere üstünden geçmez**:
     özellikten dışarı giden yol başka bir özelliği kesiyorsa ölçü temiz
-    olan öbür yana alınır; iki yan da kapalıysa ölçü dışarıdan değil,
-    özelliğin YANINDAN, en yakın ölçülü komşusundan verilir.
+    olan öbür yana alınır; iki yan da kapalıysa o bölge DETAYA taşınır
+    (bkz. 14).
 13. **Rakam kendi ölçüsünün hizasında**: aralık rakamı alıyorsa rakamın
     ortası aralığın içindedir (komşu aralığın yanına kayan rakam onun
     ölçüsü gibi okunur). Düşey zincirde bütün rakamlar hattın aynı
     yanında, aynı eksende. Dar zincir halkasında ok yerine NOKTA, dışarı
     kuyruk çıkmaz; zincir yine tek hizada kalır.
-14. **Sığmayan ölçü atılmaz**, sırayla: öbür yan -> özelliğin yanı ->
-    özel şekilde not ("3x SLOT 80x180": genişlik x boy) -> DETAY görünüşü
-    (ana görünüşte daire + harf, "DETAY D (4:1)", boş hücrede). Raporda
-    `yer_yok` 0 olmalı.
+14. **KARIŞIKLIK DETAYA TAŞINIR** (uzman ressam gibi): ana görünüşte
+    yalnız temiz, hiçbir şeyi kesmeyen ölçüler kalır. Ölçü çizgisi iki
+    yanda da şekil kesiyorsa, zincir halkası rakamın yarısından kısaysa
+    ya da ölçüye dışarıda yer yoksa o bölge AYRILIR:
+    - Bölge, parçayı uzun yönüne dik boydan boya kesen BANT (sol uç,
+      sağ uç, orta); yakın bantlar birleşir, detayda sığmayacak kadar
+      uzun bant eşit parçalara bölünür; en çok 3 bant.
+    - Bandın içindeki bütün konumlar ana görünüşten çıkar, DETAY
+      görünüşünde (büyütülmüş, "DETAY D (2,5:1)", ana görünüşte ince
+      çerçeve + harf) zincirle verilir: referans bant datum kenarını
+      içeriyorsa kenar; içermiyorsa ana görünüşte ölçülü BAĞLANTI
+      özelliği (bandın datuma en yakın, temiz yerleşen özelliği ana
+      görünüşte kalır) - tek referans bozulmaz.
+    - Bu, iki geçişle yapılır: önce deneme (temiz yerleşmeyenler bulunur,
+      deneme silinir), sonra bantsız ana görünüş + detaylar.
+    - Pafta: detaylar izdüşüm ızgarasına girmez; görünüş öbeğinin ALTINA
+      okuma sırasıyla dizilir (altta yer yoksa kâğıdın başka boş yeri).
+    Sığmayan ölçü yine de ATILMAZ: detay kurulamazsa özelliğin yanına,
+    o da olmazsa slot notu ("3x SLOT 80x180"). Raporda `yer_yok` 0 olmalı.
 15. **Aynı görünen ayna görünüşler** (SAĞ = SOL, ÜST = ALT) tek çizilir.
 16. **Sacta delik / kesik** pres ya da lazerle yapılır: konumu verilir;
     çap, boy, genişlik yalnız özel ise. Özel şekillerde (pencere, anahtar
