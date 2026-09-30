@@ -128,15 +128,23 @@ BASLIK_SERIT = 11.7          # sag ust baslik seridi: 0,8 + 4,5lik satir + 1,6 +
 # 1:5, yani resim yarı yarıya küçülüyor). 8 mm iki görünüşü ayırmaya
 # yeter; yer varsa zaten EN_COK'a kadar açılıyor.
 ARA_EN_AZ = 10.0
-ARA_EN_COK = 45.0        # ve en çok bu kadar; yoksa köşelere dağılırlar
+ARA_EN_COK = 15.0        # ve en çok bu kadar; görünüşler birbirine yakın dursun (kullanıcı: "sağ görüntüyü yanaştır")
 
 HARF_ORAN = 0.62         # yazı genişliği ~ harf sayısı x yükseklik x bu
 EN_AZ_YAZI_MM = 1.8      # kâğıtta bundan küçük yazı okunmaz (ISO 3098: 2,5)
 
 # Teknik resimde kullanılan standart ölçekler (ISO 5455). Ara ölçek
 # uydurulmaz: 1:7 diye bir resim olmaz.
-KUCULTME = (1, 2, 5, 10, 20, 50, 100, 200, 500, 1000)
-BUYUTME = (2, 5, 10)
+#
+# PDF yalnız GÖRSELDİR, ondan ölçü alınmaz (ölçü DXF'te 1:1). Kullanıcı:
+# "1/15 1/17 1/14 1/8 ne bileyim, %70'ine yerleştir". Yalnız 1-2-5
+# serisiyle bir kademe aşağı düşen resim kâğıdın küçük bir kısmında
+# "karınca duası" gibi kalıyordu (P01: 1:10 sığmıyor, 1:20'de yazı 0,7
+# mm). Sık aralıklı ölçekler arasından SIĞAN EN BÜYÜĞÜ seçilir.
+KUCULTME = (1, 1.5, 2, 2.5, 3, 3.5, 4, 4.5, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16,
+            17, 18, 20, 22, 25, 28, 30, 35, 40, 45, 50, 60, 70, 80, 90, 100, 120,
+            150, 200, 250, 300, 400, 500, 700, 1000)
+BUYUTME = (1.5, 2, 2.5, 3, 4, 5, 10)
 
 KAT_CERCEVE = "PAFTA_CERCEVE"
 KAT_ANTET = "PAFTA_ANTET_ALANI"
@@ -185,6 +193,69 @@ def _yazi_kutusu(e):
         return None
 
 
+def _mtext_kutusu(v):
+    """MTEXT'in TEK SATIR ölçülmüş sınırı (x0, y0, x1, y1).
+
+    ezdxf'in sınır kutusu genişliği verilmemiş MTEXT'i boşluklardan
+    satırlara kırılmış sayar: "6x Ø45" iki satırlık dar bir sütun
+    ölçülür, PDF'te ise tek satır basılır. Pencere dar açılıyor, yazı
+    kenardan kırpılıyordu (P06: "6x Ø4"). Genişlik yazı ölçüm aracından
+    (mtext_size) alınır; pf3_olcu.mtext_kutusu ile aynı hesap."""
+    import math
+    from ezdxf.tools import text_size as _ts
+    m = _ts.mtext_size(v)
+    w, hh = m.total_width, m.total_height
+    ap = v.dxf.get("attachment_point", 1)
+    ox = {1: 0, 4: 0, 7: 0, 2: -w / 2, 5: -w / 2, 8: -w / 2}.get(ap, -w)
+    oy = {1: -hh, 2: -hh, 3: -hh, 4: -hh / 2, 5: -hh / 2, 6: -hh / 2}.get(ap, 0.0)
+    td = v.dxf.get("text_direction", None)
+    if td is not None and (abs(td[0]) + abs(td[1])) > 1e-12:
+        a = math.atan2(td[1], td[0])
+    else:
+        a = math.radians(v.dxf.get("rotation", 0.0) or 0.0)
+    ca, sa = math.cos(a), math.sin(a)
+    ix, iy = v.dxf.insert.x, v.dxf.insert.y
+    pts = [(ix + x * ca - y * sa, iy + x * sa + y * ca)
+           for x, y in ((ox, oy), (ox + w, oy), (ox + w, oy + hh), (ox, oy + hh))]
+    return (min(q[0] for q in pts), min(q[1] for q in pts),
+            max(q[0] for q in pts), max(q[1] for q in pts))
+
+
+def _varlik_kutulari(varlik, harf_payi=False):
+    """Her varlığın sınırı [(x0, y0, x1, y1)] - boş olanlar atlanır.
+    MTEXT tek satır ölçülür (bkz. _mtext_kutusu), gerisi ezdxf'ten.
+
+    harf_payi: TEXT kutusu Ü/Ö/Ğ'nin noktası ve Ç/Ş/Ğ'nin kuyruğu kadar
+    büyütülür. ezdxf kutusu büyük harf boyundadır; pencere buna göre
+    açılınca etiketin noktaları kırpılıyor, PDF'te "ÜST" "UST", "SAĞ"
+    "SAG" basılıyordu. Yalnız pencere BOYU için kullanılır."""
+    out = []
+    for e, k in zip(varlik, ezdxf.bbox.multi_flat(varlik)):
+        if not k.has_data:
+            continue
+        b = (k.extmin.x, k.extmin.y, k.extmax.x, k.extmax.y)
+        t = e.dxftype()
+        if harf_payi and t == "TEXT":
+            try:
+                hh = float(e.dxf.height or 0)
+                b = (b[0], b[1] - 0.3 * hh, b[2], b[3] + 0.35 * hh)
+            except Exception:
+                pass
+        try:
+            # ölçünün yazısı da bloğunun içinde bir MTEXT'tir
+            ic = ([e] if t == "MTEXT" else
+                  [v for v in e.virtual_entities() if v.dxftype() == "MTEXT"]
+                  if t == "DIMENSION" else [])
+            for v in ic:
+                m = _mtext_kutusu(v)
+                b = (min(b[0], m[0]), min(b[1], m[1]),
+                     max(b[2], m[2]), max(b[3], m[3]))
+        except Exception:
+            pass
+        out.append(b)
+    return out
+
+
 def _varlik_kutusu(uzay, yazi=True):
     """Bir uzaydaki çizimin sınırları (x0, y0, x1, y1) ya da None."""
     xs, ys = [], []
@@ -230,12 +301,11 @@ def cizim_kutusu(yol):
     açar ve yazıyı yazı tipinden ölçer, o yüzden önce o denenir."""
     d = ezdxf.readfile(yol)
     try:
-        k = ezdxf.bbox.extents(
-            [e for e in d.modelspace() if e.dxf.layer != GORUNUS_KATMAN],
-            fast=False)
-        if k.has_data:
-            return (float(k.extmin.x), float(k.extmin.y),
-                    float(k.extmax.x), float(k.extmax.y))
+        kl = _varlik_kutulari(
+            [e for e in d.modelspace() if e.dxf.layer != GORUNUS_KATMAN])
+        if kl:
+            return (float(min(b[0] for b in kl)), float(min(b[1] for b in kl)),
+                    float(max(b[2] for b in kl)), float(max(b[3] for b in kl)))
     except Exception:
         pass                      # eski ezdxf ya da bozuk varlık: kabaca ölç
     k = _varlik_kutusu(d.modelspace())
@@ -308,15 +378,13 @@ def _gorunus_kutulari(d, alanlar):
     kutu = {k: list(v) for k, v in gor.items()}
     try:
         varlik = [e for e in d.modelspace() if e.dxf.layer != GORUNUS_KATMAN]
-        kutular = ezdxf.bbox.multi_flat(varlik)
+        kutular = list(zip(_varlik_kutulari(varlik),
+                           _varlik_kutulari(varlik, harf_payi=True)))
     except Exception:
         return {k: tuple(v) for k, v in kutu.items()}
-    for k in kutular:
-        if not k.has_data:
-            continue
-        b = (k.extmin.x, k.extmin.y, k.extmax.x, k.extmax.y)
-        if bas and (b[0] >= bas[0] - 0.01 and b[1] >= bas[1] - 0.01
-                    and b[2] <= bas[2] + 0.01 and b[3] <= bas[3] + 0.01):
+    for b0, b in kutular:
+        if bas and (b0[0] >= bas[0] - 0.01 and b0[1] >= bas[1] - 0.01
+                    and b0[2] <= bas[2] + 0.01 and b0[3] <= bas[3] + 0.01):
             continue                    # başlık bloğunun parçası
         ad = min(gor, key=lambda a: _kutu_uzakligi(b, gor[a]))
         q = kutu[ad]
@@ -380,10 +448,7 @@ def _pencere_temiz_mi(d, hucreler):
                 return False
     try:
         varlik = [e for e in d.modelspace() if e.dxf.layer != GORUNUS_KATMAN]
-        for k in ezdxf.bbox.multi_flat(varlik):
-            if not k.has_data:
-                continue
-            b = (k.extmin.x, k.extmin.y, k.extmax.x, k.extmax.y)
+        for b in _varlik_kutulari(varlik):
             # Ölçüt tek: varlık TAM OLARAK BİR hücrenin içinde olmalı.
             # Hücreler birbiriyle çakışmadığı için "birden fazlasının
             # içinde" olamaz; hiçbirinin içinde değilse ya sınırı aşıyor
@@ -426,8 +491,8 @@ def olcek_metni(o):
     if abs(o - 1.0) < 1e-9:
         return "1:1"
     if o < 1:
-        return f"1:{round(1 / o)}"
-    return f"{round(o)}:1"
+        return f"1:{round(1 / o, 2):g}".replace(".", ",")
+    return f"{round(o, 2):g}:1".replace(".", ",")
 
 
 def cerceve(kagit=VARSAYILAN_KAGIT, sablon=None):
@@ -539,7 +604,7 @@ def kagit_sec(gx, gy, adaylar=KAGIT_BOY, en_az_olcek=1.0, sablon=None):
 
 
 # --------------------------------------------------------------- pafta
-def cok_pencere_plani(d, kutu, alan_g, alan_y):
+def cok_pencere_plani(d, kutu, alan_g, alan_y, olcek_zorla=None):
     """Görünüşleri kâğıda ORTADAN DIŞA, eşit aralıklarla dağıtan plan.
 
     Mantık: görünüşler resimde zaten izdüşüm ızgarasındadır (ÖN'ün solu
@@ -568,7 +633,7 @@ def cok_pencere_plani(d, kutu, alan_g, alan_y):
     ts, tr = sum(sutun), sum(satir)
     nj, ni = len(sutun), len(satir)
     olcek = None
-    for k in KUCULTME:
+    for k in (KUCULTME if olcek_zorla is None else (1.0 / olcek_zorla,)):
         o = 1.0 / k
         gen = max(ts * o + (nj - 1) * ARA_EN_AZ, bg * o)
         boy = tr * o + (ni - 1) * ARA_EN_AZ + (bb * o + ARA_EN_AZ if baslik else 0)
@@ -591,6 +656,70 @@ def cok_pencere_plani(d, kutu, alan_g, alan_y):
             "obek": (max(obek_g, bg * olcek),
                      obek_y + (bb * olcek + ARA_EN_AZ if baslik else 0)),
             "gorunus_obek": (obek_g, obek_y), "baslik_olcu": (bg, bb)}
+
+
+def _hucre_kutulari(plan, sol, alt):
+    """Planın DOLU pencerelerinin kâğıttaki dikdörtgenleri (başlık dahil);
+    _cok_pencere_ciz ile aynı hesap."""
+    o = plan["olcek"]
+    og, _oy = plan["gorunus_obek"]
+    tg, ty = plan["obek"]
+    bg, bb = plan["baslik_olcu"]
+    out = []
+    if plan["baslik"]:
+        out.append((sol, alt + ty - bb * o, sol + bg * o, alt + ty))
+    gsol = sol + (tg - og) / 2.0
+    for _ad, (j, i, _c) in plan["hucre"].items():
+        gx = gsol + sum(plan["sutun"][:j]) * o + j * plan["ara_x"]
+        gy = alt + sum(plan["satir"][:i]) * o + i * plan["ara_y"]
+        out.append((gx, gy, gx + plan["sutun"][j] * o, gy + plan["satir"][i] * o))
+    return out
+
+
+def tam_kagit_plani(d, kutu, kagit=VARSAYILAN_KAGIT, sablon=None):
+    """ANTETİN ÜSTÜ ve SOLU birlikte: öbek kâğıdın bütün çerçevesine
+    yayılabilir, yalnız DOLU pencereler (görünüşler, başlık) antete ve
+    çerçeveye değmez; boş hücre antetin üstüne düşebilir. Kullanıcı:
+    "büyüt şu resmi, %72-%75 olur, yeter ki antet sığsın". Eski yol öbeği
+    tek dikdörtgen sayıp antetin üstündeki şeride ya da soluna sıkıştırıyor,
+    kâğıdın yarısı boş kalıyordu.
+    Döner: plan ("sabit_yer": (sol, alt) ile) ya da None."""
+    fx0, fy0, fx1, fy1 = cerceve(kagit, sablon)
+    ic = (fx0 + IC_PAY, fy0 + IC_PAY, fx1 - IC_PAY, fy1 - IC_PAY)
+    ant = antet_kutusu(kagit, sablon)
+    ant = (ant[0] - IC_PAY, ant[1] - IC_PAY, ant[2] + IC_PAY, ant[3] + IC_PAY)
+    ilk = cok_pencere_plani(d, kutu, ic[2] - ic[0], ic[3] - ic[1])
+    if not ilk:
+        return None
+    for k in KUCULTME:
+        o = 1.0 / k
+        if o > ilk["olcek"] + 1e-12:
+            continue
+        p = cok_pencere_plani(d, kutu, ic[2] - ic[0], ic[3] - ic[1], olcek_zorla=o)
+        if not p:
+            continue
+        pg, py = p["obek"]
+        en_iyi = None
+        for fx in (0.0, 0.25, 0.5, 0.75, 1.0):
+            for fy in (1.0, 0.75, 0.5, 0.25, 0.0):
+                sol = ic[0] + fx * max(0.0, (ic[2] - ic[0]) - pg)
+                alt = ic[1] + fy * max(0.0, (ic[3] - ic[1]) - py)
+                kut = _hucre_kutulari(p, sol, alt)
+                if any(k_[0] < ic[0] - 1e-6 or k_[1] < ic[1] - 1e-6 or k_[2] > ic[2] + 1e-6
+                       or k_[3] > ic[3] + 1e-6 for k_ in kut):
+                    continue
+                if any(k_[0] < ant[2] and k_[2] > ant[0] and k_[1] < ant[3] and k_[3] > ant[1]
+                       for k_ in kut):
+                    continue
+                cx, cy = sol + pg / 2.0, alt + py / 2.0
+                u = (cx - (fx0 + fx1) / 2.0) ** 2 + (cy - (fy0 + fy1) / 2.0) ** 2
+                if en_iyi is None or u < en_iyi[0]:
+                    en_iyi = (u, sol, alt)
+        if en_iyi:
+            p["sabit_yer"] = (en_iyi[1], en_iyi[2])
+            p["yer"], p["alan"] = "tam", ic
+            return p
+    return None
 
 
 def _cok_pencere_ciz(pafta, plan, sol, alt):
@@ -894,12 +1023,18 @@ def pafta_kur(kaynak_dxf, cikti_dxf=None, kagit=VARSAYILAN_KAGIT, olcek=None,
     plan, kagit = None, adaylar[0]
     if cok and olcek is None:
         for kg_ad in adaylar:
+            yon_en = None
             for ad, a in cizim_alanlari(kg_ad, sablon).items():
                 p = cok_pencere_plani(d, (x0, y0, x1, y1),
                                       a[2] - a[0], a[3] - a[1])
-                if p and (plan is None or p["olcek"] > plan["olcek"]):
+                if p and (yon_en is None or p["olcek"] > yon_en["olcek"]):
                     p["yer"], p["alan"] = ad, a
-                    plan, kagit = p, kg_ad
+                    yon_en = p
+            tp = tam_kagit_plani(d, (x0, y0, x1, y1), kg_ad, sablon)
+            if tp and (yon_en is None or tp["olcek"] > yon_en["olcek"] + 1e-12):
+                yon_en = tp
+            if yon_en and (plan is None or yon_en["olcek"] > plan["olcek"] + 1e-12):
+                plan, kagit = yon_en, kg_ad
 
     # --- ölçek ve hangi boşluğa oturacağı
     if olcek is None:
@@ -974,7 +1109,9 @@ def pafta_kur(kaynak_dxf, cikti_dxf=None, kagit=VARSAYILAN_KAGIT, olcek=None,
     def _kis(v, alt, ust):
         return alt if v < alt else (ust if v > ust else v)
 
-    if _uygun(ox, oy):
+    if plan and plan.get("sabit_yer"):
+        mx, my = plan["sabit_yer"][0] + pg / 2.0, plan["sabit_yer"][1] + py / 2.0
+    elif _uygun(ox, oy):
         mx, my = ox, oy
     else:
         aday = []

@@ -90,6 +90,15 @@ def yazilar(msp):
 
 
 def kutu(e):
+    """Yazının gerçek sınırı. MTEXT tek satır ölçülür: ezdxf'in sınır
+    kutusu genişliği verilmemiş MTEXT'i boşluklardan satırlara kırılmış
+    sayar ("3 x 200 = 600" dar bir sütun olur) - bkz. pf3_olcu.mtext_kutusu."""
+    if e.dxftype() == "MTEXT":
+        try:
+            import pf3_olcu
+            return pf3_olcu.mtext_kutusu(e)
+        except Exception:
+            pass
     try:
         k = ezdxf.bbox.extents([e], fast=False)
     except Exception:
@@ -117,7 +126,62 @@ def denetle(yol):
             for p in parcalar(e)]
     ustunde = [m for k, m in yz
                if any(_parca_kutuda(a, b, k) for a, b in kont)]
-    return ikili, ustunde, len(yz)
+    return ikili, ustunde, len(yz), cizgi_ustunde(msp, yz)
+
+
+CIZGI_KATMAN = ("GORUNEN", "GIZLI", "EKSEN", "OLCU", "BOLGE")
+
+
+def _tum_cizgiler(msp):
+    """Resmin BÜTÜN çizgi parçaları: görünüş, gizli, eksen, ızgara sınırı
+    ve ÖLÇÜLERİN kendi çizgileri (ölçü, uzatma, kılavuz)."""
+    out = []
+
+    def gez(e):
+        t = e.dxftype()
+        if t in KONTUR:
+            out.extend(parcalar(e))
+        elif t in ("DIMENSION", "INSERT"):
+            try:
+                for v in e.virtual_entities():
+                    if v.dxftype() in ("LINE", "LWPOLYLINE", "ARC", "CIRCLE"):
+                        out.extend(parcalar(v))
+            except Exception:
+                pass
+    for e in msp:
+        if e.dxf.layer in CIZGI_KATMAN:
+            gez(e)
+    return out
+
+
+def cizgi_ustunde(msp, yz, kucult=0.18):
+    """Bir ÇİZGİNİN (ölçü, uzatma, kılavuz, eksen dahil) içinden geçtiği
+    yazılar. Kullanıcı: "ölçü çizgileri üst üste binmiş". Yazının kutusu
+    her yandan boyunun %18'i kadar küçültülür: ölçünün kendi çizgisi ve
+    Ø kılavuzunun yazıya dayanan ucu yazının KENARINA değer, içinden
+    geçmez."""
+    cz = _tum_cizgiler(msp)
+    if not cz:
+        return []
+    H = 50.0
+    izgara = {}
+    for i, (a, b) in enumerate(cz):
+        for gx in range(int(min(a[0], b[0]) // H), int(max(a[0], b[0]) // H) + 1):
+            for gy in range(int(min(a[1], b[1]) // H), int(max(a[1], b[1]) // H) + 1):
+                izgara.setdefault((gx, gy), []).append(i)
+    out = []
+    for k, m in yz:
+        p = kucult * min(k[2] - k[0], k[3] - k[1])
+        k2 = (k[0] + p, k[1] + p, k[2] - p, k[3] - p)
+        if k2[0] >= k2[2] or k2[1] >= k2[3]:
+            continue
+        aday = set()
+        for gx in range(int(k2[0] // H), int(k2[2] // H) + 1):
+            for gy in range(int(k2[1] // H), int(k2[3] // H) + 1):
+                aday.update(izgara.get((gx, gy), ()))
+        if any(_parca_kutuda(cz[i][0], cz[i][1], k2) for i in aday):
+            out.append(m)
+    return out
 
 
 def kendini_dene():
@@ -146,7 +210,7 @@ def kendini_dene():
         m.add_text("BOS", height=8,
                    dxfattribs={"layer": "YAZI"}).set_placement((35, 100))
         d.saveas(y1)
-        ikili, ustunde, n = denetle(y1)
+        ikili, ustunde, n, _cz = denetle(y1)
         if ustunde:
             hata.append(f"boşluktaki yazı konturda sanıldı: {ustunde}")
         if n != 1:
@@ -159,7 +223,7 @@ def kendini_dene():
         m.add_text("USTUNDE", height=8,
                    dxfattribs={"layer": "YAZI"}).set_placement((50, 96))
         d.saveas(y2)
-        ikili, ustunde, n = denetle(y2)
+        ikili, ustunde, n, _cz = denetle(y2)
         if not ustunde:
             hata.append("çizginin üstündeki yazı yakalanamadı")
         # (3) İki yazı üst üste
@@ -171,7 +235,7 @@ def kendini_dene():
         m.add_text("IKINCI", height=8,
                    dxfattribs={"layer": "YAZI"}).set_placement((5, 2))
         d.saveas(y3)
-        ikili, ustunde, n = denetle(y3)
+        ikili, ustunde, n, _cz = denetle(y3)
         if not ikili:
             hata.append("üst üste binen iki yazı yakalanamadı")
     finally:
@@ -202,25 +266,28 @@ def main(argv):
     if not dosya:
         print("DXF bulunamadi.")
         return 1
-    ty = tk = tn = 0
+    ty = tk = tc = tn = 0
     for f in dosya:
         try:
-            ikili, ustunde, n = denetle(f)
+            ikili, ustunde, n, czu = denetle(f)
         except Exception as ex:
             print(f"  {os.path.basename(f):32s} OKUNAMADI: {ex}")
             continue
-        ty += len(ikili); tk += len(ustunde); tn += n
-        durum = "tamam" if not ikili and not ustunde else "HATA "
+        ty += len(ikili); tk += len(ustunde); tc += len(czu); tn += n
+        durum = "tamam" if not ikili and not ustunde and not czu else "HATA "
         print(f"  {durum} {os.path.basename(f):34s} {n:4d} yazi")
         for a, b in ikili[:4]:
             print(f"          yazi-yazi:   {a!r} x {b!r}")
         for m in ustunde[:4]:
             print(f"          konturda:    {m!r}")
+        for m in czu[:4]:
+            print(f"          cizgi ustu:  {m!r}")
     print(f"\n{len(dosya)} resim, {tn} yazi")
     print(f"  yazi-yazi cakismasi : {ty}")
     print(f"  kontur ustunde yazi : {tk}")
-    print("SONUC:", "CAKISMA YOK" if not (ty or tk) else f"{ty + tk} CAKISMA")
-    return 1 if (ty or tk) else 0
+    print(f"  cizgi ustunde yazi  : {tc}")
+    print("SONUC:", "CAKISMA YOK" if not (ty or tk or tc) else f"{ty + tk + tc} CAKISMA")
+    return 1 if (ty or tk or tc) else 0
 
 
 if __name__ == "__main__":

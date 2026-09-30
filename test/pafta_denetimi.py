@@ -217,8 +217,19 @@ try:
     esit("küçük parça 1:1", P.yerlesim(200, 150, "A3")["olcek"], 1.0)
     esit("yüksek parça sola oturur", P.yerlesim(200, 240, "A3")["yer"], "sol")
     esit("uzun parça üste oturur", P.yerlesim(1860, 238, "A3")["yer"], "ust")
-    esit("1860x238 A3", P.yerlesim(1860, 238, "A3")["olcek"], 1 / 10)
-    esit("2480x233 A3", P.yerlesim(2480, 233, "A3")["olcek"], 1 / 10)
+    # Sık ölçek merdiveni (kullanıcı: "1/14, 1/17, 1/8 ne olursa, %70'ine
+    # yerleştir"): SIĞAN EN BÜYÜK ölçek seçilir. 1860 mm 1:6'da 310 mm,
+    # 2480 mm 1:7'de 354 mm; 366 mm'lik üst boşluğa sığar, bir büyüğü
+    # (1:5 -> 372, 1:6 -> 413) sığmaz.
+    esit("1860x238 A3", P.yerlesim(1860, 238, "A3")["olcek"], 1 / 6)
+    esit("2480x233 A3", P.yerlesim(2480, 233, "A3")["olcek"], 1 / 7)
+    for g_ in ((1860, 238), (2480, 233)):
+        y_ = P.yerlesim(*g_, "A3")
+        i_ = P.KUCULTME.index(round(1 / y_["olcek"]))
+        a_ = y_["alan"]
+        dogru(f"{g_[0]}x{g_[1]}: bir büyük ölçek sığmaz (en büyüğü seçilmiş)",
+              g_[0] / P.KUCULTME[i_ - 1] > a_[2] - a_[0]
+              or g_[1] / P.KUCULTME[i_ - 1] > a_[3] - a_[1])
     esit("kendiliğinden büyütme yok", P.yerlesim(20, 15, "A3")["olcek"], 1.0)
     esit("ölçek metni 1:10", P.olcek_metni(0.1), "1:10")
     esit("ölçek metni 1:1", P.olcek_metni(1.0), "1:1")

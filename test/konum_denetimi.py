@@ -6,13 +6,15 @@
 atölye "2480 x 120 sacta 124 delik Ø6,8" biliyordu ama deliklerin
 yerini bilmiyordu.
 
-Zincir kuralı (kullanıcının verdiği): kenardan ilk deliğe, sonra
-dizinin adımı, sonra son delikten öbür kenara. 124 deliğin her birine
-20 mm yazmak resmi okunmaz yapar ve hiçbir şey eklemez.
+Zincir kuralı (kullanıcının verdiği): referanstan (kenardan) ilk
+deliğe, sonra dizinin adımı ve toplamı ("10 x 20 = 200"). Son delikten
+öbür kenara ölçü VERİLMEZ: gabari ile zincir onu zaten belirler, ikinci
+kez yazmak fazla ölçüdür. 124 deliğin her birine 20 mm yazmak resmi
+okunmaz yapar ve hiçbir şey eklemez.
 
 Denetlenen:
   1. Dizi tanınıyor mu ve "123 x 20" diye tek ölçüye iniyor mu,
-  2. zincir kenardan başlayıp kenarda bitiyor mu,
+  2. zincir kenardan başlıyor mu, son delikten kenara fazla ölçü yok mu,
   3. dağınık delikler tek tek ölçülüyor mu,
   4. gabari ölçüsü EN DIŞARIDA mı (küçük ölçüler içeride),
   5. hiçbir yazı bir başkasının ya da konturun üstüne binmiyor mu.
@@ -93,16 +95,16 @@ def main():
     print("     yatay zincir:",
           [(round(r["a"], 1), round(r["b"], 1), r["metin"]) for r in y])
     # Sıra ÖLÇÜ BOYUNA göredir (kısa içeride); içeriğe göre aranır.
-    esit("zincir üç parça", len(y), 3)
+    esit("zincir iki parça (kenar -> ilk delik, dizi)", len(y), 2)
     diz = [r for r in y if r["metin"]]
     kenar = sorted(r for r in (abs(r["b"] - r["a"]) for r in y))
-    esit("ortadaki dizi", [r["metin"] for r in diz], ["10 x 20"])
+    esit("dizi adım ve toplamıyla", [r["metin"] for r in diz], ["10 x 20 = 200"])
     dogru("kenardan başlıyor",
           any(abs(r["a"] - 0.0) < 0.2 and abs(r["b"] - 10.0) < 0.2 for r in y),
           str([(round(r["a"], 1), round(r["b"], 1)) for r in y]))
-    dogru("kenarda bitiyor",
-          any(abs(r["b"] - 220.0) < 0.2 and abs(r["a"] - 210.0) < 0.2
-              for r in y),
+    dogru("son delikten kenara fazla ölçü yok (gabari verir)",
+          not any(abs(r["b"] - 220.0) < 0.2 and abs(r["a"] - 210.0) < 0.2
+                  for r in y),
           str([(round(r["a"], 1), round(r["b"], 1)) for r in y]))
     dogru("hiçbir ölçü 20 diye tek tek yazılmamış",
           sum(1 for r in y if r["metin"] is None and
@@ -232,11 +234,11 @@ def main():
     d = ezdxf.readfile(yol)
     olc = olcu_degerleri(yol)
     print("     ölçüler:", olc)
-    dogru("'10 x 20' resme girdi",
-          any(t == "10 x 20" for t, _v in olc), str(olc))
+    dogru("'10 x 20 = 200' resme girdi",
+          any(t == "10 x 20 = 200" for t, _v in olc), str(olc))
     dogru("gabari 220 var", any(v == 220.0 for _t, v in olc), str(olc))
-    dogru("kenar payları var",
-          sum(1 for _t, v in olc if v == 10.0) >= 2, str(olc))
+    dogru("kenardan ilk deliğe (10) var",
+          sum(1 for _t, v in olc if v == 10.0) >= 1, str(olc))
 
     # Gabari ölçüsü, konum ölçülerinin DIŞINDA olmalı.
     gab = alt = None
@@ -252,7 +254,7 @@ def main():
             continue
         if v == 220.0:
             gab = k.extmin.y
-        elif (e.dxf.get("text", "") or "") == "10 x 20":
+        elif (e.dxf.get("text", "") or "") == "10 x 20 = 200":
             alt = k.extmin.y
     dogru("gabari konum ölçüsünün dışında",
           gab is not None and alt is not None and gab < alt,
@@ -422,8 +424,11 @@ def main():
     print("     ölçüler:", sorted(deg))
     dogru("çentiğin başı (30) ölçülmüş",
           any(abs(v - 30.0) < 0.01 for v in deg), str(sorted(deg)))
-    dogru("çentiğin sonu (50) ölçülmüş",
-          any(abs(v - 50.0) < 0.01 for v in deg), str(sorted(deg)))
+    # referanstan zincir: sonu ya 50 (paralel) ya başından +20 (0 -> A -> B)
+    dogru("çentiğin sonu (50 ya da 30 + 20) ölçülmüş",
+          any(abs(v - 50.0) < 0.01 for v in deg)
+          or (any(abs(v - 30.0) < 0.01 for v in deg)
+              and any(abs(v - 20.0) < 0.01 for v in deg)), str(sorted(deg)))
     dogru("çentiğin derinliği (15) ölçülmüş",
           any(abs(v - 15.0) < 0.01 for v in deg), str(sorted(deg)))
 
@@ -569,7 +574,7 @@ def main():
     dogru("slot konumu (45) dizinin aralığında atılmadı", 45.0 in tum13, str(tum13))
     dogru("slot merkezler arası (15)", 15.0 in tum13, str(tum13))
     metin13 = [r["metin"] for yon in ("yatay", "dusey") for r in pl13["UST"][yon] if r["metin"]]
-    esit("dizi adımı yuvarlak ve Türkçe", metin13, ["2 x 80"])
+    esit("dizi adımı yuvarlak ve Türkçe", metin13, ["2 x 80 = 160"])
 
     print("\n-- EKSTRÜZYON sade resim: kalıbın iç ayrıntısı yok, işleme deliği var")
     import pf8_tani as TNx
