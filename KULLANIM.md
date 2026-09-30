@@ -516,8 +516,9 @@ bir ölçüye ya da parçanın bir çizgisine binecekse ölçü dışarı ya da 
 yana kaydırılır; hiçbir yere sığmıyorsa çizilmez, değeri listede kalır.
 
 Ölçüldü (gerçek modeller, her resim ölçülmüş yazı sınırlarıyla):
-kaynak resimlerinde şasi (250 kaynak) ve televre (196 kaynak) yazı-yazı
-çakışması 0, parça çizgisi üstünde yazı 0. Normal detay resimlerinde
+kasa modelinin bütün kaynak resimleri (26 PDF, 172 sayfa, 944 kaynak)
+yazı-yazı çakışması 0, parça çizgisi üstünde yazı 0 (döndürülmüş yazı
+gerçek dikdörtgeniyle ölçülür: `test/yazi_dikdortgeni.py`). Normal detay resimlerinde
 kasa (144 resim, 4.164 yazı), Karluna (55 resim, 1.809 yazı), Televre
 (111 resim, 3.330 yazı): çakışma 0 (`test/cizim_cakisma_denetimi.py`).
 

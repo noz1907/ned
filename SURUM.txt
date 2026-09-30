@@ -157,8 +157,9 @@ BU SÜRÜMDE NE VAR
       başlığına değiyorsa aşağı kayar.
     - sıralı kaynak ölçüsü başka yazıya ya da parça çizgisine binecekse
       kayar, sığmazsa çizilmez (değer listede).
-    - ölçüldü: şasi ve televre kaynak resimleri 0 çakışma; normal detay
-      resimleri kasa / Karluna / Televre 310 resim 0 çakışma.
+    - ölçüldü: kasa modelinin bütün kaynak resimleri (26 PDF, 172 sayfa)
+      0 çakışma, 0 çizgi üstü yazı; normal detay resimleri kasa /
+      Karluna / Televre 310 resim 0 çakışma.
 
   AÇINIM = BÜKÜM RESMİ + LAZER: açınımı çıkan her parça için büküm
   resmi (ACINIM/..._acinim.dxf) ve lazer kesim (LZR/..._acinim_lzr.dxf,
