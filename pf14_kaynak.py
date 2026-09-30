@@ -686,7 +686,7 @@ def _simetrik_zincirler(zin, tol=1.5):
             bitti.add(id(kopya))
 
 
-def _olcu_ciz(msp, R, a3, b3, deger, yon, h):
+def _olcu_ciz(msp, R, a3, b3, deger, yon, h, dolu=None):
     """Eksen boyunca ölçü (kâğıtta; yazı gerçek mm). Çizilemiyorsa False:
     eksen bakışa eğik (dik görünüşte boy kısalır) ya da uç pencere dışı."""
     c = abs(sum(x * y for x, y in zip(yon, R.goz)))
@@ -706,7 +706,30 @@ def _olcu_ciz(msp, R, a3, b3, deger, yon, h):
     nx, ny = -uy, ux
     if ny < 0 or (abs(ny) < 1e-9 and nx < 0):
         nx, ny = -nx, -ny
-    off = 2.4 * h
+    # Yazı başka bir ölçünün yazısına binecekse ölçü dışarı kaydırılır;
+    # hiçbir yere sığmıyorsa çizilmez (değer listede). Sıralı kaynakların
+    # ara ölçüleri paralel zincirlerde üst üste biniyordu (236 / 70 / 115).
+    t_ = str(deger)
+    mx0, my0 = (a[0] + b[0]) / 2, (a[1] + b[1]) / 2
+    off = None
+    for o_ in (2.4, 4.6, 6.8, -2.4, -4.6, 9.0, -6.8, 11.2, 13.4):
+        cx, cy = mx0 + nx * (o_ + 1.0) * h, my0 + ny * (o_ + 1.0) * h
+        yk = max(_en(t_, h) / 2, 0.7 * h)
+        kutu_ = (cx - yk - 0.3 * h, cy - yk - 0.3 * h, cx + yk + 0.3 * h, cy + yk + 0.3 * h)
+        bos = dolu is None or not any(not (kutu_[2] < k[0] or k[2] < kutu_[0]
+                                           or kutu_[3] < k[1] or k[3] < kutu_[1])
+                                      for k in dolu)
+        # yazı parçanın çizgisine de binmesin (kullanıcı: yazılar parçanın
+        # çizimine engel olmamalı)
+        if bos and not R.cizgiye_degiyor(kutu_):
+            off = o_ * h
+            if dolu is not None:
+                dolu.append(kutu_)
+            break
+    if off is None:
+        return False
+    if off < 0:
+        nx, ny, off = -nx, -ny, -off
     kat = {"layer": "OLCU"}
     a2 = (a[0] + nx * off, a[1] + ny * off)
     b2 = (b[0] + nx * off, b[1] + ny * off)
@@ -735,7 +758,7 @@ def _olcu_ciz(msp, R, a3, b3, deger, yon, h):
     return True
 
 
-def _konum_olcusu(msp, R, d, h, bu_detay=()):
+def _konum_olcusu(msp, R, d, h, bu_detay=(), dolu=None):
     """Sıralı kaynağın ölçüleri: zincirin ilk kaynağına kenardan başlangıç
     (kenardan / köşeden başlıyorsa yok), sonrakilere bir öncekiyle ARA.
     Ara, iki kaynak da aynı detaydaysa çizilir; değil ise listededir."""
@@ -743,11 +766,11 @@ def _konum_olcusu(msp, R, d, h, bu_detay=()):
         return
     r = d.get("ara")
     if r and not r.get("kenara_kadar") and any(x is r["onceki"] for x in bu_detay):
-        _olcu_ciz(msp, R, r["a"], r["b"], r["deger"], d["yon"], h)
+        _olcu_ciz(msp, R, r["a"], r["b"], r["deger"], d["yon"], h, dolu)
     k = d.get("konum")
     if not k or not k.get("uc") or not k.get("gorunur", True):
         return
-    _olcu_ciz(msp, R, k["uc"], k["bas"], XL.tam(k["deger"]), d["yon"], h)
+    _olcu_ciz(msp, R, k["uc"], k["bas"], XL.tam(k["deger"]), d["yon"], h, dolu)
 
 
 # ------------------------------------------------------------ görünürlük
@@ -1060,13 +1083,38 @@ def _sembol(msp, q, dirsek, taraf, d, h, ek=(), not_=None):
     if sag_t:
         _yaz(msp, sag_t, xs + 2.0 * h, y - 1.4 * h, h, kat="OLCU")
     no = _no_yazisi([d["no"]] + [e[1]["no"] for e in ek])
-    r = 0.45 * _en(no, h) + 0.6 * h
-    bx = x2 + taraf * r
-    msp.add_circle((bx, y), r, dxfattribs=kat)
+    rx, ry = _balon(no, h)
+    bx = x2 + taraf * rx
+    if ek:                                 # birden çok numara: basık çerçeve
+        msp.add_lwpolyline([(bx - rx, y - ry), (bx + rx, y - ry), (bx + rx, y + ry),
+                            (bx - rx, y + ry)], close=True, dxfattribs=kat)
+    else:
+        msp.add_circle((bx, y), rx, dxfattribs=kat)
     _yaz(msp, no, bx - 0.36 * _en(no, h) / 0.72, y - 0.5 * h, h, kat="OLCU")
     if not_:                               # "SİM. K1-K3": balonun altında, parçadan uzakta
-        _yaz(msp, not_, bx - _en(not_, h) / 2, y - r - 1.6 * h, h, kat="OLCU")
-    return abs(x2 - x) + 2 * r
+        _yaz(msp, not_, bx - _en(not_, h) / 2, y - ry - 1.6 * h, h, kat="OLCU")
+    return abs(x2 - x) + 2 * rx
+
+
+def _balon(no, h):
+    """Numara balonunun yarı eni / yarı boyu: tek numara daire, birden
+    çok numara ("K12,K14") basık çerçeve - büyük daire alttaki etikete
+    biniyordu."""
+    if "," in no or "-" in no:
+        return _en(no, h) / 2 + 0.6 * h, 1.0 * h
+    r = 0.45 * _en(no, h) + 0.6 * h
+    return r, r
+
+
+def _etiket_yuksekligi(uye, h):
+    """Bir etiketin referans çizgisinin üstünde / altında kapladığı yer
+    (not dahil): (üst, alt)."""
+    no = _no_yazisi([d["no"] for _q, d in uye])
+    _rx, ry = _balon(no, h)
+    alt = max(ry, 1.6 * h)
+    if any(e.get("sim_not") and not e.get("_olcusuz") for _q, e in uye):
+        alt = ry + 2.8 * h
+    return max(ry, 0.6 * h), alt
 
 
 def _no_yazisi(nolar):
@@ -1164,6 +1212,41 @@ class _Resim:
         for kat, q in self.cizgi:
             msp.add_lwpolyline([self.p(a) for a in q], dxfattribs={"layer": kat})
 
+    def cizgiye_degiyor(self, k):
+        """Kâğıttaki k kutusu görünüşün bir çizgisine değiyor mu (yazı
+        parçanın üstüne binmesin)."""
+        for _kat, q in self.cizgi:
+            for a, b in zip(q, q[1:]):
+                a, b = self.p(a), self.p(b)
+                if max(a[0], b[0]) < k[0] or min(a[0], b[0]) > k[2] or \
+                        max(a[1], b[1]) < k[1] or min(a[1], b[1]) > k[3]:
+                    continue
+                if _parca_kutuda(a, b, k):
+                    return True
+        return False
+
+
+def _parca_kutuda(a, b, k):
+    """(a, b) doğru parçası k dikdörtgenine değiyor mu (Liang-Barsky)."""
+    x0, y0 = a
+    dx, dy = b[0] - a[0], b[1] - a[1]
+    t0, t1 = 0.0, 1.0
+    for p, q in ((-dx, x0 - k[0]), (dx, k[2] - x0), (-dy, y0 - k[1]), (dy, k[3] - y0)):
+        if abs(p) < 1e-12:
+            if q < 0:
+                return False
+        else:
+            r = q / p
+            if p < 0:
+                if r > t1:
+                    return False
+                t0 = max(t0, r)
+            else:
+                if r < t0:
+                    return False
+                t1 = min(t1, r)
+    return t0 <= t1
+
 
 def _etiketle(msp, R, dikisler, h):
     """Görünüşün sağına ve soluna, yukarıdan aşağı sıralı etiket sütunu."""
@@ -1188,19 +1271,23 @@ def _etiketle(msp, R, dikisler, h):
                 g[1].append((q, d))
             else:
                 gr.append((k, [(q, d)]))
-        y_son = y1 + 3.0 * h
+        # etiketler üst üste binmesin: her birinin gerçek yüksekliği (balon,
+        # SİM. notu) kadar yer ayrılır
+        alt_son = y1 + 3.0 * h
         for _k, uye in gr:
             q, d = uye[0]
-            y = min(max(p[1] for p, _ in uye), y_son - 3.0 * h)
-            y_son = y
+            ust_, alt_ = _etiket_yuksekligi(uye, h)
+            y = min(max(p[1] for p, _ in uye), alt_son - ust_ - 0.8 * h)
+            alt_son = y - alt_
             # bilgi parçanın DIŞINDA: kırılma görünüşün kenarından 6 yazı
             # boyu uzakta (kullanıcı: bilgi parçaya karışmasın)
             x_dirsek = (x1 + 6 * h) if taraf > 0 else (x0 - 6 * h)
             not_ = next((e.get("sim_not") for _q, e in uye if e.get("sim_not")
                          and not e.get("_olcusuz")), None)
             _sembol(msp, q, (x_dirsek, y), taraf, d, h, ek=uye[1:], not_=not_)
+    dolu = []                              # bu görünüşte yazılan ölçü yazıları
     for d in dikisler:
-        _konum_olcusu(msp, R, d, h, dikisler)
+        _konum_olcusu(msp, R, d, h, dikisler, dolu)
 
 
 def _tablo_ciz(msp, satirlar, x, y_ust, h):
