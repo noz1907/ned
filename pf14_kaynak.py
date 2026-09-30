@@ -713,7 +713,11 @@ def _olcu_ciz(msp, R, a3, b3, deger, yon, h, dolu=None):
     mx0, my0 = (a[0] + b[0]) / 2, (a[1] + b[1]) / 2
     off = None
     for o_ in (2.4, 4.6, 6.8, -2.4, -4.6, 9.0, -6.8, 11.2, 13.4):
-        cx, cy = mx0 + nx * (o_ + 1.0) * h, my0 + ny * (o_ + 1.0) * h
+        # yazının merkezi ölçü çizgisinin 1 yazı boyu DIŞINDA; öbür yana
+        # (eksi) kaydırılınca da dışında (işaret hatası: kutu yazıdan 2 h
+        # uzağa bakıyordu, kabin korumada 105 / 35 çizgiye bindi)
+        sg = 1.0 if o_ > 0 else -1.0
+        cx, cy = mx0 + nx * (o_ + sg) * h, my0 + ny * (o_ + sg) * h
         yk = max(_en(t_, h) / 2, 0.7 * h)
         kutu_ = (cx - yk - 0.3 * h, cy - yk - 0.3 * h, cx + yk + 0.3 * h, cy + yk + 0.3 * h)
         bos = dolu is None or not any(not (kutu_[2] < k[0] or k[2] < kutu_[0]

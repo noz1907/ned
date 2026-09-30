@@ -341,36 +341,11 @@ def main():
     # YAZILAR ÜST ÜSTE BİNMEZ: bütün sayfalarda ölçü, etiket ve not
     # yazılarının ölçülmüş sınırları kesişmez (kullanıcı: balonlar ve
     # SİM. notları, paralel zincirlerin ara ölçüleri üst üste biniyordu)
-    def cakisan(docs):
-        out = []
-        for doc in docs:
-            kt = [(e.dxf.text, O._yazi_siniri(e)) for e in doc.modelspace().query("TEXT")
-                  if e.dxf.layer == "OLCU"]
-            kt = [(t_, k_) for t_, k_ in kt if k_]
-            for i, (ta, ka) in enumerate(kt):
-                for tb, kb in kt[i + 1:]:
-                    if (min(ka[2], kb[2]) - max(ka[0], kb[0]) > 0.2
-                            and min(ka[3], kb[3]) - max(ka[1], kb[1]) > 0.2):
-                        out.append((ta, tb))
-        return out
-    dogru("ölçü / etiket yazıları üst üste binmiyor", not cakisan(yakala), cakisan(yakala)[:6])
-
-    def cizgide(docs):
-        out = []
-        for doc in docs:
-            msp = doc.modelspace()
-            ks = [(a_, b_) for e in msp.query("LWPOLYLINE") if e.dxf.layer in ("GORUNEN", "KAYNAK")
-                  for pts in [[(x, y) for x, y in e.get_points("xy")]]
-                  for a_, b_ in zip(pts, pts[1:])]
-            for e in msp.query("TEXT"):
-                if e.dxf.layer != "OLCU":
-                    continue
-                k_ = O._yazi_siniri(e)
-                if k_ and any(KR._parca_kutuda(a_, b_, k_) for a_, b_ in ks):
-                    out.append(e.dxf.text)
-        return out
-    dogru("ölçü / etiket yazısı parça çizgisinin üstünde değil", not cizgide(yakala),
-          cizgide(yakala)[:6])
+    import yazi_dikdortgeni as YD
+    cift = [c for doc in yakala for c in YD.sayfa_denetimi(doc)[0]]
+    ust = [t for doc in yakala for t in YD.sayfa_denetimi(doc)[1]]
+    dogru("ölçü / etiket yazıları üst üste binmiyor", not cift, cift[:6])
+    dogru("ölçü / etiket yazısı parça çizgisinin üstünde değil", not ust, ust[:6])
 
     # kaynakta ondalık yok: 2,7 -> 3, 1,77 -> 2, 24,6 -> 25
     import pf3_olcu as O
