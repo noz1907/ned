@@ -1092,7 +1092,10 @@ def _sembol(msp, q, dirsek, taraf, d, h, ek=(), not_=None):
         msp.add_circle((bx, y), rx, dxfattribs=kat)
     _yaz(msp, no, bx - 0.36 * _en(no, h) / 0.72, y - 0.5 * h, h, kat="OLCU")
     if not_:                               # "SİM. K1-K3": balonun altında, parçadan uzakta
-        _yaz(msp, not_, bx - _en(not_, h) / 2, y - ry - 1.6 * h, h, kat="OLCU")
+        # referans çizgisinin altındaki a / boy yazısı y - 1,4 h'den aşağı
+        # iner: not ondan ve balondan en az yarım yazı boyu aşağıda
+        _yaz(msp, not_, bx - _en(not_, h) / 2, min(y - ry, y - 1.6 * h) - 2.2 * h, h,
+             kat="OLCU")
     return abs(x2 - x) + 2 * rx
 
 
@@ -1113,7 +1116,7 @@ def _etiket_yuksekligi(uye, h):
     _rx, ry = _balon(no, h)
     alt = max(ry, 1.6 * h)
     if any(e.get("sim_not") and not e.get("_olcusuz") for _q, e in uye):
-        alt = ry + 2.8 * h
+        alt = max(ry, 1.6 * h) + 3.4 * h
     return max(ry, 0.6 * h), alt
 
 
