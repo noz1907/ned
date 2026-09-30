@@ -1248,8 +1248,41 @@ def _parca_kutuda(a, b, k):
     return t0 <= t1
 
 
-def _etiketle(msp, R, dikisler, h):
-    """Görünüşün sağına ve soluna, yukarıdan aşağı sıralı etiket sütunu."""
+def _etiket_kutusu(uye, x_dirsek, y, taraf, h, not_):
+    """Etiketin (referans çizgisi, a / boy yazıları, balon, not) kâğıtta
+    kapladığı dikdörtgen."""
+    d = uye[0][1]
+    o = d["olcu"]
+    tip = o.get("tip") or ""
+    sol_t = f"a{XL.tam(o['a_mm'])}" if o.get("a_mm") and "nokta" not in tip else ""
+    sag_t = str(XL.tam(o["boy_mm"])) if o.get("boy_mm") and "nokta" not in tip else ""
+    Lr = max(12 * h, _en(sol_t, h) + _en(sag_t, h) + 5 * h)
+    no = _no_yazisi([e["no"] for _q, e in uye])
+    rx, ry = _balon(no, h)
+    bx = x_dirsek + taraf * (Lr + rx)
+    ust_, alt_ = _etiket_yuksekligi(uye, h)
+    xs = [x_dirsek, bx + taraf * rx]
+    if not_:
+        xs += [bx - _en(not_, h) / 2, bx + _en(not_, h) / 2]
+    return (min(xs) - 0.3 * h, y - alt_ - 0.3 * h, max(xs) + 0.3 * h, y + ust_ + 0.3 * h)
+
+
+def _kesisir(a, b):
+    return not (a[2] < b[0] or b[2] < a[0] or a[3] < b[1] or b[3] < a[1])
+
+
+def _etiketle(msp, R, dikisler, h, sayfa_dolu=None):
+    """Görünüşün sağına ve soluna, yukarıdan aşağı sıralı etiket sütunu.
+
+    sayfa_dolu: sayfada DOLU yerler (başka detayların görünüşleri ve
+    etiketleri). Etiket onlardan birine değecekse aşağı kaydırılır: yan
+    yana iki detayın etiket sütunları sayfanın ortasında birbirine
+    biniyordu."""
+    sayfa_dolu = [] if sayfa_dolu is None else sayfa_dolu
+    kendi = None
+    x0, y0 = R.p(R.kutu[:2])
+    x1, y1 = R.p(R.kutu[2:])
+    kendi = (x0, y0, x1, y1)
     x0, y0 = R.p(R.kutu[:2])
     x1, y1 = R.p(R.kutu[2:])
     orta = (x0 + x1) / 2
@@ -1278,12 +1311,20 @@ def _etiketle(msp, R, dikisler, h):
             q, d = uye[0]
             ust_, alt_ = _etiket_yuksekligi(uye, h)
             y = min(max(p[1] for p, _ in uye), alt_son - ust_ - 0.8 * h)
-            alt_son = y - alt_
             # bilgi parçanın DIŞINDA: kırılma görünüşün kenarından 6 yazı
             # boyu uzakta (kullanıcı: bilgi parçaya karışmasın)
             x_dirsek = (x1 + 6 * h) if taraf > 0 else (x0 - 6 * h)
             not_ = next((e.get("sim_not") for _q, e in uye if e.get("sim_not")
                          and not e.get("_olcusuz")), None)
+            # sayfadaki başka bir şeye (öbür detayın görünüşü ya da
+            # etiketi) değiyorsa boş yer bulunana kadar aşağı
+            for _ in range(400):
+                k_ = _etiket_kutusu(uye, x_dirsek, y, taraf, h, not_)
+                if not any(_kesisir(k_, b) for b in sayfa_dolu if b != kendi):
+                    break
+                y -= 0.5 * h
+            sayfa_dolu.append(k_)
+            alt_son = y - alt_
             _sembol(msp, q, (x_dirsek, y), taraf, d, h, ek=uye[1:], not_=not_)
     dolu = []                              # bu görünüşte yazılan ölçü yazıları
     for d in dikisler:
@@ -1708,7 +1749,16 @@ def _sayfalar(O, bilgi, tab, detaylar, det_r):
             x1, y1 = R.p(R.kutu[2:])
             msp.add_lwpolyline([(x0, y0), (x1, y0), (x1, y1), (x0, y1)], close=True,
                                dxfattribs={"layer": "DETAY"})
-            _etiketle(msp, R, dt["dikis"], YH)
+        # etiketler görünüşlerin HEPSİ yerleştikten sonra: hiçbir etiket
+        # öbür detayın görünüşüne ya da etiketine binmesin
+        dolu_s = []
+        for R in det_r[i0:i0 + 4]:
+            a_, b_ = R.p(R.kutu[:2]), R.p(R.kutu[2:])
+            dolu_s.append((a_[0], a_[1], b_[0], b_[1]))
+            # görünüşün başlığı ("DETAY B2 - BÖLGE B (...)") da dolu
+            dolu_s.append((a_[0], b_[1] + 2.0, a_[0] + 130.0, b_[1] + 7.0))
+        for dt, R in zip(detaylar[i0:i0 + 4], det_r[i0:i0 + 4]):
+            _etiketle(msp, R, dt["dikis"], YH, dolu_s)
         sayfalar.append(doc)
     for i, doc in enumerate(sayfalar, 1):
         _antet(doc.modelspace(), bilgi, i, len(sayfalar))
