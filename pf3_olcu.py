@@ -5691,15 +5691,18 @@ def _kayip_noktalari(k):
 
 
 def bolge_sec(kayip, gkutu, kaydir, h):
-    """Ana görünüşte TEMİZ yerleşemeyen özelliklerden DETAY BANTLARI.
+    """Ana görünüşte TEMİZ yerleşemeyen özelliklerden DETAY BÖLGELERİ
+    (dikdörtgen).
 
-    Sıra: özellikler görünüşün uzun ekseni boyunca bantlara toplanır
-    (aralarında BOLGE_BAG'dan büyük boşluk yoksa aynı bant) -> pay ->
-    parçanın ucuna yakın bant uca uzatılır (sol uç / sağ uç) -> kesişen
-    bantlar birleşir -> detayda en az 2:1 büyütüleceği için
-    DETAY_BANT_EN'i aşan bant EŞİT parçalara bölünür (birleşmeden SONRA:
-    bütün parçayı kaplayan bant detay değildir) -> en çok özelliği içeren
-    BOLGE_EN_COK bant. Döner: [{"gad", "k", "ek", "n"}] (çizim koord.)."""
+    Sıra: özellikler 2B'de tek bağlantılı öbeklere ayrılır (BOLGE_BAG) ->
+    öbeğin kutusu + pay -> HER YÖNDE parçanın kenarına yakınsa (o yöndeki
+    boyun BOLGE_UC'u) kenara kadar uzatılır: ince uzun parçada iki uzun
+    kenar da yakın olduğundan bölge boydan boya BANT olur (dik konumlar
+    datum kenarından), levhada köşedeki öbek yalnız köşeyi alır (1036 mm'lik
+    levhanın bütün yüksekliği detay olmaz) -> kesişen bölgeler birleşir ->
+    detayda en az 2:1 büyütüleceği için bir yönde DETAY_BANT_EN'i aşan
+    bölge o yönde EŞİT parçalara bölünür -> en çok özelliği içeren
+    BOLGE_EN_COK bölge. Döner: [{"gad", "k", "ek", "n"}] (çizim koord.)."""
     adaylar = []
     for gad in dict.fromkeys(k["gad"] for k in kayip):
         if gad not in gkutu:
@@ -5707,48 +5710,58 @@ def bolge_sec(kayip, gkutu, kaydir, h):
         dx, dy = kaydir[gad]
         gk = gkutu[gad]
         ek = 0 if (gk[2] - gk[0]) >= (gk[3] - gk[1]) else 1      # uzun eksen
-        L = gk[ek + 2] - gk[ek]
+        L = max(gk[2] - gk[0], gk[3] - gk[1])
         en_bant = DETAY_BANT_EN * L / min(DETAY_OLCEK)
-        pts = sorted({round((x + dx, y + dy)[ek], 3)
-                      for k in kayip if k["gad"] == gad for x, y in _kayip_noktalari(k)})
+        pts = list(dict.fromkeys((round(x + dx, 3), round(y + dy, 3))
+                                 for k in kayip if k["gad"] == gad
+                                 for x, y in _kayip_noktalari(k)))
         if not pts:
             continue
-        ham_bant = [[pts[0], pts[0], 1]]
-        for v in pts[1:]:
-            if v - ham_bant[-1][1] <= BOLGE_BAG * h:
-                ham_bant[-1][1] = v
-                ham_bant[-1][2] += 1
-            else:
-                ham_bant.append([v, v, 1])
-        bant = []
-        for a, b, n in ham_bant:
-            a, b = a - BOLGE_PAY * h, b + BOLGE_PAY * h
-            if a - gk[ek] <= BOLGE_UC * L:
-                a = gk[ek] - 1.5 * h                   # sol / alt uç
-            if gk[ek + 2] - b <= BOLGE_UC * L:
-                b = gk[ek + 2] + 1.5 * h               # sağ / üst uç
-            bant.append([a, b, n])
-        bant.sort()
-        birlesik = [bant[0]]
-        for a, b, n in bant[1:]:
-            if a <= birlesik[-1][1]:
-                birlesik[-1][1] = max(birlesik[-1][1], b)
-                birlesik[-1][2] += n
-            else:
-                birlesik.append([a, b, n])
-        for a, b, n in birlesik:
-            parca = max(1, math.ceil((b - a) / en_bant - 1e-9))
-            adim = (b - a) / parca
-            for i in range(parca):
-                a_, b_ = a + i * adim, a + (i + 1) * adim
-                n_ = sum(1 for v in pts if a_ <= v <= b_)
-                if not n_:
-                    continue
-                if ek == 0:
-                    kt = (a_, gk[1] - 1.5 * h, b_, gk[3] + 1.5 * h)
-                else:
-                    kt = (gk[0] - 1.5 * h, a_, gk[2] + 1.5 * h, b_)
-                adaylar.append({"gad": gad, "k": kt, "ek": ek, "n": n_})
+        obek = []
+        for q in pts:
+            bag = [o_ for o_ in obek if any(math.dist(q, r_) <= BOLGE_BAG * h for r_ in o_)]
+            yeni = [q]
+            for o_ in bag:
+                yeni.extend(o_)
+                obek.remove(o_)
+            obek.append(yeni)
+        kutular = []
+        for o_ in obek:
+            k = [min(q[0] for q in o_) - BOLGE_PAY * h, min(q[1] for q in o_) - BOLGE_PAY * h,
+                 max(q[0] for q in o_) + BOLGE_PAY * h, max(q[1] for q in o_) + BOLGE_PAY * h]
+            for i in (0, 1):
+                boy = gk[i + 2] - gk[i]
+                if k[i] - gk[i] <= BOLGE_UC * boy:
+                    k[i] = gk[i] - 1.5 * h                   # sol / alt kenar
+                if gk[i + 2] - k[i + 2] <= BOLGE_UC * boy:
+                    k[i + 2] = gk[i + 2] + 1.5 * h           # sağ / üst kenar
+            kutular.append(k)
+        # kesişen bölgeler birleşir
+        degisti = True
+        while degisti:
+            degisti = False
+            for i in range(len(kutular)):
+                for j in range(i + 1, len(kutular)):
+                    a, b = kutular[i], kutular[j]
+                    if a[0] <= b[2] and b[0] <= a[2] and a[1] <= b[3] and b[1] <= a[3]:
+                        kutular[i] = [min(a[0], b[0]), min(a[1], b[1]),
+                                      max(a[2], b[2]), max(a[3], b[3])]
+                        del kutular[j]
+                        degisti = True
+                        break
+                if degisti:
+                    break
+        # detay sınırını aşan bölge eşit parçalara bölünür (iki yönde de)
+        for k in kutular:
+            nx = max(1, math.ceil((k[2] - k[0]) / en_bant - 1e-9))
+            ny = max(1, math.ceil((k[3] - k[1]) / en_bant - 1e-9))
+            ax_, ay_ = (k[2] - k[0]) / nx, (k[3] - k[1]) / ny
+            for i in range(nx):
+                for j in range(ny):
+                    kt = (k[0] + i * ax_, k[1] + j * ay_, k[0] + (i + 1) * ax_, k[1] + (j + 1) * ay_)
+                    n_ = sum(1 for q in pts if kt[0] <= q[0] <= kt[2] and kt[1] <= q[1] <= kt[3])
+                    if n_:
+                        adaylar.append({"gad": gad, "k": kt, "ek": ek, "n": n_})
     adaylar.sort(key=lambda b: -b["n"])
     return adaylar[:BOLGE_EN_COK]
 
