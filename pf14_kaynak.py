@@ -752,11 +752,15 @@ def _olcu_ciz(msp, R, a3, b3, deger, yon, h, dolu=None):
     if ang > 90 or ang <= -90:
         ang -= 180 if ang > 0 else -180
     mx, my = (a2[0] + b2[0]) / 2, (a2[1] + b2[1]) / 2
-    e = _yaz(msp, str(deger), mx + nx * 0.5 * h, my + ny * 0.5 * h, h, kat="OLCU")
+    # Yazı, yeri denetlenen kutunun TAM ORTASINA (orta hizalı) konur.
+    # Alttan hizalı yazı okunurluk için 180° çevrilince ölçü çizgisinin iç
+    # yanına düşüyordu; denetlenen yerde değildi (kabin korumada 189 / 189
+    # ve çizgi üstünde 105, 70 böyle kaldı).
+    cx, cy = mx + nx * 1.0 * h, my + ny * 1.0 * h
+    e = _yaz(msp, str(deger), cx, cy, h, kat="OLCU")
     try:
         from ezdxf.enums import TextEntityAlignment
-        e.set_placement((mx + nx * 0.5 * h, my + ny * 0.5 * h),
-                        align=TextEntityAlignment.BOTTOM_CENTER)
+        e.set_placement((cx, cy), align=TextEntityAlignment.MIDDLE_CENTER)
     except Exception:
         pass
     e.dxf.rotation = ang
