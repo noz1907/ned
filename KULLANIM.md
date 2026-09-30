@@ -507,6 +507,20 @@ dikişler **tek sembol** alır; o sembolden her dikişe ayrı ok gider
 Uzaktaki aynı dikiş kendi sembolünü alır. `SİM.` notu balonun
 altındadır, parçanın üstünde değil.
 
+**Yazılar asla üst üste binmez, parçanın çizgisine binmez.** Etiketler
+sayfa bazında yerleşir: önce sayfadaki dört detayın görünüşleri konur;
+her etiketin tam kutusu (referans çizgisi, a / boy, balon, not) başka
+bir etikete, öbür detayın görünüşüne ya da başlığına değiyorsa boş yer
+bulunana kadar aşağı kaydırılır. Sıralı kaynak ölçüsünün yazısı başka
+bir ölçüye ya da parçanın bir çizgisine binecekse ölçü dışarı ya da öbür
+yana kaydırılır; hiçbir yere sığmıyorsa çizilmez, değeri listede kalır.
+
+Ölçüldü (gerçek modeller, her resim ölçülmüş yazı sınırlarıyla):
+kaynak resimlerinde şasi (250 kaynak) ve televre (196 kaynak) yazı-yazı
+çakışması 0, parça çizgisi üstünde yazı 0. Normal detay resimlerinde
+kasa (144 resim, 4.164 yazı), Karluna (55 resim, 1.809 yazı), Televre
+(111 resim, 3.330 yazı): çakışma 0 (`test/cizim_cakisma_denetimi.py`).
+
 **Sembol (ISO 2553):**
 - ok dikişe değer, sonra kırılır ve yatay referans çizgisine bağlanır;
 - çizginin altında (ok tarafı) köşe kaynağı üçgeni vardır;
