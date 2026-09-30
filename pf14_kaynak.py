@@ -19,12 +19,18 @@ kendi resmini alır:
     ağında): ışın bir parçaya çarpıyorsa o noktada dikiş gizlidir. Her dikiş
     NET göründüğü TEK detayda işaretlenir.
   * SEMBOL (ISO 2553): ok + referans çizgisi + köşe kaynağı üçgeni +
-    "a2" (boğaz) + "25" (boy) + K numarası balonu. Kenardan dikiş başına
-    konum ölçüsü; izometrikte eksen boyunca, gerçek değer.
-  * KAYNAK LİSTESİ: K no, tip, a, z, boy, kenardan, başlangıç / bitiş
-    koordinatı (grubun sınır kutusunun köşesine göre, mm), birleştirdiği
-    pozlar, detay. Resim ne kadar kalabalık olursa olsun ölçü ve yer
-    buradan KESİN okunur.
+    "a2" (boğaz) + "25" (boy) + K numarası balonu.
+  * KONUM ÖLÇÜSÜ YALNIZ SIRALI KAYNAKTA: tek duran kaynağın yeri
+    parçanın kesiminden, yarığından, köşesinden zaten bellidir; ölçü
+    verilmez. Aynı parçaları aynı eksen üzerinde art arda birleştiren
+    kaynaklarda (zincir) ilkine kenardan başlangıç (tam kenardan /
+    köşeden başlıyorsa yok), sonrakilere bir öncekiyle ARA ölçüsü.
+    İzometrikte eksen boyunca, gerçek değer. Küçük üründe (gabari
+    < KUCUK_URUN) resimde ölçü yok, listede var.
+  * KAYNAK LİSTESİ: K no, tip, a, z, boy, konum (- / kenardan / K8 + 51),
+    başlangıç / bitiş koordinatı (grubun sınır kutusunun köşesine göre,
+    mm), birleştirdiği pozlar, detay. Resim ne kadar kalabalık olursa
+    olsun ölçü ve yer buradan KESİN okunur.
   * ÖLÇEK serbesttir (1:13 gibi): görünüş sayfayı doldurur, ölçüler
     gerçek değerle yazılır.
 
@@ -292,15 +298,31 @@ def ikinci_parca(sh, adaylar, kayit, kutular, degen):
 
 
 # ------------------------------------------------------------ konum
-def _bacak(dikis_sh, parca_sh):
-    """Dikişin parçaya oturan BACAK yüzü (düzlem, en geniş): (nokta, normal)."""
+def _bacak(dikis_sh, parca_sh, tol=None):
+    """Dikişin parçaya oturan BACAK yüzü (düzlem): (nokta, normal).
+
+    Yüzün tek bir noktasına (ağırlık merkezine) bakmak yetmiyordu: ince
+    sacın kenarındaki dikişte bacak sacdan geniştir, ortası sacın dışına
+    düşer; şasede "?" konumların çoğu buydu. Yüz üzerine 5 x 5 nokta
+    serpilir; en az üçte biri parçaya tol içinde değen düzlemlerin en
+    genişi bacaktır."""
     from OCP.BRepAdaptor import BRepAdaptor_Surface
+    from OCP.BRepClass import BRepClass_FaceClassifier
     from OCP.BRepGProp import BRepGProp
+    from OCP.BRepTools import BRepTools
     from OCP.GeomAbs import GeomAbs_Plane
     from OCP.GProp import GProp_GProps
-    from OCP.TopAbs import TopAbs_FACE
+    from OCP.TopAbs import TopAbs_FACE, TopAbs_IN
     from OCP.TopExp import TopExp_Explorer
     from OCP.TopoDS import TopoDS
+    from OCP.gp import gp_Pnt2d
+    tol = DEGME_TOL if tol is None else tol
+    # Değme, parçanın dikişe YAKIN yüzlerine izdüşümle denetlenir; katı
+    # sınıflayıcı büyük sacda nokta başına ~80 ms sürüyordu (250 dikişli
+    # şasi 5 dk -> 20 dk üstü).
+    yz = _kutu_yuzleri(parca_sh, TN._kutu(dikis_sh), tol)
+    if not yz:
+        return None
     en = None
     ex = TopExp_Explorer(dikis_sh, TopAbs_FACE)
     while ex.More():
@@ -309,32 +331,26 @@ def _bacak(dikis_sh, parca_sh):
         s = BRepAdaptor_Surface(f)
         if s.GetType() != GeomAbs_Plane:
             continue
+        u0, u1, v0, v1 = BRepTools.UVBounds_s(f)
+        pts = []
+        for a in range(1, 6):
+            for b in range(1, 6):
+                u, v = u0 + (u1 - u0) * a / 6.0, v0 + (v1 - v0) * b / 6.0
+                if BRepClass_FaceClassifier(f, gp_Pnt2d(u, v), 1e-7).State() == TopAbs_IN:
+                    q = s.Value(u, v)
+                    pts.append((q.X(), q.Y(), q.Z()))
+        if not pts:
+            continue
+        deg = sum(1 for q in pts if _yuzeyde(q, yz, tol))
+        if deg < max(1, len(pts) / 3.0):
+            continue                       # yüz parçaya oturmuyor
         g = GProp_GProps()
         BRepGProp.SurfaceProperties_s(f, g)
-        c = g.CentreOfMass()
-        if not _degiyor((c.X(), c.Y(), c.Z()), parca_sh, DEGME_TOL):
-            continue                       # yüzün ortası parçada değil
         if en is None or g.Mass() > en[0]:
             ax = s.Plane().Axis()
             p, n = ax.Location(), ax.Direction()
             en = (g.Mass(), (p.X(), p.Y(), p.Z()), (n.X(), n.Y(), n.Z()))
     return None if en is None else en[1:]
-
-
-_SINIF_ONB = {}
-
-
-def _degiyor(p, sh, tol):
-    """p, katının yüzeyine tol'dan yakın (ya da içinde) mı. Nokta
-    sınıflayıcı katı başına bir kez kurulur."""
-    from OCP.BRepClass3d import BRepClass3d_SolidClassifier
-    from OCP.TopAbs import TopAbs_OUT
-    from OCP.gp import gp_Pnt
-    c = _SINIF_ONB.get(id(sh))
-    if c is None or c[0] is not sh:
-        c = _SINIF_ONB[id(sh)] = (sh, BRepClass3d_SolidClassifier(sh))
-    c[1].Perform(gp_Pnt(*p), tol)
-    return c[1].State() != TopAbs_OUT
 
 
 def _hat_yuzleri(sh, k, u, tol):
@@ -365,6 +381,50 @@ def _hat_yuzleri(sh, k, u, tol):
         if t0 <= t1:
             out.append((BRep_Tool.Surface_s(f), BRepTopAdaptor_FClass2d(f, 0.05)))
     return out
+
+
+def _kutu_yuzleri(sh, kutu, tol):
+    """Katının, verilen kutuya tol'dan yakın yüzleri: [(yüzey, sınıflayıcı)]."""
+    from OCP.BRep import BRep_Tool
+    from OCP.BRepTopAdaptor import BRepTopAdaptor_FClass2d
+    from OCP.TopAbs import TopAbs_FACE
+    from OCP.TopExp import TopExp_Explorer
+    from OCP.TopoDS import TopoDS
+    out = []
+    ex = TopExp_Explorer(sh, TopAbs_FACE)
+    while ex.More():
+        f = TopoDS.Face_s(ex.Current())
+        ex.Next()
+        if _kutu_yakin(TN._kutu(f), kutu, tol + 0.5):
+            out.append((BRep_Tool.Surface_s(f), BRepTopAdaptor_FClass2d(f, 0.05)))
+    return out
+
+
+def _bosluk(dikis_sh, parca_sh, en_cok):
+    """Dikişin köşelerinin parça yüzeyine en küçük uzaklığı (en_cok'a
+    kadar; daha uzaksa None). CAD'de dikiş parçaya tam oturtulmamışsa
+    boşluk budur."""
+    from OCP.BRep import BRep_Tool
+    from OCP.GeomAPI import GeomAPI_ProjectPointOnSurf
+    from OCP.TopAbs import TopAbs_OUT, TopAbs_VERTEX
+    from OCP.TopExp import TopExp_Explorer
+    from OCP.TopoDS import TopoDS
+    from OCP.gp import gp_Pnt2d
+    yz = _kutu_yuzleri(parca_sh, TN._kutu(dikis_sh), en_cok)
+    en = None
+    ex = TopExp_Explorer(dikis_sh, TopAbs_VERTEX)
+    while ex.More():
+        q = BRep_Tool.Pnt_s(TopoDS.Vertex_s(ex.Current()))
+        ex.Next()
+        for srf, cls in yz:
+            pr = GeomAPI_ProjectPointOnSurf(q, srf)
+            if pr.NbPoints() == 0 or pr.LowerDistance() > en_cok:
+                continue
+            u_, v_ = pr.LowerDistanceParameters()
+            if cls.Perform(gp_Pnt2d(u_, v_)) != TopAbs_OUT:
+                d_ = pr.LowerDistance()
+                en = d_ if en is None else min(en, d_)
+    return en
 
 
 def _yuzeyde(p, yuzler, tol):
@@ -416,9 +476,26 @@ def konum_hesapla(d, parca_sh):
     uçtan dikiş başına mesafe döner: {"deger", "uc" (3B), "bas" (3B)};
     uçtan başlıyorsa deger 0; iki parçalı değilse ya da ölçülemezse None."""
     import numpy as np
+    if len(parca_sh) > 2:
+        # üçüncü parça dikişin ucuna değiyor olabilir: bacağı OTURAN iki
+        # parça birleştirilen parçalardır; iki taneden fazlaysa belirsiz
+        bc = [(_bacak(d["sh"], sh), sh) for sh in parca_sh]
+        bc = [t for t in bc if t[0] is not None]
+        if len(bc) != 2:
+            return None
+        parca_sh = [sh for _b, sh in bc]
     if len(parca_sh) != 2:
         return None
     bc = [_bacak(d["sh"], sh) for sh in parca_sh]
+    bosluk = 0.0
+    for i_, sh in enumerate(parca_sh):
+        if bc[i_] is None:
+            # CAD boşluğu: dikiş parçaya 0,27 mm uzak çizilmiş olabilir;
+            # ölçülen boşluk kadar payla bir kez daha (en çok BOSLUK_TOL)
+            g_ = _bosluk(d["sh"], sh, BOSLUK_TOL)
+            if g_ is not None:
+                bosluk = max(bosluk, g_)
+                bc[i_] = _bacak(d["sh"], sh, g_ + DEGME_TOL)
     if any(b is None for b in bc):
         return None
     (pa, na), (pb, nb) = [(np.array(p), np.array(n)) for p, n in bc]
@@ -439,7 +516,7 @@ def konum_hesapla(d, parca_sh):
     w1 = float((np.array(d["p1"]) - k) @ u)
     w0, w1 = min(w0, w1), max(w0, w1)
     tm = (w0 + w1) / 2.0
-    tol = 0.3                              # kaynakta alt-mm hassasiyet aranmaz
+    tol = 0.3 + bosluk                     # kaynakta alt-mm hassasiyet aranmaz
     yz = [_hat_yuzleri(sh, k, u, tol) for sh in parca_sh]
 
     def ic(t):
@@ -471,27 +548,110 @@ def konum_hesapla(d, parca_sh):
     return {"deger": XL.tam(v), "uc": tuple(k + u * uc), "bas": tuple(k + u * bas)}
 
 
-def _konum_olcusu(msp, R, d, h):
-    """Kenardan dikiş başına ölçü (kâğıtta; yazı gerçek mm)."""
-    k = d.get("konum")
-    if not k or not k.get("uc") or not k.get("gorunur", True):
-        return                             # değer listede kalır
-    c = abs(sum(x * y for x, y in zip(d["yon"], R.goz)))
-    # Dik görünüşte eğik eksen boyu kısaltır. İZOMETRİKTE ölçü eksenin
-    # izdüşümü boyunca çizilir, üstünde GERÇEK değer yazar (ISO 128-30
-    # aksonometrik ölçülendirme); yalnız bakışa neredeyse dik eksen olmaz.
+ZINCIR_TOL = 1.5           # mm: sıralı kaynakların eksenleri bu kadar içinde aynı çizgi
+KUCUK_URUN = 300.0         # mm: gabarisi bundan küçük grupta resimde konum ölçüsü yok
+
+
+def zincirler(dikisler):
+    """SIRALI KAYNAKLAR: aynı parçaları AYNI EKSEN üzerinde art arda
+    birleştiren kaynaklar (iki sacın uzun birleşiminde 40 mm kaynak,
+    100 mm boşluk, 40 mm kaynak ...). Döner: [[dikiş, ...]] (eksen
+    boyunca sıralı, en az iki).
+
+    Kullanıcı: "çoğu kaynağın yeri zaten belli (parçanın kesim yerinde, ya
+    da yarıkta, köşede); ölçü gereksiz. İki parça uzunlamasına ya da
+    genişlemesine art arda kaynaklanıyorsa pozisyon önemli: başlangıç
+    ölçüsü (tam kenardan / köşeden başlamıyorsa) ve ara ölçüler." Tek
+    duran kaynağa bu yüzden konum ölçüsü verilmez.
+
+    Aynı eksen: yönler paralel, eksenler 1,5 mm içinde aynı çizgi ve
+    eksen boyunca ÜST ÜSTE BİNMİYORLAR. Bir sacın iki yüzündeki yan yana
+    kaynaklar (eksenleri sac kalınlığı kadar ayrık, boyları aynı aralıkta)
+    zincir değildir; ilk denemede öyle sayılıp "K2 + 0" yazılıyordu."""
+    kume = {}
+    for d in dikisler:
+        if len(d.get("degen") or ()) >= 2:
+            kume.setdefault(frozenset(d["degen"]), []).append(d)
+    out = []
+    for ds in kume.values():
+        ata = list(range(len(ds)))
+
+        def bul(i):
+            while ata[i] != i:
+                ata[i] = ata[ata[i]]
+                i = ata[i]
+            return i
+        def aralik(d, u, o):
+            t = [sum((p[k] - o[k]) * u[k] for k in range(3)) for p in (d["p0"], d["p1"])]
+            return min(t), max(t)
+        for i, a in enumerate(ds):
+            for j in range(i + 1, len(ds)):
+                b = ds[j]
+                if abs(sum(a["yon"][k] * b["yon"][k] for k in range(3))) < 0.99:
+                    continue
+                v = [b["orta"][k] - a["orta"][k] for k in range(3)]
+                t = sum(v[k] * a["yon"][k] for k in range(3))
+                r = math.sqrt(max(0.0, sum(x * x for x in v) - t * t))
+                if r > ZINCIR_TOL:
+                    continue
+                (a0, a1), (b0, b1) = aralik(a, a["yon"], a["orta"]), aralik(b, a["yon"], a["orta"])
+                if min(a1, b1) - max(a0, b0) > -1.0:
+                    continue               # üst üste biniyor: yan yana kaynak
+                ata[bul(j)] = bul(i)
+        gr = {}
+        for i, d in enumerate(ds):
+            gr.setdefault(bul(i), []).append(d)
+        for z in gr.values():
+            if len(z) < 2:
+                continue
+            u = z[0]["yon"]
+            o = z[0]["orta"]
+
+            def t_(p):
+                return sum((p[k] - o[k]) * u[k] for k in range(3))
+            z.sort(key=lambda d: t_(d["orta"]))
+            out.append(z)
+    return out
+
+
+def _zincir_ara(z):
+    """Zincir eksen boyunca sıralıyken her kaynağın başı/sonu ve bir
+    öncekiyle arası (tam mm). Kaynağın p0'ı zincir yönünde BAŞI olur."""
+    u = z[0]["yon"]
+    if sum((z[-1]["orta"][k] - z[0]["orta"][k]) * u[k] for k in range(3)) < 0:
+        u = tuple(-x for x in u)
+    o = z[0]["orta"]
+
+    def t_(p):
+        return sum((p[k] - o[k]) * u[k] for k in range(3))
+    for d in z:
+        if t_(d["p1"]) < t_(d["p0"]):
+            d["p0"], d["p1"] = d["p1"], d["p0"]
+    for i, d in enumerate(z):
+        d["zincir_sira"] = i
+        d["ara"] = None
+        if i:
+            on = z[i - 1]
+            g = max(0.0, t_(d["p0"]) - t_(on["p1"]))
+            d["ara"] = {"deger": XL.tam(g), "a": on["p1"], "b": d["p0"], "onceki": on}
+
+
+def _olcu_ciz(msp, R, a3, b3, deger, yon, h):
+    """Eksen boyunca ölçü (kâğıtta; yazı gerçek mm). Çizilemiyorsa False:
+    eksen bakışa eğik (dik görünüşte boy kısalır) ya da uç pencere dışı."""
+    c = abs(sum(x * y for x, y in zip(yon, R.goz)))
     if c > (0.9 if R.gad in ISO_GOR else 0.25):
-        return
-    if R.kirpik:                           # detay: ölçünün ucu pencerede olmalı
+        return False
+    if R.kirpik:
         x0, y0, x1, y1 = R.kutu
-        for p in (k["uc"], k["bas"]):
+        for p in (a3, b3):
             q = _izdusum(p, R.goz, R.xr)
             if not (x0 <= q[0] <= x1 and y0 <= q[1] <= y1):
-                return                     # değer listede kalır
-    a, b = R.p3(k["uc"]), R.p3(k["bas"])
+                return False
+    a, b = R.p3(a3), R.p3(b3)
     L = math.dist(a, b)
     if L < 1.5:
-        return
+        return False
     ux, uy = (b[0] - a[0]) / L, (b[1] - a[1]) / L
     nx, ny = -uy, ux
     if ny < 0 or (abs(ny) < 1e-9 and nx < 0):
@@ -510,12 +670,11 @@ def _konum_olcusu(msp, R, d, h):
         msp.add_solid([p, (p[0] + ok * tx + 0.3 * ok * nx, p[1] + ok * ty + 0.3 * ok * ny),
                        (p[0] + ok * tx - 0.3 * ok * nx, p[1] + ok * ty - 0.3 * ok * ny)],
                       dxfattribs=kat)
-    t = str(XL.tam(k["deger"]))
     ang = math.degrees(math.atan2(uy, ux))
     if ang > 90 or ang <= -90:
         ang -= 180 if ang > 0 else -180
     mx, my = (a2[0] + b2[0]) / 2, (a2[1] + b2[1]) / 2
-    e = _yaz(msp, t, mx + nx * 0.5 * h, my + ny * 0.5 * h, h, kat="OLCU")
+    e = _yaz(msp, str(deger), mx + nx * 0.5 * h, my + ny * 0.5 * h, h, kat="OLCU")
     try:
         from ezdxf.enums import TextEntityAlignment
         e.set_placement((mx + nx * 0.5 * h, my + ny * 0.5 * h),
@@ -523,6 +682,22 @@ def _konum_olcusu(msp, R, d, h):
     except Exception:
         pass
     e.dxf.rotation = ang
+    return True
+
+
+def _konum_olcusu(msp, R, d, h, bu_detay=()):
+    """Sıralı kaynağın ölçüleri: zincirin ilk kaynağına kenardan başlangıç
+    (kenardan / köşeden başlıyorsa yok), sonrakilere bir öncekiyle ARA.
+    Ara, iki kaynak da aynı detaydaysa çizilir; değil ise listededir."""
+    if d.get("_olcusuz"):
+        return
+    r = d.get("ara")
+    if r and any(x is r["onceki"] for x in bu_detay):
+        _olcu_ciz(msp, R, r["a"], r["b"], r["deger"], d["yon"], h)
+    k = d.get("konum")
+    if not k or not k.get("uc") or not k.get("gorunur", True):
+        return
+    _olcu_ciz(msp, R, k["uc"], k["bas"], XL.tam(k["deger"]), d["yon"], h)
 
 
 # ------------------------------------------------------------ görünürlük
@@ -636,7 +811,7 @@ YONLER = ("ON", "UST", "SAG", "ARKA", "SOL", "ALT", "ISO1", "ISO2", "ISO3", "ISO
 GENEL = ("ISO1", "ISO3", "ISO5", "ISO7")
 ANA = ("ON", "UST", "SAG", "ISO1")
 DETAY_EN_COK = 8          # bir detay görünüşünde en çok dikiş
-TABLO_BAS = ("K", "tip", "a", "z", "boy", "kenardan", "başlangıç (x; y; z)",
+TABLO_BAS = ("K", "tip", "a", "z", "boy", "konum", "başlangıç (x; y; z)",
              "bitiş (x; y; z)", "birleştirdiği", "detay / görünüş")
 
 
@@ -741,35 +916,48 @@ def genel_gorunus(O, kutu3):
     return en[1]
 
 
-def bolgeler(dikisler, goz, xr, L):
+def bolgeler(dikisler, goz, xr, L, birlikte=()):
     """Kaynakları genel_gorunus düzleminde yakınlığa göre kümeler; küme
     sayısı harf sayısını (A..Z) aşmayana kadar bölge büyütülür. Bölgeler
-    planda soldan sağa, yukarıdan aşağı sıralı döner (A sol üstte)."""
+    planda soldan sağa, yukarıdan aşağı sıralı döner (A sol üstte).
+
+    birlikte: BÖLÜNMEYECEK kaynak listeleri (sıralı kaynak zincirleri). Ara
+    ölçüsü iki kaynak aynı detaydaysa çizilir; zincir bölgelere
+    dağılırsa ara ölçüler resimden düşüyordu."""
     for d in dikisler:
         q = _izdusum(d["orta"], goz, xr)
         d["_q"] = (q[0], q[1], 0.0)
+    birim, gordu = [], set()
+    for z in birlikte:
+        z = [d for d in z if id(d) not in gordu]
+        if z:
+            gordu.update(id(d) for d in z)
+            birim.append(z)
+    birim += [[d] for d in dikisler if id(d) not in gordu]
+
+    def mrk(g):
+        return (sum(d["_q"][0] for d in g) / len(g), sum(d["_q"][1] for d in g) / len(g), 0.0)
+    birim = [(mrk(b), b) for b in birim]
     en_cok = max(DETAY_EN_COK, math.ceil(len(dikisler) / (len(HARFLER) - 2)))
     cap = min(max(L / 6.0, 80.0), 300.0)
     while True:
-        kalan = sorted(dikisler, key=lambda d: (d["_q"][0], -d["_q"][1]))
+        kalan = sorted(birim, key=lambda t: (t[0][0], -t[0][1]))
         out = []
         while kalan:
             tohum = kalan.pop(0)
             grp = [tohum]
-            kalan.sort(key=lambda d: math.dist(d["_q"], tohum["_q"]))
-            while kalan and len(grp) < en_cok:
-                d = kalan[0]
-                if max(math.dist(d["_q"], g["_q"]) for g in grp) > cap:
+            kalan.sort(key=lambda t: math.dist(t[0], tohum[0]))
+            while kalan and sum(len(b) for _, b in grp) + len(kalan[0][1]) <= en_cok:
+                m, _b = kalan[0]
+                if max(math.dist(m, g[0]) for g in grp) > cap:
                     break
                 grp.append(kalan.pop(0))
-            out.append(grp)
+            out.append([d for _, b in grp for d in b])
         if len(out) <= len(HARFLER) or cap > 4 * L:
             break
         cap *= 1.25
         en_cok += 1
     # okuma sırası: planda yukarıdan aşağı satırlar, satırda soldan sağa
-    def mrk(g):
-        return (sum(d["_q"][0] for d in g) / len(g), sum(d["_q"][1] for d in g) / len(g))
     ys = sorted(mrk(g)[1] for g in out)
     bant = max(cap, (ys[-1] - ys[0]) / 4.0 if ys else 1.0)
     out.sort(key=lambda g: (-round(mrk(g)[1] / bant), mrk(g)[0]))
@@ -895,7 +1083,7 @@ def _etiketle(msp, R, dikisler, h):
             x_dirsek = (x1 + 4 * h) if taraf > 0 else (x0 - 4 * h)
             _sembol(msp, q, (x_dirsek, y), taraf, d, h)
     for d in dikisler:
-        _konum_olcusu(msp, R, d, h)
+        _konum_olcusu(msp, R, d, h, dikisler)
 
 
 def _tablo_ciz(msp, satirlar, x, y_ust, h):
@@ -920,6 +1108,21 @@ def _tablo_ciz(msp, satirlar, x, y_ust, h):
         msp.add_line((xx, y_ust), (xx, y_ust - len(satirlar) * sat_h), dxfattribs=kat)
     msp.add_line((x, y_ust), (x, y_ust - len(satirlar) * sat_h), dxfattribs=kat)
     return W, len(satirlar) * sat_h
+
+
+def _konum_yazisi(d):
+    """Listede konum: tek duran kaynakta "-" (yeri parçadan belli);
+    sıralı kaynakta ilk için kenardan başlangıç, sonrakiler için
+    bir öncekiyle ara."""
+    r = d.get("ara")
+    if r:
+        return f"{r['onceki']['no']} + {XL.tr(r['deger'], 0)}"
+    if "zincir_sira" in d:
+        k = d.get("konum") or {}
+        if k.get("deger") is None:
+            return "?"
+        return "kenardan " + XL.tr(XL.tam(k["deger"]), 0) if k["deger"] else "kenardan"
+    return "-"
 
 
 def kaynak_resmi(O, kayit, komp, grup, satirlar, yol, P=None, log=print,
@@ -1020,7 +1223,8 @@ def kaynak_resmi(O, kayit, komp, grup, satirlar, yol, P=None, log=print,
     plan_gad = genel_gorunus(O, gk)
     goz_p, xr_p = _gorunus(O, plan_gad)
     adlar = iter(list(HARFLER) + [f"{a}{b}" for a in HARFLER for b in HARFLER])
-    for bolge in bolgeler(dikisler, goz_p, xr_p, L):
+    zin = zincirler(dikisler)
+    for bolge in bolgeler(dikisler, goz_p, xr_p, L, zin):
         harf = next(adlar)
         kb = TN._kutu(_bilesik([d["sh"] for d in bolge]))
         pay = max(15.0, 0.25 * max(kb[3] - kb[0], kb[4] - kb[1], kb[5] - kb[2]))
@@ -1065,12 +1269,25 @@ def kaynak_resmi(O, kayit, komp, grup, satirlar, yol, P=None, log=print,
         if ilerleme:
             ilerleme(min(1.0, max(0.0, oran)))
     adim(0.3)
+    kucuk = max(gk[3] - gk[0], gk[4] - gk[1], gk[5] - gk[2]) < KUCUK_URUN
+    for z in zin:
+        # zincirin BAŞI, kenara yakın ucudur: iki uçtan da konum ölçülür
+        uclar = []
+        for d in (z[0], z[-1]):
+            try:
+                uclar.append((konum_hesapla(d, [kayit[j][1] for j in d["degen"]]), d))
+            except Exception:
+                uclar.append((None, d))
+        var = [(k, d) for k, d in uclar if k is not None]
+        if var and min(var, key=lambda t: t[0]["deger"])[1] is z[-1]:
+            z.reverse()
+        _zincir_ara(z)
+        bas = next((k for k, d in uclar if d is z[0]), None)
+        z[0]["konum"] = bas if bas is not None else {"deger": None}
     for n, d in enumerate(dikisler):
         adim(0.3 + 0.3 * n / max(1, len(dikisler)))
-        try:
-            d["konum"] = konum_hesapla(d, [kayit[j][1] for j in d["degen"]])
-        except Exception:
-            d["konum"] = None
+        d.setdefault("konum", None)
+        d["_olcusuz"] = kucuk
         k = d["konum"] or {}
         if k.get("bas") and math.dist(k["bas"], d["p1"]) < math.dist(k["bas"], d["p0"]):
             d["p0"], d["p1"] = d["p1"], d["p0"]     # başlangıç = ölçülen uç
@@ -1098,7 +1315,7 @@ def kaynak_resmi(O, kayit, komp, grup, satirlar, yol, P=None, log=print,
                     str(XL.tam(o["a_mm"])) if o.get("a_mm") else "-",
                     str(XL.tam(z)) if z else "-",
                     XL.tr(XL.tam(o["boy_mm"]), 0) if o.get("boy_mm") else "-",
-                    XL.tr(XL.tam(d["konum"]["deger"]), 0) if d.get("konum") else "?",
+                    _konum_yazisi(d),
                     kk_(d["p0"]), kk_(d["p1"]), birl, yer))
     ana_r = [_Resim(O, parca_sh, [d["sh"] for d in dikisler], g) for g in ana]
     det_r = []

@@ -459,8 +459,8 @@ kullanıcıyla denenip onaylandı:
      bölgeler büyütülür (250 dikişli şasi 23 bölge).
    - Az bölgeli grupta (6'ya kadar) dört izometrik tek sayfadadır; dikiş
      listesi de kısaysa (10 satıra kadar) bu sayfanın üstündedir.
-2. **Kaynak listesi:** K no, tip, a, z, boy, **kenardan** ve başlangıç /
-   bitiş koordinatları. Koordinatlar grubun sınır kutusunun en küçük
+2. **Kaynak listesi:** K no, tip, a, z, boy, **konum** (`-`,
+   `kenardan 20`, `K8 + 51`; aşağıda) ve başlangıç / bitiş koordinatları. Koordinatlar grubun sınır kutusunun en küçük
    köşesine göre, mm'dir. Listede ayrıca birleştirdiği pozlar
    (P12 + P31) ve dikişin gösterildiği detay yer alır. Resim ne kadar
    kalabalık olursa olsun yer ve ölçü buradan kesin okunur.
@@ -472,8 +472,10 @@ kullanıcıyla denenip onaylandı:
      dışta mı olduğu anlaşılmaz. Dikişi gören bir izometrik varsa detay
      ondan çizilir (sekiz izometrik: üstten ve alttan, dört köşe). Hiçbir
      izometrikte görünmeyen dikiş dik görünüşe kalır.
-   - Konum ölçüsü izometrikte de verilir: dikiş ekseni boyunca çizilir,
-     üstünde **gerçek** değer yazar.
+   - Sıralı kaynağın ölçüleri izometrikte de verilir: dikiş ekseni
+     boyunca çizilir, üstünde **gerçek** değer yazar. Bir zincirin
+     kaynakları bölgelere bölünmez, aynı detaya düşer; aralar böylece
+     resimde görünür.
 
 **Ölçek serbesttir.** Kaynak resminde ölçek standart olmak zorunda
 değil; görünüş sayfayı dolduracak tam sayılı ölçekle çizilir (1:17,
@@ -497,21 +499,39 @@ işaretlenir.
 - uçtaki balonda K numarası vardır;
 - çevre kaynağında kırılmada daire, puntada daire sembolü kullanılır.
 
-**Konum ölçüsü (kenardan).** Dikişin yeri, dikişin **kök çizgisi**
-üzerinde ölçülür. Kök çizgisi, dikişin iki parçaya oturan bacak
-yüzlerinin kesişimidir. Bu çizgi boyunca iki parçanın da yüzeyinin
-sürdüğü aralık (birleşme çizgisi) 0,01 mm'ye bölünerek bulunur.
-- Dikiş bir uca 2 mm'den yakınsa **uçtan başlar** (0).
-- Değilse **yakın uçtan dikiş başına** mesafe tam mm yazılır.
-  Resimde bu değer ölçü çizgisiyle, listede `kenardan` sütununda
-  görünür.
-- Ölçü çizgisi yalnız dikiş görünüş düzlemine paralelken çizilir.
-  Eğik görünüşte boy kısa görünür ve yanıltır; o zaman değer yalnız
-  listededir. Ölçünün iki ucu da görünmüyorsa (önde bir parça varsa ya
-  da uç detay penceresinin dışındaysa) çizilmez; değer yine listededir.
-- Kök çizgisi dikişin uçlarından geçmiyorsa (bacak yüzü seçilemediyse)
-  sonuç verilmez: `?`.
-- Tek parçaya değen dikişte kök çizgisi yoktur: `?`.
+**Konum ölçüsü yalnız SIRALI kaynakta.** Kaynakların çoğunun yeri
+zaten bellidir: parçanın kesim yerinde, yarıkta, köşede, çıkıntının ya
+da ayağın kenarında. Oraya ölçü vermek gereksizdir; **tek duran
+kaynağa konum ölçüsü konmaz**, listede konumu `-`'dir. Ölçü, iki
+parçanın **boyuna ya da enine art arda** kaynaklandığı yerde önemlidir
+(sıralı / aralıklı kaynak):
+
+- **Zincir:** aynı parçaları, **aynı eksen** üzerinde (eksenler 1,5 mm
+  içinde) art arda birleştiren, eksen boyunca üst üste binmeyen
+  kaynaklar. Bir sacın iki yüzündeki yan yana kaynaklar zincir değildir.
+- Zincirin **ilk** kaynağına kenardan başlangıç: tam kenardan ya da
+  köşeden başlıyorsa (2 mm'den yakın) ölçü yok, listede `kenardan`;
+  değilse `kenardan 20`. Zincirin başı, kenara yakın olan ucudur.
+- **Sonraki** kaynaklara bir öncekiyle **ara**: listede `K8 + 51`
+  (K8'in bitiminden 51 mm sonra başlar), resimde ölçü çizgisi.
+- **Küçük üründe** (grubun en büyük ölçüsü 300 mm'den küçük) resimde
+  konum ölçüsü yoktur; parçanın nereye takılacağı zaten bellidir.
+  Değer listededir.
+
+Başlangıç ölçüsü dikişin **kök çizgisi** üzerinde ölçülür. Kök
+çizgisi, dikişin iki parçaya oturan bacak yüzlerinin kesişimidir; bu
+çizgi boyunca iki parçanın da yüzeyinin sürdüğü aralık (birleşme
+çizgisi) ölçülür.
+- Bacak yüzü yüzün 25 noktasından denetlenir: ince sacın kenarındaki
+  dikişte bacak sacdan geniştir, ortası sacın dışına düşer.
+- CAD'de dikiş parçaya birkaç onda mm boşlukla çizilmişse (şasede
+  0,27 mm) ölçülen boşluk kadar pay verilir (en çok 2,5 mm).
+- Üç parçaya değen dikişte bacağı oturan iki parça kullanılır.
+- Ölçü çizgisi dik görünüşte yalnız dikiş görünüş düzlemine
+  paralelken çizilir; izometrikte eksen boyunca. Ucu detay penceresinin
+  dışındaysa çizilmez; değer yine listededir.
+- Bacak yüzü bulunamazsa ya da kök çizgisi dikişin uçlarından
+  geçmiyorsa başlangıç verilmez: `?`. Ara ölçüleri yine verilir.
 
 Kaynak YÖNTEMİ ve dikişin hangi tarafa yapılacağı (ok tarafı / karşı
 taraf) geometriden anlaşılmaz. Sembol ok tarafına çizilir.

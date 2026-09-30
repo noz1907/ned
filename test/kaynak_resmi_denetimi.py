@@ -136,12 +136,20 @@ def main():
           d1 and d1["olcu"].get("a_mm"))
     dogru("D1 boy 40", d1 and abs(d1["olcu"]["boy_mm"] - 40) < 0.1,
           d1 and d1["olcu"].get("boy_mm"))
-    dogru("D1 kenardan 20", d1 and d1.get("konum") and d1["konum"]["deger"] == 20,
-          d1 and d1.get("konum"))
-    dogru("D2 kenardan başlıyor (0)", d2 and d2.get("konum") and d2["konum"]["deger"] == 0,
-          d2 and d2.get("konum"))
-    dogru("D1 başlangıcı ölçülen uç (y = 20)", d1 and abs(d1["p0"][1] - 20) < 0.1,
-          d1 and d1["p0"])
+    # TEK DURAN kaynağa konum ölçüsü verilmez: yeri parçadan belli
+    # (kullanıcı). Konum hesabının kendisi yine doğru olmalı.
+    dogru("tek duran kaynakta konum yok", d1 and d1.get("konum") is None
+          and d2 and d2.get("konum") is None, (d1 and d1.get("konum"), d2 and d2.get("konum")))
+    dogru("listede konum '-'", d1 and KR._konum_yazisi(d1) == "-", d1 and KR._konum_yazisi(d1))
+    for d_, bek in ((d1, 20), (d2, 0)):
+        if not d_:
+            continue
+        s_ = kayit[d_["j"]][1]
+        p0, p1, o_, y_ = KR.dikis_ekseni(s_)
+        k_ = KR.konum_hesapla({"sh": s_, "olcu": d_["olcu"], "p0": p0, "p1": p1,
+                               "orta": o_, "yon": y_}, [kayit[0][1], kayit[1][1]])
+        dogru(f"konum hesabı {kayit[d_['j']][0]}: kenardan {bek}",
+              k_ is not None and k_["deger"] == bek, k_)
     dogru("iki dikiş görünür", all(d["gorunur"] for d in ds), [d["gorunur"] for d in ds])
     dogru("numaralar K1, K2", sorted(d["no"] for d in ds) == ["K1", "K2"],
           [d["no"] for d in ds])
@@ -200,6 +208,60 @@ def main():
     g2 = KR.kaynakli_gruplar(k2, komp2, agac2, log=lambda t: None)
     dg = g2[0]["degen"][3] if g2 else []
     dogru("1,2 mm boşluklu dikiş iki parçaya bağlandı", sorted(dg) == [0, 1], dg)
+
+    # SIRALI KAYNAK: 400 mm dik sacın bir yanında art arda üç kaynak
+    # (y 20..60, 110..150, 200..240 -> kenardan 20, ara 50, 50), öbür
+    # yanında y 20..60'ta bir kaynak (yan yana: zincire girmez)
+    zk = [("TABAN", kutu(0, 0, 0, 200, 400, 5)), ("DIK", kutu(50, 0, 5, 55, 400, 85)),
+          ("Z1", ucgen_prizma((55, 5), (59, 5), (55, 9), 20, 60)),
+          ("Z2", ucgen_prizma((55, 5), (59, 5), (55, 9), 110, 150)),
+          ("Z3", ucgen_prizma((55, 5), (59, 5), (55, 9), 200, 240)),
+          ("YAN", ucgen_prizma((50, 5), (46, 5), (50, 9), 20, 60))]
+    zkomp = [{"kod": ad, "ad": ad, "indeks": [i], "adet": 1, "hacim_mm3": 1.0,
+              "sinif": "parca" if i < 2 else "kaynak", "tip": ""}
+             for i, (ad, _) in enumerate(zk)]
+    zagac = {"ad": "Z", "montaj": True, "alt": [
+        {"ad": ad, "katilar": [i], "tum": [i], "alt": []} for i, (ad, _) in enumerate(zk)]}
+    zg = KR.kaynakli_gruplar(zk, zkomp, zagac, log=lambda t: None)
+    zsat = [{"kod": "TABAN", "poz": 1}, {"kod": "DIK", "poz": 2}]
+    yakala = []
+    KR.pdf_yaz = lambda sayfalar, yol: yakala.extend(sayfalar)
+    try:
+        zd = KR.kaynak_resmi(O, zk, zkomp, zg[0], zsat, "z_kaynak.pdf")
+    finally:
+        KR.pdf_yaz = asil
+    ad_ = {zk[d["j"]][0]: d for d in zd}
+    z1, z2, z3, yan = (ad_.get(a) for a in ("Z1", "Z2", "Z3", "YAN"))
+    dogru("zincirin ilki kenardan 20", z1 and (z1.get("konum") or {}).get("deger") == 20,
+          z1 and z1.get("konum"))
+    dogru("ikinci: birinciyle ara 50", z2 and z2.get("ara") and z2["ara"]["deger"] == 50
+          and z2["ara"]["onceki"] is z1, z2 and z2.get("ara"))
+    dogru("üçüncü: ikinciyle ara 50", z3 and z3.get("ara") and z3["ara"]["deger"] == 50
+          and z3["ara"]["onceki"] is z2, z3 and z3.get("ara"))
+    dogru("listede 'kenardan 20' ve 'K + 50'",
+          z1 and KR._konum_yazisi(z1) == "kenardan 20"
+          and KR._konum_yazisi(z2) == f"{z1['no']} + 50", z1 and (KR._konum_yazisi(z1),
+                                                               KR._konum_yazisi(z2)))
+    dogru("öbür yüzdeki yan yana kaynak zincire girmedi",
+          yan and "zincir_sira" not in yan and yan.get("konum") is None, yan and yan.get("ara"))
+    olcu = [e.dxf.text for doc in yakala for e in doc.modelspace().query("TEXT")
+            if e.dxf.layer == "OLCU"]
+    dogru("resimde başlangıç (20) ve ara (50) ölçüsü", "20" in olcu and "50" in olcu, olcu)
+    # küçük üründe resimde ölçü yok, listede var
+    eski = KR.KUCUK_URUN
+    KR.KUCUK_URUN = 10000.0
+    yakala.clear()
+    KR.pdf_yaz = lambda sayfalar, yol: yakala.extend(sayfalar)
+    try:
+        zd2 = KR.kaynak_resmi(O, zk, zkomp, zg[0], zsat, "z_kaynak.pdf")
+    finally:
+        KR.pdf_yaz = asil
+        KR.KUCUK_URUN = eski
+    olcu = [e.dxf.text for doc in yakala for e in doc.modelspace().query("TEXT")
+            if e.dxf.layer == "OLCU" and e.dxf.text in ("20", "50")]
+    dogru("küçük üründe resimde konum ölçüsü yok", not olcu, olcu)
+    dogru("küçük üründe listede yine var",
+          any(KR._konum_yazisi(d).endswith("+ 50") for d in zd2))
 
     # kaynakta ondalık yok: 2,7 -> 3, 1,77 -> 2, 24,6 -> 25
     import pf3_olcu as O

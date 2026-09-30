@@ -1,6 +1,6 @@
 Pi3D  –  3B modelden parça listesi ve teknik resim
 
-Sürüm   : v1.0.3  (29.09.2026)
+Sürüm   : v1.0.4  (30.09.2026)
 Kaynak  : github.com/noz1907/ned   dal: claude/fikstur-parca-stp-57hwc1
 
 KURULUM
@@ -122,6 +122,20 @@ BU SÜRÜMDE NE VAR
       kaynakları üç ayrı resme dağılıyordu, biri tek başına "KASA
       MONTAJ" resmi oluyordu; artık TELEVRE MONTAJ resmindeler (travers
       o montajda).
+
+  v1.0.4:
+    - KAYNAK KONUM ÖLÇÜSÜ YALNIZ SIRALI KAYNAKTA (kullanıcıyla denenip
+      onaylandı). Tek duran kaynağın yeri parçanın kesiminden / yarığından /
+      köşesinden belli: ölçü yok, listede "-". Aynı parçaları aynı eksende
+      art arda birleştiren kaynaklarda ilkine kenardan başlangıç (tam
+      kenardan / köşeden başlıyorsa yok), sonrakilere bir öncekiyle ARA
+      ("K8 + 51"). Zincir bölgelere bölünmez. Küçük üründe (< 300 mm)
+      resimde ölçü yok, listede var. Liste sütunu "kenardan" -> "konum".
+    - konum hesabı: bacak yüzü 25 noktadan (ince sac kenarı), CAD
+      boşluğu payı, üç parçaya değen dikişte bacağı oturan iki parça.
+      Şasede zincir başlarındaki "?" çoğu kalktı.
+    - BOM sayfası: ARA kutusu (kod / tanım / poz; Türkçe harf farkı yok,
+      Enter sıradaki) ve SEÇİLİ PARÇANIN küçük izometrik resmi.
 
   AÇINIM = BÜKÜM RESMİ + LAZER: açınımı çıkan her parça için büküm
   resmi (ACINIM/..._acinim.dxf) ve lazer kesim (LZR/..._acinim_lzr.dxf,
