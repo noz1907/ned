@@ -492,6 +492,21 @@ dikişler). Bu durumda ikincisi o görünüşe konmaz, göründüğü başka bir
 yöne alınır. Hiçbir yönden net görünmeyen dikiş listede `(gizli)` diye
 işaretlenir.
 
+**Renkler:** dikişin kendisi **kırmızı** ve kalındır; dikişin ekseni
+ince **mavi kesikli** çizgidir. Kırmızı yalnız dikişin kendi
+çizgisidir: bir çizgi 1 mm'de bir örneklenir, noktalarının çoğu dikişin
+üstündeyse kırmızı çizilir (eskiden ortası dikişin yanından geçen uzun
+sac kenarı baştan sona kırmızı oluyor, dikiş onun içinde
+kayboluyordu).
+
+**Etiketler üst üste binmez, parçaya karışmaz:** semboller görünüşün
+iki yanında, görünüşten 6 yazı boyu uzakta bir sütunda durur.
+Yan yana (kâğıtta 30 mm içinde) ve özellikleri aynı (tip, a, boy)
+dikişler **tek sembol** alır; o sembolden her dikişe ayrı ok gider
+(en çok 3). Balonda numaralar `K12-K14` ya da `K3,K7` diye yazar.
+Uzaktaki aynı dikiş kendi sembolünü alır. `SİM.` notu balonun
+altındadır, parçanın üstünde değil.
+
 **Sembol (ISO 2553):**
 - ok dikişe değer, sonra kırılır ve yatay referans çizgisine bağlanır;
 - çizginin altında (ok tarafı) köşe kaynağı üçgeni vardır;

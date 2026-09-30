@@ -1,6 +1,6 @@
 Pi3D  –  3B modelden parça listesi ve teknik resim
 
-Sürüm   : v1.0.5  (30.09.2026)
+Sürüm   : v1.0.6  (30.09.2026)
 Kaynak  : github.com/noz1907/ned   dal: claude/fikstur-parca-stp-57hwc1
 
 KURULUM
@@ -142,6 +142,13 @@ BU SÜRÜMDE NE VAR
       yok, listede "kenara kadar" ("- o -" üçlüsünde yalnız ortadaki).
     - simetrik zincirler (karşılıklı kenarlar; aynı boy, ara ve yer):
       ölçüler bir kez, öbürü "SİM. K3" / resimde "SİM. K1-K3".
+
+  v1.0.6: KAYNAK RESMİ okunurluk:
+    - yan yana aynı özellikli kaynaklar tek sembol, her birine ok (en
+      çok 3); balonda "K12-K14". Etiketler parçadan uzakta (görünüşten
+      6 yazı boyu), SİM. notu balonun altında.
+    - kırmızı yalnız kaynağın kendisi (uzun sac kenarı artık kırmızı
+      değil); kaynak ekseni ince mavi kesikli.
 
   AÇINIM = BÜKÜM RESMİ + LAZER: açınımı çıkan her parça için büküm
   resmi (ACINIM/..._acinim.dxf) ve lazer kesim (LZR/..._acinim_lzr.dxf,

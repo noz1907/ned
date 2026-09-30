@@ -303,6 +303,41 @@ def main():
     dogru("resimde yalnız ortadaki ara (70) - bir kez", olcu.count("70") == 1, olcu)
     dogru("resimde SİM. notu", any(t.startswith("SİM.") for t in olcu), olcu)
 
+    # KIRMIZI yalnız dikiş: ortası dikişin yanından geçen uzun sac kenarı
+    # eskiden baştan sona kırmızıydı, dikiş içinde kayboluyordu
+    for gad in ("ISO1", "ISO3", "ON"):
+        R = KR._Resim(O, [kayit[0][1], kayit[1][1]], [kayit[2][1], kayit[3][1]], gad)
+        uz = [sum(math.dist(a, b) for a, b in zip(q, q[1:]))
+              for k_, q in R.cizgi if k_ == "KAYNAK"]
+        dogru(f"{gad}: kırmızı çizgi var, hiçbiri dikişten (40) uzun değil",
+              uz and max(uz) <= 41.0, [round(v, 1) for v in sorted(uz)[-3:]])
+    # dikiş ekseni: mavi (5), kesikli
+    doc0 = yakala[-1] if yakala else None
+    eks = [e for doc in yakala for e in doc.modelspace().query("LINE") if e.dxf.layer == "EKSEN"]
+    dogru("dikiş ekseni çizildi", len(eks) >= 6, len(eks))
+    if doc0:
+        ly = doc0.layers.get("EKSEN")
+        dogru("eksen mavi ve kesikli", ly.dxf.color == 5 and ly.dxf.linetype == "KESIK",
+              (ly.dxf.color, ly.dxf.linetype))
+    # YAN YANA AYNI ÖZELLİKLİ dikişler tek sembol, en çok 3 ok; her
+    # numara bir kez yazılır
+    balon = [e.dxf.text for doc in yakala for e in doc.modelspace().query("TEXT")
+             if e.dxf.layer == "OLCU" and e.dxf.text.startswith("K")]
+    def ac(b_):                           # "K2-K4" -> K2, K3, K4
+        out = []
+        for n in b_.split(","):
+            if "-" in n:
+                a_, z_ = (int(x.strip()[1:]) for x in n.split("-"))
+                out += [f"K{i}" for i in range(a_, z_ + 1)]
+            else:
+                out.append(n.strip())
+        return out
+    nolar = [n for b_ in balon for n in ac(b_)]
+    dogru("her dikiş numarası bir kez", sorted(nolar) == sorted(d["no"] for d in ud), balon)
+    dogru("yan yana aynı dikişler birleşti (tek sembol, birden çok ok)",
+          any(len(ac(b_)) > 1 for b_ in balon) and all(len(ac(b_)) <= 3 for b_ in balon), balon)
+    dogru("etiket birleşince sembol sayısı azaldı", len(balon) < len(ud), (len(balon), len(ud)))
+
     # kaynakta ondalık yok: 2,7 -> 3, 1,77 -> 2, 24,6 -> 25
     import pf3_olcu as O
     import pf9_excel as XL

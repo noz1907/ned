@@ -1023,19 +1023,22 @@ def _en(t, h):
     return len(str(t)) * 0.72 * h
 
 
-def _sembol(msp, q, dirsek, taraf, d, h):
+def _sembol(msp, q, dirsek, taraf, d, h, ek=(), not_=None):
     """ISO 2553 sembolü: ok (dikişe) -> kırılma -> yatay referans çizgisi;
     çizginin ALTINDA (ok tarafı) köşe kaynağı üçgeni, solunda a, sağında
     boy; kırılmada daire = çevre kaynağı; uçta K numarası balonu. Punta:
     daire sembolü."""
     kat = {"layer": "OLCU"}
     x, y = dirsek
-    msp.add_line(q, (x, y), dxfattribs=kat)
-    ang = math.atan2(y - q[1], x - q[0])
-    ok_b = 1.2 * h
-    msp.add_solid([q, (q[0] + ok_b * math.cos(ang + 0.3), q[1] + ok_b * math.sin(ang + 0.3)),
-                   (q[0] + ok_b * math.cos(ang - 0.3), q[1] + ok_b * math.sin(ang - 0.3))],
-                  dxfattribs=kat)
+    # ek: aynı özellikli yan yana dikişler [(q, d)] - tek sembol, her
+    # birine ayrı ok (kullanıcı: bilgiler üst üste binmesin)
+    for q_ in [q] + [e[0] for e in ek]:
+        msp.add_line(q_, (x, y), dxfattribs=kat)
+        ang = math.atan2(y - q_[1], x - q_[0])
+        ok_b = 1.2 * h
+        msp.add_solid([q_, (q_[0] + ok_b * math.cos(ang + 0.3), q_[1] + ok_b * math.sin(ang + 0.3)),
+                       (q_[0] + ok_b * math.cos(ang - 0.3), q_[1] + ok_b * math.sin(ang - 0.3))],
+                      dxfattribs=kat)
     o = d["olcu"]
     tip = o.get("tip") or ""
     # kaynak ölçüsü ondalıksız: a 1,77 -> a2
@@ -1056,11 +1059,48 @@ def _sembol(msp, q, dirsek, taraf, d, h):
         _yaz(msp, sol_t, xs - _en(sol_t, h) - 0.4 * h, y - 1.4 * h, h, kat="OLCU")
     if sag_t:
         _yaz(msp, sag_t, xs + 2.0 * h, y - 1.4 * h, h, kat="OLCU")
-    r = 0.45 * _en(d["no"], h) + 0.6 * h
+    no = _no_yazisi([d["no"]] + [e[1]["no"] for e in ek])
+    r = 0.45 * _en(no, h) + 0.6 * h
     bx = x2 + taraf * r
     msp.add_circle((bx, y), r, dxfattribs=kat)
-    _yaz(msp, d["no"], bx - 0.36 * _en(d["no"], h) / 0.72, y - 0.5 * h, h, kat="OLCU")
+    _yaz(msp, no, bx - 0.36 * _en(no, h) / 0.72, y - 0.5 * h, h, kat="OLCU")
+    if not_:                               # "SİM. K1-K3": balonun altında, parçadan uzakta
+        _yaz(msp, not_, bx - _en(not_, h) / 2, y - r - 1.6 * h, h, kat="OLCU")
     return abs(x2 - x) + 2 * r
+
+
+def _no_yazisi(nolar):
+    """Balondaki numaralar: ardışıksa "K12-K14", değilse "K3,K7"."""
+    try:
+        n = sorted(int(x[1:]) for x in nolar)
+    except ValueError:
+        return ",".join(nolar)
+    if len(n) > 2 and n[-1] - n[0] == len(n) - 1:
+        return f"K{n[0]}-K{n[-1]}"
+    return ",".join(f"K{v}" for v in n)
+
+
+YAN_YANA = 30.0            # kâğıtta mm: aynı özellikli dikişler bu kadar yakınsa tek sembol
+TEK_SEMBOL_EN_COK = 3      # bir sembolden en çok bu kadar ok
+
+
+def _etiket_anahtari(d):
+    o = d["olcu"]
+    tip = o.get("tip") or ""
+    return (tip.startswith("çevre"), "nokta" in tip,
+            XL.tam(o["a_mm"]) if o.get("a_mm") else None,
+            XL.tam(o["boy_mm"]) if o.get("boy_mm") else None)
+
+
+def _yogun(q, adim):
+    """Çoklu çizginin noktaları, en çok 'adim' aralıkla (düz çizgi iki
+    noktadır; ortası da denetlensin)."""
+    out = [q[0]]
+    for a, b in zip(q, q[1:]):
+        n = max(1, int(math.dist(a, b) / adim))
+        out += [(a[0] + (b[0] - a[0]) * k / n, a[1] + (b[1] - a[1]) * k / n)
+                for k in range(1, n + 1)]
+    return out
 
 
 class _Resim:
@@ -1074,15 +1114,23 @@ class _Resim:
         tum = _bilesik(list(parcalar) + list(dikis_sh))
         ken = O.hlr(tum, self.goz, self.xr, gizli=False)
         kk = O.hlr(_bilesik(dikis_sh), self.goz, self.xr, gizli=False) if dikis_sh else None
+        # Kırmızı yalnız DİKİŞİN KENDİ çizgisi. Eskiden bir çizginin yalnız
+        # ORTA noktasına bakılıyordu: ortası bir dikişin yanından geçen
+        # uzun sac kenarı baştan sona kırmızı çiziliyor, kısa dikiş onun
+        # içinde kayboluyordu (kullanıcı). Şimdi çizgi 1 mm'de bir
+        # örneklenir; noktalarının çoğu dikişin üstündeyse dikiştir.
         izk = {}
         for q in (kk or {}).get("GORUNEN", []):
-            for p in q:
+            for p in _yogun(q, 0.5):
                 izk.setdefault((round(p[0]), round(p[1])), []).append(p)
 
-        def kaynak_mi(q):
-            m = q[len(q) // 2]
+        def yakin(m):
             return any(math.dist(p, m) <= 0.3 for dx in (-1, 0, 1) for dy in (-1, 0, 1)
                        for p in izk.get((round(m[0]) + dx, round(m[1]) + dy), ()))
+
+        def kaynak_mi(q):
+            ps = _yogun(q, 1.0)
+            return sum(1 for m in ps if yakin(m)) >= 0.6 * len(ps)
         cizgi = [("KAYNAK" if izk and kaynak_mi(q) else "GORUNEN", q) for q in ken["GORUNEN"]]
         if pencere:
             x0, y0, x1, y1 = pencere
@@ -1122,21 +1170,37 @@ def _etiketle(msp, R, dikisler, h):
     x0, y0 = R.p(R.kutu[:2])
     x1, y1 = R.p(R.kutu[2:])
     orta = (x0 + x1) / 2
+    # dikiş EKSENİ: ince, kesikli, mavi (dikişin kendisi kırmızı kalsın)
+    for d in dikisler:
+        msp.add_line(R.p3(d["p0"]), R.p3(d["p1"]), dxfattribs={"layer": "EKSEN"})
     for taraf in (-1, 1):
         ds = [(R.p3(d["ok"]), d) for d in dikisler]
         ds = [(q, d) for q, d in ds if (q[0] >= orta) == (taraf > 0)]
         ds.sort(key=lambda t: -t[0][1])
-        y_son = y1 + 3.0 * h
+        # yan yana, aynı özellikli dikişler tek sembol (en çok 3 ok);
+        # uzaktakiler ayrı sembol
+        gr = []
         for q, d in ds:
-            y = min(q[1], y_son - 3.0 * h)
+            k = _etiket_anahtari(d)
+            g = next((g for g in gr if g[0] == k and len(g[1]) < TEK_SEMBOL_EN_COK
+                      and math.dist(g[1][0][0], q) <= YAN_YANA), None)
+            if g:
+                g[1].append((q, d))
+            else:
+                gr.append((k, [(q, d)]))
+        y_son = y1 + 3.0 * h
+        for _k, uye in gr:
+            q, d = uye[0]
+            y = min(max(p[1] for p, _ in uye), y_son - 3.0 * h)
             y_son = y
-            x_dirsek = (x1 + 4 * h) if taraf > 0 else (x0 - 4 * h)
-            _sembol(msp, q, (x_dirsek, y), taraf, d, h)
+            # bilgi parçanın DIŞINDA: kırılma görünüşün kenarından 6 yazı
+            # boyu uzakta (kullanıcı: bilgi parçaya karışmasın)
+            x_dirsek = (x1 + 6 * h) if taraf > 0 else (x0 - 6 * h)
+            not_ = next((e.get("sim_not") for _q, e in uye if e.get("sim_not")
+                         and not e.get("_olcusuz")), None)
+            _sembol(msp, q, (x_dirsek, y), taraf, d, h, ek=uye[1:], not_=not_)
     for d in dikisler:
         _konum_olcusu(msp, R, d, h, dikisler)
-        if d.get("sim_not") and not d.get("_olcusuz"):
-            q = R.p3(d["orta"])
-            _yaz(msp, d["sim_not"], q[0] + 0.8 * h, q[1] + 0.8 * h, h, kat="OLCU")
 
 
 def _tablo_ciz(msp, satirlar, x, y_ust, h):
@@ -1425,10 +1489,10 @@ ANTET_Y = 18.0
 YH = 2.5                    # kâğıtta yazı yüksekliği, mm
 UCTAN_PAY = 2.0             # dikiş uca bundan yakınsa "uçtan başlar" (0)
 KISA_TABLO = 10             # bu kadar dikişe kadar tablo genel görünüş sayfasında
-ETIKET_PAY = 50.0           # görünüşün iki yanında etiket sütunu
+ETIKET_PAY = 60.0           # görünüşün iki yanında etiket sütunu
 # ISO 5455 ölçekleri (kâğıt / gerçek)
 KATMAN_RENK = {"GORUNEN": 7, "KAYNAK": 1, "OLCU": 5, "YAZI": 7, "CERCEVE": 7,
-               "DETAY": 6, "EKSEN": 6, "BOLGE": 6}
+               "DETAY": 6, "EKSEN": 5, "BOLGE": 6}
 
 
 def olcek_sec(ideal):
@@ -1459,10 +1523,12 @@ def _yeni_sayfa(O):
         doc.layers.get(kat).color = renk
     doc.layers.get("KAYNAK").dxf.lineweight = 50
     doc.layers.get("GORUNEN").dxf.lineweight = 25
-    try:
-        doc.layers.get("DETAY").dxf.linetype = "KESIK"
-    except Exception:
-        pass
+    for kat in ("DETAY", "EKSEN"):
+        try:
+            doc.layers.get(kat).dxf.linetype = "KESIK"
+        except Exception:
+            pass
+    doc.layers.get("EKSEN").dxf.lineweight = 13
     return doc
 
 

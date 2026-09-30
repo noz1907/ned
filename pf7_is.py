@@ -44,7 +44,7 @@ DURUM_DOSYASI = "pi3d_is.json"
 # PROGRAMIN SÜRÜM NUMARASI - tek yer. Ekran başlığı, rapor.md, komut
 # satırı (--surum), kaynak resmi anteti ve paket adı buradan okur.
 # Her teslim edilen pakette artırılır: büyük.küçük.düzeltme
-PI3D_SURUM = "1.0.5"
+PI3D_SURUM = "1.0.6"
 PI3D_SURUM_TARIHI = "30.09.2026"
 CIZIM_SURUMU = "2026.09.26"
 
