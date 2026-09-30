@@ -719,9 +719,14 @@ def _olcu_ciz(msp, R, a3, b3, deger, yon, h, dolu=None):
         bos = dolu is None or not any(not (kutu_[2] < k[0] or k[2] < kutu_[0]
                                            or kutu_[3] < k[1] or k[3] < kutu_[1])
                                       for k in dolu)
-        # yazı parçanın çizgisine de binmesin (kullanıcı: yazılar parçanın
+        # yazı kendi görünüşünün penceresinde kalsın (dışarı kayan ölçü
+        # komşu detayın çizgilerine / ölçülerine biniyordu - kabin koruma)
+        # ve parçanın çizgisine binmesin (kullanıcı: yazılar parçanın
         # çizimine engel olmamalı)
-        if bos and not R.cizgiye_degiyor(kutu_):
+        pa, pb = R.p(R.kutu[:2]), R.p(R.kutu[2:])
+        icinde = (pa[0] <= kutu_[0] and kutu_[2] <= pb[0]
+                  and pa[1] <= kutu_[1] and kutu_[3] <= pb[1])
+        if bos and icinde and not R.cizgiye_degiyor(kutu_):
             off = o_ * h
             if dolu is not None:
                 dolu.append(kutu_)
