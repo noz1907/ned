@@ -5631,12 +5631,21 @@ def detay_gorunusleri(msp, kenarlar, kaydir, gkutu, kayip, h, rapor=None,
             H, olcek, dc, Rd = kur
             # ölçüler: gerçek değer (dimlfac)
             _EK_OVR["dimlfac"] = 1.0 / olcek
+            kalan_ = []
             try:
                 for k in kl:
-                    if _detay_olcu(msp, k, c, dc, olcek, Rd, h, yabanci) and rapor is not None:
-                        rapor["yer_yok"] -= 1
+                    if _detay_olcu(msp, k, c, dc, olcek, Rd, h, yabanci):
+                        if rapor is not None:
+                            rapor["yer_yok"] -= 1
+                    else:
+                        kalan_.append(k)
             finally:
                 _EK_OVR.clear()
+            for k in kalan_:                   # detayda da yer yok: yanına
+                if _yanina_koy(msp, k["yon"], k["a"], k["b"], list(k["dik_a"] or []),
+                               list(k["dik_b"] or []), k.get("metin"), k["kayd"],
+                               k["dkay"], h, yabanci) and rapor is not None:
+                    rapor["yer_yok"] -= 1
             cikti.append((f"DETAY {H}", _detay_kutusu(dc, Rd, h)))
     return cikti
 
@@ -5888,9 +5897,12 @@ def _bant_detayi_kur(msp, b, en_kisa, kenarlar, kaydir, gkutu, h, harf, ust=None
     gad, k = b["gad"], b["k"]
     w, hh = k[2] - k[0], k[3] - k[1]
     L = max(max(g[2] - g[0], g[3] - g[1]) for g in gkutu.values())
-    sigan = [m for m in DETAY_OLCEK if m * w <= DETAY_BANT_EN * L and m * hh <= DETAY_BANT_EN * L]
-    if not sigan:
-        return None
+    # En küçük büyütme (2:1) HER ZAMAN olur: bant boyu bolge_sec'te zaten
+    # sınırlı, eni parçanın kısa kenarıdır. Küçük parçada bant yüksekliği
+    # 2:1'de sınırı aşıyor, hiçbir büyütme "sığmıyor", detay kurulmuyor ve
+    # ölçüler düşüyordu (kasa P47). Daha büyük büyütme sınıra bağlı.
+    sigan = [m for m in DETAY_OLCEK
+             if m == min(DETAY_OLCEK) or (m * w <= DETAY_BANT_EN * L and m * hh <= DETAY_BANT_EN * L)]
     olcek = next((m for m in sigan if m * en_kisa >= 3.5 * h), max(sigan))
     yw, yh = w * olcek / 2.0, hh * olcek / 2.0
     yer_ = _detay_serbest_kutu(msp, gkutu, yw + 6.0 * h, yh + 6.0 * h, h, ust=ust,
@@ -5903,7 +5915,7 @@ def _bant_detayi_kur(msp, b, en_kisa, kenarlar, kaydir, gkutu, h, harf, ust=None
     dc = yer_
     c = ((k[0] + k[2]) / 2.0, (k[1] + k[3]) / 2.0)
     _yazidan_kacan_kutu(msp, k, h)
-    _yaz(msp, H, k[0] + 0.3 * h, k[3] + 0.4 * h, 1.3 * h)
+    _bant_harfi(msp, k, H, h)
     dx, dy = kaydir[gad]
     for kat in ("GORUNEN", "GIZLI"):
         for p in kenarlar[gad].get(kat, []):
@@ -6006,13 +6018,19 @@ def bolge_detaylari(msp, bolgeler, bolge_olcu, kenarlar, kaydir, gkutu, h,
         H, olcek, dc, (yw, yh) = kur
         c = ((b["k"][0] + b["k"][2]) / 2.0, (b["k"][1] + b["k"][3]) / 2.0)
         _EK_OVR["dimlfac"] = 1.0 / olcek
+        kalan = []
         try:
             for k in halka:
                 if not _detay_olcu(msp, k, c, dc, olcek, max(yw, yh), h, yabanci):
-                    if rapor is not None:
-                        rapor["yer_yok"] += 1
+                    kalan.append(k)
         finally:
             _EK_OVR.clear()
+        # detayda yer bulamayan ölçü DÜŞMEZ: ana görünüşte özelliğin yanına
+        for k in kalan:
+            if not _yanina_koy(msp, k["yon"], k["a"], k["b"], k["dik_a"], k["dik_b"],
+                               k.get("metin"), k["kayd"], k["dkay"], h, yabanci):
+                if rapor is not None:
+                    rapor["yer_yok"] += 1
         cikti.append((f"DETAY {H}", (dc[0] - yw - 6 * h, dc[1] - yh - 6 * h,
                                      dc[0] + yw + 6 * h, dc[1] + yh + 3.0 * h)))
     return cikti
@@ -6171,17 +6189,49 @@ def _yazidan_kacan_daire(msp, c, R, h, n=360):
         msp.add_arc(c, R, a0, a1, dxfattribs={"layer": "OLCU"})
 
 
-def _detay_harfi(msp, c, R, H, h):
+def _harf_koy(msp, adaylar, H, h):
+    """Detay harfini ilk BOŞ adaya koyar: hiçbir yazıya ve hiçbir çizgiye
+    (kontur, gizli, eksen, ölçü, kılavuz) değmeyen yer - ölçülür. Harf
+    önce konup sonra kontrol edilmiyordu; çizgi ve kontur üstünde kalan
+    harfler oldu (18 resim). Döner: True / False."""
     dolu = _yazi_kutulari(msp)
-    for a in (45, 135, 315, 225, 90, 0, 180, 270):
-        ra = math.radians(a)
-        x, y = c[0] + math.cos(ra) * (R + 1.3 * h), c[1] + math.sin(ra) * (R + 1.3 * h)
-        e = _yaz(msp, H, x - 0.5 * h, y - 0.65 * h, 1.3 * h, kat="OLCU")
+    xs = [a[0] for a in adaylar]
+    ys = [a[1] for a in adaylar]
+    alan = (min(xs) - 4 * h, min(ys) - 4 * h, max(xs) + 4 * h, max(ys) + 4 * h)
+    cz = _cizgi_parcalari(msp, alan, katman=("GORUNEN", "GIZLI", "EKSEN", "OLCU", "BOLGE"))
+    e = None
+    for x, y in adaylar:
+        if e is None:
+            e = _yaz(msp, H, x - 0.5 * h, y - 0.65 * h, 1.3 * h, kat="OLCU")
+        else:
+            e.set_placement((x - 0.5 * h, y - 0.65 * h))
         k = _yazi_siniri(e)
-        if k and not _cakisiyor(k, dolu, 0.2 * h):
-            return
+        if k and not _cakisiyor(k, dolu, 0.2 * h) and not _cizgi_kesiyor(k, cz, 0.1 * h):
+            return True
+    if e is not None:
         msp.delete_entity(e)
-    _yaz(msp, H, c[0] + R, c[1] + R, 1.3 * h, kat="OLCU")
+    return False
+
+
+def _detay_harfi(msp, c, R, H, h):
+    ad = []
+    for uz in (1.3, 2.3, 3.5, 5.0):
+        for a in (45, 135, 315, 225, 90, 0, 180, 270, 22, 68, 112, 158, 202, 248, 292, 338):
+            ra = math.radians(a)
+            ad.append((c[0] + math.cos(ra) * (R + uz * h), c[1] + math.sin(ra) * (R + uz * h)))
+    _harf_koy(msp, ad, H, h)
+
+
+def _bant_harfi(msp, k, H, h):
+    """Bant çerçevesinin harfi: köşelerin dışında, sonra kenar ortalarında,
+    giderek uzaklaşarak - ölçülen ilk boş yer."""
+    ad = []
+    for uz in (0.9, 2.0, 3.2, 4.5):
+        ad += [(k[0] + 0.6 * h, k[3] + uz * h), (k[2] - 0.6 * h, k[3] + uz * h),
+               (k[0] + 0.6 * h, k[1] - uz * h), (k[2] - 0.6 * h, k[1] - uz * h),
+               (k[0] - uz * h, (k[1] + k[3]) / 2.0), (k[2] + uz * h, (k[1] + k[3]) / 2.0),
+               ((k[0] + k[2]) / 2.0, k[3] + uz * h), ((k[0] + k[2]) / 2.0, k[1] - uz * h)]
+    _harf_koy(msp, ad, H, h)
 
 
 def _detay_olcu(msp, k, c, dc, olcek, Rd, h, yabanci):
@@ -6199,7 +6249,7 @@ def _detay_olcu(msp, k, c, dc, olcek, Rd, h, yabanci):
     dolu = _yazi_kutulari(msp)
     alan = (dc[0] - Rd - 10 * h, dc[1] - Rd - 10 * h, dc[0] + Rd + 10 * h, dc[1] + Rd + 10 * h)
     cz = _cizgi_parcalari(msp, alan, katman=("GORUNEN", "GIZLI", "OLCU", "EKSEN", "BOLGE"))
-    for j in range(6):
+    for j in range(10):
         for yan in (1, -1):
             if yat:
                 cizgi = ((max(p1[1], p2[1]) + (1.5 + 1.4 * j) * h) if yan > 0
