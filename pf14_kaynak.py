@@ -1230,15 +1230,28 @@ class _Resim:
 
     def cizgiye_degiyor(self, k):
         """Kâğıttaki k kutusu görünüşün bir çizgisine değiyor mu (yazı
-        parçanın üstüne binmesin)."""
-        for _kat, q in self.cizgi:
-            for a, b in zip(q, q[1:]):
-                a, b = self.p(a), self.p(b)
-                if max(a[0], b[0]) < k[0] or min(a[0], b[0]) > k[2] or \
-                        max(a[1], b[1]) < k[1] or min(a[1], b[1]) > k[3]:
-                    continue
-                if _parca_kutuda(a, b, k):
-                    return True
+        parçanın üstüne binmesin). Kâğıttaki parçalar bir kez hesaplanıp
+        10 mm'lik ızgaraya konur (görünüş yerleştikten sonra çağrılır);
+        her denetim yalnız yakın parçalara bakar."""
+        if getattr(self, "_izgara_yer", None) != (self.ox, self.oy, self.olcek):
+            iz = {}
+            for _kat, q in self.cizgi:
+                for a, b in zip(q, q[1:]):
+                    a, b = self.p(a), self.p(b)
+                    for gx in range(int(min(a[0], b[0]) // 10), int(max(a[0], b[0]) // 10) + 1):
+                        for gy in range(int(min(a[1], b[1]) // 10),
+                                        int(max(a[1], b[1]) // 10) + 1):
+                            iz.setdefault((gx, gy), []).append((a, b))
+            self._izgara, self._izgara_yer = iz, (self.ox, self.oy, self.olcek)
+        bak = set()
+        for gx in range(int(k[0] // 10), int(k[2] // 10) + 1):
+            for gy in range(int(k[1] // 10), int(k[3] // 10) + 1):
+                for ab in self._izgara.get((gx, gy), ()):
+                    if id(ab) in bak:
+                        continue
+                    bak.add(id(ab))
+                    if _parca_kutuda(ab[0], ab[1], k):
+                        return True
         return False
 
 
