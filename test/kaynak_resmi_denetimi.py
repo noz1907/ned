@@ -263,6 +263,46 @@ def main():
     dogru("küçük üründe listede yine var",
           any(KR._konum_yazisi(d).endswith("+ 50") for d in zd2))
 
+    # ZİNCİRİN İKİ UCU KÖŞEDE: 260 mm birleşmede y 0..40, 110..150,
+    # 220..260 -> ilki "kenardan", ortadaki ara 70, sonuncusu "kenara
+    # kadar" (ölçüsü yok; kullanıcı: "- o -" üçlüsünde yalnız ortadaki).
+    # Dik sacın öbür yanında AYNI yerlerde üç kaynak: simetrik zincir,
+    # ölçüleri tekrar yazılmaz ("SİM.").
+    def ucgen_sol(y0, y1):
+        return ucgen_prizma((50, 5), (46, 5), (50, 9), y0, y1)
+    # taban 320: küçük ürün sayılmasın (resimde ölçü çizilsin)
+    uk = [("TABAN", kutu(0, 0, 0, 320, 260, 5)), ("DIK", kutu(50, 0, 5, 55, 260, 85)),
+          ("U1", ucgen_prizma((55, 5), (59, 5), (55, 9), 0, 40)),
+          ("U2", ucgen_prizma((55, 5), (59, 5), (55, 9), 110, 150)),
+          ("U3", ucgen_prizma((55, 5), (59, 5), (55, 9), 220, 260)),
+          ("S1", ucgen_sol(0, 40)), ("S2", ucgen_sol(110, 150)), ("S3", ucgen_sol(220, 260))]
+    ukomp = [{"kod": ad, "ad": ad, "indeks": [i], "adet": 1, "hacim_mm3": 1.0,
+              "sinif": "parca" if i < 2 else "kaynak", "tip": ""}
+             for i, (ad, _) in enumerate(uk)]
+    uagac = {"ad": "U", "montaj": True, "alt": [
+        {"ad": ad, "katilar": [i], "tum": [i], "alt": []} for i, (ad, _) in enumerate(uk)]}
+    ug = KR.kaynakli_gruplar(uk, ukomp, uagac, log=lambda t: None)
+    yakala.clear()
+    KR.pdf_yaz = lambda sayfalar, yol: yakala.extend(sayfalar)
+    try:
+        ud = KR.kaynak_resmi(O, uk, ukomp, ug[0], zsat, "u_kaynak.pdf")
+    finally:
+        KR.pdf_yaz = asil
+    ua = {uk[d["j"]][0]: d for d in ud}
+    yaz_ = {a: KR._konum_yazisi(d) for a, d in ua.items()}
+    # hangi yan asıl, hangisi simetrik: numarası küçük olan asıl
+    asil_, sim_ = (("U", "S") if int(ua["U1"]["no"][1:]) < int(ua["S1"]["no"][1:])
+                   else ("S", "U"))
+    dogru("köşeden başlayan: 'kenardan'", yaz_[asil_ + "1"] == "kenardan", yaz_)
+    dogru("ortadaki: ara 70", yaz_[asil_ + "2"] == f"{ua[asil_ + '1']['no']} + 70", yaz_)
+    dogru("köşede biten: 'kenara kadar'", yaz_[asil_ + "3"] == "kenara kadar", yaz_)
+    dogru("karşı yandaki aynı düzen simetrik",
+          all(yaz_[sim_ + str(i)] == f"SİM. {ua[asil_ + str(i)]['no']}" for i in (1, 2, 3)), yaz_)
+    olcu = [e.dxf.text for doc in yakala for e in doc.modelspace().query("TEXT")
+            if e.dxf.layer == "OLCU"]
+    dogru("resimde yalnız ortadaki ara (70) - bir kez", olcu.count("70") == 1, olcu)
+    dogru("resimde SİM. notu", any(t.startswith("SİM.") for t in olcu), olcu)
+
     # kaynakta ondalık yok: 2,7 -> 3, 1,77 -> 2, 24,6 -> 25
     import pf3_olcu as O
     import pf9_excel as XL

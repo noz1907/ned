@@ -539,13 +539,14 @@ def konum_hesapla(d, parca_sh):
     # dikiş ucu parça kenarını geçebilir (kenarı döner) ya da kenara bir-iki
     # mm kala biter: atölyede ikisi de "uçtan başlar"
     if min(s0, s1) < UCTAN_PAY:
-        return {"deger": 0}
+        return {"deger": 0, "birlesme": (tuple(k + u * T0), tuple(k + u * T1))}
     if s0 <= s1:
         uc, bas, v = T0, w0, s0
     else:
         uc, bas, v = T1, w1, s1
     # tam mm: kaynakta ondalık yok (atölye ölçüsü)
-    return {"deger": XL.tam(v), "uc": tuple(k + u * uc), "bas": tuple(k + u * bas)}
+    return {"deger": XL.tam(v), "uc": tuple(k + u * uc), "bas": tuple(k + u * bas),
+            "birlesme": (tuple(k + u * T0), tuple(k + u * T1))}
 
 
 ZINCIR_TOL = 1.5           # mm: sıralı kaynakların eksenleri bu kadar içinde aynı çizgi
@@ -636,6 +637,55 @@ def _zincir_ara(z):
             d["ara"] = {"deger": XL.tam(g), "a": on["p1"], "b": d["p0"], "onceki": on}
 
 
+def _eksen_t(z):
+    """Zincir yönünde (ilk kaynağın başından son kaynağın sonuna) konum."""
+    a, b = z[0]["p0"], z[-1]["p1"]
+    L = math.dist(a, b) or 1.0
+    u = [(b[k] - a[k]) / L for k in range(3)]
+    return lambda p: sum((p[k] - a[k]) * u[k] for k in range(3))
+
+
+def _kenara_uzak(z, birlesme):
+    """Zincirin son kaynağının sonundan birleşme çizgisinin o yandaki
+    ucuna uzaklık (mm)."""
+    t = _eksen_t(z)
+    return max(t(q) for q in birlesme) - t(z[-1]["p1"])
+
+
+def _simetrik_zincirler(zin, tol=1.5):
+    """Aynı düzendeki paralel zincirler (sacın karşılıklı iki kenarı: boylar
+    ve aralar aynı, kaynaklar eksen boyunca aynı yerlerde). Ölçüler
+    numarası küçük olanda verilir; öbürünün her kaynağı d["sim"] =
+    karşılığı, resimde "SİM." notu (kullanıcı: alt kenar üsttekinin
+    simetriği, ölçü iki kez yazılmaz)."""
+    def no(d):
+        try:
+            return int(str(d.get("no", "K0"))[1:])
+        except ValueError:
+            return 0
+    bitti = set()
+    for i, a in enumerate(zin):
+        for b in zin[i + 1:]:
+            if len(a) != len(b) or id(b) in bitti or id(a) in bitti:
+                continue
+            if abs(sum(a[0]["yon"][k] * b[0]["yon"][k] for k in range(3))) < 0.99:
+                continue
+            t = _eksen_t(a)
+            ia = [sorted((t(d["p0"]), t(d["p1"]))) for d in a]
+            ib = sorted(sorted((t(d["p0"]), t(d["p1"]))) for d in b)
+            if not all(abs(x[0] - y[0]) <= tol and abs(x[1] - y[1]) <= tol
+                       for x, y in zip(sorted(ia), ib)):
+                continue
+            asil, kopya = (a, b) if no(a[0]) <= no(b[0]) else (b, a)
+            ta = _eksen_t(asil)
+            es = sorted(asil, key=lambda d: ta(d["orta"]))
+            for d in sorted(kopya, key=lambda d: ta(d["orta"])):
+                d["sim"] = es.pop(0)
+            ilk = min(kopya, key=no)
+            ilk["sim_not"] = f"SİM. {min(asil, key=no)['no']}-{max(asil, key=no)['no']}"
+            bitti.add(id(kopya))
+
+
 def _olcu_ciz(msp, R, a3, b3, deger, yon, h):
     """Eksen boyunca ölçü (kâğıtta; yazı gerçek mm). Çizilemiyorsa False:
     eksen bakışa eğik (dik görünüşte boy kısalır) ya da uç pencere dışı."""
@@ -689,10 +739,10 @@ def _konum_olcusu(msp, R, d, h, bu_detay=()):
     """Sıralı kaynağın ölçüleri: zincirin ilk kaynağına kenardan başlangıç
     (kenardan / köşeden başlıyorsa yok), sonrakilere bir öncekiyle ARA.
     Ara, iki kaynak da aynı detaydaysa çizilir; değil ise listededir."""
-    if d.get("_olcusuz"):
+    if d.get("_olcusuz") or d.get("sim"):
         return
     r = d.get("ara")
-    if r and any(x is r["onceki"] for x in bu_detay):
+    if r and not r.get("kenara_kadar") and any(x is r["onceki"] for x in bu_detay):
         _olcu_ciz(msp, R, r["a"], r["b"], r["deger"], d["yon"], h)
     k = d.get("konum")
     if not k or not k.get("uc") or not k.get("gorunur", True):
@@ -1084,6 +1134,9 @@ def _etiketle(msp, R, dikisler, h):
             _sembol(msp, q, (x_dirsek, y), taraf, d, h)
     for d in dikisler:
         _konum_olcusu(msp, R, d, h, dikisler)
+        if d.get("sim_not") and not d.get("_olcusuz"):
+            q = R.p3(d["orta"])
+            _yaz(msp, d["sim_not"], q[0] + 0.8 * h, q[1] + 0.8 * h, h, kat="OLCU")
 
 
 def _tablo_ciz(msp, satirlar, x, y_ust, h):
@@ -1114,7 +1167,11 @@ def _konum_yazisi(d):
     """Listede konum: tek duran kaynakta "-" (yeri parçadan belli);
     sıralı kaynakta ilk için kenardan başlangıç, sonrakiler için
     bir öncekiyle ara."""
+    if d.get("sim"):
+        return f"SİM. {d['sim']['no']}"
     r = d.get("ara")
+    if r and r.get("kenara_kadar"):
+        return "kenara kadar"
     if r:
         return f"{r['onceki']['no']} + {XL.tr(r['deger'], 0)}"
     if "zincir_sira" in d:
@@ -1284,6 +1341,14 @@ def kaynak_resmi(O, kayit, komp, grup, satirlar, yol, P=None, log=print,
         _zincir_ara(z)
         bas = next((k for k, d in uclar if d is z[0]), None)
         z[0]["konum"] = bas if bas is not None else {"deger": None}
+        # zincirin SONU da kenarda / köşede bitiyorsa son aranın ölçüsü
+        # gereksiz: son kaynağın yeri köşeden belli (kullanıcı: "- o -"
+        # üçlüsünde yalnız ortadaki ölçülür)
+        son = next((k for k, d in uclar if d is z[-1]), None)
+        if son and son.get("birlesme") and z[-1].get("ara"):
+            if _kenara_uzak(z, son["birlesme"]) < UCTAN_PAY:
+                z[-1]["ara"]["kenara_kadar"] = True
+    _simetrik_zincirler(zin)
     for n, d in enumerate(dikisler):
         adim(0.3 + 0.3 * n / max(1, len(dikisler)))
         d.setdefault("konum", None)

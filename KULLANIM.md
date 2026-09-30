@@ -514,6 +514,15 @@ parçanın **boyuna ya da enine art arda** kaynaklandığı yerde önemlidir
   değilse `kenardan 20`. Zincirin başı, kenara yakın olan ucudur.
 - **Sonraki** kaynaklara bir öncekiyle **ara**: listede `K8 + 51`
   (K8'in bitiminden 51 mm sonra başlar), resimde ölçü çizgisi.
+- Zincirin **son** kaynağı da kenarda ya da köşede bitiyorsa (2 mm'den
+  yakın) onun ara ölçüsü çizilmez, listede `kenara kadar`: yeri köşeden
+  bellidir. `– o –` üçlüsünde yalnız ortadaki ölçülür.
+- **Simetrik zincirler:** aynı düzende paralel iki zincir (sacın
+  karşılıklı iki kenarı ya da bir sacın iki yüzü; boylar, aralar ve
+  kaynakların eksen boyundaki yerleri aynı, 1,5 mm içinde) ölçüler
+  **bir kez** verilir: numarası küçük olan zincirde. Öbürünün
+  kaynakları listede `SİM. K3` (karşılığı), resimde ilk kaynağının
+  yanında `SİM. K1-K3` notu.
 - **Küçük üründe** (grubun en büyük ölçüsü 300 mm'den küçük) resimde
   konum ölçüsü yoktur; parçanın nereye takılacağı zaten bellidir.
   Değer listededir.
