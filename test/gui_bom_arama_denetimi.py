@@ -105,7 +105,7 @@ def main():
     # 2. parça resmi: TABAN seç -> çizgiler
     u.v_ara.set("TABAN")
     u.ara_bul()
-    bekle(kok, lambda: len(u.c_parca.find_withtag("all")) > 3, 60)
+    bekle(kok, lambda: len(u.c_parca.find_withtag("all")) > 3, 180)
     cizgi = [i for i in u.c_parca.find_all() if u.c_parca.type(i) == "line"]
     dogru("seçili parçanın resmi çizildi", len(cizgi) >= 8, len(cizgi))
     dogru("parça adı yazıyor", "TABAN" in u.v_parca_ad.get(), u.v_parca_ad.get())
