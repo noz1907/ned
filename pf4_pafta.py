@@ -189,6 +189,9 @@ def _logo_baytlari(ad):
         import pi3d_logo
         v = getattr(pi3d_logo, "LOGO", {}).get(ad)
         if v:
+            if isinstance(v, str):          # gömülü resim base64 metindir
+                import base64
+                return base64.b64decode(v)
             return v
     except Exception:
         pass

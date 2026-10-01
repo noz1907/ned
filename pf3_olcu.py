@@ -12028,7 +12028,8 @@ def calistir(step, on, kayit, komp, P, asama=(1, 2, 3), esl=None, agac=None,
         # GUI'de ayrı düğme, komut satırında --kaynak-resmi.
         try:
             import pf14_kaynak as KR
-            KR.kaynak_resimleri(on, kayit, komp, agac, satirlar, log=log, iptal=dur)
+            KR.kaynak_resimleri(on, kayit, komp, agac, satirlar, log=log, iptal=dur,
+                                balon=bool(P.get("kaynak_balon")))
         except Exception as ex:
             log(f"  ! kaynak resimleri üretilemedi: {ex}"[:160])
     bom = [r for r in satirlar if r["sinif"] != "kaynak"]
@@ -12149,6 +12150,9 @@ uretir: KAYNAK/<grup>_kaynak.pdf (yalniz PDF; buyuk modelde uzun surer).
                          "ve aynı ayarla üretildiği kayıtlı olanlar atlanır")
     ap.add_argument("--surum", "--version", action="version",
                     version=f"Pi3D v{IS.PI3D_SURUM} ({IS.PI3D_SURUM_TARIHI})")
+    ap.add_argument("--kaynak-balon", action="store_true",
+                    help="kaynak resmi SUNUM biçiminde: tablo ve ad yok, kaynak "
+                         "noktaları büyütülmüş dairelerde (--kaynak-resmi ile)")
     ap.add_argument("--kaynak-resmi", action="store_true",
                     help="aşama 2'de kaynak resimlerini de üret (KAYNAK/<grup>_kaynak.pdf; "
                          "büyük kaynaklı modelde uzun sürer)")
@@ -12165,7 +12169,7 @@ uretir: KAYNAK/<grup>_kaynak.pdf (yalniz PDF; buyuk modelde uzun surer).
     gor = gorunus_sec([t.strip().upper() for t in a.gorunus.replace(";", ",").split(",")])
     P = {"gizli": a.gizli, "en_az_delik": a.en_az_delik, "yogunluk": RHO,
          "gorunusler": gor, "kesit": bool(a.kesit),
-         "kaynak_resmi": bool(a.kaynak_resmi)}
+         "kaynak_resmi": bool(a.kaynak_resmi), "kaynak_balon": bool(a.kaynak_balon)}
     print("görünüşler: " + ", ".join(GORUNUS_AD[g] for g in gor)
           + (" + " + KESIT_AD if a.kesit else ""))
 

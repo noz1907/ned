@@ -1629,7 +1629,13 @@ def kaynak_resmi(O, kayit, komp, grup, satirlar, yol, P=None, log=print,
                            and gorunurluk(d, isin_tum, goz)[0] >= GORUNUR_ORAN)
         b["gorunen"] = {g for g, n in say.items() if n} or {max(say, key=say.get)}
     bilgi["genel"] = (bolge_l, ana_r)
-    sayfalar = _sayfalar(O, bilgi, tab, detaylar, det_r)
+    if (P or {}).get("balon"):
+        # SUNUM / BALONLU resim: tablo yok, ad yok; kaynak noktaları
+        # büyütülmüş dairelerde, ana görünüşe uçan çizgiyle bağlı
+        sayfalar = _balon_sayfalari(O, bilgi, detaylar, det_r,
+                                    os.path.dirname(os.path.abspath(yol)))
+    else:
+        sayfalar = _sayfalar(O, bilgi, tab, detaylar, det_r)
     adim(0.9)
     pdf_yaz(sayfalar, yol)
     for d in dikisler:
@@ -1866,6 +1872,211 @@ def _genel_sayfalari(O, bilgi, tab=None):
     return out
 
 
+# ------------------------------------------------------------ balonlu (sunum) resim
+BALON_R = 33.0             # büyütülmüş kaynak dairesinin yarıçapı (kâğıt mm)
+BALON_SAYFA = 8            # sayfa başına en çok balon
+BALON_YH = 2.0             # balon etiketlerinin yazı boyu
+BALON_ETIKET = 44.0        # dairenin dış yanında sembol için ayrılan şerit (mm)
+
+
+def _daire_kesisim(a, b, c, r):
+    """a-b doğru parçasının c merkezli r yarıçaplı daireyle kesişim
+    parametreleri (0..1), küçükten büyüğe."""
+    dx, dy = b[0] - a[0], b[1] - a[1]
+    fx, fy = a[0] - c[0], a[1] - c[1]
+    A = dx * dx + dy * dy
+    if A < 1e-12:
+        return []
+    B = 2 * (fx * dx + fy * dy)
+    C = fx * fx + fy * fy - r * r
+    disk = B * B - 4 * A * C
+    if disk < 0:
+        return []
+    k = math.sqrt(disk)
+    return sorted(t for t in ((-B - k) / (2 * A), (-B + k) / (2 * A)) if 0.0 < t < 1.0)
+
+
+def _daire_kirp(q, c, r):
+    """Çoklu çizginin daire İÇİNDE kalan parçaları."""
+    def ara(a, b, t):
+        return (a[0] + (b[0] - a[0]) * t, a[1] + (b[1] - a[1]) * t)
+
+    def icte(p):
+        return math.dist(p, c) <= r
+    out, cur = [], []
+    for a, b in zip(q, q[1:]):
+        ia, ib = icte(a), icte(b)
+        if ia and ib:
+            if not cur:
+                cur = [a]
+            cur.append(b)
+            continue
+        ts = _daire_kesisim(a, b, c, r)
+        if ia and not ib:
+            if not cur:
+                cur = [a]
+            cur.append(ara(a, b, ts[0]) if ts else b)
+            out.append(cur)
+            cur = []
+        elif ib and not ia:
+            cur = [ara(a, b, ts[-1]) if ts else a, b]
+        elif len(ts) == 2:
+            out.append([ara(a, b, ts[0]), ara(a, b, ts[1])])
+    if cur:
+        out.append(cur)
+    return [w for w in out if len(w) > 1]
+
+
+def _balon_yuvalari(n):
+    """n balon için sayfadaki daire merkezleri ve ana görünüşün kutusu.
+    Balonlar sayfanın sol / sağ sütununda (üçer), 7-8 balonda altta iki
+    tane daha; ana görünüş ortada kalan alanda."""
+    W, H = KAGIT
+    R = BALON_R
+    ust = H - KENAR - 24.0                 # üstte logo şeridi
+    alt = KENAR + 8.0
+    sol, sag = KENAR + 4.0 + BALON_ETIKET + R, W - KENAR - 4.0 - BALON_ETIKET - R
+    yuva = []
+    def dizi(x, k):
+        if k <= 0:
+            return []
+        adim = (ust - alt - 2 * R) / max(1, k - 1) if k > 1 else 0.0
+        if k == 1:
+            return [(x, (ust + alt) / 2.0)]
+        return [(x, ust - R - i * adim) for i in range(k)]
+    if n <= 3:
+        yuva += dizi(sag, n)
+        kutu = (KENAR + 8.0, alt, sag - R - 10.0, ust)
+    else:
+        n_sag = min(3, n - min(3, n - 3)) if n <= 6 else 3
+        n_sol = min(3, n - n_sag) if n <= 6 else 3
+        yuva += dizi(sol, n_sol) + dizi(sag, n_sag)
+        kalan = n - n_sol - n_sag
+        if kalan > 0:
+            xs = [W / 2.0 - R - 30.0, W / 2.0 + R + 30.0][:kalan] if kalan == 2 else [W / 2.0]
+            yuva += [(x, alt + R) for x in xs]
+            kutu = (sol + R + 10.0, alt + 2 * R + 12.0, sag - R - 10.0, ust)
+        else:
+            kutu = (sol + R + 10.0, alt, sag - R - 10.0, ust)
+    return yuva, kutu
+
+
+def _balon_sayfalari(O, bilgi, detaylar, det_r, klasor):
+    """SUNUM resmi: her sayfada ortada bir izometrik genel görünüş (parçalar
+    siyah, kaynaklar kırmızı), çevresinde her bölge için BÜYÜTÜLMÜŞ daire
+    (bölgenin detay görünüşü daireye kırpılmış, kaynak sembolleri dairenin
+    dış yanında), ana görünüşteki küçük daireden büyüğe uçan çizgi.
+    Tablo yok, parça / grup adı yok; sol üstte Pi3D logosu."""
+    bolge_l, ana_r = bilgi["genel"]
+    W, H = KAGIT
+    R = BALON_R
+    h = BALON_YH
+    sayfalar = []
+    paketler = [list(range(i, min(i + BALON_SAYFA, len(detaylar))))
+                for i in range(0, len(detaylar), BALON_SAYFA)] or [[]]
+    try:
+        import pf4_pafta as PF
+        logo = PF.pi3d_antet_resmi(klasor)
+    except Exception:
+        logo = None
+    for sayfa_no, paket in enumerate(paketler, 1):
+        doc = _yeni_sayfa(O)
+        doc.filename = os.path.join(klasor, "_balon.dxf")   # IMAGE yolu buradan
+        msp = doc.modelspace()
+        kat = {"layer": "CERCEVE"}
+        msp.add_lwpolyline([(KENAR, KENAR), (W - KENAR, KENAR), (W - KENAR, H - KENAR),
+                            (KENAR, H - KENAR)], close=True, dxfattribs=kat)
+        # --- logo şeridi (uçan: hafif eğik gölge çizgisiyle) + başlık
+        if logo:
+            try:
+                px = PF.PI3D_ANTET_PX
+                hi = 14.0
+                wi = hi * px[0] / px[1]
+                idef = doc.add_image_def(filename=logo, size_in_pixel=px)
+                msp.add_image(image_def=idef, insert=(KENAR + 6.0, H - KENAR - 4.0 - hi),
+                              size_in_units=(wi, hi), dxfattribs={"layer": "CERCEVE"})
+            except Exception:
+                _yaz(msp, "Pi3D", KENAR + 6.0, H - KENAR - 14.0, 8.0)
+        _yaz(msp, "KAYNAK RESMİ", W - KENAR - 70.0, H - KENAR - 10.0, 5.0)
+        _yaz(msp, f"SAYFA {sayfa_no} / {len(paketler)}", W - KENAR - 70.0,
+             H - KENAR - 16.0, 3.0)
+        import pf7_is as IS
+        _yaz(msp, f"Pi3D v{IS.PI3D_SURUM}", W - KENAR - 30.0, KENAR + 3.0, 2.5)
+        yuva, kutu = _balon_yuvalari(len(paket))
+        # --- ana görünüş: bu sayfanın bölgelerinin en çok göründüğü izometrik
+        bu_harf = {detaylar[i]["bolge"] for i in paket}
+        en = None
+        for Rm in ana_r:
+            n = sum(1 for b in bolge_l if b["harf"] in bu_harf and Rm.gad in b["gorunen"])
+            if en is None or n > en[0]:
+                en = (n, Rm)
+        Rm = en[1] if en else ana_r[0]
+        w1 = max(Rm.kutu[2] - Rm.kutu[0], 1e-6)
+        h1 = max(Rm.kutu[3] - Rm.kutu[1], 1e-6)
+        Rm.olcek = min((kutu[2] - kutu[0]) / w1, (kutu[3] - kutu[1]) / h1)
+        wm, hm = Rm.boyut()
+        Rm.yerlestir((kutu[0] + kutu[2]) / 2 - wm / 2, (kutu[1] + kutu[3]) / 2 + hm / 2)
+        Rm.ciz(msp)
+        # --- balonlar
+        kucuk = {}                          # bölge -> ana görünüşteki küçük daire
+        for (cx, cy), i in zip(yuva, paket):
+            dt, Rd = detaylar[i], det_r[i]
+            # ana görünüşte küçük daire (bölgenin BÜTÜN kaynakları, bir kez)
+            if dt["bolge"] not in kucuk:
+                b = next(b for b in bolge_l if b["harf"] == dt["bolge"])
+                pts = [Rm.p3(d["orta"]) for d in b["dikis"]]
+                ex = [Rm.p3(p) for d in b["dikis"] for p in (d["p0"], d["p1"])]
+                mx = sum(p[0] for p in pts) / len(pts)
+                my = sum(p[1] for p in pts) / len(pts)
+                rs = max(4.0, max(math.dist((mx, my), p) for p in ex) + 2.0)
+                msp.add_circle((mx, my), rs, dxfattribs={"layer": "BOLGE"})
+                kucuk[dt["bolge"]] = (mx, my, rs)
+            mx, my, rs = kucuk[dt["bolge"]]
+            # büyük daire (düz çizgi)
+            msp.add_circle((cx, cy), R, dxfattribs={"layer": "OLCU"})
+            # uçan çizgi: küçük dairenin kenarından büyüğün kenarına
+            vx, vy = cx - mx, cy - my
+            L_ = math.hypot(vx, vy) or 1.0
+            ux, uy = vx / L_, vy / L_
+            if L_ > rs + R:
+                msp.add_line((mx + ux * rs, my + uy * rs), (cx - ux * R, cy - uy * R),
+                             dxfattribs={"layer": "BOLGE"})
+            # bölge harfi: büyük dairenin üstüne teğet küçük daire
+            hx, hy = cx, cy + R + 4.0
+            msp.add_circle((hx, hy), 4.0, dxfattribs={"layer": "BOLGE"})
+            e = _yaz(msp, dt["harf"], hx, hy, 3.2 if len(dt["harf"]) == 1 else 2.4, kat="BOLGE")
+            try:
+                from ezdxf.enums import TextEntityAlignment
+                e.set_placement((hx, hy), align=TextEntityAlignment.MIDDLE_CENTER)
+            except Exception:
+                pass
+            # detay görünüşü daireye: kenar 1,3 R'lik kareye sığacak ölçek
+            wd = max(Rd.kutu[2] - Rd.kutu[0], 1e-6)
+            hd = max(Rd.kutu[3] - Rd.kutu[1], 1e-6)
+            Rd.olcek = min(1.3 * R / wd, 1.3 * R / hd)
+            wdd, hdd = Rd.boyut()
+            Rd.yerlestir(cx - wdd / 2, cy + hdd / 2)
+            for kat_, q in Rd.cizgi:
+                for w in _daire_kirp([Rd.p(a) for a in q], (cx, cy), R - 0.6):
+                    msp.add_lwpolyline(w, dxfattribs={"layer": kat_})
+            # kaynak sembolleri dairenin DIŞ yanında: sütuna göre dışa doğru
+            taraf = -1 if cx < W / 2 - 1 else 1
+            if abs(cx - W / 2) <= R + 10 and cy < H / 2:      # alt sıra: sağa / sola
+                taraf = -1 if cx <= W / 2 else 1
+            ds = sorted(dt["dikis"], key=lambda d: -Rd.p3(d["ok"])[1])
+            n = len(ds)
+            for k, d in enumerate(ds):
+                q = Rd.p3(d["ok"])
+                yy = cy + 0.7 * R - (1.4 * R * k / max(1, n - 1) if n > 1 else 0.7 * R)
+                dx_ = math.sqrt(max(0.0, R * R - (yy - cy) ** 2))
+                xe = cx + taraf * (dx_ + 3.0)
+                # ok dairenin içinden çıkar: kırılma dışarıda, ok ucu kaynakta
+                msp.add_line(Rd.p3(d["p0"]), Rd.p3(d["p1"]), dxfattribs={"layer": "EKSEN"})
+                _sembol(msp, q, (xe, yy), taraf, d, h)
+        sayfalar.append(doc)
+    return sayfalar
+
+
 def pdf_yaz(sayfalar, yol):
     """Sayfaları tek PDF'e basar: A3 yatay, 1:1 (kâğıt mm)."""
     import matplotlib
@@ -1913,7 +2124,7 @@ def dosya_adi(ad, kullanilan):
 
 
 def kaynak_resimleri(on, kayit, komp, agac, satirlar, log=print, iptal=None,
-                     ilerleme=None):
+                     ilerleme=None, balon=False):
     """Bütün kaynaklı alt grupların kaynak resimleri: KAYNAK/<grup>_kaynak.pdf.
     Artık karşılığı olmayan eski *_kaynak.pdf dosyaları silinir (yalnız bu
     klasörde, yalnız bu programın ürettiği adlar). Döner: dosya listesi.
@@ -1921,7 +2132,11 @@ def kaynak_resimleri(on, kayit, komp, agac, satirlar, log=print, iptal=None,
     ilerleme(yapilan, toplam): iş birimi dikiştir - önce gruplama (her
     dikişin değdiği parçalar), sonra çizim (grubun dikiş sayısı kadar);
     böylece büyük grup çizilirken de çubuk ilerler. İptal edilirse o ana
-    kadar yazılanlar kalır, eski dosyalar silinmez."""
+    kadar yazılanlar kalır, eski dosyalar silinmez.
+
+    balon=True: SUNUM resmi (balonlu) - tablo ve ad yok, kaynak noktaları
+    büyütülmüş dairelerde; dosya adı G1_kaynak.pdf, G2_... (grup adı
+    yazılmaz)."""
     import pf3_olcu as O
     import pf7_is as IS
     n_dikis = sum(1 for k in komp if k["sinif"] == "kaynak" for _ in k["indeks"])
@@ -1950,12 +2165,12 @@ def kaynak_resimleri(on, kayit, komp, agac, satirlar, log=print, iptal=None,
         if iptal and iptal():
             log("! iptal edildi")
             return yazilan
-        ad = dosya_adi(g["dugum_ad"], kullanilan)
+        ad = f"G{i}_kaynak.pdf" if balon else dosya_adi(g["dugum_ad"], kullanilan)
         pay = n_dikis * len(g["dikis"]) / tum_dikis
         log(f"  [{i}/{len(gruplar)}] KAYNAK/{ad}  ({len(g['dikis'])} kaynak) çiziliyor...")
         try:
-            d = kaynak_resmi(O, kayit, komp, g, satirlar, os.path.join(kl, ad), log=log,
-                             iptal=iptal,
+            d = kaynak_resmi(O, kayit, komp, g, satirlar, os.path.join(kl, ad),
+                             {"balon": True} if balon else None, log=log, iptal=iptal,
                              ilerleme=lambda o, b=yapilan, p=pay: bildir(b + o * p))
             yazilan.append(ad)
             gizli = sum(1 for x in d if not x.get("gorunur"))

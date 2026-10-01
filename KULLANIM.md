@@ -594,6 +594,26 @@ somun böyle adlandırılmıştı; eskiden geometri yalnız öneri yazıyordu, h
 | **o-ring** | yalnız tor yüzü |
 | **kaynak dikişi** | birbirine dik iki düz bacak yüzü + hipotenüs: uzun üçgen prizma; bacaklar hacimden ve alanlardan hesaplanır (1–20 mm) |
 
+#### Sunum (balonlu) kaynak resmi: `--kaynak-balon`
+
+Tanıtım ya da atölye panosu için ikinci bir biçim: **tablo yok, grup ve
+parça adı yok**, yalnız resim. Her sayfada ortada bir izometrik genel
+görünüş (parçalar siyah, kaynaklar kırmızı); çevresinde her bölge için
+**büyütülmüş bir daire**: bölgenin detay görünüşü daireye kırpılmış,
+ISO 2553 sembolleri (a, boy, K no) dairenin dış yanında. Ana görünüşteki
+küçük daireden büyük daireye uçan bir çizgi gider; bölge harfi büyük
+dairenin tepesinde. Sol üstte Pi3D / PiVision logosu, sağ üstte sayfa
+numarası. Sayfa başına en çok 8 balon; fazlası sonraki sayfaya (ana
+görünüş o sayfanın bölgelerinin en çok göründüğü izometriktir).
+
+```
+python pf3_olcu.py model.stp --asama 2 --kaynak-resmi --kaynak-balon
+```
+
+Dosya adları `KAYNAK/G1_kaynak.pdf`, `G2_kaynak.pdf` … (grup adı
+yazılmaz). Normal kaynak resmi (`--kaynak-balon` yok) eskisi gibi tablo
+ve detay sayfalarıyla çıkar.
+
 #### YAPISAL tanıma: tipleri saymak yerine öğelere ayırmak
 
 Cıvata, somun, pul, rulman tiplerinin sonu yok (imbus, torx, yıldız, düz;

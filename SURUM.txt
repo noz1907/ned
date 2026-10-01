@@ -166,6 +166,13 @@ BU SÜRÜMDE NE VAR
     - AÇINIM profili: büyütme profili açınımın kendisinden büyük yapmaz
       (16 kanatlı 1,2 m sacda 5:1 profil 5,4 m olup pafta 1:30'a
       düşüyordu; şimdi 1:12).
+    - KAYNAK RESMİ, SUNUM (BALONLU) BİÇİMİ (pf14_kaynak, --kaynak-balon):
+      tablo yok, grup / parça adı yok; her sayfada ortada izometrik
+      genel görünüş (kaynaklar kırmızı), çevresinde her bölge için
+      BÜYÜTÜLMÜŞ daire (bölgenin detayı daireye kırpılmış, ISO 2553
+      sembolleri dairenin dış yanında), ana görünüşteki küçük daireden
+      büyüğe uçan çizgi; sol üstte Pi3D / PiVision logosu. Sayfa başına
+      8 balon, dosya adı G1_kaynak.pdf ... (ad yazılmaz).
     - TANITIM VİDEOSU yenilendi (Pi3D_Tanitim.mp4): Pi3D antetli PDF,
       güncel açınım (büküm tablosu, paralel + düz ölçüler), 3B açınım,
       lazer; "3-4 gün değil, 1-2 saat" vurgusu (program süresi 23 dk
