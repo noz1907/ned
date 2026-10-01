@@ -1862,11 +1862,21 @@ kesim dosyası `LZR/..._acinim_lzr.dxf` de **kendiliğinden** yazılır ve
 
 #### Listede kimler var
 
+**Lazer kesim bütün sac parçalar içindir** — yalnız bükülecekler
+değil. Uygulamanın yapısı: **AÇINIM (6. adım) = bükülecek saclar**
+(abkant / pres), **LAZER (8. adım) = bütün saclar**: düz sac doğrudan
+kendi konturundan kesilir, bükümlü sac açınımının konturundan kesilir
+ve sonra bükülür.
+
 | grup | ne | seçim |
 |------|----|-------|
-| üstte | 6. adımda **açınımı çıkan** parçalar | **seçili gelir** |
-| altta | montajdaki diğer **sac** parçalar (bükümlü ve düz) | siz seçersiniz |
+| üstte | 6. adımda **açınımı çıkan** bükümlü saclar (kontur hazır) | **seçili gelir** |
+| sonra | öbür **bükümlü** saclar (açınım burada hesaplanır) | **seçili gelir** |
+| sonra | **düz** saclar — lazer kesim düz, kendi konturundan | **seçili gelir** |
+| altta | önceden üretilmişler | seçisiz |
 | — | sac olmayanlar (freze, torna, profil) | listeye hiç alınmaz |
+
+6. adıma uğranmamışsa sac taraması burada yapılır (parça başına ~20 ms).
 
 Kontur nereden gelir:
 

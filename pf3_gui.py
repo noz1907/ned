@@ -1307,8 +1307,11 @@ class Uygulama(ttk.Frame):
             "dosya ADINDADIR.\n"
             "Bu dosyalar PAFTAYA ALINMAZ ve PDF'i BASILMAZ; 7. adımın "
             "listesinde görünmezler.\n"
-            "Açınımı çıkan parçalar üstte ve SEÇİLİ gelir; altta "
-            "montajdaki diğer sac parçalar durur, onları siz seçersiniz."
+            "LAZER KESİM BÜTÜN SAC PARÇALAR İÇİNDİR: DÜZ SAC doğrudan "
+            "kendi konturundan kesilir; BÜKÜMLÜ SAC açınımının konturundan "
+            "kesilir, sonra abkant / preste bükülür (6. adım). Montajdaki "
+            "bütün sac parçalar listede SEÇİLİ gelir; sac olmayanlar (freze, "
+            "torna, profil) listeye girmez."
                   )).pack(anchor="w", pady=(0, 8))
 
         orta = ttk.Frame(f); orta.pack(fill="both", expand=True)
@@ -1344,9 +1347,15 @@ class Uygulama(ttk.Frame):
         self.b_lazer.pack(side="right", padx=4, ipadx=10, ipady=3)
 
     def lazer_doldur(self):
-        """Sac parçaları listeler: açınımı çıkanlar üstte ve seçili.
+        """BÜTÜN sac parçaları listeler ve SEÇİLİ getirir (kullanıcı:
+        "lazer kesim illa bükülecek saclar değil: açınım = bükülecek
+        saclar (abkant / pres), düz saclar = lazer kesim düz").
 
-        Tarama 6. adımda zaten yapıldıysa yeniden yapılmaz."""
+        Üstte açınımı çıkanlar (kontur hazır), sonra bükümlü saclar
+        (açınım burada hesaplanır), sonra düz saclar (kendi konturu);
+        önceden üretilmişler en altta, seçisiz. Sac olmayanlar listeye
+        girmez. Tarama 6. adımda yapıldıysa yeniden yapılmaz; yapılmadıysa
+        burada yapılır (parça başına ~20 ms)."""
         if not hasattr(self, "lz_agac") or not self.komp:
             return
         self.lz_agac.delete(*self.lz_agac.get_children())
@@ -1363,22 +1372,26 @@ class Uygulama(ttk.Frame):
                 continue
             ad = k.get("kod") or k.get("ad")
             tip = kod_tip.get(ad)
+            if tip is None:
+                # 6. adıma uğranmamış: burada tara (sac mı, bükümlü mü)
+                try:
+                    r_ = self.M.sac_taramasi(self.kayit[k["indeks"][0]][1])
+                except Exception:
+                    r_ = {"sac": False, "tip": "sac degil"}
+                self.tarama_kod[ad] = r_
+                tip = r_["tip"]
+            if tip == "sac degil":
+                continue        # freze / torna / profil: lazer konturu yok
             if ad in lz_var:
                 sira.append((3, i, "önceden üretildi  –  " + lz_var[ad], False))
             elif ad in acilan:
-                sira.append((0, i, "açınımı çıktı", True))
+                sira.append((0, i, "bükümlü sac – açınımdan (abkant / pres)", True))
             elif tip == "bukumlu sac":
-                sira.append((1, i, "bükümlü sac", False))
-            elif tip == "duz sac":
-                sira.append((1, i, "düz sac", False))
-            elif tip is None:
-                # Henüz taranmamış: 6. adıma hiç uğranmamış olabilir.
-                # Listeye alınır ama seçilmez - lazer resmi denenince
-                # sac olup olmadığı zaten anlaşılır.
-                sira.append((2, i, "taranmadı", False))
-            # "sac degil" çıkanlar listeye HİÇ alınmaz: freze/torna
-            # parçasının lazer kesim konturu diye bir şey yoktur.
+                sira.append((1, i, "bükümlü sac – açınımdan (abkant / pres)", True))
+            else:
+                sira.append((2, i, "düz sac – lazer kesim düz", True))
         sira.sort(key=lambda t: (t[0], t[1]))
+        say = {"b": 0, "d": 0}
         for _, i, tip, secili in sira:
             k = self.komp[i]
             onc = tip.startswith("önceden")
@@ -1390,16 +1403,18 @@ class Uygulama(ttk.Frame):
             self.lz_satir[s] = i
             if secili:
                 sec.append(s)
+                say["b" if tip.startswith("bükümlü") else "d"] += 1
         if sec:
             self.lz_agac.selection_set(sec)
         self.b_lazer.configure(state="normal" if self.lz_satir else "disabled")
+        onc_n = len(self.lz_satir) - len(sec)
         self.v_lz_ozet.set(
-            f"{len(sec)} parçanın açınımı çıkmış, seçili geldi. "
-            f"Listede toplam {len(self.lz_satir)} parça var; "
-            "diğerlerini de seçebilirsiniz."
+            f"{len(sec)} sac parça seçili geldi: {say['b']} bükümlü (kontur "
+            f"açınımdan, sonra abkant / pres), {say['d']} düz (lazer kesim düz)."
+            + (f"  {onc_n} parça önceden üretilmiş, seçisiz." if onc_n else "")
             if sec else
-            f"Listede {len(self.lz_satir)} parça var. Açınım çıkarılmamış; "
-            "istediklerinizi seçin.")
+            f"Listede {len(self.lz_satir)} parça var; hepsi önceden üretilmiş."
+            if self.lz_satir else "Montajda sac parça bulunamadı.")
 
     def lazer_uret(self):
         sec = [s for s in self.lz_agac.selection()

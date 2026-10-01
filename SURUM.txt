@@ -173,6 +173,10 @@ BU SÜRÜMDE NE VAR
       standart elemanda TraceParts malzeme grubu; Source (Made / Bought)
       doluysa sınıf oradan. Material yoksa açıkça söylenir, eşleştirme
       yine yapılır. Test: test/catia_bom_denetimi.py.
+    - LAZER = BÜTÜN SACLAR (kullanıcı: "lazer kesim illa bükülecek saclar
+      değil; açınım = bükülecek saclar, düz saclar = lazer kesim düz"):
+      8. adımda düz saclar da SEÇİLİ gelir (kendi konturundan), bükümlü
+      saclar açınımının konturundan; taranmamışsa orada taranır.
     - AÇINIM, iki gövdeli parça (Karluna SOL_DIKME: 533 mm şapka profili +
       768 mm eğik kanal uç uca birleştirilmiş, arada büküm yok): kontur
       notuna açık YORUM eklendi ("uç uca eklenmiş iki sac gövde, modelde

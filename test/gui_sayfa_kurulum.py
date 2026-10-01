@@ -214,10 +214,10 @@ print("    ozet:", u.v_lz_ozet.get())
 kalan = [v[1] for v in u.lz_agac.satir.values()]
 secili = [u.lz_agac.satir[s][1] for s in (u.lz_agac.secili or [])
           if s in u.lz_agac.satir]
-# Acinimi cikan USTTE ve SECILI; duz plaka listede ama SECISIZ;
+# Acinimi cikan USTTE ve SECILI; duz plaka da SECILI (lazer kesim duz);
 # kalin blok (sac degil) listeye HIC girmemeli.
-if secili != ["01.051.000.01"]:
-    hata.append(("lazer secimi", f"secilen {secili}, beklenen ['01.051.000.01']"))
+if secili != ["01.051.000.01", "09.020.000.03"]:
+    hata.append(("lazer secimi", f"secilen {secili}, beklenen ['01.051.000.01', '09.020.000.03']"))
 if "09.020.000.03" not in kalan:
     hata.append(("lazer listesi", f"duz plaka listede yok: {kalan}"))
 if "01.050.000.01" in kalan:
