@@ -8972,6 +8972,42 @@ def _bagsiz_duvar_raporu(duvarlar, bukumler, disarda, t, en_cok=6):
     return "\n".join(sat)
 
 
+def _iki_govde_yorumu(duvarlar, harita, disarda):
+    """Bağlanamayan duvarlar ağaçtaki duvarlarla BOY BOYUNCA çakışmıyorsa
+    parça uç uca eklenmiş iki sac gövdedir (Karluna SOL_DIKME: 533 mm'lik
+    şapka profili + 768 mm'lik eğik kanal, CATIA'da tek gövdeye
+    birleştirilmiş, arada büküm yok). Bunu açıkça söylemek gerekir:
+    kullanıcı "dış konturu nasıl alırım" diye uğraşmasın - çözüm modelde."""
+    if not disarda or not harita:
+        return ""
+    agac = [duvarlar[i]["z"] for i in harita]
+    dis = [duvarlar[i]["z"] for i in disarda]
+    a0, a1 = min(z[0] for z in agac), max(z[1] for z in agac)
+    d0, d1 = min(z[0] for z in dis), max(z[1] for z in dis)
+    # ağacın GÖVDESİ: duvarların çoğunun kapladığı aralık (tek bir uzun
+    # kanat iki gövdeyi birden geçebilir, onu saymamak için medyan)
+    ortak = (max(a0, d0), min(a1, d1))
+    cak = max(0.0, ortak[1] - ortak[0])
+    kisa = min(a1 - a0, d1 - d0) or 1.0
+    bas_bit = [z for z in agac if z[1] - z[0] < 0.9 * (a1 - a0)]
+    if bas_bit:
+        b0, b1 = min(z[0] for z in bas_bit), max(z[1] for z in bas_bit)
+        cak2 = max(0.0, min(b1, d1) - max(b0, d0))
+    else:
+        b0, b1, cak2 = a0, a1, cak
+    if cak2 <= 0.05 * kisa + 10.0:
+        return (f"\nYORUM: bağlanamayan duvarlar boyun [{XL.tr(d0, 0, sade=False)}, "
+                f"{XL.tr(d1, 0, sade=False)}] aralığında, bükümlü gövde ise "
+                f"[{XL.tr(b0, 0, sade=False)}, {XL.tr(b1, 0, sade=False)}] aralığında; "
+                f"çakışma yok. Parça UÇ UCA EKLENMİŞ İKİ SAC GÖVDEDEN oluşuyor "
+                f"(kaynaklı birleşim ya da CAD'de birleştirilmiş iki gövde); tek blank "
+                f"olarak kesilip bükülemez. Modelde iki ayrı parça yapın: Pi3D her "
+                f"birinin açınımını ve kesim konturunu ayrı verir.")
+    return ("\nYORUM: bağlanamayan duvar bükümlü gövdeyle aynı boyda ama ona bir "
+            "bükümle bağlı değil: üstüne eklenmiş (kaynaklı) sac ya da ikinci yönde "
+            "büküm. Tek blank olarak verilemez; modelde ayrı parça yapın.")
+
+
 def _acma_haritasi(duvarlar, bukumler, t, k_faktor):
     """Ağacı gezerek her duvara ve her büküme düzlemdeki yerini verir.
 
@@ -9027,7 +9063,8 @@ def _acma_haritasi(duvarlar, bukumler, t, k_faktor):
             f"Duvarların {len(disarda)} tanesi büküm ağacına bağlanamadı "
             f"(sac yüzeyinin %{XL.tr(100 * alan / toplam, 0, sade=False)}'i). Parça tek bir "
             f"sac şeridi değil; kaynaklı ya da çok yönlü bükülmüş olabilir."
-            + _bagsiz_duvar_raporu(duvarlar, bukumler, disarda, t))
+            + _bagsiz_duvar_raporu(duvarlar, bukumler, disarda, t)
+            + _iki_govde_yorumu(duvarlar, harita, disarda))
     if len(b_harita) > len(harita) - 1:
         raise AcilimYok(
             f"Büküm ağacında çevrim var ({len(harita)} duvar, "
@@ -9515,6 +9552,11 @@ def dxf_acilim(r, k, yol, P=None):
     else:
         sat.append(("ŞERİT GENİŞLİĞİDİR: büküm yerleri ve kesim konturu yok."
                     if r.get("serit_genisligi") else
+                    # iki gövdeli parçada kesitten çıkan blank TEK gövde
+                    # varsayımıyla hesaplanmıştır: yanlış ölçü verilmez
+                    "BLANK ÖLÇÜSÜ GEÇERSİZ: parça iki ayrı sac gövde; ölçü tek "
+                    "gövde varsayımıyla kesitten çıktı, kullanmayın."
+                    if "İKİ SAC GÖVDE" in (r.get("kontur_notu") or "") else
                     "BLANK ÖLÇÜSÜDÜR: dış kontur kesikleri ve delikler "
                     "bu resimde YOKTUR.", 1.1 * h))
         if r.get("kontur_notu"):
