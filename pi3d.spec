@@ -58,8 +58,12 @@ print(f"pi3d.spec: {'PI3D (logolu, antetsiz)' if LOGOLU else 'FIRMA (antetli)'}"
 # uyarisini basar. Uyaridir, hata degil: toplama devam eder, OCP.TopoDS
 # dahil 321 modulun hepsi pakete girer. on_error="ignore" yalnizca bu
 # yaniltici satiri susturur, toplanan dosyalari DEGISTIRMEZ.
-ocp_bin, ocp_data, ocp_gizli = collect_all("OCP", on_error="ignore")
-ezdxf_bin, ezdxf_data, ezdxf_gizli = collect_all("ezdxf", on_error="ignore")
+# include_py_files=False: collect_all varsayilani paketlerin .py
+# kaynaklarini da VERI olarak kopyaliyordu (_internal/ezdxf/*.py,
+# _internal/OCP/*.py - 666 dosya). Moduller zaten derlenmis olarak PYZ'de;
+# pakette hicbir .py bulunmaz (exebuild.py bariyeri bunu denetler).
+ocp_bin, ocp_data, ocp_gizli = collect_all("OCP", include_py_files=False, on_error="ignore")
+ezdxf_bin, ezdxf_data, ezdxf_gizli = collect_all("ezdxf", include_py_files=False, on_error="ignore")
 # AI kontrolü (pf10_ai) isteğe bağlıdır: 'anthropic' paketi derleyen
 # makinede kuruluysa exe'ye girer, değilse program AI'sız çalışır.
 # pf10_ai onu yalnız bir fonksiyonun İÇİNDE import eder; PyInstaller
