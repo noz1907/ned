@@ -201,9 +201,11 @@ BU SÜRÜMDE NE VAR
       değil). Büküm ağacına bağlanamayan duvar sessiz atlanmaz: resimde
       "DİKKAT ... konturda EKSİK olabilir - MODEL KONTROL". Eğik / düşey
       büküm etiketi (B1, B2) sağ kenarda değil çizginin kendi ucunda.
-      4 modelde eksenleri paralel olmayan 17 kasa + 18 televre + 18
-      Karluna parçasının hepsi açılıyor; 2B'nin açamadığı 5 tek yönlü
-      parça da 3B ile açıldı.
+      4 modelde 3B ile açılan parça: kasa 20, televre 20, Karluna 13;
+      eksenleri paralel olmayan hiçbir parçada hata kalmadı. 2B'nin
+      kontur veremediği 3 tek yönlü parça (yardımcı şasi, yakıt hattı
+      braketi, toolbox takviyesi) da 3B ile açıldı. Açılamayanlar kapalı
+      kesit (trim profili, burç) ve hacim denetimi tutmayan 1 parça.
     - AÇINIM ÖLÇÜLERİ (kullanıcı: "hem paralel hem düz ölçü; açınımı teyit
       için önemli"): sol tarafta DÜZ zincir (kenar -> B1 -> B2 ... ->
       kenar, dar halka yazılmaz) ve her büküm ekseninin alt kenardan
