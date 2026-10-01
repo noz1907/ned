@@ -37,6 +37,7 @@ daha büyük ölçek veriyorsa oraya oturur.
 """
 from __future__ import annotations
 import os
+import sys
 
 import ezdxf
 import ezdxf.bbox
@@ -153,6 +154,181 @@ KAT_CERCEVE = "PAFTA_CERCEVE"
 KAT_ANTET = "PAFTA_ANTET_ALANI"
 KAT_BILGI = "PAFTA_BILGI"
 KAT_BOLGE = "PAFTA_BOLGE"
+
+# ---------------------------------------------------------- Pi3D anteti
+# Firma anteti yoksa sağ alttaki 150 x 100 mm kutuya Pi3D'nin kendi
+# anteti çizilir: üstte logo şeridi (Pi3D + PiVision), altında parça adı,
+# resim no, malzeme, kütle, ölçek, kâğıt / sayfa, çizen, onaylayan.
+# Logo DXF'e IMAGE olarak girer; resim dosyası (pi3d_antet.png) DXF'in
+# yanına bir kez yazılır (CAD programı ve PDF basımı oradan okur).
+# Ayar dosyasında antet_pi3d: 0 ise kutu eskisi gibi BOŞ bırakılır.
+PI3D_ANTET_PNG = "pi3d_antet.png"
+PI3D_ANTET_PX = (1031, 240)           # logo şeridi piksel ölçüsü (en, boy)
+PI3D_ANTET_BANT = 26.0                # logo şeridi yüksekliği (mm)
+PI3D_ANTET_ETIKET = 2.0               # alan adı yazı boyu (mm)
+PI3D_ANTET_DEGER = 3.2                # alan değeri yazı boyu (mm)
+PI3D_LACIVERT = (19, 53, 83)          # PiVision yazısının kâğıt üstündeki rengi
+_IMGDEF = {}                           # belge -> IMAGEDEF (sayfalar paylaşır)
+
+
+def pi3d_antet_acik(istek=None):
+    """Pi3D anteti çizilsin mi? Çağıran açıkça söylemişse o; yoksa ayar
+    dosyasındaki antet_pi3d (varsayılan 1)."""
+    if istek is not None:
+        return bool(istek)
+    try:
+        import pf3_olcu
+        return bool(int(pf3_olcu.ayar_oku().get("antet_pi3d", 1)))
+    except Exception:
+        return True
+
+
+def _logo_baytlari(ad):
+    """Logonun ham baytı: önce exe'ye gömülü pi3d_logo, yoksa logo/ klasörü."""
+    try:
+        import pi3d_logo
+        v = getattr(pi3d_logo, "LOGO", {}).get(ad)
+        if v:
+            return v
+    except Exception:
+        pass
+    kok = os.path.dirname(os.path.abspath(__file__))
+    for yol in (os.path.join(kok, "logo", ad),
+                os.path.join(os.path.dirname(os.path.abspath(sys.executable)), "logo", ad)):
+        if os.path.isfile(yol):
+            with open(yol, "rb") as f:
+                return f.read()
+    return None
+
+
+def pi3d_antet_resmi(klasor):
+    """Antet logo şeridini (Pi3D logosu + lacivert PiVision yazısı) klasöre
+    PNG olarak yazar; varsa dokunmaz. Döner: dosya adı ya da None."""
+    yol = os.path.join(klasor, PI3D_ANTET_PNG)
+    if os.path.isfile(yol):
+        return PI3D_ANTET_PNG
+    try:
+        import io
+        from PIL import Image
+        import numpy as np
+        a = Image.open(io.BytesIO(_logo_baytlari("pi3d_256.png"))).convert("RGBA")
+        b = Image.open(io.BytesIO(_logo_baytlari("pivision_beyaz.png"))).convert("RGBA")
+        H = PI3D_ANTET_PX[1]
+        a = a.resize((H, H), Image.LANCZOS)
+        b = b.resize((int(round(b.width * H / b.height)), H), Image.LANCZOS)
+        px = np.array(b)
+        px[:, :, :3] = PI3D_LACIVERT          # beyaz yazı kâğıtta görünmez: lacivert
+        b = Image.fromarray(px)
+        out = Image.new("RGBA", (H + 40 + b.width, H), (255, 255, 255, 255))
+        out.alpha_composite(a, (0, 0))
+        out.alpha_composite(b, (H + 40, 0))
+        out = out.convert("RGB")
+        if out.size != PI3D_ANTET_PX:
+            out = out.resize(PI3D_ANTET_PX, Image.LANCZOS)
+        out.save(yol)
+        return PI3D_ANTET_PNG
+    except Exception:
+        return None
+
+
+def _antet_yazi(pafta, metin, x, y, genislik, h, stil, sag=False):
+    """Antet kutusuna yazı; sığmıyorsa önce küçültür, sonra kısaltır
+    (ölçülerek - pf5_antet.Sablon._yaz ile aynı mantık)."""
+    metin = str(metin)
+    if not metin:
+        return None
+
+    def koy(m, yuk):
+        t = pafta.add_text(m, height=yuk, dxfattribs={"layer": KAT_ANTET, "style": stil})
+        t.set_placement((x, y), align=(ezdxf.enums.TextEntityAlignment.BOTTOM_RIGHT if sag
+                                       else ezdxf.enums.TextEntityAlignment.LEFT))
+        return t
+    t = koy(metin, h)
+    for _ in range(8):
+        try:
+            k = ezdxf.bbox.extents([t], fast=False)
+        except Exception:
+            return t
+        en = k.extmax.x - k.extmin.x
+        if en <= genislik:
+            return t
+        pafta.delete_entity(t)
+        if h > 1.8:
+            h = max(h * 0.85, 1.8)
+        elif len(metin) > 4:
+            n = max(3, min(len(metin) - 1, int(len(metin) * genislik / en) - 1))
+            metin = metin[:n] + "…"
+        else:
+            return koy(metin, h)
+        t = koy(metin, h)
+    return t
+
+
+def _pi3d_antet_ciz(pafta, kagit, deger, stil):
+    """Pi3D antetini sağ alt kutuya çizer (firma anteti yokken)."""
+    d = pafta.doc
+    if KAT_ANTET not in d.layers:
+        d.layers.add(KAT_ANTET, color=7)
+    x0, y0, x1, y1 = antet_kutusu(kagit)
+    W = x1 - x0
+
+    def cizgi(ax, ay, bx, by, kalin=13):
+        pafta.add_line((ax, ay), (bx, by), dxfattribs={"layer": KAT_ANTET, "lineweight": kalin})
+    cizgi(x0, y1, x1, y1, 35)              # üst ve sol kenar (sağ / alt çerçevedir)
+    cizgi(x0, y0, x0, y1, 35)
+    bant = PI3D_ANTET_BANT
+    yb = y1 - bant
+    cizgi(x0, yb, x1, yb, 35)
+    # --- logo şeridi
+    klasor = deger.get("_klasor")
+    ad = pi3d_antet_resmi(klasor) if klasor else None
+    if ad:
+        anahtar = id(d)
+        if anahtar not in _IMGDEF:
+            _IMGDEF[anahtar] = d.add_image_def(filename=ad, size_in_pixel=PI3D_ANTET_PX)
+        hi = bant - 5.0
+        wi = hi * PI3D_ANTET_PX[0] / PI3D_ANTET_PX[1]
+        pafta.add_image(image_def=_IMGDEF[anahtar], insert=(x0 + 3.0, yb + 2.5),
+                        size_in_units=(wi, hi), dxfattribs={"layer": KAT_ANTET})
+    else:
+        _antet_yazi(pafta, "Pi3D  ·  PiVision", x0 + 3.0, yb + 9.0, W - 6.0, 6.0, stil)
+    try:
+        import pf7_is
+        surum = f"Pi3D v{pf7_is.PI3D_SURUM}"
+    except Exception:
+        surum = "Pi3D"
+    _antet_yazi(pafta, surum, x1 - 2.0, yb + 1.5, 40.0, PI3D_ANTET_ETIKET, stil, sag=True)
+    # --- alanlar: 5 satır, bazıları iki sütun
+    r = (yb - y0) / 5.0
+    xm = x0 + W / 2.0
+
+    def m(ad):
+        v = deger.get(ad, "")
+        return v if isinstance(v, str) else ("" if v is None else str(v))
+    deger = {k: m(k) for k in ("parca_adi", "resim_no", "dosya", "malzeme", "kutle", "olcek",
+                               "kagit", "cizen", "cizen_tarih", "onaylayan", "onay_tarih")} | \
+        {"sayfa": deger.get("sayfa")}
+    satirlar = [
+        [("PARÇA ADI", deger.get("parca_adi", ""))],
+        [("RESİM NO", deger.get("resim_no", "")), ("DOSYA", deger.get("dosya", ""))],
+        [("MALZEME", deger.get("malzeme", "")), ("KÜTLE", deger.get("kutle", ""))],
+        [("ÖLÇEK", deger.get("olcek", "")),
+         ("KÂĞIT / SAYFA", "  ·  ".join(v for v in (deger.get("kagit", ""),
+                                                   f"sayfa {deger['sayfa']}" if deger.get("sayfa") else "") if v))],
+        [("ÇİZEN", "  ".join(v for v in (deger.get("cizen", ""), deger.get("cizen_tarih", "")) if v)),
+         ("ONAYLAYAN", "  ".join(v for v in (deger.get("onaylayan", ""), deger.get("onay_tarih", "")) if v))],
+    ]
+    for i, hucreler in enumerate(satirlar):
+        yt = yb - i * r                     # satırın üst kenarı
+        if i:
+            cizgi(x0, yt, x1, yt)
+        if len(hucreler) == 2:
+            cizgi(xm, yt, xm, yt - r)
+        for j, (etiket, v) in enumerate(hucreler):
+            xa = x0 if (j == 0) else xm
+            gen = (W if len(hucreler) == 1 else W / 2.0) - 4.0
+            _antet_yazi(pafta, etiket, xa + 2.0, yt - PI3D_ANTET_ETIKET - 1.2, gen, PI3D_ANTET_ETIKET, stil)
+            _antet_yazi(pafta, v, xa + 2.0, yt - r + 2.0, gen, PI3D_ANTET_DEGER, stil)
 
 
 class PaftaYok(Exception):
@@ -853,7 +1029,8 @@ def _serbest_yerlestir(plan, dolu, ic, ant, adim=4.0):
     return out
 
 
-def _detay_sayfalari(d, pafta_adi, kagit, detaylar, no, resim_adi, sablon, deger):
+def _detay_sayfalari(d, pafta_adi, kagit, detaylar, no, resim_adi, sablon, deger,
+                     pi3d_antet=False):
     """DETAY SAYFALARI: 1. sayfaya sığmayan (ya da ana resmi küçültecek)
     detaylar, aynı kâğıt boyunda "PAFTA_2", "PAFTA_3" ... sayfalarına.
     Her sayfada detaylar sığan EN BÜYÜK ortak ölçekle (küçültme merdiveni;
@@ -897,7 +1074,8 @@ def _detay_sayfalari(d, pafta_adi, kagit, detaylar, no, resim_adi, sablon, deger
                 + ("  (detay büyütmesi ayrıca yazılı)" if any(_serbest_mi(a) for a in secim) else "")
                 + ("" if gorunus_var else "  DETAYLAR"))
         _pafta_cerceve_ciz(pafta, kagit, no, resim_adi, not_, sablon=sablon,
-                           antet_degerleri=deger)
+                           antet_degerleri=dict(deger or {}, sayfa=n),
+                           pi3d_antet=pi3d_antet)
         for ad, (x, y) in yerler.items():
             c = secim[ad]
             w, hh = (c[2] - c[0]) * olcek, (c[3] - c[1]) * olcek
@@ -1039,7 +1217,7 @@ def turkce_duzelt(d):
 
 
 def _pafta_cerceve_ciz(pafta, kagit, resim_no="", resim_adi="", bilgi="",
-                       sablon=None, antet_degerleri=None):
+                       sablon=None, antet_degerleri=None, pi3d_antet=False):
     """Standart pafta çerçevesini çizer.
 
         - kâğıdın kenarında ince dış çizgi
@@ -1153,11 +1331,14 @@ def _pafta_cerceve_ciz(pafta, kagit, resim_no="", resim_adi="", bilgi="",
     alt = "   ".join(x for x in (str(resim_adi or ""), bilgi) if x)
     if alt:
         sagust_yaz(alt, BASLIK_ALT_YAZI, 13, y)
+    if pi3d_antet:
+        _pi3d_antet_ciz(pafta, kagit, antet_degerleri or {}, stil)
 
 
 def pafta_kur(kaynak_dxf, cikti_dxf=None, kagit=VARSAYILAN_KAGIT, olcek=None,
               buyutme=False, pafta_adi="PAFTA", bilgi=True, cok=True,
-              resim_no=None, resim_adi=None, sablon=None, antet=None):
+              resim_no=None, resim_adi=None, sablon=None, antet=None,
+              pi3d_antet=None):
     """1:1 DXF'in KOPYASINA standart bir pafta ekler.
 
     kaynak_dxf : 1:1 çizim.
@@ -1190,11 +1371,15 @@ def pafta_kur(kaynak_dxf, cikti_dxf=None, kagit=VARSAYILAN_KAGIT, olcek=None,
                  bölge işaretleri ve antet firmanın çiziminden gelir.
     antet      : antet kutularına yazılacak değerler
                  {"malzeme":..., "kutle":..., "cizen":..., "tarih":...}
+    pi3d_antet : firma anteti yokken sağ alt kutuya Pi3D anteti (logo
+                 şeridi + alanlar) çizilsin mi. None: ayar dosyasındaki
+                 antet_pi3d (varsayılan açık). Firma anteti varsa çizilmez.
 
     Döner: {"olcek":, "olcek_metni":, "kagit":, "yer":, "olcu": (gx,gy),
             "alan": (g,y), "dosya":}
     """
     _KUTU_ONBELLEK.clear()           # handle'lar belgeye özel
+    _IMGDEF.clear()
     if kagit not in KAGIT:
         raise PaftaYok(f"Bilinmeyen kâğıt: {kagit}")
     istenen = kagit
@@ -1385,17 +1570,20 @@ def pafta_kur(kaynak_dxf, cikti_dxf=None, kagit=VARSAYILAN_KAGIT, olcek=None,
     if resim_adi:
         sig = max(4, int(kg2 / (HARF_ORAN * BASLIK_ALT_YAZI)) - len(not_) - 3)
         resim_adi = str(resim_adi)[:sig]
-    deger = None
-    if sablon is not None:
-        # Antet kutularına ne yazılacak. Ölçek ve dosya adı burada
-        # bilinir; malzeme, kütle, çizen ve tarih çağırandan gelir.
-        deger = dict(antet or {})
-        deger.setdefault("olcek", olcek_metni(olcek))
-        deger.setdefault("resim_no", no)
-        deger.setdefault("parca_adi", resim_adi or "")
-        deger.setdefault("dosya", os.path.basename(hedef_adi))
+    # Antet kutularına ne yazılacak (firma anteti ya da Pi3D anteti).
+    # Ölçek ve dosya adı burada bilinir; malzeme, kütle, çizen ve tarih
+    # çağırandan gelir.
+    deger = dict(antet or {})
+    deger.setdefault("olcek", olcek_metni(olcek))
+    deger.setdefault("resim_no", no)
+    deger.setdefault("parca_adi", resim_adi or "")
+    deger.setdefault("dosya", os.path.basename(hedef_adi))
+    deger.setdefault("kagit", kagit_adi(kagit))
+    deger["sayfa"] = 1
+    deger["_klasor"] = os.path.dirname(os.path.abspath(hedef_adi))
+    pi3d_antet = sablon is None and pi3d_antet_acik(pi3d_antet)
     _pafta_cerceve_ciz(pafta, kagit, no, resim_adi or "", not_,
-                       sablon=sablon, antet_degerleri=deger)
+                       sablon=sablon, antet_degerleri=deger, pi3d_antet=pi3d_antet)
 
     # --- pencere(ler): 1:1 çizime buradan bakılır
     sayfa = 1
@@ -1409,7 +1597,7 @@ def pafta_kur(kaynak_dxf, cikti_dxf=None, kagit=VARSAYILAN_KAGIT, olcek=None,
                     except Exception:
                         pass
             pencere += _detay_sayfalari(d, pafta_adi, kagit, plan["sayfa2"], no,
-                                        resim_adi or "", sablon, deger)
+                                        resim_adi or "", sablon, deger, pi3d_antet)
             sayfa = 1 + sum(1 for ad_ in d.layout_names()
                             if ad_.startswith(pafta_adi + "_") and ad_[len(pafta_adi) + 1:].isdigit())
     else:

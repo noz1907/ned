@@ -166,7 +166,9 @@ DXF'te yazı boyunun katı olarak uygulanır):
 - Çizim kâğıdın yaklaşık %70-75'ini doldurur; ölçek serbest ve ara
   değerde olabilir (1:12, 1:14, 1:17 ...). Standart 1-2-5 serisine
   zorlanmaz.
-- Antet alanı (A3'te sağ alt 150 x 100 mm) BOŞ kalır; dolu pencereler
-  (görünüşler, başlık) antete değmez, boş hücre antetin üstüne düşebilir.
+- Antet alanına (A3'te sağ alt 150 x 100 mm) ÇİZİM GİRMEZ; firma anteti
+  yoksa oraya Pi3D logolu antet çizilir (`antet_pi3d: 0` ile boş). Dolu
+  pencereler (görünüşler, başlık) antete değmez, boş hücre antetin
+  üstüne düşebilir.
 - Görünüşler birbirine yakın durur (arası en çok 15 mm), dağılmaz.
 - Yazılar okunur olmalı; "karınca duası" resim kabul edilmez.

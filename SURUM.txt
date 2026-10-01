@@ -1,6 +1,6 @@
 Pi3D  –  3B modelden parça listesi ve teknik resim
 
-Sürüm   : v1.0.9  (01.10.2026)
+Sürüm   : v1.0.10  (01.10.2026)
 Kaynak  : github.com/noz1907/ned   dal: claude/fikstur-parca-stp-57hwc1
 
 KURULUM
@@ -31,7 +31,8 @@ BU SÜRÜMDE NE VAR
                     alinmaz, PDF'i basilmaz. Acinimi cikanlar secili
                     gelir, obur sac parcalari kullanici secer.
   7 PAFTA           Resmin KENDİ dosyasına standart A3 (A4..A0) pafta
-                    sekmesi ekler - ayrı kopya YOK. Kâğıt her zaman
+                    sekmesi ekler - ayrı kopya YOK. Firma anteti yoksa
+                    Pi3D logolu antet kendiliğinden dolar. Kâğıt her zaman
                     YATAY (dikey yalnız --kagit A3-D). ANA RESİM BÜYÜK
                     KALIR: detay görünüşleri (ve yazı küçük kalıyorsa
                     yan görünüşler) aynı PDF'in 2. sayfasına
@@ -152,6 +153,24 @@ BU SÜRÜMDE NE VAR
       6 yazı boyu), SİM. notu balonun altında.
     - kırmızı yalnız kaynağın kendisi (uzun sac kenarı artık kırmızı
       değil); kaynak ekseni ince mavi kesikli.
+
+  v1.0.10: Pi3D ANTETİ, TANITIM VİDEOSU:
+    - Pi3D ANTETİ: firma anteti yokken sağ alttaki 150 x 100 mm kutuya
+      Pi3D / PiVision logolu antet çizilir (logo şeridi DXF'e IMAGE
+      olarak, pi3d_antet.png DXF'in yanında); parça adı, resim no,
+      dosya, malzeme, kütle, ölçek, kâğıt / sayfa, çizen ve onaylayan
+      kendiliğinden dolar, sığmayan yazı ölçülerek küçülür. PDF'te de
+      basılır. Ayar antet_pi3d: 0 ile kutu eskisi gibi boş kalır.
+      Tarih / çizen / onaylayan kutuları 7. adımda artık antetsiz
+      sürümde de sorulur. Test: test/pafta_denetimi.py.
+    - AÇINIM profili: büyütme profili açınımın kendisinden büyük yapmaz
+      (16 kanatlı 1,2 m sacda 5:1 profil 5,4 m olup pafta 1:30'a
+      düşüyordu; şimdi 1:12).
+    - TANITIM VİDEOSU yenilendi (Pi3D_Tanitim.mp4): Pi3D antetli PDF,
+      güncel açınım (büküm tablosu, paralel + düz ölçüler), 3B açınım,
+      lazer; "3-4 gün değil, 1-2 saat" vurgusu (program süresi 23 dk
+      40 sn ölçülmüş, kalan süre gözden geçirme). Başka firma logosu /
+      anteti yok.
 
   v1.0.9: CATIA BOM EŞLEŞTİRME ve GERÇEK MALZEME:
     - CATIA V5 (R14 / R17) Analyze > Bill of Material kaydı BÖLÜMLÜDÜR

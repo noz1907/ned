@@ -1196,11 +1196,12 @@ class Uygulama(ttk.Frame):
             # Sessizce yok olmasın: kullanıcı "çizen/tarih neden
             # sorulmuyor" diye takılıyordu. Nereye bakıldığı yazılır.
             ttk.Label(f, foreground="#777", justify="left", wraplength=900,
-                      text=("Firma anteti yok – sade pafta çizilecek: "
-                            "sağ alt köşede 150 x 100 mm boş alan kalır, "
-                            "kendi antetinizi oraya yapıştırırsınız. "
+                      text=("Firma anteti yok – Pi3D antetli pafta çizilecek: "
+                            "sağ alt köşede Pi3D / PiVision logolu antet; parça adı, "
+                            "resim no, malzeme, kütle, ölçek, sayfa, çizen ve onaylayan "
+                            "kendiliğinden dolar (ayar antet_pi3d: 0 ile kutu boş kalır). "
                             + getattr(self, "antet_neden", "") + "\n"
-                            "Antet istiyorsanız: exe'yi EXE_YAP.bat ile "
+                            "Firma anteti istiyorsanız: exe'yi EXE_YAP.bat ile "
                             "2 (FIRMA) seçeneğinde derleyin, ya da "
                             "firma.dxf + firma.json dosyalarını şu "
                             "klasörlerden birine koyun — "
@@ -1216,26 +1217,27 @@ class Uygulama(ttk.Frame):
                 f"  ({self.sablon.bilgi.get('ad', 'antet')} – çerçeve, "
                 "bölge işaretleri, antet ve logo firmanın çiziminden "
                 "gelir; kâğıtla birlikte ölçeklenir)")).pack(side="left")
-            gir = ttk.Frame(f); gir.pack(fill="x", pady=(0, 6))
-            ttk.Label(gir, text="Tarih:").pack(side="left")
-            self.v_tarih = tk.StringVar(
-                value=(self.M.ayar_oku().get("tarih") if self.M else "")
-                      or time.strftime("%d.%m.%Y"))
-            ttk.Entry(gir, textvariable=self.v_tarih, width=12).pack(
-                side="left", padx=(4, 12))
-            ttk.Label(gir, text="Çizen:").pack(side="left")
-            self.v_cizen = tk.StringVar(
-                value=(self.M.ayar_oku().get("cizen") if self.M else "") or "")
-            ttk.Entry(gir, textvariable=self.v_cizen, width=16).pack(
-                side="left", padx=(4, 12))
-            ttk.Label(gir, text="Onaylayan:").pack(side="left")
-            self.v_onay = tk.StringVar(
-                value=(self.M.ayar_oku().get("onaylayan") if self.M else "") or "")
-            ttk.Entry(gir, textvariable=self.v_onay, width=16).pack(
-                side="left", padx=4)
-            ttk.Label(gir, foreground="#555", text=(
-                "  antetteki Drawn / Checked satırlarına yazılır, "
-                "saklanır")).pack(side="left")
+        # tarih, çizen, onaylayan: firma anteti ya da Pi3D anteti, ikisinde de
+        gir = ttk.Frame(f); gir.pack(fill="x", pady=(0, 6))
+        ttk.Label(gir, text="Tarih:").pack(side="left")
+        self.v_tarih = tk.StringVar(
+            value=(self.M.ayar_oku().get("tarih") if self.M else "")
+                  or time.strftime("%d.%m.%Y"))
+        ttk.Entry(gir, textvariable=self.v_tarih, width=12).pack(
+            side="left", padx=(4, 12))
+        ttk.Label(gir, text="Çizen:").pack(side="left")
+        self.v_cizen = tk.StringVar(
+            value=(self.M.ayar_oku().get("cizen") if self.M else "") or "")
+        ttk.Entry(gir, textvariable=self.v_cizen, width=16).pack(
+            side="left", padx=(4, 12))
+        ttk.Label(gir, text="Onaylayan:").pack(side="left")
+        self.v_onay = tk.StringVar(
+            value=(self.M.ayar_oku().get("onaylayan") if self.M else "") or "")
+        ttk.Entry(gir, textvariable=self.v_onay, width=16).pack(
+            side="left", padx=4)
+        ttk.Label(gir, foreground="#555", text=(
+            "  antetin çizen / onaylayan kutularına yazılır, "
+            "saklanır")).pack(side="left")
 
         sec = ttk.Frame(f); sec.pack(fill="x")
         ttk.Label(sec, text="Kâğıt:").pack(side="left")
@@ -1701,11 +1703,17 @@ class Uygulama(ttk.Frame):
             pass
         sablon = self.sablon if self._antet_acik() else None
         ortak = {}
-        if sablon is not None:
-            ortak = {"cizen": self.v_cizen.get().strip(),
-                     "onaylayan": self.v_onay.get().strip(),
-                     "cizen_tarih": self.v_tarih.get().strip(),
-                     "onay_tarih": self.v_tarih.get().strip()}
+        if True:                       # firma anteti de Pi3D anteti de aynı kutuları kullanır
+            def _kutu(ad):
+                """Giriş kutusunun metni; kutu kurulmamışsa boş (sayfa
+                kurulmadan çağrılan testler, eski kayıtlar)."""
+                try:
+                    v = getattr(self, ad).get()
+                except Exception:
+                    return ""
+                return v.strip() if isinstance(v, str) else ""
+            ortak = {"cizen": _kutu("v_cizen"), "onaylayan": _kutu("v_onay"),
+                     "cizen_tarih": _kutu("v_tarih"), "onay_tarih": _kutu("v_tarih")}
             try:                       # bir daha yazmaya gerek kalmasın
                 self.M.ayar_yaz(tarih=ortak["cizen_tarih"],
                                 cizen=ortak["cizen"],

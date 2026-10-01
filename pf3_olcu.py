@@ -9634,8 +9634,16 @@ def dxf_acilim(r, k, yol, P=None):
         # binmesin); ölçek başlıkta yazar.
         en_kisa = min(kdo) if kdo else 0.0
         olc = 1.0
+        # Büyütme profili açınımın kendisinden büyük yapmaz: 16 kanatlı
+        # 1,2 m'lik sacda 5:1 profil 5,4 m oluyor, pafta ölçeği 1:30'a
+        # düşüyordu. Profil en çok açınımın uzun kenarı kadar.
+        pts0 = [p for q in pr["cizgi"] for p in q]
+        ext = max(max(p[0] for p in pts0) - min(p[0] for p in pts0),
+                  max(p[1] for p in pts0) - min(p[1] for p in pts0), 1.0)
         if en_kisa > 0:
             for v in (1.0, 2.0, 2.5, 4.0, 5.0, 10.0):
+                if v > 1.0 and ext * v > max(boy, gen):
+                    break
                 olc = v
                 if en_kisa * v >= 5.0 * yazi_h:
                     break

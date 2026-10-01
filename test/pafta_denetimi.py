@@ -242,7 +242,7 @@ try:
         bayt = hashlib.sha256(open(yol, "rb").read()).hexdigest()
         izi = model_parmak_izi(yol)
         cik = os.path.join(kl, "CIK", ad)
-        r = P.pafta_kur(yol, cik, kagit)
+        r = P.pafta_kur(yol, cik, kagit, pi3d_antet=False)
         esit(f"{ad}: kaynak dosya baytı",
              hashlib.sha256(open(yol, "rb").read()).hexdigest(), bayt)
         esit(f"{ad}: kopyanın model uzayı", model_parmak_izi(cik), izi)
@@ -427,6 +427,38 @@ try:
     harf = {e.dxf.text for e in pf if e.dxftype() == "TEXT"}
     dogru("bölge rakamları var", {"1", "8"} <= harf, str(sorted(harf))[:80])
     dogru("bölge harfleri var", {"A", "D"} <= harf, str(sorted(harf))[:80])
+
+    print("\n-- Pi3D anteti (firma anteti yokken, antet_pi3d açık)")
+    cik3 = os.path.join(kl, "CIK", "antetli.dxf")
+    P.pafta_kur(os.path.join(kl, "kucuk.dxf"), cik3, "A3", resim_no="P09",
+                resim_adi="DENEME PARÇASI", pi3d_antet=True,
+                antet={"malzeme": "S235JR", "kutle": "1,250 kg",
+                       "cizen": "N.Ö.", "cizen_tarih": "01.10.2026"})
+    pf3 = ezdxf.readfile(cik3).layout("PAFTA")
+    ak3 = P.antet_kutusu("A3")
+    ant = [e for e in pf3 if e.dxf.layer == P.KAT_ANTET]
+    dogru("antet katmanı dolu", len(ant) > 10, f"{len(ant)} varlık")
+    dogru("logo şeridi (IMAGE) var", any(e.dxftype() == "IMAGE" for e in ant),
+          str(sorted({e.dxftype() for e in ant})))
+    dogru("logo PNG dosyası DXF'in yanında",
+          os.path.isfile(os.path.join(kl, "CIK", P.PI3D_ANTET_PNG)))
+    disari = []
+    for e in ant:
+        try:
+            b = ezdxf.bbox.extents([e], fast=False)
+        except Exception:
+            continue
+        if not b.has_data:
+            continue
+        if (b.extmin.x < ak3[0] - 0.3 or b.extmax.x > ak3[2] + 0.3
+                or b.extmin.y < ak3[1] - 0.3 or b.extmax.y > ak3[3] + 0.3):
+            disari.append(e.dxftype())
+    esit("antetin bütün öğeleri 150x100 kutunun içinde", len(disari), 0)
+    yazi3 = " ".join(e.dxf.text for e in ant if e.dxftype() == "TEXT")
+    for kelime in ("DENEME PARÇASI", "P09", "S235JR", "1,250 kg", "N.Ö.", "1:1", "A3"):
+        dogru(f"antette {kelime!r} yazıyor", kelime in yazi3, yazi3[:120])
+    pdf3 = P.bas(cik3, os.path.join(kl, "antetli.pdf"), dpi=72)
+    dogru("antetli PDF üretildi", os.path.getsize(pdf3) > 5000)
 
     print("\n-- resim no ve ismi sağ üst köşede")
     cik2 = os.path.join(kl, "CIK", "nolu.dxf")

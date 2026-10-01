@@ -1486,8 +1486,26 @@ Aşağıdaki şema yatay A3'tir (420 × 297 mm); istenen dikeyde aynı yapı
 - Her biri ayrı katmandadır (`PAFTA_CERCEVE`, `PAFTA_ANTET_ALANI`,
   `PAFTA_BOLGE`, `PAFTA_BILGI`); istemediğinizi tek tıkla silersiniz.
 
-Program kendiliğinden antet **çizmez**. Her firmanın anteti başka;
-programın uyduracağı bir şey değil. Kutuyu boş bırakır, gerisi sizin.
+#### Pi3D anteti (firma anteti yokken)
+
+Firma anteti tanımlı değilse sağ alttaki 150 × 100 mm kutuya **Pi3D'nin
+kendi anteti** çizilir: üstte Pi3D ve PiVision logolu şerit (DXF'e IMAGE
+olarak girer; `pi3d_antet.png` dosyası DXF'in yanına bir kez yazılır, CAD
+programı ve PDF basımı oradan okur), altında şu kutular kendiliğinden
+dolar:
+
+| kutu | nereden gelir |
+|------|---------------|
+| PARÇA ADI, RESİM NO, DOSYA | parçanın adı, kodu, DXF dosya adı |
+| MALZEME, KÜTLE | BOM |
+| ÖLÇEK, KÂĞIT / SAYFA | paftanın ölçeği, kâğıt ve sayfa numarası |
+| ÇİZEN, ONAYLAYAN | 7. adımda yazılan tarih, çizen, onaylayan (saklanır) |
+
+Sığmayan yazı önce küçülür, sonra kısaltılır (ölçülerek). Kutuyu boş
+isteyenler (kendi antetini yapıştıracaklar) ayar dosyasına
+`"antet_pi3d": 0` yazar: o zaman alan eskisi gibi çizilmez.
+
+Firma anteti tanımlıysa Pi3D anteti çizilmez; resim firmanındır.
 
 #### Firma anteti (EXE_YAP.bat'ta 2. seçenek)
 
@@ -1523,8 +1541,8 @@ yüzden antetli paftada kâğıt her zaman yatay kalır.
 
 ```
 1 = PI3D    Pi3D ve PiVision logolari gomulu, FIRMA ANTETI YOK
-            (sag alt kosede 150x100 mm bos alan; kendi antetinizi
-             oraya yapistirirsiniz)
+            (sag alt kosede Pi3D logolu antet; antet_pi3d: 0 ile
+             bos birakilir, kendi antetinizi oraya yapistirirsiniz)
 2 = FIRMA   Pi3D logolari konmaz; antet klasorundeki FIRMA ANTETI
             kullanilir, kutularini Pi3D doldurur
 ```
