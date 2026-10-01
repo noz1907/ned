@@ -1655,7 +1655,10 @@ KISA_TABLO = 10             # bu kadar dikişe kadar tablo genel görünüş say
 ETIKET_PAY = 60.0           # görünüşün iki yanında etiket sütunu
 # ISO 5455 ölçekleri (kâğıt / gerçek)
 KATMAN_RENK = {"GORUNEN": 7, "KAYNAK": 1, "OLCU": 5, "YAZI": 7, "CERCEVE": 7,
-               "DETAY": 6, "EKSEN": 5, "BOLGE": 6}
+               "DETAY": 6, "EKSEN": 5, "BOLGE": 6,
+               # balonlu resim: balon içi çizim, balon dairesi, uçan çizgi,
+               # logo ayrı katmanda (animasyon / sunum katman katman alır)
+               "BALON_G": 7, "BALON_K": 1, "BALON_C": 5, "UCAN": 6, "LOGO": 7}
 
 
 def olcek_sec(ideal):
@@ -1685,7 +1688,9 @@ def _yeni_sayfa(O):
             doc.layers.add(kat)
         doc.layers.get(kat).color = renk
     doc.layers.get("KAYNAK").dxf.lineweight = 50
+    doc.layers.get("BALON_K").dxf.lineweight = 50
     doc.layers.get("GORUNEN").dxf.lineweight = 25
+    doc.layers.get("BALON_G").dxf.lineweight = 25
     for kat in ("DETAY", "EKSEN"):
         try:
             doc.layers.get(kat).dxf.linetype = "KESIK"
@@ -1877,6 +1882,7 @@ BALON_R = 33.0             # büyütülmüş kaynak dairesinin yarıçapı (kâ�
 BALON_SAYFA = 6            # sayfa başına en çok balon (3 sol + 3 sağ)
 BALON_YH = 2.0             # balon etiketlerinin yazı boyu
 BALON_ETIKET = 44.0        # dairenin dış yanında sembol için ayrılan şerit (mm)
+SON_BALON = None           # son balonlu resmin sayfaları ve geometrisi (sunum / animasyon)
 
 
 def _daire_kesisim(a, b, c, r):
@@ -1971,9 +1977,13 @@ def _balon_sayfalari(O, bilgi, detaylar, det_r, klasor):
         logo = PF.pi3d_antet_resmi(klasor)
     except Exception:
         logo = None
+    global SON_BALON
+    SON_BALON = {"sayfalar": [], "geo": [], "logo": None}
     for sayfa_no, paket in enumerate(paketler, 1):
         doc = _yeni_sayfa(O)
         doc.filename = os.path.join(klasor, "_balon.dxf")   # IMAGE yolu buradan
+        logo_geo = None
+        geo = []
         msp = doc.modelspace()
         kat = {"layer": "CERCEVE"}
         msp.add_lwpolyline([(KENAR, KENAR), (W - KENAR, KENAR), (W - KENAR, H - KENAR),
@@ -1986,7 +1996,8 @@ def _balon_sayfalari(O, bilgi, detaylar, det_r, klasor):
                 wi = hi * px[0] / px[1]
                 idef = doc.add_image_def(filename=logo, size_in_pixel=px)
                 msp.add_image(image_def=idef, insert=(KENAR + 6.0, H - KENAR - 4.0 - hi),
-                              size_in_units=(wi, hi), dxfattribs={"layer": "CERCEVE"})
+                              size_in_units=(wi, hi), dxfattribs={"layer": "LOGO"})
+                logo_geo = (KENAR + 6.0, H - KENAR - 4.0 - hi, wi, hi)
             except Exception:
                 _yaz(msp, "Pi3D", KENAR + 6.0, H - KENAR - 14.0, 8.0)
         _yaz(msp, "KAYNAK RESMİ", W - KENAR - 70.0, H - KENAR - 10.0, 5.0)
@@ -2022,22 +2033,22 @@ def _balon_sayfalari(O, bilgi, detaylar, det_r, klasor):
                 my = sum(p[1] for p in pts) / len(pts)
                 # geniş bölgede daire görünüşü yutmasın: en çok 1,2 R
                 rs = min(1.2 * R, max(4.0, max(math.dist((mx, my), p) for p in ex) + 2.0))
-                msp.add_circle((mx, my), rs, dxfattribs={"layer": "BOLGE"})
+                msp.add_circle((mx, my), rs, dxfattribs={"layer": "UCAN"})
                 kucuk[dt["bolge"]] = (mx, my, rs)
             mx, my, rs = kucuk[dt["bolge"]]
             # büyük daire (düz çizgi)
-            msp.add_circle((cx, cy), R, dxfattribs={"layer": "OLCU"})
+            msp.add_circle((cx, cy), R, dxfattribs={"layer": "BALON_C"})
             # uçan çizgi: küçük dairenin kenarından büyüğün kenarına
             vx, vy = cx - mx, cy - my
             L_ = math.hypot(vx, vy) or 1.0
             ux, uy = vx / L_, vy / L_
             if L_ > rs + R:
                 msp.add_line((mx + ux * rs, my + uy * rs), (cx - ux * R, cy - uy * R),
-                             dxfattribs={"layer": "BOLGE"})
+                             dxfattribs={"layer": "UCAN"})
             # bölge harfi: büyük dairenin üstüne teğet küçük daire
             hx, hy = cx, cy + R + 4.0
-            msp.add_circle((hx, hy), 4.0, dxfattribs={"layer": "BOLGE"})
-            e = _yaz(msp, dt["harf"], hx, hy, 3.2 if len(dt["harf"]) == 1 else 2.4, kat="BOLGE")
+            msp.add_circle((hx, hy), 4.0, dxfattribs={"layer": "BALON_C"})
+            e = _yaz(msp, dt["harf"], hx, hy, 3.2 if len(dt["harf"]) == 1 else 2.4, kat="BALON_C")
             try:
                 from ezdxf.enums import TextEntityAlignment
                 e.set_placement((hx, hy), align=TextEntityAlignment.MIDDLE_CENTER)
@@ -2051,9 +2062,12 @@ def _balon_sayfalari(O, bilgi, detaylar, det_r, klasor):
             Rd.yerlestir(cx - wdd / 2, cy + hdd / 2)
             for kat_, q in Rd.cizgi:
                 for w in _daire_kirp([Rd.p(a) for a in q], (cx, cy), R - 0.6):
-                    msp.add_lwpolyline(w, dxfattribs={"layer": kat_})
+                    msp.add_lwpolyline(w, dxfattribs={"layer": "BALON_K" if kat_ == "KAYNAK"
+                                                      else "BALON_G"})
             # kaynak sembolleri dairenin DIŞ yanında: sütuna göre dışa doğru
             taraf = -1 if cx < W / 2 else 1
+            geo.append({"harf": dt["harf"], "kucuk": (mx, my, rs), "buyuk": (cx, cy, R),
+                        "taraf": taraf, "etiket": BALON_ETIKET})
             ds = sorted(dt["dikis"], key=lambda d: -Rd.p3(d["ok"])[1])
             n = len(ds)
             for k, d in enumerate(ds):
@@ -2065,6 +2079,9 @@ def _balon_sayfalari(O, bilgi, detaylar, det_r, klasor):
                 msp.add_line(Rd.p3(d["p0"]), Rd.p3(d["p1"]), dxfattribs={"layer": "EKSEN"})
                 _sembol(msp, q, (xe, yy), taraf, d, h)
         sayfalar.append(doc)
+        SON_BALON["sayfalar"].append(doc)
+        SON_BALON["geo"].append(geo)
+        SON_BALON["logo"] = logo_geo
     return sayfalar
 
 
