@@ -1358,23 +1358,15 @@ yazılmaz, hata verir.
 
 #### Paftanın yapısı
 
-**Kâğıdın yönünü program seçer.** Boyu siz verirsiniz (A3), yönü
-parçaya bakılarak belirlenir: yatay ve dikey ikisi de denenir, hangisi
-daha büyük ölçek veriyorsa o kullanılır; eşitse yatay kalır.
+**Kâğıt her zaman yataydır.** Boyu siz verirsiniz (A3); yön yataydır.
+Program dik duran parça için kendiliğinden dikeye geçmez — teknik
+resimde alışılmış olan yatay paftadır ve dosyalama böyle kolaydır.
+Dikey kâğıt yalnız siz isterseniz kullanılır: komut satırında
+`--kagit A3-D`. O zaman listede ve paftanın sağ üst köşesinde "A3 dikey"
+yazar, PDF adına da girer: `P04_KONSOL_A3D.pdf`.
 
-Bu, önceki sürümün "her zaman yatay" kuralının düzeltilmesidir. Dik
-duran uzun bir parça — 3 m boyunda bir profilin ön görünüşü — yatay
-A3'te 1:20'ye, montajda 1:50'ye kadar düşüyor ve resim neredeyse
-görünmüyordu. Aynı parça dikey kâğıtta bir kademe büyük çıkıyor:
-ölçülen örnekte 230 × 3000 mm'lik bir çizim yatayda 1:20, dikeyde
-1:10. Kâğıdı parçaya uydurmak, parçayı kâğıda kurban etmekten iyidir.
-
-Listede ve paftanın sağ üst köşesinde hangi yön kullanıldığı yazar
-("A3 dikey"), PDF adına da girer: `P04_KONSOL_A3D.pdf`. Yönü kendiniz
-dayatmak isterseniz komut satırında `--kagit A3-D` diyebilirsiniz.
-
-Aşağıdaki şema yatay A3'tir (420 × 297 mm); dikeyde aynı yapı 90°
-döner, antet kutusu yine sağ alt köşededir:
+Aşağıdaki şema yatay A3'tir (420 × 297 mm); istenen dikeyde aynı yapı
+90° döner, antet kutusu yine sağ alt köşededir:
 
 ```
  +----------------------------------------------------+
@@ -2025,7 +2017,7 @@ python pf4_pafta.py --kagit A2 --cikti cikti/PAFTA cikti/*.dxf
 
 | seçenek | ne yapar |
 |---------|----------|
-| `--kagit A4..A0` | kâğıt boyu (varsayılan A3); yönü program seçer. `A3-D` denirse yalnız dikey kullanılır |
+| `--kagit A4..A0` | kâğıt boyu (varsayılan A3), her zaman yatay. `A3-D` denirse dikey kullanılır |
 | `--olcek 0.1` | ölçeği elle verir; kâğıda sığmıyorsa pafta yazılmaz |
 | `--cikti KLASÖR` | paftaların yazılacağı klasör (varsayılan `PAFTA`) |
 | `--plan` | hiçbir şey yazmaz, yalnız ölçek raporu verir |
@@ -2125,9 +2117,15 @@ başlıkta yazar.
 
 **Ölçülendirme kuralları** (ayrıntı ve gerekçe: `CLAUDE.md`):
 
-- **Dış ölçüler önce ve kesinlikle:** ana görünüş (ÖN — program parçanın
-  en çok bilgi veren yüzünü öne çevirir) boyunu ve yüksekliğini en dışta
-  taşır; derinlik yan görünüşte (sac profili kesitte) verilir.
+- **Parça montaj yönünde çizilir, döndürülmez:** modelde nasıl duruyorsa
+  ÖN / SAĞ / ÜST öyledir.
+- **Dış ölçüler önce ve kesinlikle:** ana görünüş (en çok bilgi veren
+  görünüş) iki boyutunu en dışta taşır; derinlik yan görünüşte (sac
+  profili kesitte) verilir.
+- **Karışık bölge detaya taşınır:** ana görünüşte yalnız hiçbir şeyi
+  kesmeyen ölçüler kalır; kalabalık uç ya da köşe bir çerçeveyle
+  işaretlenir ve büyütülmüş `DETAY D (2,5:1)` görünüşünde tam
+  ölçülendirilir. Detaylar görünüşlerin altına sırayla dizilir.
 - **Referans:** her yönde tek referans (düz yüz ya da eksen). Konumlar
   referanstan zincirle (0 → A → B) ya da paralel verilir.
 - **Ölçü çizgisi delik / slot üstünden geçmez:** geçecekse ölçü öbür
@@ -2138,9 +2136,21 @@ başlıkta yazar.
   görünüşü (`DETAY D (4:1)`).
 - **Aynı eleman bir kez:** `9x SLOT 6`, `3x 70`, `10 x 20 = 200`,
   `4x 30°`.
+- **Ölçülendirme el kitaplarının özeti "anayasa"dır** (ayrıntı, gerekçe
+  ve kaynak: `OLCULENDIRME_KURALLARI.md`): yazı 3,5 mm (en az 2,5), ok
+  3 mm / 30°, uzatma boşluğu 1,5 mm, taşma 2 mm, ilk ölçü hattı parçadan
+  10 mm, hatlar arası 8 mm, kılavuz çizgisi 30 / 45 / 60°. Hepsi yazı
+  boyunun katı olarak uygulanır; DXF'teki ölçü stili bu değerlerdendir.
 - **PDF okumak içindir**, üstünden ölçü alınmaz; ölçü 1:1 DXF'ten
   alınır. PDF'te ölçek serbesttir (1:9, 1:11, 1:13 …): çizim kâğıdı
   doldurur, antet boş kalır.
+- **Ana resim büyük kalır, PDF çok sayfalı olabilir:** detay görünüşleri
+  1. sayfada ana resmi küçültüyorsa aynı PDF'in 2. sayfasına
+  ("DETAYLAR") gider; tek sayfada yazı 1,2 mm'nin altında kalıyorsa ve
+  ana görünüş tek başına en az 1,3 kat büyüyorsa yan görünüşler de 2.
+  sayfaya alınır. Bilgi bloğu (parça adı, malzeme) hep 1. sayfadadır.
+  2. sayfanın başlığında kendi ölçeği yazar; detay büyütmeleri (`2:1`)
+  ayrıca detay adında. DXF'te sayfalar `PAFTA`, `PAFTA_2` … sekmeleridir.
 
 Çizimde tablo yoktur: delikler görünüşlerde `2x Ø9`, kenar yuvarlamaları
 `4x R3` olarak ölçülendirilir; yazı deliğin hemen yanına, kısa bir kılavuz

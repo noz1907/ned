@@ -149,8 +149,8 @@ try:
     cizim(os.path.join(cikti, "P01_KUCUK.dxf"), 200.0, 120.0, "P01")
     cizim(os.path.join(cikti, "P02_ORTA.dxf"), 350.0, 200.0, "P02")
     cizim(os.path.join(cikti, "P03_UZUN.dxf"), 1800.0, 240.0, "P03")
-    # DIK duran uzun parca: yatay kagitta bir kademe kucuk kalir,
-    # program dikey kagidi secmeli.
+    # DIK duran uzun parca: kagit yine YATAY (kullanici: "resimler yatay
+    # olacak"); dikey yalniz acikca istenirse.
     cizim(os.path.join(cikti, "P04_DIK.dxf"), 230.0, 1800.0, "P04")
     # Acinim resmi: detay resmiyle AYNI adi tasir, sonuna _acinim gelir.
     cizim(os.path.join(cikti, "P01_KUCUK_acinim.dxf"), 260.0, 150.0, "P01")
@@ -231,10 +231,10 @@ try:
     esit("hepsi secili geldi",
          len(u.pf_agac.selection()), len(u.pf_agac.satir))
 
-    # Yon parcaya gore secilmeli.
+    # Kagit her zaman yatay.
     yonler = {v[0]: v[3] for v in u.pf_agac.satir.values()}
     print("     yonler:", yonler)
-    esit("dik duran parca dikey kagida", yonler.get("P04_DIK.dxf"), "A3 dikey")
+    esit("dik duran parca da yatay kagida", yonler.get("P04_DIK.dxf"), "A3 yatay")
     esit("yatik duran parca yatay kagida", yonler.get("P03_UZUN.dxf"), "A3 yatay")
 
     print("\n-- hicbir satir secilmemisken PAFTAYA AL")
@@ -315,7 +315,7 @@ try:
           str(pdf))
     dogru("acinimin da PDF'i cikti",
           "P01_KUCUK_acinim_A3.pdf" in pdf, str(pdf))
-    dogru("dik parca dikey basildi", "P04_DIK_A3D.pdf" in pdf, str(pdf))
+    dogru("dik parca yatay basildi", "P04_DIK_A3.pdf" in pdf, str(pdf))
     dogru("PDF ayri klasorde", os.path.basename(pk) == "PDF", pk)
 
     print("\n-- baska kagit boylari")

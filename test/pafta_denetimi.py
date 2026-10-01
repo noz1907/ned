@@ -173,25 +173,19 @@ try:
     esit("kâğıt adı", P.kagit_adi("A3-D"), "A3 dikey")
     esit("yön eki atılıyor", P.kagit_boyu("A2-D"), "A2")
 
-    # Yön parçaya göre seçilir: dik duran uzun bir parça yatay kâğıtta
-    # bir kademe daha küçülüyordu (3000 mm'lik parça A3'te 1:20 yerine
-    # 1:50'ye kadar düşüp okunmaz hâle geliyordu).
-    print("\n-- yön parçaya göre seçiliyor")
+    # Kâğıt HER ZAMAN YATAY (kullanıcı: "resimler yatay olacak, nereden
+    # çıktı portre"): dik duran parça da yatay kâğıda; dikey kâğıt yalnız
+    # açıkça istenirse ("A3-D").
+    print("\n-- kâğıt her zaman yatay; dikey yalnız istenirse")
     dik = P.yerlesim(230.0, 3000.0, "A3")
     yat = P.yerlesim(3000.0, 230.0, "A3")
-    esit("dik duran uzun parça dikey kâğıda", dik["kagit"], "A3-D")
+    esit("dik duran uzun parça da yatay kâğıda", dik["kagit"], "A3")
     esit("yatık duran uzun parça yatay kâğıda", yat["kagit"], "A3")
-    esit("ikisinin ölçeği de aynı", dik["olcek"], yat["olcek"])
-    # Yalnız yatay zorlansaydı ne olurdu:
-    zor = max((P.sigan_olcek(230.0, 3000.0, a[2] - a[0], a[3] - a[1])
-               for a in P.cizim_alanlari("A3").values()
-               if P.sigan_olcek(230.0, 3000.0, a[2] - a[0], a[3] - a[1])),
-              default=0)
-    dogru("dikey seçmek ölçeği büyüttü", dik["olcek"] > zor,
-          f"dikey {dik['olcek']} vs yatay {zor}")
     esit("eşitlikte yatay kalıyor", P.yerlesim(300.0, 300.0, "A3")["kagit"], "A3")
-    esit("yön eki verilirse ona uyuluyor",
-         P.yerlesim(3000.0, 230.0, "A3-D")["kagit"], "A3-D")
+    iste = P.yerlesim(230.0, 3000.0, "A3-D")
+    esit("yön eki verilirse ona uyuluyor", iste["kagit"], "A3-D")
+    dogru("istenen dikey kâğıtta dik parça büyür", iste["olcek"] > dik["olcek"],
+          f"dikey {iste['olcek']} vs yatay {dik['olcek']}")
 
     print("\n-- çerçeve ve antet alanı")
     esit("A3 çerçevesi", P.cerceve("A3"), (15.0, 15.0, 405.0, 282.0))

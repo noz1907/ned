@@ -26,6 +26,32 @@ resmi), `pf4_pafta.py` (pafta / PDF), `pf14_kaynak.py` (kaynak resmi),
 Ayrıntı, gerekçe ve kaynak: `OLCULENDIRME_KURALLARI.md`. Kararlar ezbere
 değil, belirli bir mantığa göre verilir; her kuralın gerekçesi yazılıdır.
 
+### ANAYASA (kitaplar)
+
+Kullanıcı: "bu kitaplar bizim anayasamız, her ölçü bunlara göre
+şekillenecek." Üç kaynak: **Chevalier** (Guide du dessinateur industriel),
+**"La cotation"** (NF P 02-001 ders notu), **"Règles de cotation"** ders
+notu. Kitap metni kopyalanmaz; kurallar kendi cümlelerimizle özetlenir
+(özetler: scratchpad `kaynak_pdf/*.md`; kalıcı: `OLCULENDIRME_KURALLARI.md`).
+Çelişkide öncelik: kullanıcının kuralı > kitap > ISO. Sayısal standart
+koddaki tek sözlükte durur (`pf3_olcu.ANAYASA`; kâğıt mm, A3, yazı 3,5 mm;
+DXF'te yazı boyunun katı olarak uygulanır):
+
+| öğe | değer | kaynak |
+|---|---|---|
+| rakam yüksekliği | 3,5 mm (asla < 2,5) | CH s.3; La cotation s.3 |
+| ok | dolu, 3 mm, 30°; bir resimde tek tip; dar halkada nokta | La cotation s.4; CH s.3 |
+| uzatma çizgisi | konturdan 2 mm açık başlar, ölçü çizgisini 1,5 mm aşar | La cotation s.3; CH s.2 |
+| ilk ölçü çizgisi | görünüşe 10 mm | La cotation s.3 |
+| paralel ölçü çizgileri arası | 8 mm | La cotation s.3 (7-10) |
+| rakam yeri | yatayda çizginin üstünde ortada; düşeyde yatay okunur (ISO yöntem 2) | La cotation s.3; ISO 129-1 |
+| kısa ölçü içte, uzun dışta; ölçü çizgileri kesişmez; ölçü çizgisi kontur / eksenle aynı doğrultuda olmaz | | CH s.9 |
+| bir ölçü bir kez, en net görünüşte; artık (toplam = zincir) ölçü yok | | CH s.39-40 |
+| Ø kılavuzu radyal, R tek oklu; "n x Ø"; sanal keskin köşe | | CH s.5, s.7, s.2 |
+| detay: ince daire / çerçeve + harf, "DETAY D (2,5:1)", rakam gerçek değer | | CH s.20, s.41 |
+| kesit: kesit çizgisi + oklar + harf, "A-A", tarama rakamın çevresinde kesik | | CH s.9, s.49 |
+| perspektif üstüne ölçü yok; birim mm yazılmaz; ondalık virgül | | K; CH s.3 |
+
 1. **DXF 1:1 çalışma dosyasıdır**, ölçü ondan alınır, başka ölçekte
    çalışılmaz. **PDF insanın okuması içindir**, üstünden ölçü alınmaz;
    DXF'in birebir kopyası olmak zorunda değildir. PDF'te çizim kâğıdın
@@ -43,9 +69,10 @@ değil, belirli bir mantığa göre verilir; her kuralın gerekçesi yazılıdı
    referanstan, öbürleri delikten deliğe art arda.
 6. **Aynı eleman bir kez**: "9x SLOT 6", "3 x 200 = 600", "6x Ø45".
    Simetrik eşe ikinci ölçü konmaz; simetri ekseni çizilir.
-7. **DIŞ ÖLÇÜLER KESİNLİKLE YER ALIR**, önce onlar: ANA görünüş (ÖN)
-   kendi boyunu ve yüksekliğini her zaman en dışta taşır; konum ölçüleri
-   onun içine girer. Öbür görünüşler yalnız ÖN'ün gösteremediğini
+7. **DIŞ ÖLÇÜLER KESİNLİKLE YER ALIR**, önce onlar: ANA görünüş (en
+   çok bilgi veren görünüş; parça döndürülmez, o görünüş hangisiyse)
+   kendi iki boyutunu her zaman en dışta taşır; konum ölçüleri onun
+   içine girer. Öbür görünüşler yalnız ana görünüşün gösteremediğini
    (derinlik) verir - en net göründüğü yerde (sac profili kesitte; ince
    şeritte değil). Gabarinin uzatma çizgisi yolu önceden ayrılır; konamayan
    gabari raporda `gabari_yok` sayılır ve 0 olmalıdır.
@@ -74,23 +101,34 @@ değil, belirli bir mantığa göre verilir; her kuralın gerekçesi yazılıdı
     yalnız temiz, hiçbir şeyi kesmeyen ölçüler kalır. Ölçü çizgisi iki
     yanda da şekil kesiyorsa, zincir halkası rakamın yarısından kısaysa
     ya da ölçüye dışarıda yer yoksa o bölge AYRILIR:
-    - Bölge, parçayı uzun yönüne dik boydan boya kesen BANT (sol uç,
-      sağ uç, orta); yakın bantlar birleşir, detayda sığmayacak kadar
-      uzun bant eşit parçalara bölünür; en çok 3 bant.
-    - Bandın içindeki bütün konumlar ana görünüşten çıkar, DETAY
-      görünüşünde (büyütülmüş, "DETAY D (2,5:1)", ana görünüşte ince
-      çerçeve + harf) zincirle verilir: referans bant datum kenarını
-      içeriyorsa kenar; içermiyorsa ana görünüşte ölçülü BAĞLANTI
-      özelliği (bandın datuma en yakın, temiz yerleşen özelliği ana
-      görünüşte kalır) - tek referans bozulmaz.
-    - Bu, iki geçişle yapılır: önce deneme (temiz yerleşmeyenler bulunur,
-      deneme silinir), sonra bantsız ana görünüş + detaylar.
+    - Bölge = karışık özelliklerin dikdörtgeni; her yönde parça kenarına
+      yakınsa kenara uzar (ince uzun parçada boydan boya bant: sol uç /
+      sağ uç; levhada köşe); kesişenler birleşir; detaya sığmayacak
+      kadar büyük bölge bölünür; en çok 6 bölge.
+    - Bölgedeki bütün konumlar ana görünüşten çıkar, DETAY görünüşünde
+      (büyütülmüş, "DETAY D (2,5:1)", ana görünüşte ince çerçeve + harf)
+      zincirle verilir: referans bölge datum kenarını içeriyorsa kenar;
+      içermiyorsa ana görünüşte ölçülü BAĞLANTI özelliği (bölgenin datuma
+      en yakın, temiz yerleşen özelliği ana görünüşte kalır) - tek
+      referans bozulmaz.
+    - DETAY KÜÇÜK KALIR: büyütülmüş bölge görünüşün en uzun kenarının
+      %30'unu aşmaz, büyütme en kısa ölçü okunacak kadardır (2, 2,5, 4,
+      5, 10); detaylar ana görünüşün ölçeğini düşürmemeli.
+    - İki geçiş: önce deneme (temiz yerleşmeyenler bulunur, deneme
+      silinir), sonra bölgesiz ana görünüş + detaylar.
     - Pafta: detaylar izdüşüm ızgarasına girmez; görünüş öbeğinin ALTINA
       okuma sırasıyla dizilir (altta yer yoksa kâğıdın başka boş yeri).
     Sığmayan ölçü yine de ATILMAZ: detay kurulamazsa özelliğin yanına,
     o da olmazsa slot notu ("3x SLOT 80x180"). Raporda `yer_yok` 0 olmalı.
+    Küçük parçada detay dairesi en az 12 yazı boyu olabilir; detayda yer
+    bulamayan ölçü için önce konmuş ölçülerle yer TAKASI denenir.
+    Aynı hizada iki bölgeye düşen özelliklerin ölçüsü bölünür.
 15. **Aynı görünen ayna görünüşler** (SAĞ = SOL, ÜST = ALT) tek çizilir.
-16. **Sacta delik / kesik** pres ya da lazerle yapılır: konumu verilir;
+16. **Gereksiz ölçü yok, önemli konum eksiksiz**: her delik / slot /
+    kesik / kanat / açı için konum ve gereken özel ölçü (Ø, boy, açı)
+    kesinlikle vardır; artık ölçü (toplamı zaten belli), tekrar, iç yüz
+    / radüs teğeti gibi işe yaramayan ölçü yoktur.
+    **Sacta delik / kesik** pres ya da lazerle yapılır: konumu verilir;
     çap, boy, genişlik yalnız özel ise. Özel şekillerde (pencere, anahtar
     deliği) yalnız konum, ana eksene göre. Çok abartmadan ölçü.
     Delikten deliğe zincir yalnız DÜZENLİ desende (iki delik ya da tam
@@ -98,15 +136,29 @@ değil, belirli bir mantığa göre verilir; her kuralın gerekçesi yazılıdı
     grupların iç ölçüsü bir kez: "3x 70".
     Sacın iki yüzü (paralel, kalınlık kadar aralı çizgiler) TEK duvardır:
     açı ve ölçü bir kez sayılır (4 eğik duvar "4x 30°", 8x değil).
-17. **Görünüş seçimi**: önce en doğru (en çok bilgi veren) görünüş ön
-    görünüş olur; sonra gerekirse sağ / sol, sonra gerekirse üst / alt.
-    Bilgi eklemeyen görünüş çizilmez; çoğu zaman 3 görünüş yeter.
+    Birbirine 0,5 mm içinde kalan datum seviyeleri (104,2 / 104,3 / 104,5)
+    tek sıradır: ortalamaya en yakın gerçek değer yazılır, başlıkta
+    "! MODEL KONTROL" uyarısı çıkar (ölçü uydurulmaz, model denetlenir).
+17. **Parça MONTAJ YÖNÜNDE çizilir, döndürülmez**: modelde nasıl
+    duruyorsa ÖN / SAĞ / ÜST öyledir (kullanıcı: "parça hep doğru yönde
+    olacak, ters neden konulur; montaj yönü neyse ona göre"). "En çok
+    bilgi veren yüzü öne çevirme" YAPILMAZ. Görünüş seçimi: bilgi
+    eklemeyen görünüş çizilmez, SAĞ = SOL / ÜST = ALT ise biri; çoğu
+    zaman 3 görünüş yeter.
 18. Perspektif üzerine ölçü verilmez.
 
 ## PDF (pafta)
 
 - PDF okumak ve atölyede iş yapmak içindir; DXF'le aynı şey değildir.
   Üstünden ölçü alınmaz (kumpas vb. yok), yalnız rakamlar okunur.
+- Kâğıt HER ZAMAN YATAY; dikey yalnız açıkça istenirse ("A3-D").
+- ANA RESİM BÜYÜK KALIR: detaylar 1. sayfada ana görünüşün ölçeğini
+  düşürüyorsa 2. SAYFAYA ("DETAYLAR", aynı PDF'in sonraki sayfası, kendi
+  ölçeğinde) gider; gerekirse daha çok sayfa. Karınca duası yerine çok
+  sayfa (kullanıcı: "gerekirse aynı kaynak gibi birden fazla sayfa").
+  Tek sayfada en küçük yazı 1,2 mm'nin altında kalıyorsa ve ana görünüş
+  tek başına en az 1,3 kat büyüyorsa yan görünüşler de 2. sayfaya
+  gider; bilgi bloğu (parça adı, malzeme) hep 1. sayfada, ızgara dışında.
 - Çizim kâğıdın yaklaşık %70-75'ini doldurur; ölçek serbest ve ara
   değerde olabilir (1:12, 1:14, 1:17 ...). Standart 1-2-5 serisine
   zorlanmaz.

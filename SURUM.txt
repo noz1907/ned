@@ -31,9 +31,12 @@ BU SÜRÜMDE NE VAR
                     alinmaz, PDF'i basilmaz. Acinimi cikanlar secili
                     gelir, obur sac parcalari kullanici secer.
   7 PAFTA           Resmin KENDİ dosyasına standart A3 (A4..A0) pafta
-                    sekmesi ekler - ayrı kopya YOK. KÂĞIDIN YÖNÜNÜ
-                    program seçer: parça hangi yönde daha büyük
-                    görünüyorsa yatay ya da dikey. Detay resimleri ve
+                    sekmesi ekler - ayrı kopya YOK. Kâğıt her zaman
+                    YATAY (dikey yalnız --kagit A3-D). ANA RESİM BÜYÜK
+                    KALIR: detay görünüşleri (ve yazı küçük kalıyorsa
+                    yan görünüşler) aynı PDF'in 2. sayfasına
+                    ("DETAYLAR") gider, bilgi bloğu 1. sayfada; PDF
+                    çok sayfalı olabilir. Detay resimleri ve
                     açınımlar birlikte listelenir, ikisinin de paftası
                     ve PDF'i çıkar. PDF'ler çıktı klasörünün altındaki
                     PDF klasörüne ..._A3.pdf / ..._A3D.pdf yazılır.
@@ -173,15 +176,41 @@ BU SÜRÜMDE NE VAR
     - açılar: sacın iki yüzü tek duvar ("4x 30°", 8x değil); yay küçük
       açıyı tarar; yazıdan kısa kenara açı verilmez.
     - ızgara (sık lazer kesimi): kesik çizgili bölge, başı ve sonu.
-    - görünüş seçimi: en çok bilgi veren yüz ÖN; SAĞ = SOL, ÜST = ALT
-      ise biri; bilgisiz görünüş çizilmez (yalnız varsayılan görünüş
-      takımında - kullanıcı seçtiyse seçtiği çizilir).
+    - PARÇA DÖNDÜRÜLMEZ: montajda nasıl duruyorsa öyle çizilir (önce
+      "en çok bilgi veren yüzü öne çevir" vardı, kabin korumayı ters
+      gösteriyordu). SAĞ = SOL, ÜST = ALT ise biri; bilgisiz görünüş
+      çizilmez.
+    - KARIŞIK BÖLGE DETAYA: ana görünüşte yalnız temiz ölçüler; uzatma
+      çizgisi iki yanda şekil kesen, çok kısa halkalı ya da yeri olmayan
+      ölçülerin bölgesi (uç / köşe) çerçeveyle işaretlenir, büyütülmüş
+      DETAY'da referanstan zincirle verilir; detaylar görünüşlerin altına
+      dizilir. Kâğıt her zaman YATAY.
     - yazı çakışması 0: yazı yazıya, çizgiye (ölçü, uzatma, kılavuz,
       eksen, gizli çizgi, açı yayı) binmez - 371 resimde 0.
+    - aynı hiza sayılan seviyeler: 0,5 mm içindeki datum seviyeleri
+      (104,2 / 104,3 / 104,5 / 104,6'daki delikler) tek sıra; gerçek
+      değer yazılır, başlıkta "! MODEL KONTROL ... aynı hizada sayıldı".
+    - küçük parçada (100 mm braket) detay kurulabiliyor (daire en az 12
+      yazı boyu); detayda yer bulamayan ölçü önce konmuş ölçülerle yer
+      takası yapıyor; iki bölgeye düşen aynı hizalı ölçü bölünüyor.
+      4 modelde 371 resimde düşen ölçü 0, dış ölçü eksiği 0.
+    - ANAYASA (ölçülendirme el kitaplarının özeti, OLCULENDIRME_KURALLARI.md):
+      yazı 3,5 mm (en az 2,5), ok 3 mm / 30°, uzatma boşluğu 1,5, taşma 2,
+      ilk ölçü hattı 10 mm, hat adımı 8 mm, kılavuz açıları 30 / 45 / 60°.
+      Ölçüler yazı boyunun katı olarak uygulanır; ölçü stili (dimstyle)
+      bu değerlerden kurulur.
   PDF: sık ölçek merdiveni (1:9, 1:11, 1:13 ...), sığan EN BÜYÜK ölçek;
     çizim kâğıdı doldurur, antet boş. "6x Ø45" gibi yazılar kenardan
     kırpılmaz; "SAĞ", "ÜST" harf noktaları basılır. PDF okumak içindir,
     ölçü 1:1 DXF'ten alınır.
+    ÇOK SAYFALI PDF: detay görünüşleri 1. sayfada ana resmi küçültüyorsa
+    2. sayfaya ("DETAYLAR", kendi ölçeği başlıkta, büyütmeler ayrıca
+    yazılı); tek sayfada yazı 1,2 mm'nin altında kalıyorsa ve ana görünüş
+    tek başına en az 1,3 kat büyüyorsa yan görünüşler de 2. sayfaya.
+    Bilgi bloğu hep 1. sayfada. Kabin koruma sacı: 1:16 tek sayfa yerine
+    1:9 + 1:7 iki sayfa. DXF'te PAFTA, PAFTA_2 ... sekmeleri.
+    HIZ: varlık kutuları belge başına bir kez hesaplanır (2,5 m'lik
+    yardımcı şasi kolu 85 s -> 11 s).
 
   v1.0.7: YAZILAR ÜST ÜSTE BİNMEZ, PARÇAYA BİNMEZ (kaynak resimleri):
     - etiketin gerçek yüksekliği (balon, SİM. notu) kadar yer; çok

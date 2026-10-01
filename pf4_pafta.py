@@ -129,6 +129,9 @@ BASLIK_SERIT = 11.7          # sag ust baslik seridi: 0,8 + 4,5lik satir + 1,6 +
 # yeter; yer varsa zaten EN_COK'a kadar açılıyor.
 ARA_EN_AZ = 10.0
 ARA_EN_COK = 15.0        # ve en çok bu kadar; görünüşler birbirine yakın dursun (kullanıcı: "sağ görüntüyü yanaştır")
+SAYFA_AYIR_ORAN = 1.3    # yan görünüşler 2. sayfaya: ana görünüş ancak bu kadar büyüyorsa
+SAYFA_AYIR_YAZI_MM = 1.2 # ... ve tek sayfada en küçük yazı bunun altında kalıyorsa
+BILGI_AD = "BILGI"       # başlık bloğunun ızgara hücresi (pf3_olcu gorunus_isareti "BILGI")
 
 HARF_ORAN = 0.62         # yazı genişliği ~ harf sayısı x yükseklik x bu
 EN_AZ_YAZI_MM = 1.8      # kâğıtta bundan küçük yazı okunmaz (ISO 3098: 2,5)
@@ -229,10 +232,32 @@ def _varlik_kutulari(varlik, harf_payi=False):
     büyütülür. ezdxf kutusu büyük harf boyundadır; pencere buna göre
     açılınca etiketin noktaları kırpılıyor, PDF'te "ÜST" "UST", "SAĞ"
     "SAG" basılıyordu. Yalnız pencere BOYU için kullanılır."""
+    # ÖNBELLEK: pafta_kur bu işlevi aynı belge için onlarca kez çağırır
+    # (her plan denemesi); ezdxf'in kutu hesabı 12 bin varlıkta 1,4 s
+    # sürüyor, büyük parçada pafta 85 s oluyordu. Kutu varlığın
+    # handle'ına göre bir kez hesaplanır (varlık pafta kurulurken
+    # değişmez; model uzayı pafta_denetimi ile de doğrulanır).
+    varlik = list(varlik)
     out = []
-    for e, k in zip(varlik, ezdxf.bbox.multi_flat(varlik)):
+    eksik = [e for e in varlik if (id(e.doc), e.dxf.handle, harf_payi) not in _KUTU_ONBELLEK]
+    if eksik:
+        for e, k in zip(eksik, ezdxf.bbox.multi_flat(eksik)):
+            _KUTU_ONBELLEK[(id(e.doc), e.dxf.handle, harf_payi)] = _varlik_kutusu_tek(e, k, harf_payi)
+    for e in varlik:
+        b = _KUTU_ONBELLEK[(id(e.doc), e.dxf.handle, harf_payi)]
+        if b is not None:
+            out.append(b)
+    return out
+
+
+_KUTU_ONBELLEK = {}
+
+
+def _varlik_kutusu_tek(e, k, harf_payi):
+    """Tek varlığın kutusu (bkz. _varlik_kutulari) ya da None."""
+    if True:
         if not k.has_data:
-            continue
+            return None
         b = (k.extmin.x, k.extmin.y, k.extmax.x, k.extmax.y)
         t = e.dxftype()
         if harf_payi and t == "TEXT":
@@ -252,8 +277,7 @@ def _varlik_kutulari(varlik, harf_payi=False):
                      max(b[2], m[2]), max(b[3], m[3]))
         except Exception:
             pass
-        out.append(b)
-    return out
+        return b
 
 
 def _varlik_kutusu(uzay, yazi=True):
@@ -360,7 +384,7 @@ def _kutu_uzakligi(k, b):
     return dx * dx + dy * dy
 
 
-def _gorunus_kutulari(d, alanlar):
+def _gorunus_kutulari(d, alanlar, haric=()):
     """Her görünüşün GERÇEK sınırı: ona ait bütün çizgi, ölçü ve yazı.
 
     Motorun bıraktığı işaret yalnız görünüşün kendisini gösterir; ölçü
@@ -386,6 +410,9 @@ def _gorunus_kutulari(d, alanlar):
         if bas and (b0[0] >= bas[0] - 0.01 and b0[1] >= bas[1] - 0.01
                     and b0[2] <= bas[2] + 0.01 and b0[3] <= bas[3] + 0.01):
             continue                    # başlık bloğunun parçası
+        if any(b0[0] >= c[0] - 0.02 and b0[1] >= c[1] - 0.02
+               and b0[2] <= c[2] + 0.02 and b0[3] <= c[3] + 0.02 for c in haric):
+            continue                    # 2. sayfadaki pencerenin parçası
         ad = min(gor, key=lambda a: _kutu_uzakligi(b, gor[a]))
         q = kutu[ad]
         q[0] = min(q[0], b[0]); q[1] = min(q[1], b[1])
@@ -406,7 +433,7 @@ def _serbest_kutular(d, alanlar):
     return {k: v for k, v in _gorunus_kutulari(d, alanlar).items() if _serbest_mi(k)}
 
 
-def _izgara(d, alanlar, kutu):
+def _izgara(d, alanlar, kutu, haric=()):
     """Görünüşleri satır/sütun ızgarasına oturtur.
 
     İzdüşüm ızgarası BOZULMAZ: aynı satırdaki görünüşler kâğıtta da aynı
@@ -416,9 +443,13 @@ def _izgara(d, alanlar, kutu):
     kayar ve resim teknik resim olmaktan çıkar.
 
     Döner: (sutun_gen, satir_boy, hucre) ya da None."""
-    dar = {k: v for k, v in _gorunus_kutulari(d, alanlar).items() if not _serbest_mi(k)}
-    if len(dar) < 2:
+    dar = {k: v for k, v in _gorunus_kutulari(d, alanlar, haric=haric).items()
+           if not _serbest_mi(k)}
+    if len(dar) < 1:
         return None
+    if len(dar) == 1:                    # tek görünüş (öbürleri 2. sayfada)
+        ad, v = next(iter(dar.items()))
+        return ([v[2] - v[0]], [v[3] - v[1]], {ad: (0, 0, tuple(v))})
     sut = _kumele([(v[0], v[2], k) for k, v in dar.items()])
     sat = _kumele([(v[1], v[3], k) for k, v in dar.items()])
     if len(sut) < 2 and len(sat) < 2:
@@ -439,7 +470,7 @@ def _izgara(d, alanlar, kutu):
     return ([g[1] - g[0] for g in sut], [g[1] - g[0] for g in sat], hucre)
 
 
-def _pencere_temiz_mi(d, hucreler):
+def _pencere_temiz_mi(d, hucreler, haric=()):
     """Her çizgi TAM OLARAK BİR pencerenin içinde mi?
 
     Bu denetim şart, çünkü bir pencere kendisine "ait" olanı değil,
@@ -462,6 +493,11 @@ def _pencere_temiz_mi(d, hucreler):
     try:
         varlik = [e for e in d.modelspace() if e.dxf.layer != GORUNUS_KATMAN]
         for b in _varlik_kutulari(varlik):
+            # 2. sayfaya giden detayın varlıkları bu sayfanın denetimine
+            # girmez (haric: detay pencereleri)
+            if any(b[0] >= c[0] - 0.02 and b[1] >= c[1] - 0.02
+                   and b[2] <= c[2] + 0.02 and b[3] <= c[3] + 0.02 for c in haric):
+                continue
             # Ölçüt tek: varlık TAM OLARAK BİR hücrenin içinde olmalı.
             # Hücreler birbiriyle çakışmadığı için "birden fazlasının
             # içinde" olamaz; hiçbirinin içinde değilse ya sınırı aşıyor
@@ -596,7 +632,9 @@ def yerlesim(gx, gy, kagit=VARSAYILAN_KAGIT, buyutme=False, sablon=None):
 
     Firma anteti kullanılıyorsa yön aranmaz: antet yatay çizilmiştir,
     dikey karşılığı yoktur."""
-    adaylar = ((kagit_yonleri(kagit) if not dikey_mi(kagit) else (kagit,))
+    # Kâğıt HER ZAMAN YATAY (kullanıcı: "resimler yatay olacak"); dikey
+    # yalnız açıkça istenirse ("A3-D").
+    adaylar = (((kagit_boyu(kagit),) if not dikey_mi(kagit) else (kagit,))
                if sablon is None else (kagit_boyu(kagit),))
     en_iyi = None
     for kg in adaylar:
@@ -617,7 +655,8 @@ def kagit_sec(gx, gy, adaylar=KAGIT_BOY, en_az_olcek=1.0, sablon=None):
 
 
 # --------------------------------------------------------------- pafta
-def cok_pencere_plani(d, kutu, alan_g, alan_y, olcek_zorla=None, serbest_izin=False):
+def cok_pencere_plani(d, kutu, alan_g, alan_y, olcek_zorla=None, serbest_izin=False,
+                      serbest_sayfa2=False, sayfa2_gorunus=()):
     """Görünüşleri kâğıda ORTADAN DIŞA, eşit aralıklarla dağıtan plan.
 
     Mantık: görünüşler resimde zaten izdüşüm ızgarasındadır (ÖN'ün solu
@@ -632,7 +671,22 @@ def cok_pencere_plani(d, kutu, alan_g, alan_y, olcek_zorla=None, serbest_izin=Fa
     Döner: {"olcek", "sutun", "satir", "hucre", "baslik", ...} ya da
     None (ızgara kurulamadıysa; o zaman tek pencere kullanılır)."""
     alanlar = gorunus_alanlari(d)
-    iz = _izgara(d, alanlar, kutu)
+    # 2. SAYFAYA GİDEN GÖRÜNÜŞLER (sayfa2_gorunus): ana resim tek başına
+    # belirgin büyük çıkıyorsa yan görünüşler 2. sayfaya (kullanıcı: "ana
+    # resmi büyüt, gerekirse birden fazla sayfa"). Bu sayfanın ızgarasına
+    # girmezler; varlıkları bu sayfanın denetiminde sayılmaz.
+    gor2, bilgi_serbest = {}, {}
+    if sayfa2_gorunus:
+        dar_hepsi = _gorunus_kutulari(d, alanlar)
+        gor2 = {a: dar_hepsi[a] for a in sayfa2_gorunus if a in dar_hepsi}
+        alanlar = {a: b for a, b in alanlar.items() if a not in gor2}
+        # Bilgi bloğu (parça adı, malzeme) 1. sayfada kalır ama ızgaraya
+        # girmez: ızgarada ana görünüşün yanına sütun açar, resmi küçültür.
+        # Serbest pencere gibi kâğıdın boş yerine konur.
+        if BILGI_AD in alanlar and BILGI_AD in dar_hepsi:
+            bilgi_serbest = {BILGI_AD: dar_hepsi[BILGI_AD]}
+            alanlar = {a: b for a, b in alanlar.items() if a != BILGI_AD}
+    iz = _izgara(d, alanlar, kutu, haric=list(gor2.values()) + list(bilgi_serbest.values()))
     if not iz:
         return None
     sutun, satir, hucre = iz
@@ -640,11 +694,16 @@ def cok_pencere_plani(d, kutu, alan_g, alan_y, olcek_zorla=None, serbest_izin=Fa
     bg = (baslik[2] - baslik[0]) if baslik else 0.0
     bb = (baslik[3] - baslik[1]) if baslik else 0.0
     serbest = _serbest_kutular(d, alanlar)
-    if serbest and not serbest_izin:
+    if serbest and not (serbest_izin or serbest_sayfa2):
         return None          # detaylar yalnız tam kâğıt planında yerleşir
+    sayfa2 = dict(serbest) if serbest_sayfa2 else {}
+    if serbest_sayfa2:
+        serbest = {}         # detaylar 2. SAYFADA: bu sayfanın planına girmez
+    serbest = dict(serbest, **bilgi_serbest)   # bilgi bloğu hep 1. sayfada
+    sayfa2.update(gor2)
     hepsi = ([h[2] for h in hucre.values()] + ([baslik] if baslik else [])
              + list(serbest.values()))
-    if not _pencere_temiz_mi(d, hepsi):
+    if not _pencere_temiz_mi(d, hepsi, haric=list(sayfa2.values())):
         return None
 
     ts, tr = sum(sutun), sum(satir)
@@ -669,7 +728,7 @@ def cok_pencere_plani(d, kutu, alan_g, alan_y, olcek_zorla=None, serbest_izin=Fa
     obek_g = ts * olcek + (nj - 1) * ax
     obek_y = tr * olcek + (ni - 1) * ay
     return {"olcek": olcek, "sutun": sutun, "satir": satir, "hucre": hucre,
-            "serbest": serbest,
+            "serbest": serbest, "sayfa2": sayfa2,
             "baslik": baslik, "ara_x": ax, "ara_y": ay,
             "obek": (max(obek_g, bg * olcek),
                      obek_y + (bb * olcek + ARA_EN_AZ if baslik else 0)),
@@ -694,7 +753,8 @@ def _hucre_kutulari(plan, sol, alt):
     return out
 
 
-def tam_kagit_plani(d, kutu, kagit=VARSAYILAN_KAGIT, sablon=None):
+def tam_kagit_plani(d, kutu, kagit=VARSAYILAN_KAGIT, sablon=None, serbest_sayfa2=False,
+                    sayfa2_gorunus=()):
     """ANTETİN ÜSTÜ ve SOLU birlikte: öbek kâğıdın bütün çerçevesine
     yayılabilir, yalnız DOLU pencereler (görünüşler, başlık) antete ve
     çerçeveye değmez; boş hücre antetin üstüne düşebilir. Kullanıcı:
@@ -706,7 +766,8 @@ def tam_kagit_plani(d, kutu, kagit=VARSAYILAN_KAGIT, sablon=None):
     ic = (fx0 + IC_PAY, fy0 + IC_PAY, fx1 - IC_PAY, fy1 - IC_PAY)
     ant = antet_kutusu(kagit, sablon)
     ant = (ant[0] - IC_PAY, ant[1] - IC_PAY, ant[2] + IC_PAY, ant[3] + IC_PAY)
-    ilk = cok_pencere_plani(d, kutu, ic[2] - ic[0], ic[3] - ic[1], serbest_izin=True)
+    ilk = cok_pencere_plani(d, kutu, ic[2] - ic[0], ic[3] - ic[1], serbest_izin=True,
+                            serbest_sayfa2=serbest_sayfa2, sayfa2_gorunus=sayfa2_gorunus)
     if not ilk:
         return None
     for k in KUCULTME:
@@ -714,7 +775,8 @@ def tam_kagit_plani(d, kutu, kagit=VARSAYILAN_KAGIT, sablon=None):
         if o > ilk["olcek"] + 1e-12:
             continue
         p = cok_pencere_plani(d, kutu, ic[2] - ic[0], ic[3] - ic[1], olcek_zorla=o,
-                              serbest_izin=True)
+                              serbest_izin=True, serbest_sayfa2=serbest_sayfa2,
+                              sayfa2_gorunus=sayfa2_gorunus)
         if not p:
             continue
         pg, py = p["obek"]
@@ -789,6 +851,63 @@ def _serbest_yerlestir(plan, dolu, ic, ant, adim=4.0):
         out[ad] = (x, y)
         engel.append((x - ARA_EN_AZ, y - ARA_EN_AZ, x + w + ARA_EN_AZ, y + hh + ARA_EN_AZ))
     return out
+
+
+def _detay_sayfalari(d, pafta_adi, kagit, detaylar, no, resim_adi, sablon, deger):
+    """DETAY SAYFALARI: 1. sayfaya sığmayan (ya da ana resmi küçültecek)
+    detaylar, aynı kâğıt boyunda "PAFTA_2", "PAFTA_3" ... sayfalarına.
+    Her sayfada detaylar sığan EN BÜYÜK ortak ölçekle (küçültme merdiveni;
+    detay geometrisi zaten büyütülmüş olduğundan 1:1'e kadar) satır satır
+    dizilir; antete değmez. Döner: açılan pencere sayısı."""
+    fx0, fy0, fx1, fy1 = cerceve(kagit, sablon)
+    ic = (fx0 + IC_PAY, fy0 + IC_PAY, fx1 - IC_PAY, fy1 - IC_PAY)
+    ant = antet_kutusu(kagit, sablon)
+    ant = (ant[0] - IC_PAY, ant[1] - IC_PAY, ant[2] + IC_PAY, ant[3] + IC_PAY)
+    kalan = dict(detaylar)
+    say, n = 0, 2
+    while kalan and n < 12:
+        # bu sayfaya sığan en büyük ölçek; sığmayanlar sonraki sayfaya
+        secim, yerler, olcek = {}, {}, None
+        for k in KUCULTME:
+            o = 1.0 / k
+            plan = {"olcek": o, "serbest": kalan}
+            sy = _serbest_yerlestir(plan, [], ic, ant)
+            if sy is not None:
+                secim, yerler, olcek = dict(kalan), sy, o
+                break
+        if not secim:
+            # en büyüğü bile hiçbir ölçekte tek sayfaya sığmıyor: teker teker
+            ad = max(kalan, key=lambda a: (kalan[a][2] - kalan[a][0]) * (kalan[a][3] - kalan[a][1]))
+            for k in KUCULTME:
+                o = 1.0 / k
+                sy = _serbest_yerlestir({"olcek": o, "serbest": {ad: kalan[ad]}}, [], ic, ant)
+                if sy is not None:
+                    secim, yerler, olcek = {ad: kalan[ad]}, sy, o
+                    break
+            if not secim:
+                break
+        pafta = d.layouts.new(f"{pafta_adi}_{n}")
+        kg, ky = KAGIT[kagit]
+        pafta.page_setup(size=(round(kg), round(ky)), margins=(0, 0, 0, 0), units="mm", scale=16)
+        # Detay başlığındaki büyütme (2:1) DXF'e göredir; kâğıtta ayrıca bu
+        # sayfanın ölçeğiyle çarpılır - ikisi de yazılır, PDF'ten ölçü
+        # alınmaz (kural 8.1)
+        gorunus_var = any(not _serbest_mi(a) for a in secim)
+        not_ = (f"{kagit_adi(kagit)}  sayfa {n}  ÖLÇEK {olcek_metni(olcek)}"
+                + ("  (detay büyütmesi ayrıca yazılı)" if any(_serbest_mi(a) for a in secim) else "")
+                + ("" if gorunus_var else "  DETAYLAR"))
+        _pafta_cerceve_ciz(pafta, kagit, no, resim_adi, not_, sablon=sablon,
+                           antet_degerleri=deger)
+        for ad, (x, y) in yerler.items():
+            c = secim[ad]
+            w, hh = (c[2] - c[0]) * olcek, (c[3] - c[1]) * olcek
+            pafta.add_viewport(center=(x + w / 2.0, y + hh / 2.0), size=(w, hh),
+                               view_center_point=((c[0] + c[2]) / 2.0, (c[1] + c[3]) / 2.0),
+                               view_height=(c[3] - c[1]))
+            say += 1
+            kalan.pop(ad, None)
+        n += 1
+    return say
 
 
 def _cok_pencere_ciz(pafta, plan, sol, alt):
@@ -1075,6 +1194,7 @@ def pafta_kur(kaynak_dxf, cikti_dxf=None, kagit=VARSAYILAN_KAGIT, olcek=None,
     Döner: {"olcek":, "olcek_metni":, "kagit":, "yer":, "olcu": (gx,gy),
             "alan": (g,y), "dosya":}
     """
+    _KUTU_ONBELLEK.clear()           # handle'lar belgeye özel
     if kagit not in KAGIT:
         raise PaftaYok(f"Bilinmeyen kâğıt: {kagit}")
     istenen = kagit
@@ -1094,7 +1214,10 @@ def pafta_kur(kaynak_dxf, cikti_dxf=None, kagit=VARSAYILAN_KAGIT, olcek=None,
     # büyük ölçek veren kazanır. Uzun bir parça dik duruyorsa yatay
     # kâğıtta 1:50'ye düşüp okunmaz oluyordu; aynı parça dikey kâğıtta
     # 1:20 çıkıyor. Eşitlikte yatay kalır: adaylar sırası öyle.
-    adaylar = ((kagit_yonleri(istenen) if not dikey_mi(istenen) else (istenen,))
+    # Kâğıt HER ZAMAN YATAY (kullanıcı: "resimler yatay olacak, nereden
+    # çıktı portre"): daha büyük ölçek veriyor diye dikeye geçilmez.
+    # Dikey yalnız açıkça istenirse ("A3-D").
+    adaylar = (((kagit_boyu(istenen),) if not dikey_mi(istenen) else (istenen,))
                if sablon is None else (kagit_boyu(istenen),))
 
     # --- görünüşleri kâğıda eşit dağıtan plan (varsa)
@@ -1111,6 +1234,30 @@ def pafta_kur(kaynak_dxf, cikti_dxf=None, kagit=VARSAYILAN_KAGIT, olcek=None,
             tp = tam_kagit_plani(d, (x0, y0, x1, y1), kg_ad, sablon)
             if tp and (yon_en is None or tp["olcek"] > yon_en["olcek"] + 1e-12):
                 yon_en = tp
+            # ANA RESİM BÜYÜK KALIR (kullanıcı: "ana resmi büyüt, karınca duası
+            # olmasın, gerekirse birden fazla sayfa yap"): detaylar 1. sayfada
+            # ölçeği düşürüyorsa 2. SAYFAYA (DETAYLAR) gider.
+            if _serbest_kutular(d, gorunus_alanlari(d)):
+                tp2 = tam_kagit_plani(d, (x0, y0, x1, y1), kg_ad, sablon, serbest_sayfa2=True)
+                if tp2 and (yon_en is None or tp2["olcek"] > yon_en["olcek"] + 1e-12):
+                    yon_en = tp2
+            # ANA GÖRÜNÜŞ TEK BAŞINA: yan görünüşler (ve detaylar) 2. sayfaya
+            # alınınca ana görünüş belirgin (SAYFA_AYIR_ORAN) büyüyorsa öyle
+            # yapılır - antet alanı ve yan görünüş ana resmi küçültmesin.
+            # Yalnız tek sayfada yazı KÜÇÜK kalıyorsa (SAYFA_AYIR_YAZI_MM):
+            # yazı okunuyorsa görünüşler bir arada kalır (izdüşüm bütünlüğü).
+            # Başlık (BILGI) her zaman 1. sayfada.
+            al_ = {a: b for a, b in gorunus_alanlari(d).items()
+                   if a not in (BASLIK_AD, BILGI_AD) and not _serbest_mi(a)}
+            yz_tek = (en_kucuk_yazi(kaynak_dxf) * yon_en["olcek"]) if yon_en else 0.0
+            if len(al_) >= 2 and (yon_en is None or yz_tek < SAYFA_AYIR_YAZI_MM):
+                ana = max(al_, key=lambda a: (al_[a][2] - al_[a][0]) * (al_[a][3] - al_[a][1]))
+                digerleri = tuple(a for a in al_ if a != ana)
+                tp3 = tam_kagit_plani(d, (x0, y0, x1, y1), kg_ad, sablon, serbest_sayfa2=True,
+                                      sayfa2_gorunus=digerleri)
+                if tp3 and (yon_en is None
+                            or tp3["olcek"] > yon_en["olcek"] * SAYFA_AYIR_ORAN + 1e-12):
+                    yon_en = tp3
             if yon_en and (plan is None or yon_en["olcek"] > plan["olcek"] + 1e-12):
                 plan, kagit = yon_en, kg_ad
 
@@ -1251,8 +1398,20 @@ def pafta_kur(kaynak_dxf, cikti_dxf=None, kagit=VARSAYILAN_KAGIT, olcek=None,
                        sablon=sablon, antet_degerleri=deger)
 
     # --- pencere(ler): 1:1 çizime buradan bakılır
+    sayfa = 1
     if plan:
         pencere = _cok_pencere_ciz(pafta, plan, mx - pg / 2.0, my - py / 2.0)
+        if plan.get("sayfa2"):
+            for ad_ in list(d.layout_names()):
+                if ad_.startswith(pafta_adi + "_") and ad_[len(pafta_adi) + 1:].isdigit():
+                    try:
+                        d.layouts.delete(ad_)
+                    except Exception:
+                        pass
+            pencere += _detay_sayfalari(d, pafta_adi, kagit, plan["sayfa2"], no,
+                                        resim_adi or "", sablon, deger)
+            sayfa = 1 + sum(1 for ad_ in d.layout_names()
+                            if ad_.startswith(pafta_adi + "_") and ad_[len(pafta_adi) + 1:].isdigit())
     else:
         pafta.add_viewport(
             center=(mx, my), size=(pg, py),
@@ -1290,7 +1449,7 @@ def pafta_kur(kaynak_dxf, cikti_dxf=None, kagit=VARSAYILAN_KAGIT, olcek=None,
             "yazi_duzeltildi": duzeltilen,
             "yazi_mm": round(yz, 2),
             "yazi_kucuk": 0 < yz < EN_AZ_YAZI_MM,
-            "pencere": pencere, "dagitildi": bool(plan),
+            "pencere": pencere, "dagitildi": bool(plan), "sayfa": sayfa,
             "obek": (round(pg, 1), round(py, 1))}
 
 
@@ -1363,30 +1522,48 @@ def bas(dxf_yolu, cikti, pafta_adi="PAFTA", siyah=True, dpi=300):
 
     d = ezdxf.readfile(dxf_yolu)
     try:
-        lay = d.layout(pafta_adi)
+        d.layout(pafta_adi)
     except Exception:
         raise PaftaYok(f"{os.path.basename(dxf_yolu)} içinde "
                        f"'{pafta_adi}' paftası yok.")
-    kg, ky = pafta_olcusu(dxf_yolu, pafta_adi)
-    if kg < 1 or ky < 1:
-        kg, ky = KAGIT[VARSAYILAN_KAGIT]
-
-    fig = plt.figure(figsize=(kg / 25.4, ky / 25.4), dpi=dpi)
-    eksen = fig.add_axes([0, 0, 1, 1])
-    eksen.set_axis_off()
+    # Sayfalar: PAFTA, PAFTA_2, PAFTA_3 ... (detay sayfaları) tek PDF'te
+    sayfalar = [pafta_adi] + sorted(
+        (a for a in d.layout_names()
+         if a.startswith(pafta_adi + "_") and a[len(pafta_adi) + 1:].isdigit()),
+        key=lambda a: int(a[len(pafta_adi) + 1:]))
+    if not str(cikti).lower().endswith(".pdf"):
+        sayfalar = sayfalar[:1]           # PNG: yalnız 1. sayfa
     ayar = Configuration(
         color_policy=ColorPolicy.BLACK if siyah else ColorPolicy.COLOR,
         background_policy=BackgroundPolicy.WHITE,
         lineweight_scaling=1.0,
     )
-    Frontend(RenderContext(d), MatplotlibBackend(eksen), config=ayar
-             ).draw_layout(lay, finalize=False)
-    eksen.set_xlim(0, kg)
-    eksen.set_ylim(0, ky)
-    eksen.set_aspect("equal")
     os.makedirs(os.path.dirname(os.path.abspath(cikti)) or ".", exist_ok=True)
-    fig.savefig(cikti, dpi=dpi, facecolor="white")
-    plt.close(fig)
+
+    def _cizim(ad):
+        kg, ky = pafta_olcusu(dxf_yolu, ad)
+        if kg < 1 or ky < 1:
+            kg, ky = KAGIT[VARSAYILAN_KAGIT]
+        fig = plt.figure(figsize=(kg / 25.4, ky / 25.4), dpi=dpi)
+        eksen = fig.add_axes([0, 0, 1, 1])
+        eksen.set_axis_off()
+        Frontend(RenderContext(d), MatplotlibBackend(eksen), config=ayar
+                 ).draw_layout(d.layout(ad), finalize=False)
+        eksen.set_xlim(0, kg)
+        eksen.set_ylim(0, ky)
+        eksen.set_aspect("equal")
+        return fig
+    if len(sayfalar) == 1:
+        fig = _cizim(sayfalar[0])
+        fig.savefig(cikti, dpi=dpi, facecolor="white")
+        plt.close(fig)
+        return cikti
+    from matplotlib.backends.backend_pdf import PdfPages
+    with PdfPages(cikti) as pdf:
+        for ad in sayfalar:
+            fig = _cizim(ad)
+            pdf.savefig(fig, dpi=dpi, facecolor="white")
+            plt.close(fig)
     return cikti
 
 

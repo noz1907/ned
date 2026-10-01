@@ -1187,7 +1187,10 @@ GORUNUS_AD = {"ON": "ÖN", "ARKA": "ARKA", "SAG": "SAĞ", "SOL": "SOL",
               "UST": "ÜST", "ALT": "ALT"}
 GORUNUS_SIRA = ("ON", "ARKA", "SAG", "SOL", "UST", "ALT")
 SON_RAPOR = {}          # son dxf_komponent'in atladıkları (gabari_yok 0 olmalı)
-ANA_GORUNUS = "ON"      # ana_gorunus_dondur en çok bilgi vereni buraya getirir
+YAKIN_SEVIYE_MM = 0.5   # bu kadar yakın datum seviyeleri tek sıra sayılır (MODEL KONTROL uyarısıyla)
+PLAN_UYARI = []         # konum_plani'nin başlığa yazılacak uyarıları (dxf_komponent temizler)
+GORUNUS_TR = {"ON": "ÖN", "ARKA": "ARKA", "SAG": "SAĞ", "SOL": "SOL", "UST": "ÜST", "ALT": "ALT"}
+ANA_GORUNUS = "ON"      # eşitlikte ana görünüş (bkz. ana_gorunus)
 VARSAYILAN_GORUNUS = ("ON", "SAG", "SOL", "UST")
 EN_COK_GORUNUS = 4
 KESIT_AD = "A-A KESIT"
@@ -1680,9 +1683,10 @@ def olcu_stili(doc, h):
     st.dxf.dimlfac = 1.0           # ölçü birebir mm
     st.dxf.dimscale = 1.0
     st.dxf.dimtxt = h              # yazı yüksekliği
-    st.dxf.dimasz = h * 0.8        # ok boyu
-    st.dxf.dimexe = h * 0.6        # uzatma çizgisi taşması
-    st.dxf.dimexo = h * 0.5        # uzatma çizgisi boşluğu
+    # ANAYASA (kitap değerleri, yazı boyunun katı; bkz. ANAYASA sözlüğü):
+    st.dxf.dimasz = h * _k("ok_mm")             # ok boyu 3 mm
+    st.dxf.dimexe = h * _k("uzatma_tasma_mm")   # uzatma çizgisi taşması 1,5 mm
+    st.dxf.dimexo = h * _k("uzatma_bosluk_mm")  # uzatma çizgisi boşluğu 2 mm
     st.dxf.dimgap = h * 0.35
     st.dxf.dimdec = 1              # mm, bir ondalık
     st.dxf.dimzin = 8              # sondaki sıfırları yazma
@@ -2145,7 +2149,9 @@ def cap_olculeri(msp, o, yer, kaydir, gkutu, h, ust, en_cok_grup=8):
                 continue
             kova[gad].append((tip, d, r))
     # Denenecek yönler: köşegenler önce, sonra dik yönler.
-    YON = [45, 135, 225, 315, 90, 270, 0, 180, 22, 68, 112, 158, 202, 248, 292, 338]
+    # kılavuz eğimi yalnız 30° / 45° / 60° aileleri (Règles de cotation s.11;
+    # ANAYASA): ne yatay / düşey ne rastgele açı
+    YON = [45, 135, 225, 315, 30, 150, 210, 330, 60, 120, 240, 300]
     en_ust = dict(ust)
     en_sag = max(k[2] for k in gkutu.values())
     mevcut = _varlik_kutulari(msp)      # resimde şu an ne varsa, ölçülmüş
@@ -3992,6 +3998,33 @@ def konum_plani(o, gorunusler, ham, h, kenarlar=None, tol=0.05,
                     temiz.append(r)
                 else:                  # aynı konumdaki özellikler birleşir
                     gor[k].setdefault("dik", []).extend(r.get("dik") or [])
+            # AYNI HİZA SAYILAN SEVİYELER: modelde 104,2 / 104,3 / 104,5 /
+            # 104,6'da dört delik (çizim gürültüsü) dört ayrı ölçü değil,
+            # tek sıradır. YAKIN_SEVIYE_MM içindeki datum ölçüleri birleşir:
+            # ortalamaya en yakın GERÇEK değer yazılır, öbürleri ona
+            # bağlanır; fark başlıkta "MODEL KONTROL" uyarısı olur (ölçü
+            # uydurulmaz, kullanıcı modeli denetler). Karluna televre sacı.
+            kos = [r for r in temiz if r.get("kosu") and r.get("deger") is not None]
+            kos.sort(key=lambda r: r["deger"])
+            i = 0
+            while i < len(kos):
+                j = i + 1
+                while j < len(kos) and kos[j]["deger"] - kos[j - 1]["deger"] <= YAKIN_SEVIYE_MM:
+                    j += 1
+                grup = kos[i:j]
+                if len(grup) > 1 and grup[-1]["deger"] - grup[0]["deger"] <= 2 * YAKIN_SEVIYE_MM:
+                    ort = sum(r["deger"] for r in grup) / len(grup)
+                    kal = min(grup, key=lambda r: abs(r["deger"] - ort))
+                    for r in grup:
+                        if r is kal:
+                            continue
+                        kal.setdefault("dik", []).extend(r.get("dik") or [])
+                        temiz.remove(r)
+                    PLAN_UYARI.append(
+                        f"{GORUNUS_TR.get(gad, gad)} {'düşey' if ad == 'dusey' else ad} "
+                        f"{_sayi(grup[0]['deger'])}..{_sayi(grup[-1]['deger'])} arası "
+                        f"{len(grup)} özellik aynı hizada sayıldı ({_sayi(kal['deger'])})")
+                i = j
             # Datumdan ölçüde KISA olan içeride durur (ISO 129-1):
             # ölçü çizgileri kesişmesin.
             temiz.sort(key=lambda r: abs(r["b"] - r["a"]))
@@ -4518,8 +4551,35 @@ def _icinde(q, b, pay=0.0):
 
 KOSU_ARA = 1.3        # ortak hattaki iki rakamın eksenleri arası en az (yazı boyu katı)
 KOSU_YAZI_PAY = 0.8   # rakamın hatta yakın ucu (uzatma çizgisi 0,6 h taşar)
-KOSU_ILK = 3.0        # ilk ölçü hattı parçadan bu kadar yazı boyu uzakta
-KOSU_ADIM = 2.0       # ölçü hatları arası (yazı boyu)
+# ------------------------------------------------------------ ANAYASA
+# Ölçülendirmenin sayısal standardı: Chevalier (Guide du dessinateur
+# industriel), "La cotation" (NF P 02-001) ve "Règles de cotation" ders
+# notları - kullanıcı: "bu kitaplar bizim anayasamız, her ölçü bunlara göre
+# şekillenecek". Değerler KÂĞIT mm'sidir (A3, yazı 3,5 mm); DXF 1:1'de yazı
+# boyu parçaya göre değiştiği için hepsi YAZI BOYUNUN KATI olarak uygulanır
+# (3,5 mm yazıda birebir kitap değeri). Tek yerden okunur; kitap değeri
+# değişirse yalnız burası değişir. Bkz. OLCULENDIRME_KURALLARI.md.
+ANAYASA = {
+    "yazi_mm": 3.5,          # rakam yüksekliği (CH s.3; La cotation 2,5-5 -> 3,5)
+    "yazi_en_az_mm": 2.5,    # kâğıtta bunun altı "karınca duası" (La cotation s.3)
+    "ok_mm": 3.0,            # ok boyu 3-5 (La cotation s.4), açıklık 30° (CH s.3)
+    "ok_aci": 30,
+    "uzatma_bosluk_mm": 1.5, # uzatma çizgisi konturdan açık başlar: La cotation 2-5, Règles ~1, ISO ~1 -> 1,5
+    "uzatma_tasma_mm": 2.0,  # uzatma çizgisi ölçü çizgisini ~2 mm aşar (Règles s.4; CH 1-2)
+    "ilk_hat_mm": 10.0,      # ilk ölçü çizgisi görünüşe 10 mm (La cotation s.3)
+    "hat_adim_mm": 8.0,      # paralel ölçü çizgileri arası 7-10 mm (La cotation s.3)
+    "kilavuz_bosluk_mm": 1.0,
+    "kilavuz_aci": (30, 45, 60),  # kılavuz eğimi (Règles s.11)
+}
+
+
+def _k(ad):
+    """ANAYASA değeri, yazı boyunun katı olarak (3,5 mm yazı bazı)."""
+    return ANAYASA[ad] / ANAYASA["yazi_mm"]
+
+
+KOSU_ILK = _k("ilk_hat_mm")      # ilk ölçü hattı parçadan bu kadar yazı boyu uzakta (10 mm)
+KOSU_ADIM = _k("hat_adim_mm")    # ölçü hatları arası (8 mm)
 
 
 def _yay(istek, ara, alt=None, ust=None):
@@ -5530,8 +5590,11 @@ def _aci_koy(msp, A, B, R, L, metin, h):
 DETAY_OLCEK = (2, 2.5, 4, 5, 10)      # ISO 5455 büyütme ölçekleri
 DETAY_HARF = "DEFGHJKLMNPRSTUVYZ"     # A, B, C datumlarda
 DETAY_EN_COK = 4
+DETAY_OLCU_PAYI = 16.0    # detayın ölçüleri daire / çerçeveden en çok bu kadar (yazı boyu) dışarı çıkar
 DETAY_BAG = 12.0          # detay bölgesinde iki nokta arası en çok (yazı boyu katı)
-DETAY_EN_BUYUK = 0.18     # detay dairesi (büyütülmüş yarıçap) görünüşün en uzun kenarına oranla
+DETAY_EN_BUYUK = 0.12     # detay dairesi (büyütülmüş yarıçap) görünüşün en uzun kenarına oranla
+DETAY_EN_AZ_YARI = 12.0   # ... ama en az bu kadar yazı boyu (küçük parçada 2:1 detay kurulabilsin)
+DETAY_EN_GEVSEK = 0.50    # geniş öbekte en küçük büyütmeyle gevşek tavan (ölçü atılmaz)
 
 
 def _daire_kirp(a, b, c, r):
@@ -5605,18 +5668,23 @@ def detay_gorunusleri(msp, kenarlar, kaydir, gkutu, kayip, h, rapor=None,
                     break
             else:
                 obek.append([(x, y, i)])
+        konan = set()        # bir ölçü bir kez: iki ucu iki öbeğe düşebilir
         for o_ in obek:
             if len(cikti) >= DETAY_EN_COK:
                 break
-            ids = {q[2] for q in o_}
+            ids = {q[2] for q in o_} - konan
             kl = [k for k in lst if id(k) in ids]
+            if not kl:
+                continue
+            konan |= ids
             xs, ys = [q[0] for q in o_], [q[1] for q in o_]
             c = ((min(xs) + max(xs)) / 2.0, (min(ys) + max(ys)) / 2.0)
-            R = max(max(xs) - min(xs), max(ys) - min(ys)) / 2.0 + 4.0 * h
-            R = max(R, 6.0 * h)
+            R = max(max(xs) - min(xs), max(ys) - min(ys)) / 2.0 + 3.0 * h
+            R = max(R, 4.0 * h)
             en_kisa = min(max(abs(k["b"] - k["a"]), 1e-3) for k in kl)
             yabanci = [(k_[0] - 0.3 * h, k_[1] - 0.3 * h, k_[2] + 0.3 * h, k_[3] + 0.3 * h)
                        for k_ in gkutu.values()]
+            onceki_h = {e.dxf.handle for e in msp}
             kur = _detay_kur(msp, gad, c, R, en_kisa, kenarlar, kaydir, gkutu, h,
                              kullanilan, harf,
                              engel=list(engel) + [kt for _a, kt in cikti])
@@ -5631,22 +5699,34 @@ def detay_gorunusleri(msp, kenarlar, kaydir, gkutu, kayip, h, rapor=None,
             H, olcek, dc, Rd = kur
             # ölçüler: gerçek değer (dimlfac)
             _EK_OVR["dimlfac"] = 1.0 / olcek
-            kalan_ = []
+            kalan_, yerler_ = [], {}
             try:
                 for k in kl:
+                    once_ = {e.dxf.handle for e in msp}
                     if _detay_olcu(msp, k, c, dc, olcek, Rd, h, yabanci):
-                        if rapor is not None:
-                            rapor["yer_yok"] -= 1
+                        yerler_[id(k)] = {e.dxf.handle for e in msp} - once_
                     else:
                         kalan_.append(k)
+                if kalan_:
+                    kalan_ = _detay_takas(msp, kalan_, {id(k): k for k in kl}, yerler_,
+                                          c, dc, olcek, Rd, h, yabanci)
+                if rapor is not None:
+                    rapor["yer_yok"] -= len(kl) - len(kalan_)
             finally:
                 _EK_OVR.clear()
+            # pencere ŞİMDİ ölçülür (yanına düşenler ana görünüşe çizilir);
+            # ana görünüşteki işaret (daire + harf) pencereye girmez
+            isaret = [e for e in msp if e.dxf.handle not in onceki_h
+                      and _icinde(_varlik_kutulari_liste([e])[0][:2] if _varlik_kutulari_liste([e]) else (1e18, 1e18),
+                                  (c[0] - R - 3 * h, c[1] - R - 3 * h, c[0] + R + 3 * h, c[1] + R + 3 * h))]
+            pencere = _olculen_pencere(msp, onceki_h | {e.dxf.handle for e in isaret},
+                                       _detay_kutusu(dc, Rd, h), h)
             for k in kalan_:                   # detayda da yer yok: yanına
                 if _yanina_koy(msp, k["yon"], k["a"], k["b"], list(k["dik_a"] or []),
                                list(k["dik_b"] or []), k.get("metin"), k["kayd"],
                                k["dkay"], h, yabanci) and rapor is not None:
                     rapor["yer_yok"] -= 1
-            cikti.append((f"DETAY {H}", _detay_kutusu(dc, Rd, h)))
+            cikti.append((f"DETAY {H}", pencere))
     return cikti
 
 
@@ -5662,10 +5742,10 @@ def detay_gorunusleri(msp, kenarlar, kaydir, gkutu, kayip, h, rapor=None,
 # konumlar detayda doğrudan datum kenarından verilir; bant datum ucunu
 # içeriyorsa uzun yöndeki konumlar da. İçermiyorsa bölgenin ana
 # görünüşte ölçülü BAĞLANTI özelliğinden zincirlenir - tek referans.
-BOLGE_EN_COK = 3
+BOLGE_EN_COK = 6
 BOLGE_BAG = 10.0      # iki bant arası bundan (yazı boyu katı) azsa birleşir
-BOLGE_PAY = 4.0       # bandın özelliklerden taşma payı (yazı boyu katı)
-DETAY_BANT_EN = 0.45  # bant detayı (büyütülmüş) en çok görünüşün bu kadarı
+BOLGE_PAY = 2.5       # bölgenin özelliklerden taşma payı (yazı boyu katı)
+DETAY_BANT_EN = 0.30  # bant detayı (büyütülmüş) en çok görünüşün bu kadarı
 BOLGE_UC = 0.12       # banda bu kadar (uzun kenar oranı) yakın uç banda katılır
 
 
@@ -5825,10 +5905,26 @@ def bolge_plani(plan, bolgeler, kaydir, h, kayip_deneme):
             def nokta(deger, v):
                 return (deger + dx, v + dy) if yat else (v + dx, deger + dy)
 
-            def ici(r):
-                d = r.get("dik") or []
-                return bool(d) and all(_bolgede(*nokta(r["deger"], v), b, h) for v in d)
-            icer = [r for r in pl.get(yon) or [] if r.get("kosu") and ici(r)]
+            # Aynı hizadaki özelliklerden (iki bantta birer slot) yalnız
+            # banttakiler bu detaya gider: ölçü BÖLÜNÜR - bant içi kopyası
+            # detaya, kalan "dik"ler ana planda kalır (hepsi bantta ise
+            # ölçü ana görünüşten bütünüyle çıkar). Önce "hepsi bantta"
+            # aranıyordu; iki slotlu sacda ölçü ne detaya ne ana görünüşe
+            # giriyor, düşüyordu (kasa TRIM bağlantı sacı 4).
+            icer = []
+            for r in pl.get(yon) or []:
+                if not r.get("kosu"):
+                    continue
+                d = list(r.get("dik") or [])
+                d_ic = [v for v in d if _bolgede(*nokta(r["deger"], v), b, h)]
+                if not d_ic:
+                    continue
+                if len(d_ic) == len(d):
+                    icer.append(r)
+                else:
+                    r2 = dict(r, dik=d_ic)
+                    r["dik"] = [v for v in d if v not in d_ic]
+                    icer.append(r2)
             if not icer:
                 continue
             k = b["k"]
@@ -5910,15 +6006,20 @@ def _bant_detayi_kur(msp, b, en_kisa, kenarlar, kaydir, gkutu, h, harf, ust=None
     gad, k = b["gad"], b["k"]
     w, hh = k[2] - k[0], k[3] - k[1]
     L = max(max(g[2] - g[0], g[3] - g[1]) for g in gkutu.values())
-    # En küçük büyütme (2:1) HER ZAMAN olur: bant boyu bolge_sec'te zaten
-    # sınırlı, eni parçanın kısa kenarıdır. Küçük parçada bant yüksekliği
-    # 2:1'de sınırı aşıyor, hiçbir büyütme "sığmıyor", detay kurulmuyor ve
-    # ölçüler düşüyordu (kasa P47). Daha büyük büyütme sınıra bağlı.
+    # DETAY KÜÇÜK KALIR: büyütülmüş bölge görünüşün en uzun kenarının
+    # DETAY_BANT_EN'ini aşmaz - detaylar kâğıtta yer kapladıkça ana
+    # görünüşün ölçeği düşüyordu (P01: 1:12 -> 1:16, yazı 0,9 mm). En
+    # küçük büyütme (2:1) bile sınırı belirgin aşıyorsa bölge detay için
+    # çok büyüktür: None (ölçüler özelliğin yanına). Yeterli büyütme:
+    # en kısa ölçü okunacak kadar (2,5 yazı boyu); fazlası yer israfı.
     sigan = [m for m in DETAY_OLCEK
-             if m == min(DETAY_OLCEK) or (m * w <= DETAY_BANT_EN * L and m * hh <= DETAY_BANT_EN * L)]
-    olcek = next((m for m in sigan if m * en_kisa >= 3.5 * h), max(sigan))
+             if m * max(w, hh) <= DETAY_BANT_EN * L
+             or (m == min(DETAY_OLCEK) and m * max(w, hh) <= 1.5 * DETAY_BANT_EN * L)]
+    if not sigan:
+        return None
+    olcek = next((m for m in sigan if m * en_kisa >= 2.5 * h), max(sigan))
     yw, yh = w * olcek / 2.0, hh * olcek / 2.0
-    yer_ = _detay_serbest_kutu(msp, gkutu, yw + 6.0 * h, yh + 6.0 * h, h, ust=ust,
+    yer_ = _detay_serbest_kutu(msp, gkutu, yw + DETAY_OLCU_PAYI * h, yh + DETAY_OLCU_PAYI * h, h, ust=ust,
                                engel=engel)
     if yer_ is None:
         return None
@@ -6019,6 +6120,7 @@ def bolge_detaylari(msp, bolgeler, bolge_olcu, kenarlar, kaydir, gkutu, h,
         if not halka:
             continue
         en_kisa = min(max(abs(k["b"] - k["a"]), 1e-3) for k in halka)
+        onceki_h = {e.dxf.handle for e in msp}
         kur = _bant_detayi_kur(msp, b, en_kisa, kenarlar, kaydir, gkutu, h, harf, ust=ust,
                                engel=[kt for _a, kt in cikti])
         if kur is None:
@@ -6031,25 +6133,80 @@ def bolge_detaylari(msp, bolgeler, bolge_olcu, kenarlar, kaydir, gkutu, h,
         H, olcek, dc, (yw, yh) = kur
         c = ((b["k"][0] + b["k"][2]) / 2.0, (b["k"][1] + b["k"][3]) / 2.0)
         _EK_OVR["dimlfac"] = 1.0 / olcek
-        kalan = []
+        kalan, yerler = [], {}
         try:
             for k in halka:
-                if not _detay_olcu(msp, k, c, dc, olcek, max(yw, yh), h, yabanci):
+                once_ = {e.dxf.handle for e in msp}
+                if _detay_olcu(msp, k, c, dc, olcek, max(yw, yh), h, yabanci):
+                    yerler[id(k)] = {e.dxf.handle for e in msp} - once_
+                else:
                     kalan.append(k)
+            if kalan:
+                kalan = _detay_takas(msp, kalan, {id(k): k for k in halka}, yerler,
+                                     c, dc, olcek, max(yw, yh), h, yabanci)
         finally:
             _EK_OVR.clear()
+        # Pencere ŞİMDİ ölçülür - yanına düşen ölçüler ana görünüşe çizilir,
+        # pencereye girmemeli (P04: pencere ÜST görünüşün üstüne taşıp
+        # paftayı bozuyordu). Ana görünüşteki işaret (çerçeve + harf) de
+        # pencereye girmez.
+        kb_ = b["k"]
+        isaret = [e for e in msp if e.dxf.handle not in onceki_h
+                  and (lambda kl: bool(kl) and _icinde(kl[0][:2], (kb_[0] - 4 * h, kb_[1] - 4 * h,
+                                                                   kb_[2] + 4 * h, kb_[3] + 4 * h)))(
+                      _varlik_kutulari_liste([e]))]
+        pencere = _olculen_pencere(
+            msp, onceki_h | {e.dxf.handle for e in isaret},
+            (dc[0] - yw - 1.5 * h, dc[1] - yh - 1.5 * h, dc[0] + yw + 1.5 * h, dc[1] + yh + 3.2 * h), h)
         # detayda yer bulamayan ölçü DÜŞMEZ: ana görünüşte özelliğin yanına
         for k in kalan:
             if not _yanina_koy(msp, k["yon"], k["a"], k["b"], k["dik_a"], k["dik_b"],
                                k.get("metin"), k["kayd"], k["dkay"], h, yabanci):
                 if rapor is not None:
                     rapor["yer_yok"] += 1
-        cikti.append((f"DETAY {H}", (dc[0] - yw - 6 * h, dc[1] - yh - 6 * h,
-                                     dc[0] + yw + 6 * h, dc[1] + yh + 3.0 * h)))
+        cikti.append((f"DETAY {H}", pencere))
     return cikti
 
 def _detay_kutusu(dc, Rd, h):
-    return (dc[0] - Rd - 6 * h, dc[1] - Rd - 6 * h, dc[0] + Rd + 6 * h, dc[1] + Rd + 3.0 * h)
+    return (dc[0] - Rd - 1.5 * h, dc[1] - Rd - 1.5 * h, dc[0] + Rd + 1.5 * h, dc[1] + Rd + 3.0 * h)
+
+
+def _olculen_pencere(msp, onceki, varsayilan, h):
+    """Detay penceresi ÖLÇÜLEREK: detay için eklenen bütün varlıkların
+    (daire / çerçeve, başlık, geometri, ölçüler, kılavuzlar) sınırı +
+    pay. Eskiden daire + 6 yazı boyu paydı; pay pencereyi büyütüp ana
+    görünüşün ölçeğini düşürüyordu (P01 1:20), dar tutulunca da dışarı
+    taşan ölçü pencereden kesiliyordu. Ölçmek ikisini de çözer."""
+    yeni_ = [e for e in msp if e.dxf.handle not in onceki]
+    if not yeni_:
+        return varsayilan
+    kl = _varlik_kutulari_liste(yeni_)
+    if not kl:
+        return varsayilan
+    return (min(k[0] for k in kl) - 0.8 * h, min(k[1] for k in kl) - 0.8 * h,
+            max(k[2] for k in kl) + 0.8 * h, max(k[3] for k in kl) + 0.8 * h)
+
+
+def _varlik_kutulari_liste(varlik):
+    """Verilen varlıkların sınırları [(x0, y0, x1, y1)]; ölçü bloğu açılır,
+    MTEXT tek satır ölçülür."""
+    out = []
+    for e in varlik:
+        try:
+            if e.dxftype() == "DIMENSION":
+                k = _dim_kutusu(type("D", (), {"dimension": e})())
+                if k:
+                    out.append(k)
+                continue
+            if e.dxftype() == "MTEXT":
+                out.append(mtext_kutusu(e))
+                continue
+            b = ezdxf.bbox.extents([e], fast=False)
+            if b.has_data:
+                out.append((b.extmin.x, b.extmin.y, b.extmax.x, b.extmax.y))
+        except Exception:
+            continue
+    return out
 
 
 def _detay_kur(msp, gad, c, R, en_kisa, kenarlar, kaydir, gkutu, h, kullanilan, harf,
@@ -6064,18 +6221,31 @@ def _detay_kur(msp, gad, c, R, en_kisa, kenarlar, kaydir, gkutu, h, kullanilan, 
     koyar). Büyütme: detay dairesi görünüşün en uzun kenarının
     DETAY_EN_BUYUK'unu aşmaz - bütün parçayı kaplayan detay detay değildir;
     en kısa ölçü okunacak kadar (3,5 yazı boyu) büyütülür."""
-    hucre = [hc for hc in _bos_hucreler(gkutu, h) if hc not in kullanilan]
-    en_yari = max([min(hc[2] - hc[0], hc[3] - hc[1]) / 2.0 - 8.0 * h for hc in hucre]
-                  + [DETAY_EN_BUYUK * max(max(g[2] - g[0], g[3] - g[1])
-                                          for g in gkutu.values())])
+    # Izgaranın boş hücresi BAŞLIĞA kalır (1. sayfanın parçası); detay
+    # görünüşlerin altına gider, paftada zaten serbest penceredir (1. sayfada
+    # boş yere ya da 2. sayfaya). Detay hücreyi alınca başlık tepeye çıkıyor,
+    # görünüş öbeğine bir satır ekleniyor ve ölçek düşüyordu (P01 1:16).
+    hucre = []
+    # Küçük parçada (100 mm'lik braket) %12 en küçük daireden (4 yazı boyu)
+    # bile dar kalıyor, detay hiç kurulamıyor ve ölçü düşüyordu (kasa TRIM
+    # bağlantı sacları): tavanın mutlak alt sınırı DETAY_EN_AZ_YARI.
+    L_ = max(max(g[2] - g[0], g[3] - g[1]) for g in gkutu.values())
+    en_yari = max(DETAY_EN_BUYUK * L_, DETAY_EN_AZ_YARI * h)
     sigan = [m for m in DETAY_OLCEK if m * R <= en_yari]
+    if not sigan and min(DETAY_OLCEK) * R <= max(DETAY_EN_GEVSEK * L_, 20.0 * h):
+        # Öbek geniş (iki uç DETAY_BAG kadar ayrı): ölçü ATILMAZ, en küçük
+        # büyütmeyle kurulur - detay görünüşün DETAY_EN_GEVSEK'ini aşmasın.
+        sigan = [min(DETAY_OLCEK)]
     if not sigan:
         return None
-    olcek = next((m for m in sigan if m * en_kisa >= 3.5 * h), max(sigan))
+    # yeterli büyütme (en kısa ölçü 2,5 yazı boyu): fazlası kâğıtta yer
+    # kaplar, ana görünüşün ölçeğini düşürür (P01 DETAY F: 4:1'de tek
+    # slot için koca daire)
+    olcek = next((m for m in sigan if m * en_kisa >= 2.5 * h), max(sigan))
     Rd = R * olcek
-    yer_ = _detay_yeri(msp, hucre, Rd + 8.0 * h, h) if hucre else None
+    yer_ = _detay_yeri(msp, hucre, Rd + DETAY_OLCU_PAYI * h, h) if hucre else None
     if yer_ is None:
-        yer_ = _detay_serbest_yeri(msp, gkutu, Rd + 8.0 * h, h, engel=engel)
+        yer_ = _detay_serbest_yeri(msp, gkutu, Rd + DETAY_OLCU_PAYI * h, h, engel=engel)
     if yer_ is None:
         return None
     H = next(harf, None)
@@ -6247,18 +6417,101 @@ def _bant_harfi(msp, k, H, h):
     _harf_koy(msp, ad, H, h)
 
 
-def _detay_olcu(msp, k, c, dc, olcek, Rd, h, yabanci):
-    """Kayıp ölçüyü detayda çizer (büyütülmüş koordinatta)."""
+def _detay_uclar(k, c, dc, olcek):
+    """Kayıp ölçünün detaydaki (büyütülmüş) iki ucu: detay dairesinin
+    İÇİNDEKİ özellikler (merkeze en yakın olanlar)."""
     yat = k["yon"] == "yatay"
 
     def don(v, d):
         x, y = (v + k["kayd"], d + k["dkay"]) if yat else (d + k["dkay"], v + k["kayd"])
         return ((x - c[0]) * olcek + dc[0], (y - c[1]) * olcek + dc[1])
-    # detay dairesinin İÇİNDEKİ özellikler (merkeze en yakın olanlar)
     m_ = c[1] if yat else c[0]
     da = min(k["dik_a"] or k["dik_b"], key=lambda d: abs(d + k["dkay"] - m_))
     db = min(k["dik_b"] or k["dik_a"], key=lambda d: abs(d + k["dkay"] - m_))
-    p1, p2 = don(k["a"], da), don(k["b"], db)
+    return don(k["a"], da), don(k["b"], db)
+
+
+def _detay_takas(msp, kalan, kobj, yerler, c, dc, olcek, Rd, h, yabanci):
+    """Detayda yer bulamayan ölçü için TAKAS: uzatma çizgisinin yolundaki
+    (iki ucun sütun / satır koridoru) daha önce konmuş detay ölçüleri
+    geçici kaldırılır, ölçü konur, kaldırılanlar yeniden yerleştirilir.
+    Biri yer bulamazsa her şey geri alınır. Önce gelen önce yer buluyor,
+    uzun uzatma çizgili (uçları ayrı sırada) ölçü hep sonda kalıyordu
+    (Televre P04 175 -> 200, Karluna P10 "2x 61").
+    yerler: {id(k): konan varlık handle'ları}. Döner: hâlâ konamayanlar."""
+    def _sil(hs):
+        for e in list(msp):
+            if e.dxf.handle in hs:
+                try:
+                    ad = e.dxf.get("geometry", None) if e.dxftype() == "DIMENSION" else None
+                    msp.delete_entity(e)
+                    if ad and ad in msp.doc.blocks:
+                        msp.doc.blocks.delete_block(ad, safe=False)
+                except Exception:
+                    pass
+
+    def _koy(k):
+        once = {e.dxf.handle for e in msp}
+        if _detay_olcu(msp, k, c, dc, olcek, Rd, h, yabanci):
+            yerler[id(k)] = {e.dxf.handle for e in msp} - once
+            return True
+        return False
+    out = []
+    for k in kalan:
+        p1, p2 = _detay_uclar(k, c, dc, olcek)
+        yat = k["yon"] == "yatay"
+        kor = []
+        for p in (p1, p2):
+            if yat:
+                kor.append((p[0] - 0.6 * h, min(p1[1], p2[1]) - 16 * h,
+                            p[0] + 0.6 * h, max(p1[1], p2[1]) + 16 * h))
+            else:
+                kor.append((min(p1[0], p2[0]) - 16 * h, p[1] - 0.6 * h,
+                            max(p1[0], p2[0]) + 16 * h, p[1] + 0.6 * h))
+        engel = []
+        for kid, hs in list(yerler.items()):
+            # yalnız YAZI kutuları: ölçünün çizgileri koridorda olabilir,
+            # engel yazıdır (uzatma çizgisi yazıdan geçemez)
+            kts = []
+            for e in msp:
+                if e.dxf.handle not in hs:
+                    continue
+                if e.dxftype() == "DIMENSION":
+                    kt = _olcu_yazi_kutusu(type("D", (), {"dimension": e})())
+                    if kt:
+                        kts.append(kt)
+                elif e.dxftype() in ("TEXT", "MTEXT"):
+                    kt = _yazi_siniri(e)
+                    if kt:
+                        kts.append(kt)
+            if any(_cakisiyor(kt, kor) for kt in kts):
+                engel.append(kobj[kid])
+        if not engel or len(engel) > 8:
+            out.append(k)
+            continue
+        for kj in engel:
+            _sil(yerler.pop(id(kj)))
+        ok = _koy(k)
+        geri = []
+        for kj in engel:
+            if not _koy(kj):
+                break
+            geri.append(kj)
+        if ok and len(geri) == len(engel):
+            continue
+        # geri al: yeni konanları sil, eskileri yeniden koy
+        for kk in ([k] if ok else []) + geri:
+            _sil(yerler.pop(id(kk), set()))
+        for kj in engel:
+            _koy(kj)
+        out.append(k)
+    return out
+
+
+def _detay_olcu(msp, k, c, dc, olcek, Rd, h, yabanci):
+    """Kayıp ölçüyü detayda çizer (büyütülmüş koordinatta)."""
+    yat = k["yon"] == "yatay"
+    p1, p2 = _detay_uclar(k, c, dc, olcek)
     dolu = _yazi_kutulari(msp)
     alan = (dc[0] - Rd - 10 * h, dc[1] - Rd - 10 * h, dc[0] + Rd + 10 * h, dc[1] + Rd + 10 * h)
     cz = _cizgi_parcalari(msp, alan, katman=("GORUNEN", "GIZLI", "OLCU", "EKSEN", "BOLGE"))
@@ -6273,6 +6526,21 @@ def _detay_olcu(msp, k, c, dc, olcek, Rd, h, yabanci):
             if _ara_dene(msp, k["yon"], p1, p2, cizgi, float(yan), h, k.get("metin"),
                          dolu, cz, yabanci) is not None:
                 return True
+    # Uçları ayrı sıralarda (y 13 ile 222) olan ölçüde iki ucun dışındaki
+    # hat uzun uzatma çizgisiyle detaydaki yazıları kesiyordu (Televre P04
+    # 175 -> 200): hat UÇLARDAN BİRİNİN yanında, iki ucun ARASINDA da
+    # denenir (ISO 129: uzatma çizgisi ölçü çizgisine kadar gider, yönü
+    # serbest).
+    u1, u2 = (p1[1], p2[1]) if yat else (p1[0], p2[0])
+    if abs(u1 - u2) > 4.0 * h:
+        for j in range(6):
+            for uc in (u1, u2):
+                for yan in (1, -1):
+                    cizgi = uc + yan * (1.5 + 1.4 * j) * h
+                    if min(u1, u2) < cizgi < max(u1, u2) and _ara_dene(
+                            msp, k["yon"], p1, p2, cizgi, float(yan), h, k.get("metin"),
+                            dolu, cz, yabanci) is not None:
+                        return True
     return False
 
 
@@ -6316,7 +6584,39 @@ def ayna_ayni(ka, kb, boy, oran=0.97):
     return min(ortak_a, ortak_b) >= oran
 
 
-def gabari_plani(gkutu, sac_kesit=None, bukum_ekseni=None):
+def ana_gorunus(gkutu, o):
+    """ANA görünüş: parça döndürülmediği için ÖN olmak zorunda değil - en çok
+    bilgi veren görünüş (bkz. _gorunus_puani: alan + o yönden daire görünen
+    delik / slot). Eşitlikte ÖN."""
+    puan = [0.0, 0.0, 0.0]
+    try:
+        alan = {}
+        for gad, gk in gkutu.items():
+            if gad in GOR_EKSEN:
+                i = "XYZ".index("XYZ"[max(range(3), key=lambda k: abs(GORUNUS[gad][0][k]))])
+                alan[i] = max(alan.get(i, 0.0), (gk[2] - gk[0]) * (gk[3] - gk[1]))
+        oz = [0, 0, 0]
+        for d in (o or {}).get("delikler") or []:
+            if d.get("eksen") in ("X", "Y", "Z"):
+                oz["XYZ".index(d["eksen"])] += d.get("adet", 1)
+        for sl in (o or {}).get("slotlar") or []:
+            if sl.get("eksen") in ("X", "Y", "Z"):
+                oz["XYZ".index(sl["eksen"])] += 2
+        top = max(1, sum(oz))
+        en_alan = max(alan.values()) if alan else 1.0
+        puan = [alan.get(i, 0.0) / max(en_alan, 1e-9) + 0.6 * oz[i] / top for i in range(3)]
+    except Exception:
+        pass
+    adaylar = [g for g in gkutu if g in GOR_EKSEN]
+    if not adaylar:
+        return ANA_GORUNUS
+
+    def eks(g):
+        return max(range(3), key=lambda k: abs(GORUNUS[g][0][k]))
+    return max(adaylar, key=lambda g: (puan[eks(g)], g == ANA_GORUNUS, g in ("ON", "UST", "SAG")))
+
+
+def gabari_plani(gkutu, sac_kesit=None, bukum_ekseni=None, ana=None):
     """Her GENEL ölçü (boy / en / yükseklik) BİR KEZ, EN NET göründüğü
     görünüşte verilir (ISO 129-1; kullanıcı: "kenar 54 ölçüsü kesitten
     ver, ölçü en net nerden görünüyorsa oradan verilir, ezbere değil").
@@ -6346,7 +6646,7 @@ def gabari_plani(gkutu, sac_kesit=None, bukum_ekseni=None):
         G, Y = gk[2] - gk[0], gk[3] - gk[1]
         for eks, yon, oteki, bu in ((i1, "yatay", Y, G), (i2, "dusey", G, Y)):
             puan = oteki / max(G, Y, 1e-9)
-            if gad == ANA_GORUNUS:
+            if gad == (ana or ANA_GORUNUS):
                 puan += 200.0
             if gad in sac_kesit and eks != b_ek:
                 puan += 100.0
@@ -9773,7 +10073,11 @@ def ana_gorunus_dondur(s, o):
     en = max(range(3), key=lambda i: (puan[i], i == 1))
     I = [[1, 0, 0], [0, 1, 0], [0, 0, 1]]
     if en == 2:
-        R = [[1, 0, 0], [0, 0, 1], [0, -1, 0]]        # Z -> Y
+        # Z -> -Y: ÖN görünüş, modelin ÜSTTEN görünüşünün AYNISI olur (aynı
+        # yüz, modelin +Y'si yukarıda). Önce Z -> +Y idi: parçaya ALTTAN
+        # bakılıyor, resim ters çıkıyordu (kullanıcı: "parça ters, kabin
+        # koruma da neden").
+        R = [[1, 0, 0], [0, 0, -1], [0, 1, 0]]
     elif en == 0:
         R = [[0, -1, 0], [1, 0, 0], [0, 0, 1]]        # X -> Y
     else:
@@ -9831,11 +10135,12 @@ def bilgisiz_gorunus(kenar, gad, o, sac_kesit):
 def dxf_komponent(s, o, k, yol, P):
     """Bir komponentin detay resmi: seçili görünüşler + ölçüler + tablolar."""
     doc = dxf_kur(); msp = doc.modelspace()
-    # Ana görünüşe döndürme yalnız görünüşleri PROGRAM seçerken (varsayılan
-    # takım): kullanıcı belirli görünüşleri seçtiyse ("yalnız ÜST") parça
-    # döndürülmez, istediği yüz çizilir.
-    oto_gor = tuple(gorunus_sec(P.get("gorunusler"))) == tuple(VARSAYILAN_GORUNUS)
-    if not P.get("gorunus_zorla") and oto_gor:
+    # PARÇA DÖNDÜRÜLMEZ: modelde (montajda) nasıl duruyorsa öyle çizilir
+    # (kullanıcı: "parça hep doğru yönde olacak, montaj yönü neyse ona göre
+    # konulur"). Eski "en çok bilgi veren yüzü öne çevir" kuralı parçayı
+    # ters gösteriyordu (kabin koruma). ana_gorunus_dondur yalnız açıkça
+    # istenirse (P["ana_gorunus_dondur"]).
+    if P.get("ana_gorunus_dondur"):
         try:
             s, o = ana_gorunus_dondur(s, o)
         except Exception:
@@ -9927,6 +10232,7 @@ def dxf_komponent(s, o, k, yol, P):
                                            float(o["sac_kalinlik_mm"])))
         except Exception:
             sac_kanat = False
+    PLAN_UYARI.clear()
     kplan = (konum_plani(o, gorunusler, ham, h, kenar_olcu, seviye=seviye,
                          rapor=atlanan, sac_kesit=sac_kesit, datum_sv=datum_sv,
                          izgara=izgara, sac_kanat=sac_kanat)
@@ -9949,7 +10255,7 @@ def dxf_komponent(s, o, k, yol, P):
     # AYRILIR - konum rakamları o yola konmaz. Yoksa kenar dibindeki küçük
     # bir rakam ("11,4") gabarinin bütün kademelerini kapatıyor, 1854
     # hiç yazılmıyordu (P01).
-    gplan = gabari_plani(gkutu, sac_kesit, o.get("bukum_ekseni"))
+    gplan = gabari_plani(gkutu, sac_kesit, o.get("bukum_ekseni"), ana=ana_gorunus(gkutu, o))
     gabari_yolu = _gabari_yolu_ayir(msp, gkutu, gplan, h)
     # KONUM ÖLÇÜLERİ İKİ GEÇİŞ: önce DENEME - ana görünüşe temiz
     # yerleşemeyenler bulunur, deneme silinir; onlardan DETAY BÖLGELERİ
@@ -9981,14 +10287,14 @@ def dxf_komponent(s, o, k, yol, P):
         kanat_olculeri(msp, s, o, sac_kesit, kaydir, gkutu, h)
     if sac_kesit:
         kalinlik_notu(msp, s, o, sac_kesit, kaydir, gkutu, h)
-    uyari = []
+    uyari = list(dict.fromkeys(PLAN_UYARI))
     if sac_kanat:
         try:
             e_ = o["bukum_ekseni"]
-            uyari = kanat_uyarilari(sac_duvarlari(s, max(range(3), key=lambda i: abs(e_[i])),
+            uyari = uyari + kanat_uyarilari(sac_duvarlari(s, max(range(3), key=lambda i: abs(e_[i])),
                                                   float(o["sac_kalinlik_mm"])))
         except Exception:
-            uyari = []
+            pass
     if kplan:
         girinti_olculeri(msp, kplan, kaydir, gkutu, h)
     if P.get("capraz", True):
