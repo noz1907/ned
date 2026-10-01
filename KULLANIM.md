@@ -1361,6 +1361,33 @@ ediyordu. Ölçüm düzeltti.
 
 ---
 
+#### Çok yönlü büküm — 3B genel açınım
+
+Büküm eksenleri birbirine paralel olmayan sac (gövdesi kırık dikme,
+iki yönde kanatlı braket, kilit sacı) 2B yöntemle açılamaz: 2B yöntem
+büküm eksenini Z'ye döndürüp tek kesit alır. Böyle parçalarda program
+**3B genel açınımı** kullanır: her duvar kendi bükümünün ekseni
+etrafında döndürülerek düzleme serilir, büküm bölgesi açı × nötr
+yarıçap kadar yayılır, delikler aynı dönüşümden geçer; sonuç yine
+hacimle (alan × kalınlık) ve tek parça olmakla denetlenir. Karluna
+SOL_DIKME'de (533 mm şapka profili + 768 mm 5° kırık kanal, tek sac)
+1312,84 × 287,48 mm çıktı; CATIA'nın kendi açınımı 1312,8 × 287,4.
+
+Resimde büküm çizgileri eğik olabilir; çizelgede her bükümün ekseni iki
+uç noktasıyla (x; y, sol alt köşeden) yazılır, başlıkta "ÇOK YÖNLÜ
+BÜKÜM" notu olur. ABKANT kanat dış ölçüsü çizelgesi bu parçalarda
+yazılmaz (kanat dizisi tek doğrultuda değildir).
+
+#### Açınım ölçüleri — paralel ve düz
+
+Açınım resminde blank gabarisinden başka: sol tarafta **düz zincir**
+(kenar → B1 → B2 … → kenar: blank'ta çizilip ölçülecek kanat boyları;
+rakamı sığmayan dar halka yazılmaz) ve her büküm ekseninin alt kenardan
+**paralel** ölçüsü kademeli olarak verilir — açınımı teyit için ikisi
+birden. Konturun çıkıntı / girinti basamakları (kenara paralel ama
+kenarda olmayan doğrular) için derinlik ve başlangıç / bitiş konumu
+ölçülenir.
+
 ### Adım 7 — PAFTA
 
 Buraya kadar çıkan resimler **1:1**'dir ve öyle kalır. Bu adım onları

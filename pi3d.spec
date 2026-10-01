@@ -103,7 +103,7 @@ a = Analysis(
     # ekrana Agg, PDF'e backend_pdf, PNG'ye yine Agg.
     hiddenimports=ocp_gizli + ezdxf_gizli + [
         "pf3_olcu", "pf4_pafta", "pf5_antet", "pf6_malzeme", "pf7_is", "pf8_tani", "pf9_excel",
-        "pf10_ai", "pf11_yapi", "pf12_katalog", "pf13_aile", "pf14_kaynak", "pf15_bom_esle",
+        "pf10_ai", "pf11_yapi", "pf12_katalog", "pf13_aile", "pf14_kaynak", "pf15_bom_esle", "pf16_acinim3",
         "pf1_referans",
         "matplotlib.backends.backend_agg",
         "matplotlib.backends.backend_pdf",

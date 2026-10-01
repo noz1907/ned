@@ -177,6 +177,26 @@ BU SÜRÜMDE NE VAR
       değil; açınım = bükülecek saclar, düz saclar = lazer kesim düz"):
       8. adımda düz saclar da SEÇİLİ gelir (kendi konturundan), bükümlü
       saclar açınımının konturundan; taranmamışsa orada taranır.
+    - 3B GENEL AÇINIM (pf16_acinim3.py): büküm eksenleri PARALEL OLMAYAN
+      (çok yönlü bükülmüş) sac artık açılıyor. Her duvar kendi bükümünün
+      ekseni etrafında döndürülüp düzleme serilir, büküm bölgesi açı x
+      nötr yarıçap kadar yayılır; delikler aynı dönüşümle. Hacim ve tek
+      parça denetimi 2B ile aynı. Karluna SOL_DIKME (tek sac: 533 mm şapka
+      profili + 768 mm eğik kanal, 5° kırma, alt kanal bükümleri 8,6°
+      dönük): 1312,84 x 287,48 mm - CATIA'nın kendi açınımı 1312,8 x
+      287,4 ile birebir; kilit sacı, tel braket de açılıyor. 2B'nin
+      çalıştığı 7 parçada ikisi aynı sonucu veriyor. 2B önce denenir;
+      açamazsa ya da kesim konturunu veremezse 3B devreye girer. Resimde
+      eğik büküm çizgileri iki uç noktasıyla (çizelgede x; y), "ÇOK YÖNLÜ
+      BÜKÜM" notu; ABKANT kanat çizelgesi çok yönlüde yazılmaz. Test:
+      test/acinim3_denetimi.py.
+    - AÇINIM ÖLÇÜLERİ (kullanıcı: "hem paralel hem düz ölçü; açınımı teyit
+      için önemli"): sol tarafta DÜZ zincir (kenar -> B1 -> B2 ... ->
+      kenar, dar halka yazılmaz) ve her büküm ekseninin alt kenardan
+      PARALEL ölçüsü kademeli; konturun çıkıntı / girinti basamakları
+      (kenara paralel, kenarda olmayan doğrular) için derinlik + konum.
+      Profil kesitindeki K / B etiketleri ölçülerek konur (kısa kanatta
+      komşu çizgiye biniyordu).
     - AÇINIM, iki gövdeli parça (Karluna SOL_DIKME: 533 mm şapka profili +
       768 mm eğik kanal uç uca birleştirilmiş, arada büküm yok): kontur
       notuna açık YORUM eklendi ("uç uca eklenmiş iki sac gövde, modelde

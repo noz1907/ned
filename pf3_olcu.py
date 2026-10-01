@@ -8000,8 +8000,55 @@ def _serit_genisligi(sh, kb, t, alan, boy, sebep, k_faktor=K_FAKTOR,
                 + " Büküm YERLERİ ve kesim konturu VERİLMEDİ.")}
 
 
-def sac_acilim(sh, o=None, k_faktor=K_FAKTOR, istasyon=11,
-               kontur=True):
+def sac_acilim(sh, o=None, k_faktor=K_FAKTOR, istasyon=11, kontur=True):
+    """Sac parçanın açınımı: önce 2B yöntem (tek yönde bükülmüş sac,
+    _sac_acilim_2b); o açamazsa ya da kesim konturunu çıkaramazsa 3B GENEL
+    AÇINIM (pf16_acinim3: büküm eksenleri paralel olmayan, çok yönlü
+    bükülmüş sac - Karluna SOL_DIKME: 533 mm şapka profili + 768 mm eğik
+    kanal, 5° kırma; CATIA'nın kendi açınımıyla 1312,8 x 287,4 birebir).
+    3B sonuç da hacimle ve tek parça olmakla denetlenir."""
+    import pf16_acinim3 as A3
+    hac = o.get("hacim_mm3") if isinstance(o, dict) else None
+    try:
+        sonuc = _sac_acilim_2b(sh, o, k_faktor, istasyon, kontur)
+        hata2 = None
+    except AcilimYok as e:
+        sonuc, hata2 = None, e
+    if sonuc is not None and (not kontur or sonuc.get("kontur_dis")):
+        return sonuc
+    # 3B genel açınım
+    try:
+        ciftler = bukum_ciftleri(bukum_yuzeyleri(sh))
+        if not ciftler:
+            raise AcilimYok("büküm yok")
+        t = sorted(c["t"] for c in ciftler)[len(ciftler) // 2]
+        ac3 = A3.acilim3(sh, t, k_faktor, sys.modules[__name__], hacim=hac)
+    except AcilimYok as e3:
+        if sonuc is not None:
+            sonuc["kontur_notu"] = (sonuc.get("kontur_notu") or "") + \
+                f" 3B açınım da veremedi: {e3}"
+            return sonuc
+        raise hata2
+    if sonuc is None:
+        sonuc = {"kalinlik_mm": round(t, 2), "k_faktor": k_faktor,
+                 "kesit_konumu_mm": None, "kesit_alani_mm2": None, "orta_cizgi_mm": None}
+        try:
+            sonuc["izo"] = hlr(sh, _birim3((1.0, -1.0, 0.8)), _birim3((1.0, 1.0, 0.0)),
+                               gizli=False)["GORUNEN"]
+        except Exception:
+            pass
+    # 2B'nin kesitten çıkan genişliği / büküm çizelgesi ÇOK YÖNLÜ parçada
+    # geçersizdir (tek kesit bütün parçayı temsil etmez): 3B'ninki yazılır.
+    sonuc.update(ac3)
+    sonuc["kontur_notu"] = ("ÇOK YÖNLÜ BÜKÜM: büküm eksenleri paralel değil; açınım 3B "
+                            "yüzeylerden açıldı (her duvar kendi bükümü etrafında "
+                            "döndürülerek). Büküm çizgileri eğik olabilir; çizelgedeki "
+                            "bölge değerleri çizginin uç noktalarıdır.")
+    return sonuc
+
+
+def _sac_acilim_2b(sh, o=None, k_faktor=K_FAKTOR, istasyon=11,
+                   kontur=True):
     """Tek yönde bükülmüş sac parçanın açınımını hesaplar.
 
     Yöntem: büküm ekseni Z'ye döndürülür, parçadan DELİKSİZ bir kesit
@@ -9355,8 +9402,8 @@ def kanat_dis_olculeri(r):
     Kenarlar açınımın en dış kenarlarıdır (en geniş yer).
     Döner: [dış ölçü, ...] (kanat sayısı = büküm sayısı + 1) ya da []."""
     bk = sorted(r.get("bukumler") or [], key=lambda b: b["acinimda_bas_mm"])
-    if not bk:
-        return []
+    if not bk or r.get("cok_yonlu"):
+        return []                     # eğik büküm çizgileri: kanat dizisi yok
     t = float(r["kalinlik_mm"])
     gen = float(r["acinim_genislik_mm"])
     pay = [(b["r_ic"] + t) * math.tan(math.radians(b["aci_derece"]) / 2.0) for b in bk]
@@ -9366,6 +9413,63 @@ def kanat_dis_olculeri(r):
         duz = sinir[2 * i + 1] - sinir[2 * i]
         out.append(duz + (pay[i - 1] if i > 0 else 0.0) + (pay[i] if i < len(bk) else 0.0))
     return out
+
+
+def _kontur_basamak_olculeri(msp, r, boy, gen, h, d, en_cok=6, sol_bas=0.0):
+    """Açınım konturunun ÇIKINTI / GİRİNTİ basamakları: dış konturun
+    blank dikdörtgeninin kenarında OLMAYAN, kenara paralel doğru parçaları.
+    Her biri için düz ölçü (kenardan derinlik) ve paralel ölçü (datum
+    köşesinden başı ve sonu). Yalnız kesim konturu varsa; en çok en_cok."""
+    dis = (r.get("kontur_dis") or [None])[0]
+    if not dis:
+        return
+    n = len(dis)
+    basamak = []
+    for i in range(n):
+        (x1, y1), (x2, y2) = dis[i], dis[(i + 1) % n]
+        L = math.hypot(x2 - x1, y2 - y1)
+        if L < 3.0 * h:
+            continue
+        if abs(y2 - y1) < 0.01 * L:                   # yatay kenar
+            yy = (y1 + y2) / 2.0
+            if 0.5 < yy < gen - 0.5:
+                basamak.append(("y", yy, min(x1, x2), max(x1, x2)))
+        elif abs(x2 - x1) < 0.01 * L:                 # düşey kenar
+            xx = (x1 + x2) / 2.0
+            if 0.5 < xx < boy - 0.5:
+                basamak.append(("x", xx, min(y1, y2), max(y1, y2)))
+    # aynı doğrudaki parçaları birleştir
+    bir = []
+    for yon, v, a, b in sorted(basamak):
+        if bir and bir[-1][0] == yon and abs(bir[-1][1] - v) < 0.05 and a <= bir[-1][3] + 0.5:
+            bir[-1] = (yon, v, bir[-1][2], max(bir[-1][3], b))
+        else:
+            bir.append((yon, v, a, b))
+    bir.sort(key=lambda t: -(t[3] - t[2]))
+    # sol: düşey ölçü kademeleri (büküm paralellerinin dışından başlar,
+    # rakam yatay okunduğundan 5 yazı boyu aralıkla); alt: yatay ölçüler
+    sol, alt = sol_bas, 0.0
+    for yon, v, a, b in bir[:en_cok]:
+        if yon == "y":
+            # düz ölçü: kenardan derinlik (solda); paralel: x konumları (altta)
+            sol += 5.0 * h
+            msp.add_linear_dim(base=(-d - sol, 0), p1=(0, 0), p2=(0, v), angle=90,
+                               dimstyle=OLCU_STILI, dxfattribs={"layer": "OLCU"}).render()
+            alt += 3.5 * h
+            for xv in (a, b):
+                if 0.5 < xv < boy - 0.5:
+                    msp.add_linear_dim(base=(0, -d - alt), p1=(0, 0), p2=(xv, 0),
+                                       dimstyle=OLCU_STILI, dxfattribs={"layer": "OLCU"}).render()
+        else:
+            alt += 3.5 * h
+            msp.add_linear_dim(base=(0, -d - alt), p1=(0, 0), p2=(v, 0),
+                               dimstyle=OLCU_STILI, dxfattribs={"layer": "OLCU"}).render()
+            sol += 5.0 * h
+            for yv in (a, b):
+                if 0.5 < yv < gen - 0.5:
+                    msp.add_linear_dim(base=(-d - sol, 0), p1=(0, 0),
+                                       p2=(0, yv), angle=90, dimstyle=OLCU_STILI,
+                                       dxfattribs={"layer": "OLCU"}).render()
 
 
 def dxf_acilim(r, k, yol, P=None):
@@ -9403,9 +9507,18 @@ def dxf_acilim(r, k, yol, P=None):
         # çiziliyordu; iki çizgi büküm ekseni sanılıyordu. Bölge sınırları
         # çizelgede yazılıdır.
         orta = (b["acinimda_bas_mm"] + b["acinimda_son_mm"]) / 2.0
-        msp.add_line((0, orta), (boy, orta), dxfattribs={"layer": "EKSEN"})
-        ey = orta - 0.45 * yazi_h
-        ex = boy + 0.6 * h
+        if b.get("cizgi"):
+            # 3B açınım: büküm ekseni iki uç noktasıyla verilir, eğik olabilir
+            (cx1, cy1), (cx2, cy2) = b["cizgi"]
+            if cx1 > cx2:
+                (cx1, cy1), (cx2, cy2) = (cx2, cy2), (cx1, cy1)
+            msp.add_line((cx1, cy1), (cx2, cy2), dxfattribs={"layer": "EKSEN"})
+            ey = cy2 - 0.45 * yazi_h
+            ex = max(cx2, boy) + 0.6 * h
+        else:
+            msp.add_line((0, orta), (boy, orta), dxfattribs={"layer": "EKSEN"})
+            ey = orta - 0.45 * yazi_h
+            ex = boy + 0.6 * h
         # Yazının yeri TAHMİN EDİLMEZ, ÖLÇÜLÜR: yaz, sınırını ölç,
         # çakışıyorsa sil ve sağa kaydırıp yeniden yaz. Bükümler 5 mm
         # arayken etiketler üst üste biniyordu.
@@ -9433,16 +9546,26 @@ def dxf_acilim(r, k, yol, P=None):
     x = max(boy + 4.0 * h, etiket_sag + 2.0 * h)
     y = gen
     if r["bukumler"]:
-        _yaz(msp, "BÜKÜM  AÇI      İÇ R   PAY    EKSEN (alt kenardan)   BÖLGE", x, y, h)
+        _yaz(msp, ("BÜKÜM  AÇI      İÇ R   PAY    EKSEN (uç noktaları x; y - sol alt köşeden)"
+                   if r.get("cok_yonlu") else
+                   "BÜKÜM  AÇI      İÇ R   PAY    EKSEN (alt kenardan)   BÖLGE"), x, y, h)
     y -= 2.0 * h
     for i, b in enumerate(r["bukumler"], 1):
         eks = (b["acinimda_bas_mm"] + b["acinimda_son_mm"]) / 2.0
-        _yaz(msp, f"B{i:<5d} {XL.tr(b['aci_derece'], 1, False):>6s}  "
-                  f"{XL.tr(b['r_ic'], 2, False):>6s} "
-                  f"{XL.tr(b['pay_mm'], 2, False):>6s}  "
-                  f"{XL.tr(eks, 2, False):>10s}             "
-                  f"{XL.tr(b['acinimda_bas_mm'], 2, False)} - "
-                  f"{XL.tr(b['acinimda_son_mm'], 2, False)}", x, y, h)
+        if b.get("cizgi"):
+            (cx1, cy1), (cx2, cy2) = b["cizgi"]
+            _yaz(msp, f"B{i:<5d} {XL.tr(b['aci_derece'], 1, False):>6s}  "
+                      f"{XL.tr(b['r_ic'], 2, False):>6s} "
+                      f"{XL.tr(b['pay_mm'], 2, False):>6s}  "
+                      f"({XL.tr(cx1, 1, False)}; {XL.tr(cy1, 1, False)}) - "
+                      f"({XL.tr(cx2, 1, False)}; {XL.tr(cy2, 1, False)})", x, y, h)
+        else:
+            _yaz(msp, f"B{i:<5d} {XL.tr(b['aci_derece'], 1, False):>6s}  "
+                      f"{XL.tr(b['r_ic'], 2, False):>6s} "
+                      f"{XL.tr(b['pay_mm'], 2, False):>6s}  "
+                      f"{XL.tr(eks, 2, False):>10s}             "
+                      f"{XL.tr(b['acinimda_bas_mm'], 2, False)} - "
+                      f"{XL.tr(b['acinimda_son_mm'], 2, False)}", x, y, h)
         y -= 1.8 * h
     kanat = kanat_dis_olculeri(r)
     if kanat:
@@ -9489,16 +9612,45 @@ def dxf_acilim(r, k, yol, P=None):
             msp.add_lwpolyline([(a + ox, b + oy) for a, b in q],
                                dxfattribs={"layer": "GORUNEN"})
         cx, cy = (px0 + px1) / 2.0, (py0 + py1) / 2.0
+        # Etiketlerin yeri ÖLÇÜLÜR (kural 12: yazı çizgiye binmez): kısa
+        # kanatta "K1 13,3" yazısı kanadın dışına taşıp komşu kanadın
+        # çizgisine biniyordu. Kanat normali boyunca artan uzaklıklarda,
+        # iki yanda ve kanat boyunca kaydırarak ilk temiz yer alınır.
+        alan_ = (px0 + ox - 12 * h, py0 + oy - 12 * h, px1 + ox + 12 * h, py1 + oy + 12 * h)
+        cz_ = _cizgi_parcalari(msp, alan_, katman=("GORUNEN", "EKSEN", "OLCU"))
+        dolu_ = []
+
+        def _etiket_koy(et, px, py, nx, ny, boy_h, kat):
+            en_ = None
+            for uz in (1.2, 2.4, 3.8, 5.4, 7.2, 9.2):
+                for sg in (1.0, -1.0):
+                    for kay in (0.0, 1.5, -1.5, 3.0, -3.0, 4.5, -4.5, 6.0, -6.0):
+                        tx = px + sg * nx * (t / 2.0 + uz * boy_h) - ny * kay * boy_h + ox
+                        ty = py + sg * ny * (t / 2.0 + uz * boy_h) + nx * kay * boy_h + oy
+                        e_ = _yaz(msp, et, tx - 0.36 * len(et) * boy_h, ty - 0.45 * boy_h,
+                                  boy_h, kat=kat)
+                        kt = _yazi_siniri(e_)
+                        if kt and not _cakisiyor(kt, dolu_, 0.15 * boy_h) \
+                                and not _cizgi_kesiyor(kt, cz_, 0.1 * boy_h):
+                            dolu_.append(kt)
+                            return
+                        if en_ is None:
+                            en_ = (tx, ty)
+                        msp.delete_entity(e_)
+            tx, ty = en_
+            e_ = _yaz(msp, et, tx - 0.36 * len(et) * boy_h, ty - 0.45 * boy_h, boy_h, kat=kat)
+            kt = _yazi_siniri(e_)
+            if kt:
+                dolu_.append(kt)
         for i, (p, n) in enumerate(pr["kanat"], 1):
             sg = 1.0 if (p[0] - cx) * n[0] + (p[1] - cy) * n[1] >= 0 else -1.0
-            tx = p[0] + sg * n[0] * (t / 2.0 + 1.2 * yazi_h) + ox
-            ty = p[1] + sg * n[1] * (t / 2.0 + 1.2 * yazi_h) + oy
             et = f"K{i}" + (f" {XL.tr(kdo[i - 1], 1)}" if len(kdo) == len(pr["kanat"]) else "")
-            _yaz(msp, et, tx - 0.36 * len(et) * yazi_h, ty - 0.45 * yazi_h, yazi_h, kat="OLCU")
+            _etiket_koy(et, p[0], p[1], sg * n[0], sg * n[1], yazi_h, "OLCU")
         for i, m in enumerate(pr["bukum"], 1):
             msp.add_circle((m[0] + ox, m[1] + oy), 0.25 * yazi_h, dxfattribs={"layer": "EKSEN"})
-            _yaz(msp, f"B{i}", m[0] + ox + 0.4 * yazi_h, m[1] + oy + 0.2 * yazi_h,
-                 0.8 * yazi_h, kat="EKSEN")
+            dx_, dy_ = m[0] - cx, m[1] - cy
+            L_ = math.hypot(dx_, dy_) or 1.0
+            _etiket_koy(f"B{i}", m[0], m[1], dx_ / L_, dy_ / L_, 0.8 * yazi_h, "EKSEN")
         y = oy + py0 - 2.0 * h
     izo = r.get("izo")
     if izo:
@@ -9517,15 +9669,37 @@ def dxf_acilim(r, k, yol, P=None):
             msp.add_lwpolyline([(a * olc2 + ox, b * olc2 + oy) for a, b in q],
                                dxfattribs={"layer": "GORUNEN"})
         y = oy + iy0 * olc2 - 2.0 * h
-    if len(r["bukumler"]) <= 4:
-        # Sol tarafa, genel genişlik ölçüsünün dışına diz: sağda büküm
-        # etiketleri ve çizelge var.
-        for i, b in enumerate(r["bukumler"], 1):
-            msp.add_linear_dim(base=(-d - i * 3.5 * h, 0), p1=(boy, 0),
-                               p2=(boy, (b["acinimda_bas_mm"] + b["acinimda_son_mm"]) / 2.0),
-                               angle=90,
+    if r["bukumler"] and not r.get("cok_yonlu") and len(r["bukumler"]) <= 8:
+        # Kullanıcı: "hem paralel hem de düz ölçü ver; bükümü kalan ölçü
+        # olarak baksak da açınımı teyit için önemli". PARALEL: her büküm
+        # ekseni alt kenardan (datum) - sağ tarafta, kademeli. DÜZ: kenar ->
+        # B1 -> B2 ... -> kenar zinciri, sol tarafta tek hatta: blank'ta
+        # çizilip ölçülecek kanat boyları.
+        # Sağ taraf büküm etiketlerinin ve çizelgenin: ölçüler SOLA.
+        # Zincir (düz) en içte, paraleller onun dışında kademeli.
+        eks = sorted((b["acinimda_bas_mm"] + b["acinimda_son_mm"]) / 2.0
+                     for b in r["bukumler"])
+        sinir = [0.0] + eks + [gen]
+        for a_, b_ in zip(sinir, sinir[1:]):
+            # dar halkanın rakamı dışarı taşıp komşuya biner: 5 yazı
+            # boyundan kısa halka zincirde yazılmaz (paralel ölçü verir)
+            if b_ - a_ >= 5.0 * h:
+                msp.add_linear_dim(base=(-d - 3.5 * h, 0), p1=(0, a_), p2=(0, b_),
+                                   angle=90, dimstyle=OLCU_STILI,
+                                   dxfattribs={"layer": "OLCU"}).render()
+        # rakam yatay okunur (ISO yöntem 2): kademeler arası 5 yazı boyu,
+        # yoksa komşu paralellerin rakamları üst üste biniyordu
+        for i, e_ in enumerate(eks, 1):
+            msp.add_linear_dim(base=(-d - 3.5 * h - i * 5.0 * h, 0), p1=(0, 0),
+                               p2=(0, e_), angle=90,
                                dimstyle=OLCU_STILI,
                                dxfattribs={"layer": "OLCU"}).render()
+        # Kontur basamak (çıkıntı / girinti) ölçüleri: yerleri henüz
+        # ölçülerek konmuyor, gabari ölçüsüyle çakışıyordu; ölçülü yerleşim
+        # yazılana kadar KAPALI (P.get("acinim_basamak") ile açılır).
+        if (P or {}).get("acinim_basamak"):
+            _kontur_basamak_olculeri(msp, r, boy, gen, h, d,
+                                     sol_bas=3.5 * h + len(eks) * 5.0 * h)
     poz = f"POZ {k['poz']}   " if k.get("poz") else ""
     sat = [(f"{poz}{k.get('kod','')}   {(k.get('ad') or '')[:60]}   AÇINIM", 1.5 * h),
            (f"adet: {k.get('adet','-')}", 1.1 * h),
