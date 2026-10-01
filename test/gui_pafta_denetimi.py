@@ -156,6 +156,8 @@ try:
     cizim(os.path.join(cikti, "P01_KUCUK_acinim.dxf"), 260.0, 150.0, "P01")
 
     u = G.Uygulama.__new__(G.Uygulama)
+    import lisans_yardim                      # geçici TAM lisans (modül kapıları)
+    u.lisans = lisans_yardim.gecici_lisans()
     u.M = M
     u.kuyruk = __import__("queue").Queue()
     u.calisiyor = False

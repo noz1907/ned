@@ -9,3 +9,8 @@ __pycache__/
 build/
 dist/
 STANDART_KATALOG/.pi3d_katalog.json
+# özel anahtar ASLA depoya girmez
+lisans_masasi/keys/
+*.lic
+version.json
+installer/Output/

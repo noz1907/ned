@@ -1,0 +1,16 @@
+Pi3D - KURULUM SIHIRBAZI (.exe) NASIL URETILIR  (PiVision)
+=========================================================
+Gerekli (yalniz gelistirici tarafinda): Windows, Python (.venv), Inno Setup 6.
+
+  1) py exebuild.py            -> PyInstaller + bariyer + zip + (Inno varsa) kurulum
+     ya da ayri ayri:
+     py exebuild.py 1 --kurulum-yok   sonra   installer\build_installer.bat
+  2) Cikti: installer\Output\Pi3D_Kurulum_v<surum>.exe  -> musteriye giden TEK dosya
+
+Musteri: kurulum .exe'sine cift tiklar; C:\Pivision\Pi3D kurulur, masaustu
+kisayolu olusur. Ilk acilista Yardim > Lisans ekranindaki PI3D-XXXX-XXXX-XXXX
+kodunu PiVision'a gonderir; pi3d.lic dosyasini ayni ekrandan yukler.
+Deneme lisansi 8 farkli model isler, sonra tam lisans gerekir.
+
+Pakette KAYNAK KOD YOKTUR: exebuild.py bariyeri .py/.pyc/.spec, anahtar ve
+lisans masasi dosyalarini bulursa derlemeyi durdurur.

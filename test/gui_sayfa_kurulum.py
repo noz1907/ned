@@ -51,6 +51,10 @@ sys.modules.update({"tkinter": tk, "tkinter.ttk": ttk,
                     "tkinter.filedialog": fd, "tkinter.messagebox": mb})
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+import os as _os, sys as _sys                                     # noqa: E402
+_sys.path.insert(0, _os.path.join(_os.path.dirname(_os.path.abspath(__file__))))
+import lisans_yardim                                              # noqa: E402
+lisans_yardim.gecici_lisans()        # geçici TAM lisans: kapılar açık
 import pf3_gui as G
 
 u = G.Uygulama.__new__(G.Uygulama)          # __init__'i atla, alanlari elle kur

@@ -38,6 +38,11 @@ def kaynak(*ad):
     return os.path.join(kok, *ad)
 
 
+try:                       # lisans (makine bazlı, imzalı .lic)
+    import pf17_lisans as L
+except Exception:          # pragma: no cover - lisans modülü eksikse program kilitli
+    L = None
+
 try:                       # logolu surumde koda gomulu resimler
     import pi3d_logo as _GOMULU
 except Exception:          # logosuz surum: dosya derlemeye katilmamistir
@@ -257,9 +262,113 @@ class Uygulama(ttk.Frame):
         self.gorunus_sirasi = []         # seçim sırası (en çok 4 tutmak için)
         self.ornek_adaylar = []
         self.agac = None                 # montaj ağacı (hiyerarşik BOM)
+        # LİSANS: makineye kilitli pi3d.lic; yoksa / geçersizse program açılır
+        # ama model işlenmez, lisans penceresi makine kimliğini gösterir.
+        self.lisans = self._lisans_yukle()
         self._kur()
         self.after(80, self._kuyruk_isle)
         threading.Thread(target=self._motoru_yukle, daemon=True).start()
+        if not (self.lisans or {}).get("gecerli"):
+            self.after(700, self.lisans_penceresi)
+
+    # ------------------------------------------------------------ lisans
+    def _lisans_yukle(self):
+        if L is None:
+            return {"gecerli": False, "sebep": "Lisans modülü (pf17_lisans) yüklenemedi.",
+                    "makine": "?", "moduller": set()}
+        try:
+            return L.yukle()
+        except Exception as ex:
+            return {"gecerli": False, "sebep": f"Lisans okunamadı: {ex}",
+                    "makine": "?", "moduller": set()}
+
+    def _lisans_izin(self, modul=None):
+        """İşlem başlamadan lisans kapısı: lisans yoksa ya da modül kapsam
+        dışıysa açıklar, lisans penceresini açar ve False döner."""
+        d = getattr(self, "lisans", None)
+        if not isinstance(d, dict):
+            d = {}
+        if not d.get("gecerli"):
+            messagebox.showwarning(
+                "Lisans", "Bu bilgisayarda geçerli bir Pi3D lisansı yok.\n\n"
+                + str(d.get("sebep", "")) + "\n\nYardım > Lisans ekranındaki makine "
+                "kimliğini PiVision'a gönderin; gelen pi3d.lic dosyasını aynı "
+                "ekrandan yükleyin.")
+            self.lisans_penceresi()
+            return False
+        if modul and not L.modul_acik(d, modul):
+            messagebox.showwarning(
+                "Lisans kapsamı",
+                f"'{L.MODULLER.get(modul, modul)}' bu lisansın kapsamında değil "
+                f"({d.get('paket', '')}).\nTam lisans için PiVision'a başvurun.")
+            return False
+        return True
+
+    def lisans_penceresi(self):
+        """Yardım > Lisans: makine kimliği (kopyala), durum, .lic yükleme."""
+        if L is None:
+            messagebox.showerror("Lisans", "Lisans modülü yüklenemedi.")
+            return
+        p = getattr(self, "_lisans_pencere", None)
+        if p is not None:
+            try:
+                p.lift()
+                return
+            except Exception:
+                pass
+        p = tk.Toplevel(self.master)
+        self._lisans_pencere = p
+        p.title("Pi3D lisansı")
+        p.resizable(False, False)
+        f = ttk.Frame(p, padding=14)
+        f.pack(fill="both", expand=True)
+        d = getattr(self, "lisans", None) or {}
+        ttk.Label(f, text="MAKİNE KİMLİĞİ (bu bilgisayar)", font=("", 10, "bold")).pack(anchor="w")
+        kutu = ttk.Frame(f); kutu.pack(fill="x", pady=(2, 8))
+        v_kimlik = tk.StringVar(value=d.get("makine") or L.makine_kimligi())
+        e = ttk.Entry(kutu, textvariable=v_kimlik, width=28, font=("Consolas", 12), state="readonly")
+        e.pack(side="left")
+
+        def kopyala():
+            try:
+                self.master.clipboard_clear()
+                self.master.clipboard_append(v_kimlik.get())
+                v_durum.set("Makine kimliği panoya kopyalandı; PiVision'a gönderin.")
+            except Exception:
+                pass
+        ttk.Button(kutu, text="Kopyala", command=kopyala).pack(side="left", padx=6)
+        ttk.Label(f, foreground="#555", wraplength=520, justify="left", text=(
+            "Bu kodu PiVision lisans masasına gönderin. Lisans dosyası (pi3d.lic) "
+            "bu makineye kilitlidir; başka bilgisayarda çalışmaz.")).pack(anchor="w")
+        ttk.Separator(f).pack(fill="x", pady=8)
+        ttk.Label(f, text="LİSANS DURUMU", font=("", 10, "bold")).pack(anchor="w")
+        v_durum = tk.StringVar(value=L.ozet(d))
+        ttk.Label(f, textvariable=v_durum, wraplength=520, justify="left",
+                  foreground=("#1a7f37" if d.get("gecerli") else "#b00020")).pack(anchor="w", pady=(2, 8))
+        if d.get("dosya"):
+            ttk.Label(f, foreground="#777", text=f"dosya: {d['dosya']}").pack(anchor="w")
+
+        def yukle():
+            y = filedialog.askopenfilename(
+                title="Lisans dosyası (pi3d.lic)",
+                filetypes=[("Lisans", "*.lic"), ("Tümü", "*.*")])
+            if not y:
+                return
+            try:
+                self.lisans = L.kur(y)
+            except Exception as ex:
+                messagebox.showerror("Lisans", f"Lisans kabul edilmedi:\n\n{ex}", parent=p)
+                return
+            v_durum.set(L.ozet(self.lisans))
+            self.v_durum.set("lisans yüklendi: " + L.ozet(self.lisans).splitlines()[0])
+            messagebox.showinfo("Lisans", "Lisans yüklendi:\n\n" + L.ozet(self.lisans), parent=p)
+        alt = ttk.Frame(f); alt.pack(fill="x", pady=(8, 0))
+        ttk.Button(alt, text="Lisans dosyasını yükle…", command=yukle).pack(side="left")
+        ttk.Button(alt, text="Kapat", command=p.destroy).pack(side="right")
+
+        def kapandi(_e=None):
+            self._lisans_pencere = None
+        p.bind("<Destroy>", kapandi)
 
     # ------------------------------------------------------------ iskelet
     def _kur(self):
@@ -1068,6 +1177,8 @@ class Uygulama(ttk.Frame):
         self.lazer_doldur()      # 8. adım da taramanın sonucunu kullanır
 
     def acilim_uret(self):
+        if not self._lisans_izin("acinim"):
+            return
         sec = self.ac_agac.selection()
         if not sec:
             messagebox.showinfo(
@@ -1419,6 +1530,8 @@ class Uygulama(ttk.Frame):
             if self.lz_satir else "Montajda sac parça bulunamadı.")
 
     def lazer_uret(self):
+        if not self._lisans_izin("lazer"):
+            return
         sec = [s for s in self.lz_agac.selection()
                if getattr(self, "lz_satir", {}).get(s) is not None]
         if not sec:
@@ -1679,6 +1792,8 @@ class Uygulama(ttk.Frame):
                             if pafta_var else ""))
 
     def pafta_uret(self):
+        if not self._lisans_izin("pafta"):
+            return
         # Hiçbir satır seçilmemişse HEPSİNİ al. Eskiden "seçim yok" deyip
         # duruyordu; kullanıcı listeyi tazeleyip butona basınca hiçbir
         # şey olmuyor gibi görünüyordu.
@@ -1840,6 +1955,8 @@ class Uygulama(ttk.Frame):
 
     # ---- baskı (kendiliğinden çalışmaz, kullanıcı ister)
     def pafta_bas(self):
+        if not self._lisans_izin("pafta"):
+            return
         sec = [s for s in self.pf_agac.selection()
                if getattr(self, "pafta_dosya", {}).get(s)]
         if not sec:
@@ -2158,6 +2275,7 @@ class Uygulama(ttk.Frame):
             y.add_separator()
             y.add_command(label="Kullanım kılavuzu", accelerator="F1",
                           command=self.kilavuz_ac)
+            y.add_command(label="Lisans ve makine kimliği…", command=self.lisans_penceresi)
             y.add_command(label="Hakkında", command=self.hakkinda)
             cubuk.add_cascade(label="Yardım", menu=y)
             self.master.config(menu=cubuk)
@@ -2221,9 +2339,10 @@ class Uygulama(ttk.Frame):
                 except Exception:
                     pass
                 break
+        lis = ("\n\nLisans: " + L.ozet(getattr(self, "lisans", None) or {})) if L is not None else ""
         messagebox.showinfo("Hakkında", f"Pi3D v{IS.PI3D_SURUM}  ({IS.PI3D_SURUM_TARIHI})\n\n"
                             + (surum or BASLIK)
-                            + "\n\nPiVision - Industrial Smart Vision System")
+                            + "\n\nPiVision - Industrial Smart Vision System" + lis)
 
     def _malzeme_listesi_tazele(self):
         """Malzeme kutusunu MALZEME tablosundan yeniden doldurur - CAD'den
@@ -2404,6 +2523,20 @@ class Uygulama(ttk.Frame):
         yol = self.v_step.get().strip()
         if not os.path.isfile(yol):
             messagebox.showwarning("Dosya", "Geçerli bir dosya seçin."); return
+        if not self._lisans_izin():
+            return
+        izin, n, lim = L.veri_izni(self.lisans, yol)
+        if not izin:
+            messagebox.showwarning(
+                "Deneme lisansı",
+                f"Deneme lisansı {lim} farklı model ile sınırlıdır; {n} model işlendi.\n\n"
+                "Daha önce işlenen modeller yeniden açılabilir. Yeni modeller için "
+                "tam lisans gerekir: Yardım > Lisans ekranındaki makine kimliğini "
+                "PiVision'a gönderin.")
+            self.lisans_penceresi()
+            return
+        if self.lisans.get("tip") == "DENEME":
+            self.v_durum.set(f"deneme lisansı: {n} / {lim} model")
         try:
             self.v_durum.set(f"biçim: {self.M.E.bicim_tani(yol)}")
         except self.M.E.OkunamazBicim as ex:
@@ -2844,6 +2977,8 @@ class Uygulama(ttk.Frame):
         """Programın tanımlamasını AI'a KONTROL ETTİRİR (pf10_ai): önce
         yazıyla bütün parçalar, emin olunamayanlar resimle. Sonuç
         öneridir; kullanıcı onaylayınca uygulanır ve öğrenilir."""
+        if not self._lisans_izin("ai"):
+            return
         if not (self.M and self.komp):
             messagebox.showinfo("AI", "Önce modeli inceleyin."); return
         import pf10_ai as AI
@@ -3065,6 +3200,8 @@ class Uygulama(ttk.Frame):
         """CATIA Analyze > Bill of Material kaydını STEP BOM'uyla eşleştirir:
         her parça için CATIA adedi / STEP adedi / durum; BOM_ESLESTIRME
         dosyaları çıktı klasörüne; Material sütunu varsa malzeme de alınır."""
+        if not self._lisans_izin("catia_bom"):
+            return
         if not (self.M and self.komp):
             messagebox.showinfo("CATIA BOM", "Önce STEP inceleyin (Adım 1)."); return
         y = yol or filedialog.askopenfilename(
@@ -3362,6 +3499,8 @@ class Uygulama(ttk.Frame):
 
     def kaynak_resimleri_uret(self):
         """Kaynak resimleri (pf14_kaynak): ayrı iş, ilerlemeli, iptal edilebilir."""
+        if not self._lisans_izin("kaynak"):
+            return
         if not self.komp:
             messagebox.showinfo("Kaynak resimleri", "Önce 1. sayfada modeli inceleyin.")
             return

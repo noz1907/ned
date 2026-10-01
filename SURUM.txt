@@ -1,12 +1,13 @@
 Pi3D  –  3B modelden parça listesi ve teknik resim
 
-Sürüm   : v1.0.10  (01.10.2026)
+Sürüm   : v1.0.11  (01.10.2026)
 Kaynak  : github.com/noz1907/ned   dal: claude/fikstur-parca-stp-57hwc1
 
 KURULUM
-  Windows'ta  Pi3D_baslat.bat  dosyasına çift tıklayın. İlk açılışta
-  .venv ortamını kurar (birkaç dakika), sonra programı açar.
-  Ayrıntı ve elle kurulum: KULLANIM.md
+  Müşteri: Pi3D_Kurulum_v<sürüm>.exe (tek dosya, Inno Setup sihirbazı,
+  C:\Pivision\Pi3D). Pakette kaynak kod yoktur; program makineye
+  kilitli lisansla (pi3d.lic) çalışır - Yardım > Lisans.
+  Geliştirici: Pi3D_baslat.bat (.venv) ve py exebuild.py. Ayrıntı: KULLANIM.md
 
 SÜRÜM NUMARASI
   Program başlığında, Yardım > Hakkında'da, rapor.md'de ve kaynak resmi
@@ -154,6 +155,32 @@ BU SÜRÜMDE NE VAR
     - kırmızı yalnız kaynağın kendisi (uzun sac kenarı artık kırmızı
       değil); kaynak ekseni ince mavi kesikli.
 
+  v1.0.11: MAKİNE BAZLI LİSANS, EXE DERLEME ve KURULUM SİHİRBAZI
+    (PiProduct ile aynı düzen; kullanıcı: "makine bazlı, hiçbir py dosya
+    olmayacak şekilde exebuild ve installer ile exe"):
+    - pf17_lisans.py: PI3D-XXXX-XXXX-XXXX makine kimliği (Windows
+      MachineGuid + bilgisayar adı), Ed25519 imzalı pi3d.lic (PiVision
+      açık anahtarı cf58062f…, Key Manager ile aynı kanonik imza),
+      exe yanı / PROGRAMDATA / LOCALAPPDATA'da aranır. Doğrulama
+      cryptography ile, yoksa saf Python Ed25519 (RFC 8032).
+    - DENEME = 8 FARKLI MODEL (kullanıcı kararı: "8 data deneme, sonra
+      full lisans"): işlenen modeller deneme.json'da imza + makine ile
+      mühürlü; 9. model kilitlenir, aynı dosya yeniden açılınca sayılmaz,
+      kayıt kurcalanırsa deneme biter. TAM: süresiz / tarihli. Sistem
+      saati geri alınırsa kilit.
+    - Arayüz: Yardım > Lisans ve makine kimliği (kopyala, .lic yükle);
+      lisanssızda model işlenmez; modül kapıları (açınım, pafta/PDF,
+      lazer, kaynak, CATIA BOM, AI); Hakkında'da lisans özeti.
+    - exebuild.py: sürüm tek kaynaktan (pf7_is), version.json, PyInstaller
+      (pi3d.spec), dağıtım klasörü dist\Pi3D_v<sürüm>\Pi3D, BARİYER
+      (.py/.pyc/.spec/__pycache__/anahtar/lisans masası/firma dosyası
+      bulunursa durur), MANIFEST.txt SHA-256, zip, Inno Setup varsa
+      Pi3D_Kurulum_v<sürüm>.exe.
+    - installer/: Pi3D_Setup.iss (C:\Pivision\Pi3D, Türkçe, kısayollar,
+      sürüm /DMyVer ile), build_installer.bat, sihirbaz görselleri.
+    - lisans_masasi/pi3d_lisans_cli.py (PiVision içi): aynı özel anahtarla
+      DENEME / TAM / A_LISANS üretir, geri okuyup doğrular. Pakete girmez.
+    - Testler: test/lisans_denetimi.py; GUI testleri geçici lisansla.
   v1.0.10: Pi3D ANTETİ, TANITIM VİDEOSU:
     - Pi3D ANTETİ: firma anteti yokken sağ alttaki 150 x 100 mm kutuya
       Pi3D / PiVision logolu antet çizilir (logo şeridi DXF'e IMAGE

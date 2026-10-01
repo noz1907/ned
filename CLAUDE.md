@@ -22,6 +22,11 @@ koşulur: eksenleri paralel olmayan parçada HATA 0, çakışma 0.
 - Yapay zekâ verisi Anthropic'e yalnız firma izniyle gider (program sorar).
 - Her teslimde `PI3D_SURUM` (pf7_is.py) artar, `SURUM.txt` ve
   `KULLANIM.md` güncellenir.
+- Müşteriye giden paket: `py exebuild.py` → `Pi3D_Kurulum_v<sürüm>.exe`
+  (Inno Setup). Pakette `.py` / `.pyc` / `.spec`, özel anahtar,
+  `lisans_masasi/` OLMAZ (bariyer). Lisans makine bazlı (`pf17_lisans`,
+  PiProduct düzeni): deneme 8 model, sonra TAM. Özel anahtar depoya
+  girmez (`lisans_masasi/keys/` .gitignore'da).
 - Testler: `test/` (bkz. `test/OKU.md`). Çakışma denetimi:
   `python test/cizim_cakisma_denetimi.py <dxf klasörü>` - sonuç 0 olmalı.
 

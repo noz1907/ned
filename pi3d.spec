@@ -104,7 +104,12 @@ a = Analysis(
     hiddenimports=ocp_gizli + ezdxf_gizli + [
         "pf3_olcu", "pf4_pafta", "pf5_antet", "pf6_malzeme", "pf7_is", "pf8_tani", "pf9_excel",
         "pf10_ai", "pf11_yapi", "pf12_katalog", "pf13_aile", "pf14_kaynak", "pf15_bom_esle", "pf16_acinim3",
-        "pf1_referans",
+        "pf1_referans", "pf17_lisans",
+        # lisans imzasi: cryptography varsa onunla (Rust baglamasi
+        # PyInstaller'in goremedigi bir yoldan yuklenir), yoksa pf17'nin saf
+        # Python Ed25519 dogrulamasi devreye girer
+        "cryptography.hazmat.primitives.asymmetric.ed25519",
+        "cryptography.hazmat.bindings._rust",
         "matplotlib.backends.backend_agg",
         "matplotlib.backends.backend_pdf",
         "matplotlib.backends.backend_svg",

@@ -39,6 +39,10 @@ KUTU = []
 for _t in ("showerror", "showinfo", "showwarning"):
     setattr(mb, _t, lambda *a, _t=_t, **k: KUTU.append((_t,) + a[:2]))
 
+import os as _os, sys as _sys                                     # noqa: E402
+_sys.path.insert(0, _os.path.join(_os.path.dirname(_os.path.abspath(__file__))))
+import lisans_yardim                                              # noqa: E402
+lisans_yardim.gecici_lisans()        # geçici TAM lisans: kapılar açık
 import pf3_gui as G                                              # noqa: E402
 from kaynak_resmi_denetimi import model                          # noqa: E402
 

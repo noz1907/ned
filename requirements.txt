@@ -8,3 +8,7 @@ matplotlib>=3.7
 # Istege bagli: "AI ile kontrol et" (pf10_ai). Kurulu degilse program
 # AI'siz calisir; dugmeye basinca kurulum yolunu soyler.
 anthropic
+
+# Lisans imzasi dogrulama (Ed25519). Kurulu degilse pf17_lisans saf Python
+# dogrulamaya duser; exe'de bulunmasi onerilir.
+cryptography>=41.0

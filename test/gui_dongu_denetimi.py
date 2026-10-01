@@ -82,6 +82,10 @@ sahte.calistir = lambda *a, **k: []
 sys.modules["pf3_olcu"] = sahte
 
 mb.showerror = mb.showinfo = mb.showwarning = lambda *a, **k: None
+import os as _os, sys as _sys                                     # noqa: E402
+_sys.path.insert(0, _os.path.join(_os.path.dirname(_os.path.abspath(__file__))))
+import lisans_yardim                                              # noqa: E402
+lisans_yardim.gecici_lisans()        # geçici TAM lisans: kapılar açık
 import pf3_gui as G
 
 kok = tk.Tk()

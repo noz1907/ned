@@ -133,7 +133,57 @@ pip install "numpy==1.26.4" "scipy==1.12.0" "matplotlib==3.8.2"
 Sonra Pi3D'u yukarıdaki gibi kendi `.venv` ortamında çalıştırın; iki
 kurulum birbirine karışmaz.
 
-### Çalıştırılabilir dosya (.exe) yapmak
+### Müşteri kurulumu: `Pi3D_Kurulum_v<sürüm>.exe` (önerilen)
+
+Müşteriye giden **tek dosya** kurulum sihirbazıdır (PiProduct ile aynı
+düzen): çift tıklanır, `C:\Pivision\Pi3D` kurulur, masaüstü ve Başlat
+menüsü kısayolu oluşur. Pakette **kaynak kod (.py) yoktur**; program
+makineye kilitli lisansla çalışır (bkz. "Lisans" bölümü).
+
+Geliştirici tarafında üretimi (Windows, `.venv` kurulu, Inno Setup 6):
+
+```
+py exebuild.py                 →  1 = PI3D logolu  /  2 = FIRMA antetli
+```
+
+`exebuild.py` sırasıyla: sürümü `pf7_is.PI3D_SURUM`'dan okur ve
+`version.json` yazar → PyInstaller (`pi3d.spec`) → `dist\Pi3D_v<sürüm>\Pi3D\`
+dağıtım klasörü (exe + `_internal` + KULLANIM.md, SURUM.txt, OKUBENI.txt)
+→ **bariyer**: pakette `.py / .pyw / .pyc / .spec`, `__pycache__`, özel
+anahtar, `lisans_masasi/`, firma CAD / Excel dosyası bulunursa derleme
+DURUR ve dosyaları listeler → `MANIFEST.txt` (SHA-256) + `dist\Pi3D_v<sürüm>.zip`
+→ Inno Setup varsa `installer\Output\Pi3D_Kurulum_v<sürüm>.exe`.
+Yalnız sihirbazı yeniden üretmek için `installer\build_installer.bat`.
+
+### Lisans (makine bazlı, imzalı `pi3d.lic`)
+
+Pi3D, PiProduct ile aynı lisans düzenini kullanır: PiVision lisans masası
+bir `.lic` dosyası üretip Ed25519 ile imzalar; program dosyayı açık
+anahtarla doğrular ve **makine kimliğiyle** karşılaştırır. Özel anahtar
+programda yoktur, lisans başka bilgisayarda çalışmaz.
+
+1. Program ilk açılışta **Yardım > Lisans ve makine kimliği** penceresini
+   açar; `PI3D-XXXX-XXXX-XXXX` kodunu **Kopyala** ile alıp PiVision'a
+   gönderirsiniz.
+2. Gelen `pi3d.lic` dosyasını aynı pencereden **Lisans dosyasını yükle…**
+   ile seçersiniz (program `%LOCALAPPDATA%\Pi3D\` altına kopyalar) ya da
+   `Pi3D.exe`'nin yanına koyarsınız. Aranan sıra: exe'nin yanı,
+   `%PROGRAMDATA%\Pi3D`, `%LOCALAPPDATA%\Pi3D`.
+3. Lisanssız program açılır ama model işlemez; lisans kapsamında olmayan
+   modül (açınım, pafta/PDF, lazer, kaynak resmi, CATIA BOM, AI) o adımda
+   uyarı verir.
+
+| paket | kapsam | sınır |
+|---|---|---|
+| DENEME | bütün modüller | **8 farklı model**: 9. STEP dosyasında kilitlenir; aynı dosyayı yeniden açmak sayılmaz. İşlenen modeller `%LOCALAPPDATA%\Pi3D\deneme.json` kaydındadır (imza ve makineyle mühürlü; silinir / değiştirilirse deneme biter) |
+| TAM | bütün modüller | süresiz ya da bitiş tarihli |
+
+Sistem saati son açılıştan bir günden çok geri alınırsa lisans o gün
+kilitlenir. Lisans durumu **Yardım > Hakkında**'da da yazar.
+
+Lisans üretimi (PiVision içi, müşteriye gitmez): `lisans_masasi/OKUBENI.md`.
+
+### Çalıştırılabilir dosya (.exe) yapmak (yalnız exe, kurulum olmadan)
 
 Python kurulu olmayan bilgisayarlarda da çalışsın istiyorsanız:
 
