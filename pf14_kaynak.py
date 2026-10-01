@@ -1874,7 +1874,7 @@ def _genel_sayfalari(O, bilgi, tab=None):
 
 # ------------------------------------------------------------ balonlu (sunum) resim
 BALON_R = 33.0             # büyütülmüş kaynak dairesinin yarıçapı (kâğıt mm)
-BALON_SAYFA = 8            # sayfa başına en çok balon
+BALON_SAYFA = 6            # sayfa başına en çok balon (3 sol + 3 sağ)
 BALON_YH = 2.0             # balon etiketlerinin yazı boyu
 BALON_ETIKET = 44.0        # dairenin dış yanında sembol için ayrılan şerit (mm)
 
@@ -1929,36 +1929,28 @@ def _daire_kirp(q, c, r):
 
 def _balon_yuvalari(n):
     """n balon için sayfadaki daire merkezleri ve ana görünüşün kutusu.
-    Balonlar sayfanın sol / sağ sütununda (üçer), 7-8 balonda altta iki
-    tane daha; ana görünüş ortada kalan alanda."""
+    Balonlar sayfanın sol / sağ sütununda (en çok üçer; 3'e kadar yalnız
+    sağda), ana görünüş ortada kalan alanda. Sütunda üç daire, aralarında
+    bölge harfi dairesine yetecek boşlukla sığar; daha fazlası sonraki
+    sayfaya (BALON_SAYFA)."""
     W, H = KAGIT
     R = BALON_R
     ust = H - KENAR - 24.0                 # üstte logo şeridi
     alt = KENAR + 8.0
     sol, sag = KENAR + 4.0 + BALON_ETIKET + R, W - KENAR - 4.0 - BALON_ETIKET - R
-    yuva = []
+
     def dizi(x, k):
         if k <= 0:
             return []
-        adim = (ust - alt - 2 * R) / max(1, k - 1) if k > 1 else 0.0
         if k == 1:
             return [(x, (ust + alt) / 2.0)]
+        adim = (ust - alt - 2 * R) / (k - 1)
         return [(x, ust - R - i * adim) for i in range(k)]
     if n <= 3:
-        yuva += dizi(sag, n)
-        kutu = (KENAR + 8.0, alt, sag - R - 10.0, ust)
-    else:
-        n_sag = min(3, n - min(3, n - 3)) if n <= 6 else 3
-        n_sol = min(3, n - n_sag) if n <= 6 else 3
-        yuva += dizi(sol, n_sol) + dizi(sag, n_sag)
-        kalan = n - n_sol - n_sag
-        if kalan > 0:
-            xs = [W / 2.0 - R - 30.0, W / 2.0 + R + 30.0][:kalan] if kalan == 2 else [W / 2.0]
-            yuva += [(x, alt + R) for x in xs]
-            kutu = (sol + R + 10.0, alt + 2 * R + 12.0, sag - R - 10.0, ust)
-        else:
-            kutu = (sol + R + 10.0, alt, sag - R - 10.0, ust)
-    return yuva, kutu
+        return dizi(sag, n), (KENAR + 8.0, alt, sag - R - 10.0, ust)
+    n_sol = min(3, n // 2)
+    n_sag = min(3, n - n_sol)
+    return dizi(sol, n_sol) + dizi(sag, n_sag), (sol + R + 10.0, alt, sag - R - 10.0, ust)
 
 
 def _balon_sayfalari(O, bilgi, detaylar, det_r, klasor):
@@ -2028,7 +2020,8 @@ def _balon_sayfalari(O, bilgi, detaylar, det_r, klasor):
                 ex = [Rm.p3(p) for d in b["dikis"] for p in (d["p0"], d["p1"])]
                 mx = sum(p[0] for p in pts) / len(pts)
                 my = sum(p[1] for p in pts) / len(pts)
-                rs = max(4.0, max(math.dist((mx, my), p) for p in ex) + 2.0)
+                # geniş bölgede daire görünüşü yutmasın: en çok 1,2 R
+                rs = min(1.2 * R, max(4.0, max(math.dist((mx, my), p) for p in ex) + 2.0))
                 msp.add_circle((mx, my), rs, dxfattribs={"layer": "BOLGE"})
                 kucuk[dt["bolge"]] = (mx, my, rs)
             mx, my, rs = kucuk[dt["bolge"]]
@@ -2060,9 +2053,7 @@ def _balon_sayfalari(O, bilgi, detaylar, det_r, klasor):
                 for w in _daire_kirp([Rd.p(a) for a in q], (cx, cy), R - 0.6):
                     msp.add_lwpolyline(w, dxfattribs={"layer": kat_})
             # kaynak sembolleri dairenin DIŞ yanında: sütuna göre dışa doğru
-            taraf = -1 if cx < W / 2 - 1 else 1
-            if abs(cx - W / 2) <= R + 10 and cy < H / 2:      # alt sıra: sağa / sola
-                taraf = -1 if cx <= W / 2 else 1
+            taraf = -1 if cx < W / 2 else 1
             ds = sorted(dt["dikis"], key=lambda d: -Rd.p3(d["ok"])[1])
             n = len(ds)
             for k, d in enumerate(ds):
