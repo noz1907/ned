@@ -23,7 +23,9 @@ CIKTI = os.path.join(os.path.dirname(os.path.abspath(__file__)), "pi3d_logo.py")
 # Arayüzün gerçekten yüklediği dosyalar.
 GOMULECEK = ["pi3d.ico", "pi3d_72.png", "pi3d_64.png", "pi3d_48.png",
              "pi3d_32.png", "pi3d_16.png",
-             "pivision_64.png", "pivision_56.png", "pivision_44.png"]
+             "pivision_64.png", "pivision_56.png", "pivision_44.png",
+             # pafta anteti (pf4_pafta.pi3d_antet_resmi): logo şeridi
+             "pi3d_256.png", "pivision_beyaz.png"]
 
 BASLIK = '''# -*- coding: utf-8 -*-
 """Gömülü logolar. ELLE DÜZENLEMEYİN — logo_gom.py üretir.
