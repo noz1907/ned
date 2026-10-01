@@ -93,6 +93,20 @@ açık olan `.CATProduct`'ın ağacını gezip `malzeme.csv` yazar.
 
 ---
 
+## Bölümlü BOM kaydı (alt montajlı ürün) ve BOM eşleştirme
+
+Alt montajlı bir üründe CATIA'nın kaydı tek tablo değildir: her alt
+montaj için ayrı **"Bill of Material: <montaj>"** bölümü, her bölümün
+kendi başlık satırı ve sonda **"Recapitulation of"** özeti (parça başına
+toplam adet) olur. Pi3D bunu bölüm bölüm okur: malzemeyi yalnız
+**Material** sütunundan (standart elemanda TraceParts `materialgruppe`)
+alır, başlık satırlarını asla kod sanmaz. Aynı dosyayla **BOM
+eşleştirme** de yapar: STEP'ten çıkan parçalarla CATIA parça no /
+Nomenclature / dosya adı üzerinden eşleşir, adet farklarını, STEP'e
+alınmamış elemanları (cıvata, somun, perçin) ve CATIA listesinde olmayan
+parçaları `BOM_ESLESTIRME.xlsx`'e yazar (Adım 2 → **CATIA BOM ile
+eşleştir…** ya da `--catia-bom`). Ayrıntı: KULLANIM.md, Adım 2.
+
 ## Sonra ne oluyor
 
 Pi3D malzemeyi şu sırayla belirler:

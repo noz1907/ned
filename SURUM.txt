@@ -1,6 +1,6 @@
 Pi3D  –  3B modelden parça listesi ve teknik resim
 
-Sürüm   : v1.0.8  (30.09.2026)
+Sürüm   : v1.0.9  (01.10.2026)
 Kaynak  : github.com/noz1907/ned   dal: claude/fikstur-parca-stp-57hwc1
 
 KURULUM
@@ -152,6 +152,27 @@ BU SÜRÜMDE NE VAR
       6 yazı boyu), SİM. notu balonun altında.
     - kırmızı yalnız kaynağın kendisi (uzun sac kenarı artık kırmızı
       değil); kaynak ekseni ince mavi kesikli.
+
+  v1.0.9: CATIA BOM EŞLEŞTİRME ve GERÇEK MALZEME:
+    - CATIA V5 (R14 / R17) Analyze > Bill of Material kaydı BÖLÜMLÜDÜR
+      (her alt montaj "Bill of Material: X" bölümü + "Recapitulation of"
+      özeti). Eski okuyucu tek tablo sanıp özetteki TraceParts
+      sütunlarını kod / malzeme diye okuyordu (Karluna: 109 satırdan 3,
+      ikisi başlık) - YANLIŞ SONUÇ. Artık bölüm bölüm çözülür
+      (pf15_bom_esle.py); parça başına toplam adet özetten, özet yoksa
+      montaj ağacından çarpılarak (ikisi aynı çıkıyor, denetlendi).
+    - BOM EŞLEŞTİRME (Adım 2 "CATIA BOM ile eşleştir…", --catia-bom):
+      STEP parçaları CATIA parça no / Nomenclature (STEP dosya adı) /
+      örnek adı / CATPart adı ile eşleşir (.CATPart.28, .1.1, "Copy (1)
+      of" ekleri); sağ / sol profil gibi aynı STEP kaydına düşenler tek
+      öbek. Durum: eşleşti / adet farklı / STEP'te yok / CATIA'da yok;
+      alt montaj eksik sayılmaz. BOM_ESLESTIRME.csv / .xlsx / .md +
+      renkli ekran tablosu. Karluna: 70 CATIA parçası, 55 STEP
+      komponenti, 44 eşleşti, 22 STEP'e alınmamış bağlantı elemanı.
+    - GERÇEK MALZEME: Material sütunu varsa oradan (KAYNAK: seçim),
+      standart elemanda TraceParts malzeme grubu; Source (Made / Bought)
+      doluysa sınıf oradan. Material yoksa açıkça söylenir, eşleştirme
+      yine yapılır. Test: test/catia_bom_denetimi.py.
 
   v1.0.8: DETAY RESMİ ÖLÇÜLENDİRME (kurallar: CLAUDE.md):
     - DIŞ ÖLÇÜLER KESİNLİKLE VAR: ana görünüş (ÖN, en çok bilgi veren

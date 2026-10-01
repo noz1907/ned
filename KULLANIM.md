@@ -921,6 +921,43 @@ Malzeme vermenin yolları:
   başlıklarından bulunur (bkz. `CATIA_MALZEME.md`)
 * **Adım adım:** **Malzemeyi CAD'den al (adım adım)…** düğmesi ya da
   **Yardım** menüsü — aşağıda.
+* **CATIA BOM ile eşleştir (adet, eksik, malzeme)…** — CATIA'nın
+  *Analyze ▸ Bill of Material ▸ Save As* kaydını (Excel `.xls` / `.xlsx`
+  ya da Text) verin; aşağıda.
+
+#### CATIA BOM ile eşleştirme — adet, eksik parça, gerçek malzeme
+
+CATIA V5 (R14 / R17) *Analyze ▸ Bill of Material* kaydı tek tablo
+değildir: her alt montaj için ayrı bir **"Bill of Material: <montaj>"**
+bölümü, her bölümün kendi başlık satırı ve sonda **"Recapitulation of:
+<montaj>"** özeti (parça başına toplam adet, "Different parts / Total
+parts") vardır. Pi3D bu dosyayı bölüm bölüm okur (eski sürüm tek tablo
+sanıp özet bölümündeki TraceParts sütunlarını kod / malzeme diye
+okuyordu — düzeltildi) ve STEP'ten çıkan BOM ile eşleştirir:
+
+* **Eşleşme anahtarları:** Part Number, Nomenclature (çoğu zaman STEP
+  dosya adıdır: `ALP0043-01-01-01.stp`), örnek adı (`X.1.1`), CATPart
+  dosya adı; `.CATPart.28`, `.1` gibi ekler ve "Copy (1) of" dikkate
+  alınır. Aynı STEP kaydına düşen sağ / sol profil (aynı nomenclature)
+  tek öbek sayılır, adetleri toplanır.
+* **Durumlar:** `eşleşti` (adet aynı), `adet farklı` (CATIA / STEP
+  adedi ayrı — modeli ya da STEP dışa aktarımını denetleyin), `STEP'te
+  yok` (CATIA'da var, STEP'te katı yok — çoğu zaman STEP'e alınmamış
+  cıvata / somun / perçin), `CATIA'da yok` (STEP'te var, listede yok).
+  Alt montajlar eksik sayılmaz.
+* **Çıktı:** çıktı klasörüne `BOM_ESLESTIRME.csv` / `.xlsx` / `.md`;
+  ekranda renkli tablo (turuncu: adet farklı, kırmızı: CATIA'da yok,
+  gri: STEP'te yok). Çıktı klasörü seçili değilse yalnız ekranda.
+* **Gerçek malzeme:** listede **Material** sütunu varsa (Define formats
+  ile görünür yapılmışsa) parçaların malzemesi oradan alınır (KAYNAK:
+  seçim); standart elemanlarda TraceParts `materialgruppe` alanı
+  (ör. `Steel`) kullanılır. Material sütunu yoksa program bunu söyler;
+  eşleştirme yine yapılır. **Source** (Made / Bought) doluysa sınıf da
+  oradan alınır.
+* **Malzeme listesi yükle** düğmesine böyle bir dosya verilirse de aynı
+  eşleştirme çalışır.
+
+Komut satırı: `--catia-bom dosya.xls` (aşağıda).
 
 #### Malzemeyi CAD'den almak — sihirbaz
 
@@ -1988,6 +2025,16 @@ kod;malzeme;ad
 
 Hiçbir malzeme seçeneği vermezseniz program çeliği varsayar, bunu **açıkça
 söyler** ve çıktı klasörüne doldurmaya hazır bir `malzeme.csv` şablonu yazar.
+
+CATIA'nın *Analyze ▸ Bill of Material* kaydıyla BOM eşleştirme (adet,
+eksik parça) ve — Material sütunu varsa — gerçek malzeme:
+
+```
+python pf3_olcu.py montaj.stp -o cikti --catia-bom montaj_bom.xls
+```
+
+Çıktı klasörüne `BOM_ESLESTIRME.csv / .xlsx / .md` yazılır; özet
+terminale basılır. Ayrıntı: Adım 2'deki "CATIA BOM ile eşleştirme".
 
 ### Görünüş, kesit, zip
 

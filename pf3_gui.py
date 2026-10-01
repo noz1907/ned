@@ -747,6 +747,9 @@ class Uygulama(ttk.Frame):
         ttk.Button(mf, text="Malzemeyi CAD'den al  (adım adım)…",
                    command=self.malzeme_sihirbazi).grid(
             row=2, column=1, columnspan=2, sticky="ew", pady=(3, 0))
+        ttk.Button(mf, text="CATIA BOM ile eşleştir (adet, eksik, malzeme)…",
+                   command=self.catia_bom_esle).grid(
+            row=3, column=1, columnspan=2, sticky="ew", pady=(3, 0))
         ttk.Label(mf, foreground="#555", justify="left", text=(
             "KAYNAK sütunu malzemenin nereden geldiğini söyler: data'dan (STEP'te ya da\n"
             "parça adında tanımlı), seçim (sizin verdiğiniz), varsayılan (hiçbiri yoksa).\n"
@@ -2967,6 +2970,13 @@ class Uygulama(ttk.Frame):
                        ("Tümü", "*.*")])
         if not y:
             return
+        # CATIA'nın bölümlü Bill of Material kaydı: eşleştirme + malzeme
+        try:
+            if self.M.catia_bom_oku(y) is not None:
+                self.catia_bom_esle(y)
+                return
+        except Exception:
+            pass
         # CAD'in Made/Bought sütunu varsa (CATIA makrosu ya da doldurulmuş
         # STANDART_KONTROL.xlsx) sınıf da buradan alınır: tasarımcının
         # bilgisi tahminden doğrudur. Malzeme sütunu olmayan dosya yalnız
@@ -3027,6 +3037,89 @@ class Uygulama(ttk.Frame):
                 + "\n\nÇözüm: dosyaya bir YOĞUNLUK sütunu ekleyin (ör. 7850 "
                 "kg/m3 ya da 7,85 g/cm3) ya da adı tanınan bir adla değiştirin. "
                 "Adım adım: Yardım > Malzemeyi CAD'den al.")
+
+    def catia_bom_esle(self, yol=None):
+        """CATIA Analyze > Bill of Material kaydını STEP BOM'uyla eşleştirir:
+        her parça için CATIA adedi / STEP adedi / durum; BOM_ESLESTIRME
+        dosyaları çıktı klasörüne; Material sütunu varsa malzeme de alınır."""
+        if not (self.M and self.komp):
+            messagebox.showinfo("CATIA BOM", "Önce STEP inceleyin (Adım 1)."); return
+        y = yol or filedialog.askopenfilename(
+            title="CATIA Bill of Material kaydı  (Analyze ▸ Bill of Material ▸ Save As)",
+            filetypes=[("CATIA BOM", "*.xls *.xlsx *.txt *.htm *.html *.csv"), ("Tümü", "*.*")])
+        if not y:
+            return
+        cb = self.M.catia_bom_oku(y)
+        if cb is None:
+            messagebox.showwarning(
+                "CATIA BOM", f"{os.path.basename(y)} CATIA'nın bölümlü Bill of Material "
+                "kaydı değil ('Bill of Material:' bölümleri yok).\n\nCATIA'da: Analyze ▸ "
+                "Bill of Material ▸ Save As ▸ Excel ya da Text. Düz malzeme listesi için "
+                "'Malzeme listesi yükle' düğmesini kullanın.")
+            return
+        BE = self.M.BE
+        s = BE.bom_eslestir(self.komp, cb)
+        on = (self.v_out.get() or "").strip()
+        yazildi = ""
+        if on:
+            try:
+                BE.eslestirme_yaz(on, s, cb, XL)
+                yazildi = os.path.join(on, "BOM_ESLESTIRME.xlsx")
+            except Exception as ex:
+                self._yaz(f"! BOM_ESLESTIRME yazılamadı: {ex}")
+        for sat in BE.ozet_metni(s, cb).splitlines():
+            self._yaz("CATIA BOM: " + sat)
+        # malzeme: Material sütunu (ya da TraceParts malzeme grubu) varsa
+        n = 0
+        if s["esl"]:
+            esl = {k: self.M.malzeme_yogunluklu(m, None) for k, m in s["esl"].items()}
+            esl = {k: v for k, v in esl.items() if v}
+            for k in self.komp:
+                if k["sinif"] != "parca":
+                    continue
+                m, kay = self.M.malzeme_ata(k, esl, "", data_oncelik=False)
+                if kay == "secim" and m:
+                    self.malzemeler[k["kod"]] = m
+                    n += 1
+            if n:
+                self.satirlar = []
+                self._agac_doldur()
+                self._malzeme_listesi_tazele()
+                self._yaz(f"CATIA BOM: {n} parçanın malzemesi CATIA'dan alındı")
+        try:
+            harita = BE.catia_kaynak_haritasi(cb)
+            if harita and self.M.cad_kaynagiyla_sinifla(self.komp, harita, log=self._yaz):
+                self._agac_doldur(); self._acilim_doldur(); self._ornek_adaylari()
+        except Exception:
+            pass
+        self._catia_bom_pencere(s, cb, yazildi, n)
+
+    def _catia_bom_pencere(self, s, cb, yazildi, n_mal):
+        w = tk.Toplevel(self.master)
+        w.title("CATIA BOM eşleştirme")
+        w.geometry("1100x560")
+        ttk.Label(w, text=self.M.BE.ozet_metni(s, cb)
+                  + (f"\n{n_mal} parçanın malzemesi CATIA'dan alındı." if n_mal else "")
+                  + (f"\nYazıldı: {yazildi}" if yazildi else
+                     "\nÇıktı klasörü seçili değil: dosya yazılmadı (Adım 1'de klasör verin)."),
+                  justify="left", padx=8, pady=6).pack(fill="x")
+        kol = ("durum", "catia_part_no", "catia_adet", "step_adet", "step_ad", "catia_tanim", "malzeme")
+        bas = ("durum", "CATIA parça no", "CATIA adet", "STEP adet", "STEP ad", "tanım", "malzeme")
+        gen = (110, 260, 80, 80, 260, 180, 110)
+        fr = ttk.Frame(w); fr.pack(fill="both", expand=True, padx=8, pady=(0, 8))
+        ag = ttk.Treeview(fr, columns=kol, show="headings")
+        for k, b, g in zip(kol, bas, gen):
+            ag.heading(k, text=b); ag.column(k, width=g, anchor="w")
+        sb = ttk.Scrollbar(fr, orient="vertical", command=ag.yview)
+        ag.configure(yscrollcommand=sb.set)
+        ag.pack(side="left", fill="both", expand=True); sb.pack(side="right", fill="y")
+        for r in s["satirlar"]:
+            ag.insert("", "end", values=[r.get(k, "") for k in kol],
+                      tags=(r["durum"].replace(" ", "_").replace("'", ""),))
+        ag.tag_configure("adet_farklı", background="#ffe4b5")
+        ag.tag_configure("CATIAda_yok", background="#ffd6d6")
+        ag.tag_configure("STEPte_yok", background="#f0f0f0")
+        ttk.Button(w, text="Kapat", command=w.destroy).pack(pady=(0, 8))
 
     def malzeme_sablon(self):
         if not (self.M and self.komp):

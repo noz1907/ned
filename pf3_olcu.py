@@ -65,6 +65,7 @@ import pf1_referans as E
 import pf7_is as IS
 import pf8_tani as TN
 import pf9_excel as XL
+import pf15_bom_esle as BE
 
 RHO = 7.85e-6          # kg/mm3 (çelik); --yogunluk ile değiştirilir
 
@@ -11066,12 +11067,55 @@ def malzeme_yogunluklu(ad, yogunluk=None, pay=0.02):
     return m
 
 
+def catia_bom_oku(yol):
+    """CATIA'nın BÖLÜMLÜ Bill of Material kaydı (her alt montaj ayrı
+    "Bill of Material: X" bölümü + "Recapitulation of" özeti) ise çözümü
+    (pf15_bom_esle.catia_bom_coz), değilse None. Tek tablolu CATIA listesi
+    (yalnız Part Number / Material) eski yoldan okunur."""
+    if yol.lower().endswith(".json"):
+        return None
+    try:
+        tablo = _tablo_satirlari(yol)
+    except Exception:
+        return None
+    if not BE.catia_bom_mu(tablo):
+        return None
+    cb = BE.catia_bom_coz(tablo)
+    return cb if (cb["bolumler"] or cb["ozet"]) else None
+
+
+CATIA_MALZEME_IPUCU = ("CATIA'da: Analyze > Bill of Material > Define formats > "
+                       "'Hidden Properties' listesinden Material'i (ve Source'u) seçip "
+                       "'>' ile görünür tarafa alın > OK > Save As > Excel.")
+
+
 def malzeme_tablosu(yol):
     """Malzeme dosyasının satır satır çözümü (sihirbazın önizlemesi için).
 
     Döner: [{"kod", "malzeme", "yogunluk", "anahtar", "durum"}]
       durum: "tanındı" / "CAD yoğunluğuyla" / "tanınmadı"
     Hata: MalzemeDosyaHatasi (ileti kullanıcıya gösterilebilir)."""
+    cb = catia_bom_oku(yol)
+    if cb is not None:
+        # Bölümlü CATIA BOM'u tek tablo gibi okunmaz: başlık satırları veri,
+        # TraceParts "oberflaeche" sütunu malzeme sanılıyordu (Karluna: 109
+        # satırdan 3'ü, ikisi başlık). Bölüm bölüm çözülür; malzeme yalnız
+        # Material sütunundan (standart elemanda TraceParts malzeme grubu).
+        cift = BE.catia_malzeme_satirlari(cb)
+        if not cift:
+            raise MalzemeDosyaHatasi(
+                f"CATIA parça listesinde ({cb['montaj'] or os.path.basename(yol)}, "
+                f"{len(cb['bolumler'])} bölüm) MALZEME sütunu yok. " + CATIA_MALZEME_IPUCU
+                + " BOM eşleştirmesi (adet, eksik parça) bu dosyayla yine yapılır.")
+        out = []
+        for kod, mal in cift:
+            taban = malzeme_coz(mal)
+            a = malzeme_yogunluklu(mal, None)
+            out.append({"kod": kod, "malzeme": mal, "yogunluk": None, "anahtar": a,
+                        "taban": taban,
+                        "durum": "tanınmadı" if not a else
+                        "CAD yoğunluğuyla" if a.startswith("cad:") else "tanındı"})
+        return out
     if yol.lower().endswith(".json"):
         ham = json.load(open(yol, encoding="utf-8")) or {}
         tablo = [["kod", "malzeme"]] + [[k, str(v)] for k, v in ham.items()]
@@ -11159,6 +11203,9 @@ def cad_kaynagi_oku(yol):
     Sütun yoksa boş sözlük (malzeme dosyası yine malzeme için okunur)."""
     if yol.lower().endswith(".json"):
         return {}
+    cb = catia_bom_oku(yol)
+    if cb is not None:
+        return BE.catia_kaynak_haritasi(cb)
     try:
         tablo = _tablo_satirlari(yol)
     except Exception:
@@ -11200,6 +11247,9 @@ def malzeme_sutunu_var(yol):
     """Dosyanın ilk satırlarında malzeme sütunu başlığı var mı."""
     if yol.lower().endswith(".json"):
         return True
+    cb = catia_bom_oku(yol)
+    if cb is not None:
+        return bool(BE.catia_malzeme_satirlari(cb))
     try:
         tablo = _tablo_satirlari(yol)
     except Exception:
@@ -11796,6 +11846,8 @@ uretir: KAYNAK/<grup>_kaynak.pdf (yalniz PDF; buyuk modelde uzun surer).
     ap.add_argument("--liste", action="store_true", help="yalnız komponent listesi")
     ap.add_argument("--malzeme", help="hepsine tek malzeme (ör. --malzeme aluminyum)")
     ap.add_argument("--malzeme-dosya", help="kod;malzeme eşleme dosyası (csv/json)")
+    ap.add_argument("--catia-bom", help="CATIA Bill of Material kaydı (xls/xlsx/txt): "
+                    "STEP BOM'uyla eşleştirilir (BOM_ESLESTIRME), malzeme varsa alınır")
     ap.add_argument("--malzeme-sor", action="store_true",
                     help="malzemeyi terminalden sor (hepsine tek ya da parça parça)")
     ap.add_argument("--malzeme-liste", action="store_true", help="malzeme tablosunu yaz")
@@ -11867,6 +11919,18 @@ uretir: KAYNAK/<grup>_kaynak.pdf (yalniz PDF; buyuk modelde uzun surer).
     os.makedirs(on, exist_ok=True)
     IS.model_kaydet(on, a.step)       # açınım/lazer kaydı model özetini bilsin
 
+    # ---- CATIA BOM eşleştirme: adet, eksik parça, (varsa) gerçek malzeme
+    if a.catia_bom:
+        cb = catia_bom_oku(a.catia_bom)
+        if cb is None:
+            sys.exit(f"HATA: {a.catia_bom} CATIA Bill of Material kaydı değil "
+                     "(bölümlü 'Bill of Material:' satırları yok).")
+        es_ = BE.bom_eslestir(komp, cb)
+        BE.eslestirme_yaz(on, es_, cb, XL)
+        print("CATIA BOM eşleştirme -> BOM_ESLESTIRME.csv / .xlsx / .md")
+        print("  " + BE.ozet_metni(es_, cb).replace("\n", "\n  "))
+        if es_["esl"] and not a.malzeme_dosya:
+            a.malzeme_dosya = a.catia_bom
     # ---- malzeme: kütle bunun üzerinden hesaplanır, tahmin edilmez
     esl, genel = {}, VARSAYILAN_MALZEME
     if a.malzeme_dosya and not malzeme_sutunu_var(a.malzeme_dosya) \
