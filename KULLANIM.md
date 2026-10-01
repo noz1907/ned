@@ -1374,9 +1374,30 @@ SOL_DIKME'de (533 mm şapka profili + 768 mm 5° kırık kanal, tek sac)
 1312,84 × 287,48 mm çıktı; CATIA'nın kendi açınımı 1312,8 × 287,4.
 
 Resimde büküm çizgileri eğik olabilir; çizelgede her bükümün ekseni iki
-uç noktasıyla (x; y, sol alt köşeden) yazılır, başlıkta "ÇOK YÖNLÜ
-BÜKÜM" notu olur. ABKANT kanat dış ölçüsü çizelgesi bu parçalarda
-yazılmaz (kanat dizisi tek doğrultuda değildir).
+uç noktasıyla (x; y, sol alt köşeden) yazılır, etiketi (B1, B2 …)
+çizginin kendi ucunda durur, başlıkta "ÇOK YÖNLÜ BÜKÜM" notu olur.
+ABKANT kanat dış ölçüsü çizelgesi bu parçalarda yazılmaz (kanat dizisi
+tek doğrultuda değildir).
+
+3B yöntemin tanıdığı özel durumlar:
+
+- **Levhanın ortasından kesilip bükülmüş dil** (bağlantı braketi): dilin
+  büküm teğeti levhanın dış kenarında değil kesiğin kenarındadır; hangi
+  yanın malzeme olduğu duvarın kendi dış çizgisiyle (delikler dahil)
+  sınanır, dil açınımda kesiğin içine serilir.
+- **Yarıkla bölünmüş kanat**: tek büküm hattı üstünde, aynı düzlemde
+  ama birbirinden ayrı duran kanat parçaları (1920 mm'lik yardımcı şasi
+  kanadı üç parça). Büküm her parça için kendi aralığıyla kopyalanır;
+  çizelgede ayrı satır çıkar. Aynı duvara ikinci bir yoldan varılıyorsa
+  (üç parça da aynı sürekli dönüş kanadına bağlanır) dönüşümler eşitse
+  çevrim sayılmaz; farklıysa parça kapalı kesittir ve açınım verilmez.
+- **Büküm ağacına bağlanamayan duvar** sessiz geçilmez: alanı küçük de
+  olsa resimde "DİKKAT: n duvar (… mm2) büküm ağacına bağlanamadı,
+  konturda EKSİK olabilir - MODEL KONTROL" yazar.
+
+Açılamayan parçalar (tasarım gereği): kapalı kesit (boru, kutu profil,
+büküp kapatılmış sac), hacim denetimi tutmayan parça (kabartma, pres
+şekli), sac olmayan gövde.
 
 #### Açınım ölçüleri — paralel ve düz
 
@@ -1386,7 +1407,9 @@ rakamı sığmayan dar halka yazılmaz) ve her büküm ekseninin alt kenardan
 **paralel** ölçüsü kademeli olarak verilir — açınımı teyit için ikisi
 birden. Konturun çıkıntı / girinti basamakları (kenara paralel ama
 kenarda olmayan doğrular) için derinlik ve başlangıç / bitiş konumu
-ölçülenir.
+yalnız istenirse ölçülenir (ayar dosyasında `acinim_basamak: 1`;
+varsayılan kapalı, çünkü sık basamaklı parçada bu ölçüler konturla
+çakışıyordu).
 
 ### Adım 7 — PAFTA
 

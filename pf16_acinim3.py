@@ -234,6 +234,59 @@ def bukumler3(sh, t, M, tol=None):
     return out
 
 
+def _malzeme_yonu(w, tA, wA, a, t):
+    """Teğet çizgisinin hangi yanında duvar malzemesi var? +1: wA yönü
+    boş (büküm o yana açılır), -1: -wA boş, None: belirsiz. Duvarın yüz
+    telleri (delikler dahil) kendi düzlemine izdüşürülüp nokta-çokgen
+    testi yapılır; sınama noktası teğet çizgisinden 1,5 t ötede."""
+    if "_halka" not in w:
+        n = w["n"]
+        u1 = _n(_c(n, (1.0, 0.0, 0.0) if abs(n[0]) < 0.9 else (0.0, 1.0, 0.0)))
+        u2 = _c(n, u1)
+        w["_u"] = (u1, u2)
+        w["_halka"] = []
+        for f in w["yuzler"]:
+            try:
+                from pf3_olcu import _yuz_telleri
+                dis, ic = _yuz_telleri(f)
+            except Exception:
+                continue
+            w["_halka"].append(([(_d((p.X(), p.Y(), p.Z()), u1), _d((p.X(), p.Y(), p.Z()), u2)) for p in dis],
+                                [[(_d((p.X(), p.Y(), p.Z()), u1), _d((p.X(), p.Y(), p.Z()), u2)) for p in q] for q in ic]))
+    if not w["_halka"]:
+        return None
+    u1, u2 = w["_u"]
+
+    def icinde(p3):
+        p = (_d(p3, u1), _d(p3, u2))
+        for dis, ic in w["_halka"]:
+            if _nokta_icinde(p, dis) and not any(_nokta_icinde(p, q) for q in ic):
+                return True
+        return False
+    # bükümün orta noktasında sına
+    from pf16_acinim3 import _p as _p_
+    orta = tA
+    arti = icinde(_p_(orta, _s(wA, 1.5 * t)))
+    eksi = icinde(_p_(orta, _s(wA, -1.5 * t)))
+    if arti == eksi:
+        return None
+    return 1.0 if (eksi and not arti) else -1.0
+
+
+def _nokta_icinde(p, halka):
+    x, y = p
+    ic = False
+    n = len(halka)
+    for i in range(n):
+        x1, y1 = halka[i]
+        x2, y2 = halka[(i + 1) % n]
+        if (y1 > y) != (y2 > y):
+            xk = x1 + (y - y1) * (x2 - x1) / ((y2 - y1) or 1e-12)
+            if xk > x:
+                ic = not ic
+    return ic
+
+
 # ------------------------------------------------------------------ ağaç
 def agac3(duvarlar, bukumler, t, tol=None):
     """Her büküme teğet iki duvar. Döner: (bükümler[ duvar: [{i, tA, sd}] ])"""
@@ -245,7 +298,11 @@ def agac3(duvarlar, bukumler, t, tol=None):
             if abs(_d(w["n"], b["a"])) > 0.05:
                 continue                           # eksen duvara paralel değil
             sd = _d(b["m"], w["n"]) - w["d"]       # eksenden orta düzleme imzalı uzaklık
-            if abs(abs(sd) - (b["r_ic"] + hedef)) > tol:
+            # Modelde büküm duvara tam teğet olmayabilir (Karluna tel
+            # braket: eksen orta düzleme 1 mm, olması gereken 3): kalınlık
+            # kadar sapmaya izin verilir, teğet noktası duvarın gerçek
+            # düzleminde alınır; hacim denetimi büyük hatayı yine yakalar.
+            if abs(abs(sd) - (b["r_ic"] + hedef)) > max(tol, 1.1 * t):
                 continue
             # eksen boyunca örtüşme
             sw = [_d(k, b["a"]) for k in w["kose"]]
@@ -259,14 +316,49 @@ def agac3(duvarlar, bukumler, t, tol=None):
             # teğet çizgisi duvarın KENARINDA mı (büküm ortadan geçmez)
             tA = _v(b["m"], _s(w["n"], sd))
             wA = _n(_c(b["a"], w["n"]))
-            if _d(_v(tA, w["merkez"]), wA) < 0:
+            # wA: teğet çizgisinden duvarın MALZEMESİ OLMAYAN yöne (büküm
+            # oraya açılır). Ağırlık merkezi kuralı levhanın ortasından
+            # kesilip bükülmüş dilde (bağlantı braketi) ters düşüyordu:
+            # teğetin iki yanındaki noktalardan hangisi duvarın içinde?
+            # sınama bükümün eksen boyu ORTASINDA: tA eksenin orijine en
+            # yakın noktasından türer, parçanın dışında olabilir
+            orta_s = (b["s"][0] + b["s"][1]) / 2.0 - _d(_v(tA, b["m"]), b["a"])
+            yon = _malzeme_yonu(w, _p(tA, _s(b["a"], orta_s)), wA, b["a"], t)
+            if yon is not None:
+                wA = _s(wA, yon)
+            elif _d(_v(tA, w["merkez"]), wA) < 0:
                 wA = _s(wA, -1.0)
             kw = [_d(k, wA) for k in w["kose"]]
             kenar = max(kw) - _d(tA, wA)           # teğet çizgisi kenardan ne kadar içeride
-            if kenar > max(1.0, 0.5 * t) + 0.3 * t:
-                continue
+            # duvar yüzü büküm bölgesine 1-2 kalınlık taşabilir (modelde
+            # yüz silindirin altına kadar uzar); düzlemde birleşince
+            # çakışan bölge iki kez sayılmaz
+            if kenar > 2.2 * t + 0.5:
+                # Levhanın ORTASINDAN kesilip bükülmüş dil (Karluna bağlantı
+                # braketi): teğet çizgisi dış sınırın içinde ama kesiğin
+                # kenarında. Duvar sınırının (delik / kesik köşeleri dahil)
+                # büküm boyunca teğet çizgisine değmesi yeter.
+                yakin = [k for k in w["kose"]
+                         if abs(_d(k, wA) - _d(tA, wA)) <= 0.6 * t
+                         and b["s"][0] - t <= _d(k, b["a"]) <= b["s"][1] + t]
+                if len(yakin) < 2:
+                    continue
+                kenar = 0.0
             b["duvar"].append({"i": i, "tA": tA, "sd": sd, "wA": wA,
+                               "s_w": (min(sw), max(sw)),
                                "hata": abs(abs(sd) - (b["r_ic"] + hedef)) + abs(kenar)})
+        if len(b["duvar"]) > 2:
+            # YARIKLA BÖLÜNMÜŞ KANAT: tek büküm hattı üstünde, aynı
+            # düzlemde ama eksen boyunca AYRI aralıklarda duran kanat
+            # parçaları (Karluna yardımcı şasi: 1920 mm'lik kanat üç
+            # parça; kasa yakıt hattı braketi: iki dil). Büküm her kanat
+            # parçası için kendi aralığıyla kopyalanır; aralıkları
+            # çakışan eş düzlemli adaylarda eski "en iyi çift" kuralı.
+            kopya = _bukum_bol(b, duvarlar)
+            if kopya:
+                b["duvar"] = []
+                b["_kopya"] = kopya
+                continue
         if len(b["duvar"]) > 2:
             # Aynı düzlemdeki iki şerit (eş düzlemli duvarlar) bir bükümün
             # iki yanı OLAMAZ; en iyi eş düzlemli olmayan çift seçilir.
@@ -282,7 +374,60 @@ def agac3(duvarlar, bukumler, t, tol=None):
                     if en is None or puan < en[0]:
                         en = (puan, x, y)
             b["duvar"] = [b["duvar"][en[1]], b["duvar"][en[2]]] if en else []
-    return [b for b in bukumler if len(b["duvar"]) == 2]
+    out = []
+    for b in bukumler:
+        if b.get("_kopya"):
+            out.extend(b["_kopya"])
+        elif len(b["duvar"]) == 2:
+            out.append(b)
+    return out
+
+
+def _duzlem_anahtari(w):
+    n, d = w["n"], w["d"]
+    for c in n:
+        if abs(c) > 1e-6:
+            if c < 0:
+                n, d = _s(n, -1.0), -d
+            break
+    return (round(n[0], 3), round(n[1], 3), round(n[2], 3), round(d / 0.3))
+
+
+def _bukum_bol(b, duvarlar):
+    """İkiden çok adayı olan bükümü, iki düzlemdeki kanat parçalarına
+    göre kopyalara böler. Döner: kopya listesi ya da None (bölünemez)."""
+    grup = defaultdict(list)
+    for d in b["duvar"]:
+        grup[_duzlem_anahtari(duvarlar[d["i"]])].append(d)
+    if len(grup) != 2:
+        return None
+    A, B = grup.values()
+    for g in (A, B):                       # aynı düzlemdekiler ayrık aralıklarda olmalı
+        g.sort(key=lambda d: d["s_w"][0])
+        for x, y in zip(g, g[1:]):
+            if y["s_w"][0] < x["s_w"][1] - 0.5:
+                return None
+    if len(A) == 1 and len(B) == 1:
+        return None
+    kopya = []
+    yuz_s = []
+    for f in b["yuzler"]:
+        sr = [_d(k, b["a"]) for k in _koseler(f)]
+        yuz_s.append((min(sr), max(sr)) if sr else b["s"])
+    for x in A:
+        for y in B:
+            s0 = max(x["s_w"][0], y["s_w"][0], b["s"][0])
+            s1 = min(x["s_w"][1], y["s_w"][1], b["s"][1])
+            if s1 - s0 < 1.0:
+                continue
+            yuzler = [f for f, (f0, f1) in zip(b["yuzler"], yuz_s)
+                      if min(f1, s1) - max(f0, s0) > 0.5]
+            if not yuzler:
+                continue
+            k = dict(b, s=(s0, s1), yuzler=yuzler, duvar=[dict(x), dict(y)])
+            k.pop("_kopya", None)
+            kopya.append(k)
+    return kopya or None
 
 
 # ---------------------------------------------------------------- serme
@@ -350,6 +495,36 @@ def _yapistir2(w, cizgiler, tol):
     return out
 
 
+def _sadelestir(w, tol=1e-3):
+    """Çokgenden ardışık çakışık noktaları, aynı doğru üstündeki ara
+    noktaları ve sıfır alanlı dikenleri (geri dönüşleri) atar.
+
+    Büküm yüzünün uç kenarı (büküm rahatlatma yuvarlaması) teğet
+    çizgisinin ötesine taşınca açı [0, teta]'ya kırpılır; kırpılan noktalar
+    kenar çizgisi üstünde geri dönen bir diken olur. Böyle çokgenden yüz
+    kurulunca birleştirme bükümü komşu duvara eklemek yerine çıkarıyordu
+    (Karluna bağlantı braketi: 1196 - 613 = 583 mm2)."""
+    pts = []
+    for q in w:                                 # ardışık çakışık noktalar
+        if not pts or math.hypot(q[0] - pts[-1][0], q[1] - pts[-1][1]) > tol:
+            pts.append(q)
+    while len(pts) > 3 and math.hypot(pts[0][0] - pts[-1][0], pts[0][1] - pts[-1][1]) <= tol:
+        pts.pop()
+    degisti = True
+    while degisti and len(pts) > 3:              # aynı doğrultu / diken: tek tek
+        degisti = False
+        n = len(pts)
+        for i in range(n):
+            a, b, c = pts[i - 1], pts[i], pts[(i + 1) % n]
+            capraz = (b[0] - a[0]) * (c[1] - b[1]) - (b[1] - a[1]) * (c[0] - b[0])
+            uz = math.hypot(b[0] - a[0], b[1] - a[1]) * math.hypot(c[0] - b[0], c[1] - b[1])
+            if uz > 0 and abs(capraz) <= tol * math.sqrt(uz):
+                del pts[i]
+                degisti = True
+                break
+    return pts
+
+
 def _cerceve(w):
     """Kök duvarın düzlem çerçevesi: e1 en uzun yön, e2 = n x e1."""
     n = w["n"]
@@ -387,7 +562,7 @@ def acilim3(sh, t, k_faktor, M, hacim=None, en_cok_sapma=0.03):
     kok = max(komsu, key=lambda i: duvarlar[i]["alan"])
     cer = _cerceve(duvarlar[kok])
     harita = {kok: _Donusum([], cer)}
-    b_harita, sira = {}, [kok]
+    b_harita, sira, atlanan, cevrim = {}, [kok], [], []
     while sira:
         wi = sira.pop()
         T = harita[wi]
@@ -395,7 +570,7 @@ def acilim3(sh, t, k_faktor, M, hacim=None, en_cok_sapma=0.03):
             if bi in b_harita:
                 continue
             b = bukumler[bi]
-            A, W = duvarlar[wi], duvarlar[obur["i"]]
+            A = duvarlar[wi]
             vA = _v(bu["tA"], b["m"]); vW = _v(obur["tA"], b["m"])
             cosT = max(-1.0, min(1.0, _d(_n(vA), _n(vW))))
             teta = math.acos(cosT)
@@ -407,21 +582,47 @@ def acilim3(sh, t, k_faktor, M, hacim=None, en_cok_sapma=0.03):
             # +teta da -teta da W'yi A'nın düzlemine getirir (biri dışa
             # AÇAR, öbürü A'nın üstüne KATLAR): eş düzleme gelenler
             # arasında A'dan uzağa açılanı (dis en büyük) seç.
-            esik = max(1.0, 0.5 * t) + 0.02 * math.dist(W["merkez"], bu["tA"])
+            # Sınama noktası W'nin ağırlık merkezi DEĞİL, W'nin kendi teğet
+            # çizgisinin hemen malzeme tarafındaki nokta: levhanın ortasından
+            # kesilip bükülmüş dilde (bağlantı braketi) levhanın merkezi
+            # dilin yanına düşüyor ve işaret ters seçiliyordu. Doğru
+            # katlamada bu nokta A'nın düzlemine gelir ve A'nın teğetinin
+            # ÖTESİNDE (büküm payının açıldığı yanda) durur.
+            orta_s = (b["s"][0] + b["s"][1]) / 2.0 - _d(_v(obur["tA"], b["m"]), b["a"])
+            sonda = _v(_p(obur["tA"], _s(b["a"], orta_s)), _s(obur["wA"], 1.5 * t))
+            # teğet noktası modelde 1,1 t'ye kadar kayabilir (agac3): eşik
+            # ona göre; yanlış katlama 2 (r + t/2) ~ 5 t uzakta kalır
+            esik = 1.5 * t + 1.0
             sec = None
             for fi in (teta, -teta):
-                cW = _rodrigues(W["merkez"], b["m"], b["a"], fi)
-                duz = abs(_d(_v(cW, bu["tA"]), A["n"]))
-                dis = _d(_v(cW, bu["tA"]), bu["wA"])
-                if duz > esik:
+                q = _rodrigues(sonda, b["m"], b["a"], fi)
+                duz = abs(_d(_v(q, bu["tA"]), A["n"]))
+                dis = _d(_v(q, bu["tA"]), bu["wA"])
+                if duz > esik or dis <= 0:
                     continue
-                if sec is None or dis > sec[1]:
+                # küçük açılı bükümde (5° kırma) iki işaret de eşiğin
+                # içinde: düzleme EN YAKIN gelen doğrudur (yanlışı 2 sin θ
+                # kadar yukarıda), eşitlikte dışa en çok açılan
+                if sec is None or (round(duz, 3), -dis) < (round(sec[0], 3), -sec[1]):
                     sec = (duz, dis, fi)
             if sec is None or sec[1] <= 0:
+                atlanan.append(f"B{bi} {wi}->{obur['i']} teta {math.degrees(teta):.0f} "
+                               f"sec {None if sec is None else (round(sec[0], 2), round(sec[1], 1))}")
                 continue                   # döndürünce aynı düzleme / dışa gelmiyor
             fi = sec[2]
             kay = _s(bu["wA"], pay)
             adim = [(b["m"], b["a"], fi, kay)] + T.adim
+            if obur["i"] in harita:
+                # Duvara ikinci yol: yarıkla bölünmüş kanat parçalarının
+                # hepsi aynı sürekli kanada bağlanır (yardımcı şasi: alt
+                # kanat üç parça, dönüş kanadı tek). Dönüşüm aynıysa
+                # çevrim DEĞİLDİR; farklıysa kapalı kesittir.
+                T2 = _Donusum(adim, cer)
+                kose = duvarlar[obur["i"]]["kose"][:16]
+                sap = max(math.dist(harita[obur["i"]](q), T2(q)) for q in kose) if kose else 0.0
+                if sap > max(0.5, 0.25 * t):
+                    cevrim.append(f"B{bi} {wi}->{obur['i']} sapma {sap:.1f} mm")
+                    continue
             b_harita[bi] = {"ust": wi, "alt": obur["i"], "tA": bu["tA"], "wA": bu["wA"],
                             "a": b["a"], "vA": vA, "vW": vW, "teta": teta, "pay": pay,
                             "r_n": r_n, "T": T}
@@ -434,9 +635,10 @@ def acilim3(sh, t, k_faktor, M, hacim=None, en_cok_sapma=0.03):
     if alan_d > 0.03 * toplam:
         raise AcilimYok(
             f"3B açınım: duvarların {len(disarda)} tanesi büküm ağacına bağlanamadı "
-            f"(sac yüzeyinin %{M.XL.tr(100 * alan_d / toplam, 0, sade=False)}'i).")
-    if len(b_harita) > len(harita) - 1:
-        raise AcilimYok("3B açınım: büküm ağacında çevrim var (kapalı kesit).")
+            f"(sac yüzeyinin %{M.XL.tr(100 * alan_d / toplam, 0, sade=False)}'i)."
+            + (" Atlanan bükümler: " + "; ".join(atlanan) if atlanan else ""))
+    if cevrim:
+        raise AcilimYok("3B açınım: büküm ağacında çevrim var (kapalı kesit): " + "; ".join(cevrim))
     # ---- düzlem telleri
     parca, delik = [], []
     for wi, T in harita.items():
@@ -480,8 +682,10 @@ def acilim3(sh, t, k_faktor, M, hacim=None, en_cok_sapma=0.03):
     # teğet çizgisinden 1 mm kısa) parçaları birleştirmez; kalınlığın
     # yarısından yakın noktalar büküm çizgisine oturtulur.
     cizgiler = [q for b in bkm for q in (b["bas"], b["son"])]
-    parca = [_yapistir2(w, cizgiler, 0.75 * t) for w in parca]
-    delik = [_yapistir2(w, cizgiler, 0.75 * t) for w in delik]
+    parca = [_sadelestir(_yapistir2(w, cizgiler, 0.75 * t)) for w in parca]
+    delik = [_sadelestir(_yapistir2(w, cizgiler, 0.75 * t)) for w in delik]
+    parca = [w for w in parca if len(w) > 2]
+    delik = [w for w in delik if len(w) > 2]
     # ---- düzlemde birleştir, denetle
     taban = M._birlestir([f for f in (M._cokgen_yuzu(w) for w in parca) if f])
     if taban is None:
@@ -513,7 +717,8 @@ def acilim3(sh, t, k_faktor, M, hacim=None, en_cok_sapma=0.03):
         raise AcilimYok(
             f"3B açınım düzlemde {len(dis)} ayrı parça çıktı; duvarlar uç uca "
             "oturmadı. Parça alanları: "
-            + ", ".join(f"{M.XL.tr(a_, 0, sade=False)} mm2" for a_ in ayri[:4]) + ".")
+            + ", ".join(f"{M.XL.tr(a_, 0, sade=False)} mm2" for a_ in ayri[:4]) + "."
+            + (" Atlanan bükümler: " + "; ".join(atlanan) if atlanan else ""))
     # ---- yönlendir: en küçük alanlı çevre dikdörtgeni eksenlere otursun,
     # uzun kenar X boyunca (2B açınımla aynı alışkanlık: büküm çizgileri
     # çoğunlukla yatay). Kök duvarın çerçevesi rastgele dönüktü.
@@ -548,6 +753,7 @@ def acilim3(sh, t, k_faktor, M, hacim=None, en_cok_sapma=0.03):
         [b["r_ic"] for b in bkm], [math.radians(b["aci_derece"]) for b in bkm],
         max(ys) - min(ys))
     return {"yontem": yon_, "profil": None, "cok_yonlu": True,
+            "baglanamayan_alan_mm2": round(alan_d, 1), "baglanamayan_duvar": len(disarda),
             "kontur_dis": [kay(w) for w in dis], "kontur_delik": [kay(w) for w in ic],
             "delik_adedi": len(ic),
             "acinim_boy_mm": round(max(xs) - min(xs), 2),

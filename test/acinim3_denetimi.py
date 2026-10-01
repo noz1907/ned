@@ -17,6 +17,8 @@ Denetlenen:
   3. sac_acilim sarmalayıcısı: 2B "eksenler paralel değil" deyince 3B
      devreye girer, sonuçta cok_yonlu ve kontur var; kanat_dis_olculeri
      çok yönlüde boş.
+  4. YARIKLA bölünmüş kanat: tek büküm hattında iki kanat parçası -
+     büküm kopyalanır (3 büküm), alan yarık kadar eksik, tek parça.
 
     python test/acinim3_denetimi.py
 """
@@ -151,9 +153,37 @@ def dene_iki_yon():
     kontrol("izo var", bool(r_.get("izo")))
 
 
+def dene_yarikli_kanat():
+    """4) Yarıkla bölünmüş kanat: x=L kanadı (h1) ortasından 4 mm'lik
+    yarıkla (büküm bölgesi dahil) ikiye bölünür. Beklenen: büküm iki
+    parça için kopyalanır (3 büküm), alan yarık kadar eksilir, hacim
+    denetimi tutar, tek parça çıkar."""
+    print("4) yarıkla bölünmüş kanat")
+    t, r, W, L, h1, h2 = 2.0, 3.0, 80.0, 120.0, 30.0, 25.0
+    sh = iki_yonlu_sac(t, r, W, L, h1, h2)
+    yarik = 4.0
+    L1 = W - h2 - r - t                       # kanat 1'in eksen boyu
+    # kutu x >= L: gövdeye dokunmaz, bükümü ve kanadı tam kalınlıkta keser
+    kutu = BRepPrimAPI_MakeBox(gp_Pnt(L, L1 / 2 - yarik / 2, -1.0), r + t + h1 + 2, yarik, t + r + h1 + 3).Shape()
+    sh = _cut(sh, kutu)
+    hac = O.hacim(sh)
+    a3 = A3.acilim3(sh, t, 0.4, O, hacim=hac)
+    pay = math.pi / 2 * (r + 0.4 * t)
+    L2 = L - r - t
+    bekl_alan = (L * W + L1 * h1 + L2 * h2 + L1 * pay + L2 * pay) - yarik * (h1 + pay)
+    kontrol("3 büküm (biri iki kopya)", a3["bukum_sayisi"] == 3, a3["bukum_sayisi"])
+    kontrol("alan = düzler + paylar - yarık", abs(a3["acinim_alan_mm2"] - bekl_alan) < 1.0,
+            (a3["acinim_alan_mm2"], round(bekl_alan, 1)))
+    kontrol("tek parça, bağlanamayan duvar yok", a3.get("baglanamayan_duvar") == 0, a3.get("baglanamayan_duvar"))
+    gab = sorted((a3["acinim_boy_mm"], a3["acinim_genislik_mm"]))
+    bekl = sorted((L + pay + h1, W + pay + h2))
+    kontrol("gabari değişmez", all(abs(a - b) < 0.05 for a, b in zip(gab, bekl)), (gab, bekl))
+
+
 if __name__ == "__main__":
     dene_tek_yon()
     dene_iki_yon()
+    dene_yarikli_kanat()
     print()
     if HATA:
         print(f"SONUC: {len(HATA)} HATA: " + ", ".join(HATA))

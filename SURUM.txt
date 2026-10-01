@@ -190,11 +190,27 @@ BU SÜRÜMDE NE VAR
       eğik büküm çizgileri iki uç noktasıyla (çizelgede x; y), "ÇOK YÖNLÜ
       BÜKÜM" notu; ABKANT kanat çizelgesi çok yönlüde yazılmaz. Test:
       test/acinim3_denetimi.py.
+      Aynı turda eklenen durumlar: levhanın ORTASINDAN kesilip bükülmüş
+      dil (Karluna bağlantı braketi: teğet çizgisi kesiğin kenarında,
+      malzeme yönü nokta-çokgen testiyle), YARIKLA bölünmüş kanat (tek
+      büküm hattı üstünde ayrı kanat parçaları: büküm her parça için
+      kopyalanır; yardımcı şasi 1920 mm, yakıt hattı braketi, toolbox
+      takviyesi), büküm yüzü uç kenarının teğete kırpılmasından doğan
+      sıfır alanlı dikenler (birleştirmede büküm çıkarılıyordu),
+      ikinci yolla aynı duvara varan büküm (dönüşüm aynıysa çevrim
+      değil). Büküm ağacına bağlanamayan duvar sessiz atlanmaz: resimde
+      "DİKKAT ... konturda EKSİK olabilir - MODEL KONTROL". Eğik / düşey
+      büküm etiketi (B1, B2) sağ kenarda değil çizginin kendi ucunda.
+      4 modelde eksenleri paralel olmayan 17 kasa + 18 televre + 18
+      Karluna parçasının hepsi açılıyor; 2B'nin açamadığı 5 tek yönlü
+      parça da 3B ile açıldı.
     - AÇINIM ÖLÇÜLERİ (kullanıcı: "hem paralel hem düz ölçü; açınımı teyit
       için önemli"): sol tarafta DÜZ zincir (kenar -> B1 -> B2 ... ->
       kenar, dar halka yazılmaz) ve her büküm ekseninin alt kenardan
       PARALEL ölçüsü kademeli; konturun çıkıntı / girinti basamakları
-      (kenara paralel, kenarda olmayan doğrular) için derinlik + konum.
+      (kenara paralel, kenarda olmayan doğrular) için derinlik + konum
+      yalnız ayar acinim_basamak=1 ile (varsayılan kapalı: çakışma
+      denetimi sıfır tutulur).
       Profil kesitindeki K / B etiketleri ölçülerek konur (kısa kanatta
       komşu çizgiye biniyordu).
     - AÇINIM, iki gövdeli parça (Karluna SOL_DIKME: 533 mm şapka profili +

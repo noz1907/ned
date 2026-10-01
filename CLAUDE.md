@@ -3,7 +3,11 @@
 Pi3D: STEP modelinden BOM, detay resmi (DXF + PDF pafta), açınım, lazer,
 kaynak resmi üreten program. Ana dosyalar: `pf3_olcu.py` (ölçü, detay
 resmi), `pf4_pafta.py` (pafta / PDF), `pf14_kaynak.py` (kaynak resmi),
-`pf3_gui.py` (arayüz), `pf7_is.py` (iş kaydı, `PI3D_SURUM`).
+`pf3_gui.py` (arayüz), `pf7_is.py` (iş kaydı, `PI3D_SURUM`). Açınım:
+`pf3_olcu.sac_acilim` önce 2B, açamazsa `pf16_acinim3.py` (3B genel
+açınım: her duvar kendi bükümü etrafında döndürülür; dil, yarıklı kanat,
+çevrim denetimi). Her açınım değişikliği 4 modelde `sac_acilim` ile
+koşulur: eksenleri paralel olmayan parçada HATA 0, çakışma 0.
 
 ## Genel
 

@@ -8044,6 +8044,15 @@ def sac_acilim(sh, o=None, k_faktor=K_FAKTOR, istasyon=11, kontur=True):
                             "yüzeylerden açıldı (her duvar kendi bükümü etrafında "
                             "döndürülerek). Büküm çizgileri eğik olabilir; çizelgedeki "
                             "bölge değerleri çizginin uç noktalarıdır.")
+    if ac3.get("baglanamayan_duvar"):
+        # YANLIŞ SONUÇ ASLA: küçük de olsa bağlanamayan duvar konturda
+        # eksiktir; sessiz geçilmez, resimde uyarı çıkar.
+        yn = sonuc.get("yontem")
+        if isinstance(yn, dict):
+            yn["uyari"] = ((yn.get("uyari") or "") +
+                           f" {ac3['baglanamayan_duvar']} duvar "
+                           f"({XL.tr(ac3['baglanamayan_alan_mm2'], 0)} mm2) büküm ağacına "
+                           "bağlanamadı, konturda EKSİK olabilir - MODEL KONTROL.").strip()
     return sonuc
 
 
@@ -8501,9 +8510,15 @@ def _tel_dizisi(tel, sapma=SAPMA):
         q = [c.Value(d.Parameter(i)) for i in range(1, d.NbPoints() + 1)]
         if ters:
             q.reverse()
-        if p and q and math.dist((p[-1].X(), p[-1].Y(), p[-1].Z()),
-                                 (q[0].X(), q[0].Y(), q[0].Z())) > 1e-6:
-            q.reverse()
+        if p and q:
+            # Kenar yönü uçların yakınlığından: 1e-6'lık eşik aynalı
+            # parçada (Karluna TEL_BRAKET aynası) tutmuyor, kenar ters
+            # ekleniyor ve kontur kendini kesiyordu (alan 6898 -> 6509).
+            son_ = (p[-1].X(), p[-1].Y(), p[-1].Z())
+            d0 = math.dist(son_, (q[0].X(), q[0].Y(), q[0].Z()))
+            d1 = math.dist(son_, (q[-1].X(), q[-1].Y(), q[-1].Z()))
+            if d1 < d0:
+                q.reverse()
         p += q[1:] if p else q
         ex.Next()
     return p
@@ -9501,6 +9516,12 @@ def dxf_acilim(r, k, yol, P=None):
     yazi_h = 0.9 * h
     kul = []                                   # ölçülmüş dolu kutular
     etiket_sag = boy
+    # Eğik / düşey eksenler ÖNCE çizilir ki etiket yeri ölçülürken sonraki
+    # bükümün çizgisi de görülsün (SOL_DIKME: B1 etiketi B2'nin üstüne
+    # geliyordu).
+    for b in r["bukumler"]:
+        if b.get("cizgi"):
+            msp.add_line(b["cizgi"][0], b["cizgi"][1], dxfattribs={"layer": "EKSEN"})
     for i, b in enumerate(r["bukumler"], 1):
         # BÜKÜM EKSENİ: büküm bölgesinin (payın) ortası - abkantta bıçağın
         # geldiği çizgi. Önce bölgenin başı ve sonu (iki teğet çizgisi)
@@ -9512,9 +9533,30 @@ def dxf_acilim(r, k, yol, P=None):
             (cx1, cy1), (cx2, cy2) = b["cizgi"]
             if cx1 > cx2:
                 (cx1, cy1), (cx2, cy2) = (cx2, cy2), (cx1, cy1)
-            msp.add_line((cx1, cy1), (cx2, cy2), dxfattribs={"layer": "EKSEN"})
             ey = cy2 - 0.45 * yazi_h
             ex = max(cx2, boy) + 0.6 * h
+            # Etiket önce çizginin KENDİ ucuna (kontur dışına): eğik /
+            # düşey eksenlerde sağ kenardaki etiket başka bükümün çizgisi
+            # sanılıyordu (bağlantı braketi: "B2 B3" B1'in yanında).
+            L_ = math.hypot(cx2 - cx1, cy2 - cy1) or 1.0
+            ux, uy = (cx2 - cx1) / L_, (cy2 - cy1) / L_
+            adaylar = [(cx2 + ux * 0.6 * h, cy2 + uy * 0.6 * h),
+                       (cx1 - ux * 0.6 * h, cy1 - uy * 0.6 * h)]
+            cz_k = _gorunen_parcalar(msp, katman=("GORUNEN", "EKSEN"))
+            for ax_, ay_ in adaylar:
+                gen_y = 1.6 * yazi_h                   # "B9" genişliği
+                e = _yaz(msp, f"B{i}", ax_ - (gen_y if ux < -0.5 else gen_y / 2 if abs(ux) <= 0.5 else 0),
+                         ay_ - (yazi_h if uy < -0.5 else yazi_h / 2 if abs(uy) <= 0.5 else 0), yazi_h)
+                kt = _yazi_siniri(e)
+                if kt and not _cakisiyor(kt, kul, 0.15 * yazi_h) \
+                        and not _cizgi_kesiyor(kt, cz_k, 0.15 * yazi_h):
+                    kul.append(kt)
+                    etiket_sag = max(etiket_sag, kt[2])
+                    ex = None
+                    break
+                msp.delete_entity(e)
+            if ex is None:
+                continue
         else:
             msp.add_line((0, orta), (boy, orta), dxfattribs={"layer": "EKSEN"})
             ey = orta - 0.45 * yazi_h
@@ -9616,6 +9658,10 @@ def dxf_acilim(r, k, yol, P=None):
         # kanatta "K1 13,3" yazısı kanadın dışına taşıp komşu kanadın
         # çizgisine biniyordu. Kanat normali boyunca artan uzaklıklarda,
         # iki yanda ve kanat boyunca kaydırarak ilk temiz yer alınır.
+        # büküm işaretleri (küçük daire) etiketlerden ÖNCE çizilir ki
+        # etiket yeri ölçülürken görülsün ("K4 15" B4'ün dairesine biniyordu)
+        for m in pr["bukum"]:
+            msp.add_circle((m[0] + ox, m[1] + oy), 0.25 * yazi_h, dxfattribs={"layer": "EKSEN"})
         alan_ = (px0 + ox - 12 * h, py0 + oy - 12 * h, px1 + ox + 12 * h, py1 + oy + 12 * h)
         cz_ = _cizgi_parcalari(msp, alan_, katman=("GORUNEN", "EKSEN", "OLCU"))
         dolu_ = []
@@ -9647,7 +9693,6 @@ def dxf_acilim(r, k, yol, P=None):
             et = f"K{i}" + (f" {XL.tr(kdo[i - 1], 1)}" if len(kdo) == len(pr["kanat"]) else "")
             _etiket_koy(et, p[0], p[1], sg * n[0], sg * n[1], yazi_h, "OLCU")
         for i, m in enumerate(pr["bukum"], 1):
-            msp.add_circle((m[0] + ox, m[1] + oy), 0.25 * yazi_h, dxfattribs={"layer": "EKSEN"})
             dx_, dy_ = m[0] - cx, m[1] - cy
             L_ = math.hypot(dx_, dy_) or 1.0
             _etiket_koy(f"B{i}", m[0], m[1], dx_ / L_, dy_ / L_, 0.8 * yazi_h, "EKSEN")
@@ -9697,7 +9742,7 @@ def dxf_acilim(r, k, yol, P=None):
         # Kontur basamak (çıkıntı / girinti) ölçüleri: yerleri henüz
         # ölçülerek konmuyor, gabari ölçüsüyle çakışıyordu; ölçülü yerleşim
         # yazılana kadar KAPALI (P.get("acinim_basamak") ile açılır).
-        if (P or {}).get("acinim_basamak"):
+        if (P or {}).get("acinim_basamak") or ayar_oku().get("acinim_basamak"):
             _kontur_basamak_olculeri(msp, r, boy, gen, h, d,
                                      sol_bas=3.5 * h + len(eks) * 5.0 * h)
     poz = f"POZ {k['poz']}   " if k.get("poz") else ""
