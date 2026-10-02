@@ -168,6 +168,14 @@ DXF'te yazı boyunun katı olarak uygulanır):
     bilgi veren yüzü öne çevirme" YAPILMAZ. Görünüş seçimi: bilgi
     eklemeyen görünüş çizilmez, SAĞ = SOL / ÜST = ALT ise biri.
 18. Perspektif üzerine ölçü verilmez.
+19. **GENEL KURAL (kullanıcı): tek yönden görünüp öbür yönden görünmeyen
+    delik, slot ya da parça için ek detay resmi ya da komple görünüş
+    ŞARTTIR.** Özellik duvarının / yüzünün göründüğü görünüşte düz
+    çizgiyle çizilir ve orada ölçülenir; o görünüş seçili değilse program
+    EKLER (`gerekli_delik_gorunusleri`), ayna ve bilgisizlik elemesi onu
+    silemez. Öbür görünüşte yalnız merkez işareti kalır. Hangi deliğin
+    hangi yüzde olduğu resimden okunmalıdır (Karluna yan kapak: 4 delik
+    dış duvarda, 6 delik iç duvarda).
 
 ## PDF (pafta)
 

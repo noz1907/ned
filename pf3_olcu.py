@@ -1073,6 +1073,27 @@ def delik_duvarlari(delikler, k):
     return out
 
 
+def slot_duvarlari(slotlar, k):
+    """Slotlar için aynı kural (GENEL KURAL - kullanıcı: "tek yönde görünüp
+    diğer yönde görünmeyen delik veya parça için ek detay ya da komple
+    görünüş şart"): tek duvardaki slot "min" / "max" duvar alır, duvarının
+    göründüğü görünüşte ölçülenir (delik_gorunusu)."""
+    for sl in slotlar or []:
+        e = "XYZ".find(str(sl.get("eksen", "")))
+        sl["taraf"] = "orta"
+        if e < 0:
+            continue
+        ext = k[e + 3] - k[e]
+        der = max(float(sl.get("derinlik_mm") or 0.0), float(sl.get("yayilim_mm") or 0.0))
+        if ext <= 1e-6 or der <= 0 or der >= 0.6 * ext:
+            continue
+        mid = (k[e] + k[e + 3]) / 2.0
+        c = sl.get("c1") or sl.get("c2")
+        if c:
+            sl["taraf"] = "min" if c[e] < mid else "max"
+    return slotlar or []
+
+
 def delik_gorunusu(d, gorunusler):
     """Deliğin ÖLÇÜLENECEĞİ görünüş: duvarının göründüğü yön (kural 4.12:
     özellik görünür olduğu görünüşte ölçülür). "max" duvar deliği gözü
@@ -1099,7 +1120,7 @@ def gerekli_delik_gorunusleri(o, gorunusler):
     seçili görünüşlerin hiçbirinde görünmüyorsa o görünüş eklenir
     (kullanıcı: "görünüm ekleme daha doğru olur")."""
     ek = []
-    for d in (o or {}).get("delikler") or []:
+    for d in ((o or {}).get("delikler") or []) + ((o or {}).get("slotlar") or []):
         if d.get("taraf") not in ("min", "max"):
             continue
         i = "XYZ".index(d["eksen"])
@@ -1236,6 +1257,9 @@ def delik_ve_radus(sh, en_az_cap=1.0, tam_oran=0.90, slot_listesi=None):
                 continue
             kul.update((i, j))
             slotlar.append({"yaricap_mm": round(r, 3), "eksen": "XYZ"[eks],
+                            "derinlik_mm": round(max(yarim[i]["boy"], yarim[j]["boy"]), 2),
+                            "yayilim_mm": round(max(h.get("u1", 0.0) - h.get("u0", 0.0)
+                                                    for h in (yarim[i], yarim[j])), 2),
                             "c1": [round(v, 4) for v in yarim[i]["merkez"]],
                             "c2": [round(v, 4) for v in yarim[j]["merkez"]],
                             "boy_mm": round(d, 3)})
@@ -1414,6 +1438,7 @@ def komponent_olcu(sh, P):
     o["delikler"], o["radusler"] = delik_ve_radus(s, P.get("en_az_delik", 1.0),
                                                   slot_listesi=o["slotlar"])
     o["delikler"] = delik_duvarlari(o["delikler"], k)
+    o["slotlar"] = slot_duvarlari(o["slotlar"], k)
     # Yarım silindirleri bölünmüş slotu (P06'daki üç büyük R40 slot)
     # yukarıdaki arama kaçırıyordu: slotlar konumsuz kalıyordu. Düz yüzün
     # İÇ TELİ iki eşit yarım daire + doğrulardan oluşuyorsa o da slottur.
@@ -3935,7 +3960,7 @@ def konum_plani(o, gorunusler, ham, h, kenarlar=None, tol=0.05,
         # seçili görünüşte; görünüşte gizli kalsa da (flanşın altında)
         slot3 = []
         for sl in (o or {}).get("slotlar") or []:
-            ilk = next((g for g in DELIK_GOR.get(sl["eksen"], ()) if g in gorunusler), None)
+            ilk = delik_gorunusu(sl, gorunusler)
             if gad == ilk:
                 slot3.append({"c1": izdusum(sl["c1"], gad), "c2": izdusum(sl["c2"], gad),
                               "r": sl["yaricap_mm"]})
@@ -10758,7 +10783,7 @@ def dxf_komponent(s, o, k, yol, P):
         gorunusler = list(gorunusler) + ek_gor
     # tek duvar deliği taşıyan görünüşler ayna / bilgisizlik elemesinden korunur
     korunan = set(ek_gor) | {delik_gorunusu(d, gorunusler)
-                             for d in (o.get("delikler") or [])
+                             for d in (o.get("delikler") or []) + (o.get("slotlar") or [])
                              if d.get("taraf") in ("min", "max")}
     korunan.discard(None)
     # Görünüşler arası boşluk: araya giren ölçü çizgisi + yazı + kılavuz kadar.

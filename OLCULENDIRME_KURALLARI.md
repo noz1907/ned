@@ -71,6 +71,7 @@ katı). Üç kaynağın uzlaşması:
 | 2.5 | Görünen çizginin üstüne gizli çizgi çizilmez; çakışan bölüm kesilir. | Teknik resim kuralı. | ISO 128 | `hlr`, `test_gizli_cizgi.py` |
 | 2.6 | İsteğe bağlı **kesit**: kesit düzlemi ana görünüşte uçlarında kalın kısa çizgi + bakış okları + harf; kesit görünüşünün üstünde "A-A"; tarama ince; tarama rakamın çevresinde kesilir. | | CH s.9, s.49, s.51 | `kesit_ciz`, `kesit_isareti` (`P["kesit"]`) |
 | 2.7 | Perspektif üzerine ölçü verilmez; büküm resmindeki izometrik yalnız yön içindir. | | K | açınım resmi |
+| 2.8 | **Tek yönden görünüp öbür yönden görünmeyen delik / slot / parça için ek detay ya da komple görünüş şart.** Tek duvar deliği duvarının göründüğü görünüşte düz çizgiyle çizilir ve ölçülenir; gereken görünüş yoksa eklenir, ayna / bilgisizlik elemesi silemez. | Okuyan hangi deliğin hangi yüzde olduğunu resimden bilmeli; aksi hâlde hepsini aynı yüze deler. | K (Karluna yan kapak) | `delik_duvarlari`, `slot_duvarlari`, `delik_gorunusu`, `gerekli_delik_gorunusleri` |
 
 ## 3. Referans (datum)
 
