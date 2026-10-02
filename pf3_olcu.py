@@ -1514,7 +1514,7 @@ def komponent_olcu(sh, P):
 
 # ---------------------------------------------------------------- HLR görünüş
 # ---------------------------------------------------------------- görünüşler
-# Altı görünüş tanımlı; çizime hangilerinin gireceği seçilir (şimdilik en çok 4).
+# Altı görünüş tanımlı; hangilerinin çizileceği özelliklere göre ölçülerek seçilir (dxf_komponent).
 # (göz yönü, izdüşüm düzleminin X ekseni)
 GORUNUS = {
     "ON":   ((0, -1, 0), (1, 0, 0)),     # göz -Y'de   -> X yatay,  Z düşey
@@ -1542,8 +1542,17 @@ YAKIN_SEVIYE_MM = 0.5   # bu kadar yakın datum seviyeleri tek sıra sayılır (
 PLAN_UYARI = []         # konum_plani'nin başlığa yazılacak uyarıları (dxf_komponent temizler)
 GORUNUS_TR = {"ON": "ÖN", "ARKA": "ARKA", "SAG": "SAĞ", "SOL": "SOL", "UST": "ÜST", "ALT": "ALT"}
 ANA_GORUNUS = "ON"      # eşitlikte ana görünüş (bkz. ana_gorunus)
-VARSAYILAN_GORUNUS = ("ON", "SAG", "SOL", "UST")
-EN_COK_GORUNUS = 4
+# GÖRÜNÜŞ SEÇİMİ OTOMATİKTİR (kullanıcı: "görünüm sayısı girişi istemiyorum;
+# sistem parçadaki özelliklere göre 6 görüntü + 5-6 detay bile yapabilir,
+# aynı kaynakta olduğu gibi"): altı görünüşle başlanır, bilgi eklemeyen ve
+# aynı görünen ayna görünüşler ölçülerek elenir (dxf_komponent). Parça
+# bazlı istek (parca_ayar["gorunusler"]) ya da komut satırı --gorunus
+# açıkça verilirse o liste çizilir (gorunus_zorla).
+VARSAYILAN_GORUNUS = ("ON", "ARKA", "SAG", "SOL", "UST", "ALT")
+EN_COK_GORUNUS = 6
+IZO_AD = "IZO"          # küçük perspektif (izometrik) görünüşün işareti
+IZO_GOZ = ((1.0, -1.0, 1.0), (1.0, 1.0, 0.0))   # önden-sağdan-üstten bakış; Z yukarı
+IZO_ORAN = 0.22         # perspektifin en uzun kenarı / parçanın en uzun kenarı
 KESIT_AD = "A-A KESIT"
 
 # görünüş -> (yatay eksen indeksi, düşey eksen indeksi, yatay ters, düşey ters)
@@ -1565,10 +1574,41 @@ DELIK_GOR = {"Y": ("ON", "ARKA"), "X": ("SAG", "SOL"), "Z": ("UST", "ALT")}
 
 
 def gorunus_sec(istek):
-    """Kullanıcının seçtiği görünüşleri düzeltir: geçerli olanlar, sırayla,
-    en çok EN_COK_GORUNUS tane. Boşsa varsayılan dörtlü."""
-    out = [g for g in GORUNUS_SIRA if g in set(istek or ())]
+    """İstenen görünüşleri düzeltir: geçerli olanlar, sırayla. Boş, None
+    ya da "OTO" ise ALTI görünüş (program özelliklere göre eler)."""
+    if isinstance(istek, str):
+        istek = () if istek.strip().upper() in ("", "OTO", "OTOMATIK", "OTOMATİK") \
+            else [t.strip() for t in istek.replace(";", ",").split(",")]
+    out = [g for g in GORUNUS_SIRA if g in {str(x).upper() for x in (istek or ())}]
     return tuple(out[:EN_COK_GORUNUS]) or tuple(VARSAYILAN_GORUNUS)
+
+
+def perspektif_ciz(msp, s, gkutu, h, L, W, T, g):
+    """KÜÇÜK PERSPEKTİF (izometrik, ölçüsüz; kullanıcı: "ufak olarak
+    perspektif yerleştir resimlerde, fazladan olsun"): parçanın önden-
+    sağdan-üstten izometriği, yalnız görünen çizgiler, en uzun kenarı
+    parçanın IZO_ORAN katı (en az 14 yazı boyu). Görünüş öbeğinin SAĞ
+    ÜSTÜNE konur; paftada serbest penceredir (ızgaraya girmez). Üstüne
+    ölçü konmaz (kural 18). Döner: kutu ya da None."""
+    try:
+        ken = hlr(s, *IZO_GOZ, gizli=False)
+    except Exception:
+        return None
+    xs = [p[0] for c in ken["GORUNEN"] for p in c]
+    ys = [p[1] for c in ken["GORUNEN"] for p in c]
+    if not xs:
+        return None
+    enb = max(max(xs) - min(xs), max(ys) - min(ys), 1e-9)
+    k = max(IZO_ORAN * max(L, W, T), 14.0 * h) / enb
+    ken2 = {"GORUNEN": [[(p[0] * k, p[1] * k) for p in c] for c in ken["GORUNEN"]], "GIZLI": []}
+    ox = max(b[2] for b in gkutu.values()) + g
+    oy_ust = max(b[3] for b in gkutu.values())
+    G, Y, _dx, _dy = gorunus_ciz(msp, ken2, ox, oy_ust - (max(ys) - min(ys)) * k, IZO_AD,
+                                 h=h, olcu2=False, etiket_ciz=False)
+    kt = (ox, oy_ust - Y, ox + G, oy_ust)
+    msp.add_text("PERSPEKTİF", dxfattribs={"height": 0.9 * h, "layer": "YAZI", "style": YAZI_STILI}
+                 ).set_placement((kt[0], kt[3] + 0.6 * h))
+    return (kt[0], kt[1], kt[2], kt[3] + 1.8 * h)
 
 
 def izdusum(p, gad):
@@ -1625,10 +1665,24 @@ def gorunus_olcusu(gad, L, W, T):
     return d[i1], d[i2]
 
 
+GENIS_GORUNUS_ORAN = 1.2   # ÖN'ün eni boyunun bu katından büyükse "geniş görünümlü" parça
+
+
+def genis_gorunumlu(L, T):
+    """Parça GENİŞ görünümlü mü (ÖN görünüş boyundan belirgin geniş: yan
+    kapak, ön panel)? Yerleşim buna göre seçilir (bkz. gorunus_yerlesimi)."""
+    return L > T * GENIS_GORUNUS_ORAN
+
+
 def gorunus_yerlesimi(L, W, T, g, gorunusler=VARSAYILAN_GORUNUS):
     """1. açı (Avrupa/ISO-E) yerleşimi. ÖN referans, (0,0) noktasında:
-    sağdan bakılan görünüş SOLA, soldan bakılan SAĞA, arka en sağa,
-    üstten bakılan ALTA, alttan bakılan ÜSTE çizilir."""
+    sağdan bakılan görünüş SOLA, soldan bakılan SAĞA, üstten bakılan
+    ALTA, alttan bakılan ÜSTE. ARKA'nın yeri parçanın durumuna göre
+    (kullanıcı, Chevalier s.49'un iki dizilişi):
+      - GENİŞ görünümlü parça (yan kapak): SÜTUN düzeni - ALT, ÖN, ÜST,
+        ARKA alt alta; SAĞ solda, SOL sağda. ARKA sağ uca konsa resim
+        iki kat genişler, ölçek yarıya düşer.
+      - DAR ya da eşit büyüklükte parça: standart haç - ARKA en sağda."""
     gorunusler = set(gorunusler)
     yer = {"ON": (0.0, 0.0)}
     if "SAG" in gorunusler:
@@ -1637,10 +1691,15 @@ def gorunus_yerlesimi(L, W, T, g, gorunusler=VARSAYILAN_GORUNUS):
     if "SOL" in gorunusler:
         yer["SOL"] = (x, 0.0)
         x += gorunus_olcusu("SOL", L, W, T)[0] + g
-    if "ARKA" in gorunusler:
-        yer["ARKA"] = (x, 0.0)
+    y_alt = 0.0
     if "UST" in gorunusler:
-        yer["UST"] = (0.0, -(gorunus_olcusu("UST", L, W, T)[1] + g))
+        y_alt = -(gorunus_olcusu("UST", L, W, T)[1] + g)
+        yer["UST"] = (0.0, y_alt)
+    if "ARKA" in gorunusler:
+        if genis_gorunumlu(L, T):
+            yer["ARKA"] = (0.0, y_alt - (gorunus_olcusu("ARKA", L, W, T)[1] + g))
+        else:
+            yer["ARKA"] = (x, 0.0)
     if "ALT" in gorunusler:
         yer["ALT"] = (0.0, T + g)
     return {k: v for k, v in yer.items() if k in gorunusler}
@@ -10808,15 +10867,56 @@ def ana_gorunus_dondur(s, o):
     return s2, o2
 
 
-def bilgisiz_gorunus(kenar, gad, o, sac_kesit):
+def bilgisiz_gorunus(kenar, gad, o, sac_kesit, sade=None):
     """Görünüş bilgi EKLEMİYOR mu: o yönden görünen delik / slot yok, sacın
-    kesiti değil ve dış hattı düz bir dikdörtgen (en çok 6 görünen çizgi)."""
+    kesiti değil ve dış hattı düz bir dikdörtgen (en çok 6 görünen çizgi).
+    SADE PROFİLDE (ekstrüzyon, sade = boy ekseni) boy görünüşü, kalıbın
+    boyuna çizgilerinden başka bir şey göstermiyorsa (boy eksenine dik en
+    çok 2 çizgi: iki uç) bilgisizdir - kesit tedarikçinin kalıbıdır, yan
+    kapağın ÜST / ALT şeritleri yalnız yer kaplıyordu."""
     eks = "XYZ"[max(range(3), key=lambda i: abs(GORUNUS[gad][0][i]))]
     if gad in (sac_kesit or {}):
         return False
     if any(d.get("eksen") == eks for d in (o.get("delikler") or []) + (o.get("slotlar") or [])):
         return False
-    return len(kenar.get("GORUNEN", [])) <= 6
+    gorunen = kenar.get("GORUNEN", [])
+    if sade in ("X", "Y", "Z") and sade != eks:
+        v = [0.0, 0.0, 0.0]
+        v["XYZ".index(sade)] = 1.0
+        q = izdusum(v, gad)
+        qn = math.hypot(*q) or 1.0
+        q = (q[0] / qn, q[1] / qn)
+        # boy eksenine dik çizgilerin boy yönündeki KONUMLARI: uç kenar HLR'de
+        # (hücre duvarlarının değdiği köşelerde) parçalara bölünür, hepsi
+        # aynı konumdadır; ayrı konumda en çok 2 (iki uç) ise bilgisiz
+        # Başka yöndeki deliklerin / slotların KENARDAN görünen izi (T-kanal
+        # yarığından görünen duvar deliği) yeni bilgi değildir: delik kendi
+        # duvarının görünüşünde ölçülenir. O konumlar sayılmaz.
+        iz = []
+        for d in (o.get("delikler") or []):
+            r = float(d.get("cap_mm") or 0.0) / 2.0 + 2.0
+            for m in d.get("merkezler") or []:
+                pq = izdusum(m, gad)
+                iz.append((pq[0] * q[0] + pq[1] * q[1], r))
+        for sl in (o.get("slotlar") or []):
+            r = float(sl.get("yaricap_mm") or sl.get("r") or 0.0) + 2.0
+            for m in (sl.get("c1"), sl.get("c2")):
+                if m:
+                    pq = izdusum(m, gad)
+                    iz.append((pq[0] * q[0] + pq[1] * q[1], r))
+        konum = set()
+        for c in gorunen:
+            for a, b in zip(c, c[1:]):
+                dx, dy = b[0] - a[0], b[1] - a[1]
+                uz = math.hypot(dx, dy)
+                if uz > 1e-6 and abs(dx * q[1] - dy * q[0]) > 0.02 * uz:
+                    t = ((a[0] + b[0]) * q[0] + (a[1] + b[1]) * q[1]) / 2.0
+                    if any(abs(t - t0) <= r for t0, r in iz):
+                        continue
+                    konum.add(round(t, 0))
+        if len(konum) <= 2:
+            return True
+    return len(gorunen) <= 6
 
 
 def dxf_komponent(s, o, k, yol, P):
@@ -10841,6 +10941,12 @@ def dxf_komponent(s, o, k, yol, P):
     h = yazi_boyu(L, W, T)
     olcu_stili(doc, h)
     gorunusler = gorunus_sec(P.get("gorunusler"))
+    # Parça bazlı ya da komut satırından AÇIKÇA verilen görünüş listesi
+    # elemeye girmez (gorunus_zorla); boş / OTO ise altı görünüşten
+    # bilgi eklemeyenler ve aynı görünen aynalar ölçülerek elenir.
+    if P.get("gorunus_zorla") is None and P.get("gorunusler") \
+            and gorunus_sec(P.get("gorunusler")) != tuple(VARSAYILAN_GORUNUS):
+        P = dict(P, gorunus_zorla=True)
     # İSTİSNA: kullanıcı bu parça için ana görünüşü elle seçmişse o
     # görünüş mutlaka çizilir ve gabariyi o taşır (bkz. ana_gorunus).
     zorla = str(P.get("ana_gorunus_zorla") or "").upper()
@@ -10912,7 +11018,7 @@ def dxf_komponent(s, o, k, yol, P):
                 break
             if b_ in korunan:
                 continue
-            if bilgisiz_gorunus(kenarlar[b_], b_, o, _sk2):
+            if bilgisiz_gorunus(kenarlar[b_], b_, o, _sk2, sade=sade):
                 del kenarlar[b_]
                 gorunusler = tuple(g_ for g_ in gorunusler if g_ != b_)
                 yer = gorunus_yerlesimi(L, W, T, g, gorunusler)
@@ -11028,6 +11134,14 @@ def dxf_komponent(s, o, k, yol, P):
     SON_RAPOR.update(atlanan)            # denetim / test: son resmin eksikleri
     for gad, gk_ in gkutu.items():
         ust[gad] = max(ust.get(gad, gk_[3]), gorunus_etiketi(msp, gad, gk_, h) + 0.5 * h)
+    izo_kutu = None
+    if P.get("perspektif", True):
+        try:
+            izo_kutu = perspektif_ciz(msp, s, gkutu, h, L, W, T, g)
+        except Exception as ex:
+            print(f"    perspektif çizilemedi: {ex}"[:100])
+        if izo_kutu:
+            ust[IZO_AD] = izo_kutu[3]
     if kplan:
         # Datum ve simetri EN SON: yerlerini bütün yazı ve çizgiler
         # konduktan sonra ölçerek bulurlar.
@@ -11122,6 +11236,8 @@ def dxf_komponent(s, o, k, yol, P):
         gorunus_isareti(msp, gad, kt)
     for ad_d, kt in detaylar:
         gorunus_isareti(msp, ad_d, kt)
+    if izo_kutu:
+        gorunus_isareti(msp, IZO_AD, izo_kutu)
     if KESIT_AD in ust:
         gorunus_isareti(msp, KESIT_AD,
                         (ky0[0], ky0[1], ky0[0] + kg, ust[KESIT_AD]))
@@ -12454,8 +12570,18 @@ def calistir(step, on, kayit, komp, P, asama=(1, 2, 3), esl=None, agac=None,
             uzun.start()
             try:
                 P_, o_ = sade_profil(s2, o, k, P)
+                # PARÇA BAZLI İSTEK (kullanıcı: "görselleri, detayları, kesit
+                # sayısını özellik olarak isteyebilirim; komple değil
+                # seçtiğim parça"): ana görünüş, görünüş listesi, kesit,
+                # perspektif bu parça için ortak ayarı ezer.
                 if pa.get("ana_gorunus"):
                     P_ = dict(P_, ana_gorunus_zorla=pa["ana_gorunus"])
+                if pa.get("gorunusler"):
+                    P_ = dict(P_, gorunusler=list(pa["gorunusler"]), gorunus_zorla=True)
+                if pa.get("kesit") is not None:
+                    P_ = dict(P_, kesit=bool(pa["kesit"]))
+                if pa.get("perspektif") is not None:
+                    P_ = dict(P_, perspektif=bool(pa["perspektif"]))
                 dxf_komponent(s2, o_, sat, os.path.join(dxf_kl, dosya), P_)
                 IS.cizim_kaydet(on, "dxf", dosya, imza=im, kod=k["kod"],
                                 step_ozet=step_oz)
@@ -12589,8 +12715,12 @@ uretir: KAYNAK/<grup>_kaynak.pdf (yalniz PDF; buyuk modelde uzun surer).
     ap.add_argument("--montaj-yok", action="store_true", help="montaj çizimini atla (= aşama 3 yok)")
     ap.add_argument("--en-cok", type=int, default=0, help="en çok bu kadar komponent çiz")
     ap.add_argument("--tek", help="yalnız bu kodu/no'yu çiz (ör. --tek 01.050.000.01)")
-    ap.add_argument("--gorunus", default=",".join(VARSAYILAN_GORUNUS),
-                    help="çizilecek görünüşler, en çok 4: ON,ARKA,SAG,SOL,UST,ALT")
+    ap.add_argument("--gorunus", default="OTO",
+                    help="OTO (varsayılan): program parçanın özelliklerine göre gereken "
+                         "görünüşleri (6'ya kadar) kendisi seçer; ya da açık liste: "
+                         "ON,ARKA,SAG,SOL,UST,ALT")
+    ap.add_argument("--perspektif-yok", action="store_true",
+                    help="resme küçük izometrik perspektif konmasın")
     ap.add_argument("--kesit", action="store_true",
                     help="parçanın ortasından A-A tam kesit görünüşü ekle")
     ap.add_argument("--acinim", default="OTO",
@@ -12629,12 +12759,15 @@ uretir: KAYNAK/<grup>_kaynak.pdf (yalniz PDF; buyuk modelde uzun surer).
     asama = {int(t) for t in re.findall(r"[123]", a.asama)} or {1, 2, 3}
     if a.montaj_yok:
         asama.discard(3)
-    gor = gorunus_sec([t.strip().upper() for t in a.gorunus.replace(";", ",").split(",")])
+    oto = str(a.gorunus or "OTO").strip().upper() in ("", "OTO", "OTOMATIK", "OTOMATİK")
+    gor = () if oto else gorunus_sec(a.gorunus)
     P = {"gizli": a.gizli, "en_az_delik": a.en_az_delik, "yogunluk": RHO,
-         "gorunusler": gor, "kesit": bool(a.kesit),
+         "gorunusler": list(gor), "kesit": bool(a.kesit),
+         "perspektif": not a.perspektif_yok,
          "kaynak_resmi": bool(a.kaynak_resmi), "kaynak_balon": bool(a.kaynak_balon)}
-    print("görünüşler: " + ", ".join(GORUNUS_AD[g] for g in gor)
-          + (" + " + KESIT_AD if a.kesit else ""))
+    print("görünüşler: " + ("otomatik (özelliklere göre, 6'ya kadar)" if oto
+                           else ", ".join(GORUNUS_AD[g] for g in gor))
+          + (" + " + KESIT_AD if a.kesit else "") + ("" if a.perspektif_yok else " + perspektif"))
 
     t0 = time.time()
     try:

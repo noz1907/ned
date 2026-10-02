@@ -194,10 +194,16 @@ try:
 
     print("\n-- çerçeve ve antet alanı")
     esit("A3 çerçevesi", P.cerceve("A3"), (15.0, 15.0, 405.0, 282.0))
-    esit("A3 antet kutusu", P.antet_kutusu("A3"), (255.0, 15.0, 405.0, 115.0))
+    # Pi3D anteti çizilirken kutu alçaktır (65 mm; kullanıcı: "antet yüksek
+    # gelmiş"); firma kendi antetini yapıştıracaksa (antet_pi3d: 0) 150 x 100.
+    esit("A3 antet kutusu (Pi3D anteti)", P.antet_kutusu("A3"), (255.0, 15.0, 405.0, 80.0))
     ak = P.antet_kutusu("A3")
     esit("antet eni", ak[2] - ak[0], 150.0)
-    esit("antet boyu", ak[3] - ak[1], 100.0)
+    esit("antet boyu (Pi3D)", ak[3] - ak[1], 65.0)
+    _eski_acik = P.pi3d_antet_acik
+    P.pi3d_antet_acik = lambda *a, **k: False
+    esit("antet boyu (firma yapıştıracak)", P.antet_kutusu("A3")[3] - 15.0, 100.0)
+    P.pi3d_antet_acik = _eski_acik
     a = P.cizim_alanlari("A3")
     # Alanlar çerçeveye ve antete dayanmaz: her yönde IC_PAY boşluk kalır.
     # Üst kenarda ayrıca sağ üstteki başlık yazısı vardır; başlık bu iç
@@ -206,7 +212,7 @@ try:
     # alan kısalır.
     ust_pay = max(P.IC_PAY, P.BASLIK_SERIT + 1.0)
     esit("üstteki boşluk", (a["ust"][2] - a["ust"][0], a["ust"][3] - a["ust"][1]),
-         (390.0 - 2 * P.IC_PAY, 167.0 - P.IC_PAY - ust_pay))
+         (390.0 - 2 * P.IC_PAY, (282.0 - P.antet_kutusu("A3")[3]) - P.IC_PAY - ust_pay))
     esit("soldaki boşluk", (a["sol"][2] - a["sol"][0], a["sol"][3] - a["sol"][1]),
          (240.0 - 2 * P.IC_PAY, 267.0 - P.IC_PAY - ust_pay))
     for ad, r in a.items():
@@ -514,7 +520,7 @@ try:
     sol = P.cizim_alanlari("A3")["sol"]
     esit("çizim alanı başlık yüzünden daralmadı",
          (round(ust[3] - ust[1]), round(sol[3] - sol[1])),
-         (142, 242))
+         (177, 242))
     dogru("başlık için ayrılan yer iç paydan büyük değil",
           P.BASLIK_SERIT + 1.0 <= P.IC_PAY + 0.8,
           f"BASLIK_SERIT={P.BASLIK_SERIT} IC_PAY={P.IC_PAY}")

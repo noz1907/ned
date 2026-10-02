@@ -175,9 +175,42 @@ DXF'te yazı boyunun katı olarak uygulanır):
     SOL (sağına), üstten ÜST (altına), alttan ALT (üstüne), ARKA uca
     (1. açı). Araç modunda da takas yok (aracın kendi yanına göre
     adlandırma denendi, kaldırıldı). "En çok bilgi veren yüzü öne
-    çevirme" (yatırma) YAPILMAZ. Görünüş seçimi: bilgi eklemeyen görünüş
-    çizilmez, SAĞ = SOL / ÜST = ALT ise biri.
-18. Perspektif üzerine ölçü verilmez.
+    çevirme" (yatırma) YAPILMAZ.
+    **YERLEŞİM parçanın durumuna göre** (kullanıcı, Chevalier'nin iki
+    dizilişi): GENİŞ görünümlü parça (ÖN'ün eni boyunun 1,2 katından
+    büyük: yan kapak, panel) SÜTUN düzeni - ALT, ÖN, ÜST, ARKA alt alta,
+    SAĞ solda, SOL sağda (`genis_gorunumlu`, `gorunus_yerlesimi`); dar
+    ya da eşit büyüklükte parça standart haç - ARKA en sağda. Gerekçe:
+    ARKA sağ uca konsa geniş parçada resim iki kat genişler, ölçek yarıya
+    düşer.
+    **GÖRÜNÜŞ SEÇİMİ OTOMATİK, SAYI GİRİŞİ YOK** (kullanıcı: "görünüm
+    sayısı girişi istemiyorum; sistem parçadaki özelliklere göre 6
+    görüntü + 5-6 detay bile yapabilir, aynı kaynakta olduğu gibi"):
+    altı görünüşle başlanır (`VARSAYILAN_GORUNUS`), ÖLÇÜLEREK elenir -
+    aynı görünen ayna çifti (SAĞ = SOL, ÜST = ALT, ÖN = ARKA) tek
+    çizilir (`ayna_ayni`); o yönden delik / slot göstermeyen, dış hattı
+    düz dikdörtgen görünüş çizilmez; sade profilde (ekstrüzyon) kalıbın
+    boyuna çizgilerinden başka şey göstermeyen boy görünüşü (ÜST / ALT
+    şeridi) çizilmez (`bilgisiz_gorunus(sade)`); tek duvar deliği
+    taşıyan görünüş (19) ve bükümlü sacın profil görünüşü korunur. 6
+    görünüş şart değil, gerekirse evet; sıkışan bölgeler detaya (14).
+    Komut satırı `--gorunus` ya da parça bazlı liste verilirse o liste
+    çizilir, elenmez (`gorunus_zorla`).
+18. Perspektif üzerine ölçü verilmez. **Küçük perspektif her resme
+    fazladan konur** (kullanıcı: "ufak olarak perspektif yerleştir"):
+    önden-sağdan-üstten izometrik, yalnız görünen çizgiler, en uzun
+    kenarı parçanın %22'si, öbeğin sağ üstünde (`perspektif_ciz`,
+    `IZO_AD`); paftada serbest penceredir, hep 1. sayfada kalır. Ortak
+    ayar `P["perspektif"]`, parça bazlı kapatılabilir.
+20. **PARÇA BAZLI İSTEK** (kullanıcı: "görselleri, detayları, kesit
+    sayısını özellik şeklinde isteyebilirim; komple değil, seçtiğim resim
+    ya da parça"): `parca_ayar[kod]` = {`ana_gorunus`, `gorunusler`
+    (açık liste), `kesit`, `perspektif`}; ortak ayarı o parça için ezer,
+    çizim imzasına girer (`IS.imza(..., pa)`), GUI'de istisna satırı +
+    "YALNIZ BU PARÇA (DXF + PDF)" ile yalnız o parça yeniden üretilir.
+21. **Bu mantıklar KURALDIR**: kullanıcının verdiği her yerleşim / seçim
+    mantığı gerekçesiyle buraya ve `OLCULENDIRME_KURALLARI.md`'ye yazılır;
+    program seçim yaparken önce bu kuralları uygular, ezbere karar vermez.
 19. **GENEL KURAL (kullanıcı): tek yönden görünüp öbür yönden görünmeyen
     delik, slot ya da parça için ek detay resmi ya da komple görünüş
     ŞARTTIR.** Özellik duvarının / yüzünün göründüğü görünüşte düz
@@ -204,7 +237,10 @@ DXF'te yazı boyunun katı olarak uygulanır):
   kalıyorsa ve çekirdek en az 1,3 kat büyüyorsa 2. sayfaya gider; 2.
   sayfadaki görünüşler TEK SIRADA, resimdeki hizada durur
   (`_gorunus_sirasi_yerlestir`), detaylar altına. Bilgi bloğu (parça
-  adı, malzeme) hep 1. sayfada, ızgara dışında.
+  adı, malzeme) hep 1. sayfada; ızgaranın boş hücresine düşüyorsa
+  orada, yeni satır / sütun açıyorsa serbest pencere (yan kapakta
+  ızgaraya satır olarak girip 1:7'yi 1:11'e düşürmüştü). Perspektif
+  (IZO) serbest pencere, hep 1. sayfada.
 - Çizim kâğıdın yaklaşık %70-75'ini doldurur; ölçek serbest ve ara
   değerde olabilir (1:12, 1:14, 1:17 ...). Standart 1-2-5 serisine
   zorlanmaz.
@@ -214,9 +250,11 @@ DXF'te yazı boyunun katı olarak uygulanır):
   (`pf5_antet.otomatik_tanim`, LOCALAPPDATA\Pi3D\antet, ayar
   `antet_sablon`), pafta / PDF / kaynak resminde kullanılır. Tek exe
   (1/2 derleme seçimi kalktı). Firma antet DXF'i depoya girmez.
-- Antet alanına (A3'te sağ alt 150 x 100 mm) ÇİZİM GİRMEZ; firma anteti
-  yoksa oraya Pi3D logolu antet çizilir (`antet_pi3d: 0` ile boş). Dolu
-  pencereler (görünüşler, başlık) antete değmez, boş hücre antetin
-  üstüne düşebilir.
+- Antet alanına ÇİZİM GİRMEZ. Pi3D anteti çizilirken (DENEME ya da firma
+  anteti yokken) kutu ALÇAKTIR: A3'te sağ alt 150 x 65 mm
+  (`ANTET_BOY_PI3D`; kullanıcı: "antet yüksek gelmiş, normal antette bu
+  yerleşim mümkün"); firma kendi antetini yapıştıracaksa (`antet_pi3d:
+  0`) 150 x 100 boş kalır. Dolu pencereler (görünüşler, başlık) antete
+  değmez, boş hücre antetin üstüne düşebilir.
 - Görünüşler birbirine yakın durur (arası en çok 15 mm), dağılmaz.
 - Yazılar okunur olmalı; "karınca duası" resim kabul edilmez.

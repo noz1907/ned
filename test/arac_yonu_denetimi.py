@@ -137,6 +137,14 @@ def main():
     dogru("araç modunda da ad bakış yönünden (Chevalier s.49): SAĞ", O.gorunus_adi("SAG") == "SAĞ" and O.gorunus_adi("SOL") == "SOL")
     O.ARAC_MODU["acik"] = False
     dogru("araç modu kapalı: SAĞ", O.gorunus_adi("SAG") == "SAĞ")
+    dogru("görünüş seçimi otomatik: boş / OTO = altı görünüş",
+          O.gorunus_sec(None) == O.VARSAYILAN_GORUNUS and O.gorunus_sec("OTO") == O.VARSAYILAN_GORUNUS
+          and len(O.VARSAYILAN_GORUNUS) == 6 and O.gorunus_sec("ON,UST") == ("ON", "UST"))
+    gk = {"ON": (0, 0, 100, 50), "SAG": (-30, 0, -10, 50), "SOL": (110, 0, 130, 50), "UST": (0, -40, 100, -10), "ARKA": (0, 0, 0, 0)}
+    y1 = O.gorunus_yerlesimi(1568.0, 25.0, 400.0, 50.0, ("ON", "SAG", "UST", "ARKA"))
+    dogru("geniş parçada ARKA sütunun altında (ÜST'ün altı)", y1["ARKA"][0] == 0.0 and y1["ARKA"][1] < y1["UST"][1], y1)
+    y2 = O.gorunus_yerlesimi(400.0, 25.0, 1568.0, 50.0, ("ON", "SAG", "SOL", "UST", "ARKA"))
+    dogru("dar parçada ARKA en sağda (SOL'un sağı)", y2["ARKA"][1] == 0.0 and y2["ARKA"][0] > y2["SOL"][0], y2)
     a1 = IS.cizim_ayari({"gorunusler": ["ON"], "arac": {"on": "-X", "ust": "+Z"}})
     a2 = IS.cizim_ayari({"gorunusler": ["ON"], "arac": None})
     dogru("çizim ayarı araç yönünü taşır (eksik üretim yeniden çizer)",

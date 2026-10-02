@@ -169,6 +169,16 @@ BU SÜRÜMDE NE VAR
     - Ana görünüş = en büyük alan; delik sayısı yalnız eşit alanlarda.
     - Model gürültüsü (0,05 mm içinde iki delik sırası) aynı dizi
       ölçüsünü iki kez yazdırmaz, "MODEL KONTROL" uyarısı çıkarmaz.
+    - GÖRÜNÜŞ SEÇİMİ OTOMATİK, sayı girişi kalktı: altı görünüşle
+      başlanır, ayna / bilgisiz / ekstrüzyon boy şeridi ölçülerek elenir;
+      gerekirse 6 görünüş + detaylar. Komut satırı --gorunus OTO.
+    - KÜÇÜK PERSPEKTİF: her detay resminin sağ üstüne izometrik (ölçüsüz),
+      paftada serbest pencere, 1. sayfada (--perspektif-yok ile kapanır).
+    - PARÇA BAZLI İSTEK: istisna satırında görünüş listesi, kesit,
+      perspektif parça için; YALNIZ BU PARÇA ile üretilir.
+    - YERLEŞİM: geniş görünümlü parçada sütun düzeni (ALT, ÖN, ÜST, ARKA
+      alt alta; SAĞ solda, SOL sağda), dar parçada standart haç.
+    - Pi3D anteti alçaldı (150 x 65; firma yapıştıracaksa 150 x 100).
     - PAFTA: 1. sayfa dağılmaz - ÖN + bir yan + bir üst / alt + kesit
       birlikte kalır; yalnız ekstra görünüşler (ARKA, ikinci yan ...) 2.
       sayfaya gider ve orada tek sırada, aynı hizada durur (kullanıcı:

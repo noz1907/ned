@@ -142,6 +142,7 @@ def cizim_ayari(P):
             "en_az_delik": float(P.get("en_az_delik") or 0.0),
             "gorunusler": list(P.get("gorunusler") or []),
             "kesit": bool(P.get("kesit")),
+            "perspektif": bool(P.get("perspektif", True)),
             # araç yönü çizimi değiştirir (parça kullanım yönünde çizilir)
             "arac": {"on": str(arac.get("on") or "").upper(),
                      "ust": str(arac.get("ust") or "+Z").upper()} if arac else None}

@@ -1107,10 +1107,16 @@ malzemeyi görür, BOM'u yeniden çıkarmak gerekmez.
 
 ### Adım 3 — GÖRÜNÜŞ ve KESİT
 
-* **Görünüşler:** ÖN, ARKA, SAĞ, SOL, ÜST, ALT arasından **en çok 4 tane**.
-  Beşinciyi işaretlerseniz en eski seçim kendiliğinden kapanır.
-  Yerleşim 1. açı (Avrupa/ISO-E): SAĞ sola, SOL sağa, ARKA en sağa,
-  ÜST alta, ALT üste.
+* **Görünüşler OTOMATİK (sayı girilmez):** program altı görünüşle
+  başlar, parçanın özelliklerine göre (delik, slot, kesik, tek duvar
+  deliği, büküm) gerekenleri bırakır: aynı görünen ayna görünüş (SAĞ =
+  SOL, ÜST = ALT, ÖN = ARKA) tek çizilir, bilgi eklemeyen görünüş
+  (düz dikdörtgen; ekstrüzyonda yalnız boyuna çizgi) çizilmez, sıkışan
+  bölgeler detaya taşınır. Gerekirse 6 görünüş + detaylar. Yerleşim 1.
+  açı: SAĞ sola, SOL sağa, ÜST alta, ALT üste; geniş görünümlü parçada
+  (yan kapak, panel) ARKA sütunun altına, dar parçada en sağa.
+  **Küçük perspektif** (izometrik, ölçüsüz) her resmin sağ üstüne
+  fazladan konur; kutudan kapatılabilir.
 * **Kesit:** *olmasın (H)* ya da *A-A kesit eklensin (E)*. Kesme düzlemi
   rastgele ortadan değil, **en çok deliği açan** yerden geçer; kesilen
   malzeme taranır, kesme çizgisi görünüşe **A—A** olarak işaretlenir.
@@ -1131,9 +1137,12 @@ malzemeyi görür, BOM'u yeniden çıkarmak gerekmez.
   yazar; `yok`: araç yönü yok (yine geniş yüz ÖN'e döner). Seçim çıktı
   klasörüne kaydedilir. Eğik duran parça en yakın eksene **en küçük
   açıyla** oturtulur.
-* **İstisna – parça / ana görünüş:** bir parçanın ana görünüşünü elle
-  seçersiniz (ÖN / ARKA / SAĞ / SOL / ÜST / ALT); *Kaydet* ile klasör
-  ayarında saklanır, o parça yeniden üretilince uygulanır.
+* **İstisna – parça bazlı istek:** bir parça için ana görünüşü (ÖN /
+  ARKA / SAĞ / SOL / ÜST / ALT), çizilecek görünüş listesini (işaretli
+  olanlar; hiçbiri = otomatik), kesiti ve perspektifi (ortak ayar /
+  evet / hayır) ayrı ayrı istersiniz; *Kaydet* ile klasör ayarında
+  saklanır, o parça yeniden üretilince uygulanır (komple montaj değil,
+  yalnız seçtiğiniz parça).
 * **YALNIZ BU PARÇA (DXF + PDF) ▸:** seçili parçanın detay DXF'i,
   paftası ve PDF'i yeniden üretilir; öbür dosyalara dokunulmaz (iş kaydı
   güncellenir). Malzeme, görünüş ya da istisna değişikliğinden sonra
@@ -2217,7 +2226,7 @@ terminale basılır. Ayrıntı: Adım 2'deki "CATIA BOM ile eşleştirme".
 ### Görünüş, kesit, zip
 
 ```
-python pf3_olcu.py parca.stp -o cikti --gorunus ON,SAG,UST --kesit --zip
+python pf3_olcu.py parca.stp -o cikti --kesit --zip
 python pf3_olcu.py parca.stp -o cikti --tek 01.050.000.01 --asama 2
                                                   # yalnız tek parçanın resmi
 python pf3_olcu.py parca.stp -o cikti --asama 1 --acinim 01.051.000.01
@@ -2264,7 +2273,8 @@ Kaynak DXF'lere dokunulmaz; her pafta ayrı bir dosyaya yazılır.
 | `--malzeme-sor` | terminalden sor |
 | `--malzeme-liste` | malzeme tablosunu yaz |
 | `--yogunluk <kg/mm3>` | malzeme seçimini ezer (uzman kullanımı) |
-| `--gorunus ON,ARKA,SAG,SOL,UST,ALT` | görünüş seçimi, en çok 4 |
+| `--gorunus OTO` | görünüş seçimi: OTO (varsayılan) özelliklere göre otomatik, 6'ya kadar; ya da açık liste `ON,ARKA,SAG,SOL,UST,ALT` (elenmez) |
+| `--perspektif-yok` | küçük izometrik perspektif konmasın |
 | `--kesit` | A-A tam kesit görünüşü ekle |
 | `--zip` | çıktıları `cizimler.zip`'te topla (klasör düzeniyle) |
 | `--eksik` | yalnız eksik ya da eskimiş çizimleri üret; aynı model ve ayarla üretildiği kayıtlı olanlar atlanır |
@@ -2385,7 +2395,10 @@ başlıkta yazar.
   boyunun katı olarak uygulanır; DXF'teki ölçü stili bu değerlerdendir.
 - **PDF okumak içindir**, üstünden ölçü alınmaz; ölçü 1:1 DXF'ten
   alınır. PDF'te ölçek serbesttir (1:9, 1:11, 1:13 …): çizim kâğıdı
-  doldurur, antet boş kalır.
+  doldurur, antet boş kalır. Pi3D anteti alçaktır (150 x 65 mm); firma
+  kendi antetini yapıştıracaksa (`antet_pi3d: 0`) 150 x 100 boş kalır.
+  Başlık bloğu ve bilgi bloğu ızgaraya girmeden kâğıdın boş yerine
+  konabilir (ölçeği düşürmesin diye); küçük perspektif de öyle.
 - **Ana resim büyük kalır, PDF çok sayfalı olabilir:** detay görünüşleri
   1. sayfada ana resmi küçültüyorsa aynı PDF'in 2. sayfasına
   ("DETAYLAR") gider. 1. sayfa dağılmaz: ÖN + bir yan (SAĞ ya da SOL)

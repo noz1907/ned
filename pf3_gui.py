@@ -10,7 +10,7 @@ Pencere adım adım ilerler, her adım bitmeden sonraki açılmaz:
     1. VERİ      incelenecek STEP dosyası + kaydedilecek klasör
     2. BOM       komponentler çıkarılır; malzeme data'da tanımlıysa oradan
                  alınır, değilse parça bazlı ya da hepsine birden seçilir
-    3. AYAR      kaç görünüş (ÖN/ARKA/SAĞ/SOL/ÜST/ALT, en çok 4), kesit E/H
+    3. AYAR      görünüşler otomatik (özelliklere göre, 6'ya kadar), kesit E/H, araç yönü, parça istisnası
     4. ÖRNEK     bir parçanın resmi üretilir, ekranda gösterilir, onaylanır
     5. TÜMÜ      onay sonrası bütün DXF'ler üretilir ve ZIP'lenir
 
@@ -261,7 +261,6 @@ class Uygulama(ttk.Frame):
         self.kuyruk = queue.Queue()
         self.calisiyor = False
         self.iptal_istendi = False
-        self.gorunus_sirasi = []         # seçim sırası (en çok 4 tutmak için)
         self.ornek_adaylar = []
         self.agac = None                 # montaj ağacı (hiyerarşik BOM)
         # LİSANS: makineye kilitli pi3d.lic; yoksa / geçersizse program açılır
@@ -1053,19 +1052,16 @@ class Uygulama(ttk.Frame):
         f = self.sayfa[2]
         ttk.Label(f, text="Görünüşler, kesit ve çizim ayarları",
                   style="Baslik.TLabel").grid(row=0, column=0, columnspan=3, sticky="w", pady=(0, 8))
-        gf = ttk.LabelFrame(f, text=" Görünüşler (en çok 4) ", padding=8)
+        # GÖRÜNÜŞ SEÇİMİ OTOMATİK (kullanıcı: "görünüm sayısı girişi
+        # istemiyorum; sistem parçadaki özelliklere göre 6 görüntü + 5-6
+        # detay bile yapabilir"): seçim kutuları kalktı. Parça bazlı istek
+        # (görünüş listesi, kesit, perspektif) aşağıdaki istisna satırında.
+        gf = ttk.LabelFrame(f, text=" Görünüşler (otomatik) ", padding=8)
         gf.grid(row=1, column=0, sticky="nsew")
         self.v_gor = {}
-        for i, (k, ad) in enumerate((("ON", "ÖN (referans)"), ("ARKA", "ARKA"),
-                                     ("SAG", "SAĞ"), ("SOL", "SOL"),
-                                     ("UST", "ÜST"), ("ALT", "ALT"))):
-            v = tk.BooleanVar(value=k in ("ON", "SAG", "SOL", "UST"))
-            self.v_gor[k] = v
-            if v.get():
-                self.gorunus_sirasi.append(k)
-            ttk.Checkbutton(gf, text=ad, variable=v,
-                            command=lambda kk=k: self.gorunus_degisti(kk)
-                            ).grid(row=i % 3, column=i // 3, sticky="w", padx=(0, 18))
+        self.v_perspektif = tk.BooleanVar(value=True)
+        ttk.Checkbutton(gf, text="küçük perspektif (izometrik) de konsun",
+                        variable=self.v_perspektif).grid(row=0, column=0, columnspan=2, sticky="w")
         self.v_gor_bilgi = tk.StringVar()
         # wraplength ŞART: uzun tek satır sütunu genişletip Kesit kutusunu
         # 1280 px ekranda 24 px'e sıkıştırıyordu
@@ -1138,6 +1134,25 @@ class Uygulama(ttk.Frame):
         ttk.Button(pf_, text="Kaydet", width=7, command=self.istisna_kaydet).pack(side="left")
         ttk.Button(pf_, text="YALNIZ BU PARÇA (DXF + PDF)  ▸",
                    command=self.tek_parca_uret).pack(side="left", padx=(6, 0))
+        # PARÇA BAZLI İSTEK (kullanıcı: "görselleri, detayları, kesit sayısını
+        # özellik şeklinde isteyebilirim; komple değil, seçtiğim parça"):
+        # görünüş listesi (boş = otomatik), kesit ve perspektif bu parça için.
+        pf2_ = ttk.Frame(f); pf2_.grid(row=5, column=0, columnspan=3, sticky="w", pady=(0, 2))
+        ttk.Label(pf2_, text="   bu parça için görünüşler:").pack(side="left")
+        self.v_ist_v = {}
+        for k, ad in (("ON", "ÖN"), ("ARKA", "ARKA"), ("SAG", "SAĞ"), ("SOL", "SOL"),
+                      ("UST", "ÜST"), ("ALT", "ALT")):
+            v = tk.BooleanVar(value=False)
+            self.v_ist_v[k] = v
+            ttk.Checkbutton(pf2_, text=ad, variable=v).pack(side="left", padx=(2, 0))
+        ttk.Label(pf2_, text="(hiçbiri = otomatik)   kesit:").pack(side="left", padx=(6, 0))
+        self.v_ist_kesit = tk.StringVar(value="ortak ayar")
+        ttk.Combobox(pf2_, textvariable=self.v_ist_kesit, state="readonly", width=10,
+                     values=["ortak ayar", "evet", "hayır"]).pack(side="left", padx=(2, 0))
+        ttk.Label(pf2_, text="perspektif:").pack(side="left", padx=(6, 0))
+        self.v_ist_persp = tk.StringVar(value="ortak ayar")
+        ttk.Combobox(pf2_, textvariable=self.v_ist_persp, state="readonly", width=10,
+                     values=["ortak ayar", "evet", "hayır"]).pack(side="left", padx=(2, 0))
         self.v_ist_bilgi = tk.StringVar(value="")
         self.b_ornek = ttk.Button(f, text="ÖRNEK DXF ÜRET  ▸", style="Bas.TButton",
                                   command=self.ornek_uret)
@@ -2621,8 +2636,8 @@ class Uygulama(ttk.Frame):
             d = 1.0
         return {"gizli": bool(self.v_gizli.get()), "en_az_delik": d,
                 "yogunluk": self.M.RHO,
-                "gorunusler": self.M.gorunus_sec(
-                    [k for k, v in self.v_gor.items() if v.get()]),
+                "gorunusler": [],          # OTO: program özelliklere göre seçer
+                "perspektif": bool(self.v_perspektif.get()) if hasattr(self, "v_perspektif") else True,
                 "kesit": bool(self.v_kesit.get()),
                 "arac": self._arac(), "parca_ayar": self._parca_ayar_p()}
 
@@ -2643,15 +2658,23 @@ class Uygulama(ttk.Frame):
                        "ÜST": "UST", "ALT": "ALT"}
 
     def _parca_ayar_p(self):
-        """Parça istisnaları motor diline: ad -> görünüş anahtarı (adlar
-        bakış yönünden, Chevalier s.49; araç modunda takas yok)."""
+        """Parça istisnaları motor diline: ana görünüş (ad -> anahtar; adlar
+        bakış yönünden, Chevalier s.49), görünüş listesi, kesit, perspektif."""
         out = {}
         for kod, a in (self.parca_ayar or {}).items():
-            ad = str((a or {}).get("ana_gorunus_ad") or "").upper()
-            key = self._GOR_AD_ANAHTAR.get(ad)
-            if not key:
-                continue
-            out[kod] = {"ana_gorunus": key}
+            a = a or {}
+            d = {}
+            key = self._GOR_AD_ANAHTAR.get(str(a.get("ana_gorunus_ad") or "").upper())
+            if key:
+                d["ana_gorunus"] = key
+            gor = [g for g in (a.get("gorunusler") or []) if g in self._GOR_AD_ANAHTAR.values()]
+            if gor:
+                d["gorunusler"] = gor
+            for ad in ("kesit", "perspektif"):
+                if a.get(ad) is not None:
+                    d[ad] = bool(a[ad])
+            if d:
+                out[kod] = d
         return out
 
     def _istisna_kod(self):
@@ -2674,23 +2697,56 @@ class Uygulama(ttk.Frame):
     def _istisna_goster(self):
         kod = self._istisna_kod()
         a = self.parca_ayar.get(kod) if kod else None
+        a = a or {}
         if hasattr(self, "v_ist_gor"):
-            self.v_ist_gor.set((a or {}).get("ana_gorunus_ad") or "OTOMATİK")
+            self.v_ist_gor.set(a.get("ana_gorunus_ad") or "OTOMATİK")
+        if hasattr(self, "v_ist_v"):
+            for k, v in self.v_ist_v.items():
+                v.set(k in (a.get("gorunusler") or []))
+            uc = {None: "ortak ayar", True: "evet", False: "hayır"}
+            self.v_ist_kesit.set(uc.get(a.get("kesit"), "ortak ayar"))
+            self.v_ist_persp.set(uc.get(a.get("perspektif"), "ortak ayar"))
         n = len(self.parca_ayar)
         self.v_ist_bilgi.set(
             (f"{n} parçada istisna: " + ", ".join(
-                f"{k} → {v.get('ana_gorunus_ad')}" for k, v in list(self.parca_ayar.items())[:6])
+                f"{k} → {self._istisna_ozet(v)}" for k, v in list(self.parca_ayar.items())[:6])
              + (" …" if n > 6 else "")) if n else "istisna yok (hepsi otomatik)")
+
+    @staticmethod
+    def _istisna_ozet(a):
+        a = a or {}
+        par = []
+        if a.get("ana_gorunus_ad"):
+            par.append("ana " + a["ana_gorunus_ad"])
+        if a.get("gorunusler"):
+            par.append("+".join(a["gorunusler"]))
+        if a.get("kesit") is not None:
+            par.append("kesit " + ("evet" if a["kesit"] else "hayır"))
+        if a.get("perspektif") is not None:
+            par.append("perspektif " + ("evet" if a["perspektif"] else "hayır"))
+        return ", ".join(par) or "otomatik"
 
     def istisna_kaydet(self):
         kod = self._istisna_kod()
         if not kod:
             messagebox.showinfo("İstisna", "Önce listeden parça seçin."); return
         g = self.v_ist_gor.get()
-        if g == "OTOMATİK":
-            self.parca_ayar.pop(kod, None)
+        a = {}
+        if g != "OTOMATİK":
+            a["ana_gorunus_ad"] = g
+        if hasattr(self, "v_ist_v"):
+            gor = [k for k, v in self.v_ist_v.items() if v.get()]
+            if gor:
+                a["gorunusler"] = gor
+            uc = {"evet": True, "hayır": False}
+            if self.v_ist_kesit.get() in uc:
+                a["kesit"] = uc[self.v_ist_kesit.get()]
+            if self.v_ist_persp.get() in uc:
+                a["perspektif"] = uc[self.v_ist_persp.get()]
+        if a:
+            self.parca_ayar[kod] = a
         else:
-            self.parca_ayar[kod] = {"ana_gorunus_ad": g}
+            self.parca_ayar.pop(kod, None)
         on = (self.v_out.get() or "").strip()
         if on:
             try:
@@ -2698,7 +2754,7 @@ class Uygulama(ttk.Frame):
             except Exception:
                 pass
         self._istisna_goster()
-        self._yaz(f"istisna: {kod} ana görünüş = {g}")
+        self._yaz(f"istisna: {kod} → {self._istisna_ozet(a)}")
 
     def tek_parca_uret(self):
         """YALNIZ seçili parçanın detay DXF'i, paftası ve PDF'i yeniden
@@ -2788,7 +2844,7 @@ class Uygulama(ttk.Frame):
             # malzeme ve görünüş seçimi geri gelir, yeniden girilmez.
             try:
                 IS.ayar_kaydet(on, malzemeler=dict(self.malzemeler),
-                               gorunusler=list(P["gorunusler"]),
+                               perspektif=bool(P.get("perspektif", True)),
                                kesit=P["kesit"], gizli=P["gizli"],
                                en_az_delik=P["en_az_delik"],
                                montaj=bool(self.v_montaj.get()),
@@ -2804,7 +2860,8 @@ class Uygulama(ttk.Frame):
                 "P": P, "esl": dict(self.malzemeler),
                 "genel": self.M.VARSAYILAN_MALZEME,
                 "kesit": bool(self.v_kesit.get()),
-                "gorunus_ad": ", ".join(self.M.GORUNUS_AD[x] for x in P["gorunusler"])}
+                "gorunus_ad": (", ".join(self.M.GORUNUS_AD[x] for x in P["gorunusler"])
+                               if P.get("gorunusler") else "otomatik (özelliklere göre)")}
 
     def _calistir(self, g, asama, komp=None, **ek):
         """Motoru arka planda, yalnız düz veriyle çağırır."""
@@ -3051,13 +3108,9 @@ class Uygulama(ttk.Frame):
         if mal:
             self.malzemeler.update(mal)
             ne.append(f"{len(mal)} parçanın malzemesi")
-        gor = [g for g in (a.get("gorunusler") or []) if g in self.v_gor]
-        if gor:
-            for k, v in self.v_gor.items():
-                v.set(k in gor)
-            self.gorunus_sirasi = list(gor)
-            self.gorunus_degisti(None)
-            ne.append("görünüşler (" + ", ".join(gor) + ")")
+        # görünüş listesi artık kaydedilmez / okunmaz (seçim otomatik)
+        if a.get("perspektif") is not None and hasattr(self, "v_perspektif"):
+            self.v_perspektif.set(bool(a.get("perspektif")))
         for ad, v in (("kesit", self.v_kesit), ("gizli", self.v_gizli),
                       ("montaj", self.v_montaj)):
             if ad in a:
@@ -3872,21 +3925,14 @@ class Uygulama(ttk.Frame):
         self.v_durum.set(self._durum_ipucu)
 
     # ------------------------------------------------------------ 3 AYAR
-    def gorunus_degisti(self, k):
-        if k:
-            if self.v_gor[k].get():
-                self.gorunus_sirasi.append(k)
-                en_cok = self.M.EN_COK_GORUNUS if self.M else 4
-                while len(self.gorunus_sirasi) > en_cok:
-                    esk = self.gorunus_sirasi.pop(0)
-                    self.v_gor[esk].set(False)
-                    self._yaz(f"en çok 4 görünüş: {esk} kapatıldı")
-            elif k in self.gorunus_sirasi:
-                self.gorunus_sirasi.remove(k)
-        n = sum(1 for v in self.v_gor.values() if v.get())
-        self.v_gor_bilgi.set(f"{n} görünüş seçili (en çok 4). Yerleşim 1. açı "
-                             f"(Avrupa): bakılan yanın karşısına; ÜST alta, ALT üste. "
-                             "Adlar bakış yönünden (Chevalier s.49).")
+    def gorunus_degisti(self, k=None):
+        """Görünüş seçimi otomatik: yalnız açıklama yazılır."""
+        self.v_gor_bilgi.set(
+            "Program parçanın özelliklerine (delik, slot, kesik, tek duvar deliği, "
+            "büküm) göre gereken görünüşleri 6'ya kadar kendisi seçer; bilgi "
+            "eklemeyen ve ayna görünüşler elenir, sıkışan bölgeler detaya taşınır. "
+            "Yerleşim 1. açı; adlar bakış yönünden (Chevalier s.49). Parça bazlı "
+            "istek (görünüş, kesit, perspektif) aşağıdaki istisna satırında.")
 
     def ornek_uret(self):
         if not self.komp:

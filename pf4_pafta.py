@@ -102,7 +102,8 @@ def kagit_adi(kagit):
 
 KENAR = 15.0                 # çerçeve kâğıdın kenarından bu kadar içeride
 DIS_PAY = 5.0                # ince dış çizgi kâğıdın kenarından
-ANTET_EN, ANTET_BOY = 150.0, 100.0     # sağ alt köşede boş bırakılan kutu
+ANTET_EN, ANTET_BOY = 150.0, 100.0     # sağ alt köşede boş bırakılan kutu (firma anteti yapıştırılacak)
+ANTET_BOY_PI3D = 65.0                  # Pi3D anteti çizilince (DENEME) alçak kutu: resim yeri kazanır
 
 # Bölge bölümleri (ISO 5457): rakamlar soldan sağa, harfler yukarıdan
 # aşağıya. "B3'teki delik" demek için. Sütun ve satır sayısı çifttir.
@@ -164,7 +165,7 @@ KAT_BOLGE = "PAFTA_BOLGE"
 # Ayar dosyasında antet_pi3d: 0 ise kutu eskisi gibi BOŞ bırakılır.
 PI3D_ANTET_PNG = "pi3d_antet.png"
 PI3D_ANTET_PX = (1031, 240)           # logo şeridi piksel ölçüsü (en, boy)
-PI3D_ANTET_BANT = 26.0                # logo şeridi yüksekliği (mm)
+PI3D_ANTET_BANT = 17.0                # logo şeridi yüksekliği (mm)
 PI3D_ANTET_ETIKET = 2.0               # alan adı yazı boyu (mm)
 PI3D_ANTET_DEGER = 3.2                # alan değeri yazı boyu (mm)
 PI3D_LACIVERT = (19, 53, 83)          # PiVision yazısının kâğıt üstündeki rengi
@@ -629,10 +630,14 @@ def _gorunus_kutulari(d, alanlar, haric=()):
     return {k: tuple(v) for k, v in kutu.items()}
 
 
+IZO_AD = "IZO"           # küçük perspektif (pf3_olcu.IZO_AD); serbest, hep 1. sayfada
+SAYFA1_SERBEST = (IZO_AD, BASLIK_AD)   # 2. sayfaya gitmeyen serbest pencereler (bilgi bloğu ayrıca)
+
+
 def _serbest_mi(ad):
-    """DETAY görünüşü izdüşüm ızgarasının parçası değildir: kâğıdın boş
-    yerine SERBEST pencere olarak konur (bkz. _serbest_yerlestir)."""
-    return str(ad).startswith("DETAY")
+    """DETAY ve PERSPEKTİF görünüşleri izdüşüm ızgarasının parçası değildir:
+    kâğıdın boş yerine SERBEST pencere olarak konur (bkz. _serbest_yerlestir)."""
+    return str(ad).startswith("DETAY") or str(ad) == IZO_AD
 
 
 def _serbest_kutular(d, alanlar):
@@ -779,7 +784,12 @@ def antet_kutusu(kagit=VARSAYILAN_KAGIT, sablon=None):
     if sablon is not None:
         return sablon.antet_kutusu(KAGIT[kagit])
     x0, y0, x1, y1 = cerceve(kagit)
-    return (max(x0, x1 - ANTET_EN), y0, x1, min(y1, y0 + ANTET_BOY))
+    # Pi3D anteti çizilecekse (DENEME, ya da firma anteti yokken ayar açık)
+    # kutu ALÇAKTIR (kullanıcı: "antet yüksek gelmiş; normal antette bu
+    # yerleşim mümkün"): 100 mm'lik kutu yalnız firma kendi antetini
+    # yapıştıracaksa (antet_pi3d: 0) ayrılır.
+    boy = ANTET_BOY_PI3D if pi3d_antet_acik() else ANTET_BOY
+    return (max(x0, x1 - ANTET_EN), y0, x1, min(y1, y0 + boy))
 
 
 def cizim_alanlari(kagit=VARSAYILAN_KAGIT, sablon=None):
@@ -864,7 +874,7 @@ def kagit_sec(gx, gy, adaylar=KAGIT_BOY, en_az_olcek=1.0, sablon=None):
 
 
 # --------------------------------------------------------------- pafta
-def cok_pencere_plani(d, kutu, alan_g, alan_y, olcek_zorla=None, serbest_izin=False,
+def cok_pencere_plani(d, kutu, alan_g, alan_y, olcek_zorla=None, serbest_izin=False, baslik_serbest=False,
                       serbest_sayfa2=False, sayfa2_gorunus=()):
     """Görünüşleri kâğıda ORTADAN DIŞA, eşit aralıklarla dağıtan plan.
 
@@ -895,6 +905,18 @@ def cok_pencere_plani(d, kutu, alan_g, alan_y, olcek_zorla=None, serbest_izin=Fa
         if BILGI_AD in alanlar and BILGI_AD in dar_hepsi:
             bilgi_serbest = {BILGI_AD: dar_hepsi[BILGI_AD]}
             alanlar = {a: b for a, b in alanlar.items() if a != BILGI_AD}
+    elif serbest_izin and BILGI_AD in alanlar:
+        # Bilgi bloğu ızgaranın boş bir hücresine düşüyorsa orada kalır; YENİ
+        # satır ya da sütun açıyorsa (ARKA sütunun altına inince boşalan
+        # yere konmuş, satır eklemiş; yan kapak 1:7'den 1:11'e düşmüştü)
+        # serbest pencere olur, kâğıdın boş yerine konur.
+        dar_hepsi = _gorunus_kutulari(d, alanlar)
+        alansiz = {a: b for a, b in alanlar.items() if a != BILGI_AD}
+        iz_w = _izgara(d, alanlar, kutu)
+        iz_wo = _izgara(d, alansiz, kutu, haric=[dar_hepsi[BILGI_AD]] if BILGI_AD in dar_hepsi else ())
+        if iz_wo and (not iz_w or len(iz_w[0]) > len(iz_wo[0]) or len(iz_w[1]) > len(iz_wo[1])):
+            bilgi_serbest = {BILGI_AD: dar_hepsi[BILGI_AD]}
+            alanlar = alansiz
     iz = _izgara(d, alanlar, kutu, haric=list(gor2.values()) + list(bilgi_serbest.values()))
     if not iz:
         return None
@@ -905,10 +927,18 @@ def cok_pencere_plani(d, kutu, alan_g, alan_y, olcek_zorla=None, serbest_izin=Fa
     serbest = _serbest_kutular(d, alanlar)
     if serbest and not (serbest_izin or serbest_sayfa2):
         return None          # detaylar yalnız tam kâğıt planında yerleşir
-    sayfa2 = dict(serbest) if serbest_sayfa2 else {}
+    # Detaylar 2. SAYFAYA gidebilir; perspektif (IZO) hep 1. sayfada kalır
+    sayfa2 = {a: b for a, b in serbest.items() if a not in SAYFA1_SERBEST} if serbest_sayfa2 else {}
     if serbest_sayfa2:
-        serbest = {}         # detaylar 2. SAYFADA: bu sayfanın planına girmez
+        serbest = {a: b for a, b in serbest.items() if a in SAYFA1_SERBEST}
     serbest = dict(serbest, **bilgi_serbest)   # bilgi bloğu hep 1. sayfada
+    if baslik_serbest and baslik is not None and serbest_izin:
+        # BAŞLIK BLOĞU SERBEST: öbeğin üstünde tam genişlikte şerit açmak
+        # yerine kâğıdın boş yerine (yan kapakta öbeğin üstündeki 28 mm'lik
+        # şerit ARKA satırını antete bindiriyor, 1:8 yerine 1:11 çıkıyordu)
+        serbest = dict(serbest, **{BASLIK_AD: baslik})
+        baslik = None
+        bg = bb = 0.0
     sayfa2.update(gor2)
     hepsi = ([h[2] for h in hucre.values()] + ([baslik] if baslik else [])
              + list(serbest.values()))
@@ -975,17 +1005,22 @@ def tam_kagit_plani(d, kutu, kagit=VARSAYILAN_KAGIT, sablon=None, serbest_sayfa2
     ic = (fx0 + IC_PAY, fy0 + IC_PAY, fx1 - IC_PAY, fy1 - IC_PAY)
     ant = antet_kutusu(kagit, sablon)
     ant = (ant[0] - IC_PAY, ant[1] - IC_PAY, ant[2] + IC_PAY, ant[3] + IC_PAY)
-    ilk = cok_pencere_plani(d, kutu, ic[2] - ic[0], ic[3] - ic[1], serbest_izin=True,
-                            serbest_sayfa2=serbest_sayfa2, sayfa2_gorunus=sayfa2_gorunus)
-    if not ilk:
+    ilkler = [cok_pencere_plani(d, kutu, ic[2] - ic[0], ic[3] - ic[1], serbest_izin=True,
+                                serbest_sayfa2=serbest_sayfa2, sayfa2_gorunus=sayfa2_gorunus,
+                                baslik_serbest=bs) for bs in (False, True)]
+    ilkler = [p for p in ilkler if p]
+    if not ilkler:
         return None
-    for k in KUCULTME:
+    en_buyuk = max(p["olcek"] for p in ilkler)
+    # Her ölçekte iki diziliş denenir: başlık öbeğin üstünde (önce) ya da
+    # serbest pencere; büyük ölçekte sığan kazanır.
+    for k, bs in ((k, bs) for k in KUCULTME for bs in (False, True)):
         o = 1.0 / k
-        if o > ilk["olcek"] + 1e-12:
+        if o > en_buyuk + 1e-12:
             continue
         p = cok_pencere_plani(d, kutu, ic[2] - ic[0], ic[3] - ic[1], olcek_zorla=o,
                               serbest_izin=True, serbest_sayfa2=serbest_sayfa2,
-                              sayfa2_gorunus=sayfa2_gorunus)
+                              sayfa2_gorunus=sayfa2_gorunus, baslik_serbest=bs)
         if not p:
             continue
         pg, py = p["obek"]
