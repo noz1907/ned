@@ -181,7 +181,8 @@ BU SÜRÜMDE NE VAR
       alt alta; SAĞ solda, SOL sağda), dar parçada standart haç.
     - Pi3D anteti alçaldı (150 x 65; firma yapıştıracaksa 150 x 100).
     - YARDIMCI GÖRÜNÜŞ: eğik yüz / eğik büküm kanadı için yüze dik bakış
-      ("YARDIMCI GÖRÜNÜŞ D"), delikleri kenardan paralel, gerçek boy;
+      ("YARDIMCI GÖRÜNÜŞ D"), delikleri kenardan zincirle (kalabalıksa
+      delik tablosu), gerçek boy;
       esas görünüşte bakış oku + harf (ISO 128-3).
     - DELİK KOORDİNAT TABLOSU: bir görünüşte 20 ve üstü delik varsa konum
       ölçüsü yerine tablo (NO, X, Y, Ø; sıfır görünüşün sol alt köşesi);
