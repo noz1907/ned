@@ -12,7 +12,8 @@ Kullanıcı: "parça kesinlikle kullanım yönünde olmalı; araç yönü bizim 
   3. dik duran panel (kalınlık X boyunca, 1365 x 787) çizim çerçevesinde
      ÖN görünüşte büyük yüzüyle, üstü üstte: kalınlık çizim Y'sinde
   4. araç yönü önerisi: adında ÖN / ARKA geçen parçalardan
-  5. SAĞ / SOL adları araç modunda takas; ayar imzası araç yönünü içerir
+  5. görünüş adları araç modunda da bakış yönünden (Chevalier s.49); ayar imzası araç yönünü içerir
+  6. geniş düşey yüz ÖN'e döner (düşey eksen etrafında), dıştan bakış; yatay levha dikilmez
 """
 import math
 import os
@@ -85,8 +86,38 @@ def main():
     # araç yönü yoksa model eksenleri olduğu gibi (yatırılmaz)
     s0, _ = O.cizim_cercevesi(panel, None)
     k0 = O.kutu(s0)
-    dogru("araç yönü yokken model eksenleri: kalınlık X'te kalır",
-          abs((k0[3] - k0[0]) - 54) < 0.01, [round(v, 1) for v in k0])
+    dogru("araç yönü yokken de geniş düşey yüz ÖN'e döner: kalınlık Y'de",
+          abs((k0[4] - k0[1]) - 54) < 0.01 and abs((k0[3] - k0[0]) - 1365) < 0.01, [round(v, 1) for v in k0])
+
+    print("6) geniş yüz ÖN'e: yan kapak dıştan bakış, levha dikilmez")
+    arac = {"on": "-X", "ust": "+Z"}
+    merkez = [-1000.0, 0.0, 400.0]                      # montaj merkezi (model)
+    # önü -X olan aracın SAĞI model +Y'dir (sağ = ön x üst). Model -Y'deki
+    # kapak aracın SOL yanı: araç boyu X'te 1568, kalınlık 25
+    sol_kapak = kutu(-1800, -700, 100, 1568, 25, 700)
+    s6, R6 = O.cizim_cercevesi(sol_kapak, arac, merkez)
+    k6 = O.kutu(s6)
+    dogru("yan kapak: 1568'lik yüz ÖN'de (X), kalınlık Y'de",
+          abs((k6[3] - k6[0]) - 1568) < 0.01 and abs((k6[4] - k6[1]) - 25) < 0.01, [round(v, 1) for v in k6])
+    # dıştan bakış: okuyan aracın sol yanında durur, aracın önü (model -X) resmin SOLUNDA
+    on_ucu = [sum(R6[r][c] * v for c, v in enumerate((-1.0, 0.0, 0.0))) for r in range(3)]
+    dogru("sol kapak: araç önü resmin solunda (-X)", on_ucu[0] < -0.99, on_ucu)
+    sag_kapak = kutu(-1800, 675, 100, 1568, 25, 700)
+    s7, R7 = O.cizim_cercevesi(sag_kapak, arac, merkez)
+    on_ucu = [sum(R7[r][c] * v for c, v in enumerate((-1.0, 0.0, 0.0))) for r in range(3)]
+    dogru("sağ kapak: araç önü resmin sağında (+X)", on_ucu[0] > 0.99, on_ucu)
+    levha = kutu(-1800, -500, 100, 1600, 1000, 3)      # yatay taban sacı
+    s8, _ = O.cizim_cercevesi(levha, arac, merkez)
+    k8 = O.kutu(s8)
+    dogru("yatay levha dikilmez: kalınlık Z'de, uzun kenar X'te",
+          abs((k8[5] - k8[2]) - 3) < 0.01 and abs((k8[3] - k8[0]) - 1600) < 0.01, [round(v, 1) for v in k8])
+    gk = {"ON": (0, 0, 1600, 3), "UST": (0, 0, 1600, 1000), "SAG": (0, 0, 1000, 3)}
+    dogru("levhada ana görünüş ÜST (geniş yüz)", O.ana_gorunus(gk, {"delikler": [{"eksen": "Y", "adet": 4}]}) == "UST")
+    gk = {"ON": (0, 0, 1568, 700), "UST": (0, 0, 1568, 25), "SAG": (0, 0, 25, 700)}
+    dogru("kapakta ana görünüş ÖN (delikler X'te olsa da)", O.ana_gorunus(gk, {"delikler": [{"eksen": "X", "adet": 10}]}) == "ON")
+    mm = O.montaj_merkezi([("a", kutu(0, 0, 0, 100, 100, 100)), ("b", kutu(100, 0, 0, 200, 50, 50))],
+                          [{"sinif": "parca", "indeks": [0]}, {"sinif": "parca", "indeks": [1]}])
+    dogru("montaj merkezi", mm == [150.0, 50.0, 50.0], mm)
 
     print("4) araç yönü önerisi")
     kayit = [("a", kutu(-2000, -1500, 0, 100, 1400, 50)), ("b", kutu(-100, -1500, 0, 100, 1400, 50)),
@@ -103,7 +134,7 @@ def main():
 
     print("5) adlar ve ayar")
     O.ARAC_MODU["acik"] = True
-    dogru("araç modunda SAG anahtarı SOL yazar", O.gorunus_adi("SAG") == "SOL" and O.gorunus_adi("SOL") == "SAĞ")
+    dogru("araç modunda da ad bakış yönünden (Chevalier s.49): SAĞ", O.gorunus_adi("SAG") == "SAĞ" and O.gorunus_adi("SOL") == "SOL")
     O.ARAC_MODU["acik"] = False
     dogru("araç modu kapalı: SAĞ", O.gorunus_adi("SAG") == "SAĞ")
     a1 = IS.cizim_ayari({"gorunusler": ["ON"], "arac": {"on": "-X", "ust": "+Z"}})

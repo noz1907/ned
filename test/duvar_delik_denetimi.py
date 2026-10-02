@@ -52,20 +52,20 @@ def main():
     sh = kutu_profil()
     P = {"yogunluk": 2.7e-6, "en_az_delik": 1.0, "arac": None}
     s, o = O.komponent_olcu(sh, P)
-    print("1) duvar ayrımı")
+    print("1) duvar ayrımı (geniş yüz ÖN'e döndüğünden X duvarları çizimde Y duvarıdır)")
     x = {(d["eksen"], d.get("taraf")): d for d in o["delikler"]}
-    dogru("+X duvarı 2 delik (max)", ("X", "max") in x and x[("X", "max")]["adet"] == 2,
+    dogru("+X duvarı 2 delik -> çizimde -Y (min)", ("Y", "min") in x and x[("Y", "min")]["adet"] == 2,
           [(d["eksen"], d.get("taraf"), d["adet"]) for d in o["delikler"]])
-    dogru("-X duvarı 3 delik (min)", ("X", "min") in x and x[("X", "min")]["adet"] == 3)
+    dogru("-X duvarı 3 delik -> çizimde +Y (max)", ("Y", "max") in x and x[("Y", "max")]["adet"] == 3)
     dogru("boydan boya Z deliği 'orta'", ("Z", "orta") in x)
     print("2) ölçülenecek görünüş")
     gor = ("ON", "SAG", "SOL", "UST")
-    dogru("+X duvarı SAĞ'da", O.delik_gorunusu(x[("X", "max")], gor) == "SAG")
-    dogru("-X duvarı SOL'da", O.delik_gorunusu(x[("X", "min")], gor) == "SOL")
+    dogru("-Y duvarı ÖN'de", O.delik_gorunusu(x[("Y", "min")], gor) == "ON")
+    dogru("+Y duvarı ARKA'da", O.delik_gorunusu(x[("Y", "max")], gor + ("ARKA",)) == "ARKA")
     dogru("boydan boya ilk seçili (ÜST)", O.delik_gorunusu(x[("Z", "orta")], gor) == "UST")
     print("3) eksik görünüş eklenir")
-    dogru("SOL seçili değilse eklenir", O.gerekli_delik_gorunusleri(o, ("ON", "SAG", "UST")) == ["SOL"])
-    dogru("ikisi de seçiliyse ek yok", O.gerekli_delik_gorunusleri(o, gor) == [])
+    dogru("ARKA seçili değilse eklenir", O.gerekli_delik_gorunusleri(o, gor) == ["ARKA"])
+    dogru("ikisi de seçiliyse ek yok", O.gerekli_delik_gorunusleri(o, gor + ("ARKA",)) == [])
     print("4) simetri toleransı")
     import re
     src = open(os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "pf3_olcu.py"),

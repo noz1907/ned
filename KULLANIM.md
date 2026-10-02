@@ -1118,14 +1118,19 @@ malzemeyi görür, BOM'u yeniden çıkarmak gerekmez.
   en az delik çapı (bunun altındaki silindirler delik değil radüs sayılır).
 * **Araç yönü (Çizim kutusunda):** parça **kullanım (araç) yönünde**
   çizilir, yatırılmaz, çevrilmez: üstü üstte, önü önde. "Aracın önü"
-  hangi eksendeyse (`-X`, `+X`, `-Y`, `+Y`) ÖN görünüş oradan bakar, ÜST
-  üstten; **SAĞ / SOL aracın kendi sağı / soludur** (sürücü yönü; ÖN
-  görünüşte araç size baktığı için aracın sağı resmin solunda kalır,
-  yerleşim yine 1. açı). `oto`: program parça adlarından (ÖN / ARKA,
-  SAĞ / SOL) öneri verir ve kutuya yazar; `yok`: model eksenleri olduğu
-  gibi. Seçim çıktı klasörüne kaydedilir. Eğik duran parça en yakın
-  eksene **en küçük açıyla** oturtulur; ana görünüş parçanın **uzun-geniş
-  yüzünü** gösteren bakıştır (dik panelde ÖN, yatay plakada ÜST).
+  hangi eksendeyse (`-X`, `+X`, `-Y`, `+Y`) araç o yöne bakar, ÜST
+  üstten. **ÖN görünüş = parçanın uzun-geniş düşey yüzü** (Chevalier
+  s.49; "dar kenarlar çok nadiren ön görünüştür"): parça yalnız düşey
+  eksen etrafında döndürülür, üstü üstte kalır; yan kapak gibi parçada
+  okuyan aracın dışından bakar (yan kapakta araç önü sağ kapakta sağda,
+  sol kapakta solda). Yatay geniş yüz (levha, taban sacı) dikilmez; ana
+  görünüş ÜST olur. **Görünüş adları bakış yönündendir:** ÖN'e göre
+  sağdan bakış SAĞ (ÖN'ün soluna konur), soldan bakış SOL (sağına),
+  üstten ÜST (altına), ARKA uca; araç modunda da değişmez. `oto`:
+  program parça adlarından (ÖN / ARKA, SAĞ / SOL) öneri verir ve kutuya
+  yazar; `yok`: araç yönü yok (yine geniş yüz ÖN'e döner). Seçim çıktı
+  klasörüne kaydedilir. Eğik duran parça en yakın eksene **en küçük
+  açıyla** oturtulur.
 * **İstisna – parça / ana görünüş:** bir parçanın ana görünüşünü elle
   seçersiniz (ÖN / ARKA / SAĞ / SOL / ÜST / ALT); *Kaydet* ile klasör
   ayarında saklanır, o parça yeniden üretilince uygulanır.
@@ -2340,13 +2345,16 @@ başlıkta yazar.
 **Ölçülendirme kuralları** (ayrıntı ve gerekçe: `CLAUDE.md`):
 
 - **Parça kullanım (araç) yönünde çizilir, döndürülmez:** araçta nasıl
-  duruyorsa öyle; üstü üstte, önü önde. Araç yönü ayarı (3. adım) model
-  eksenlerini ÖN / SAĞ / ÜST'e çevirir; SAĞ / SOL aracın kendi yanıdır.
-  Eğik parça en yakın eksene en küçük açıyla oturtulur. Ana görünüş
-  uzun-geniş yüzdür; istisna parça başına elle verilir.
+  duruyorsa öyle; üstü üstte. Araç yönü ayarı (3. adım) model
+  eksenlerini araç çerçevesine çevirir; ÖN görünüş parçanın uzun-geniş
+  düşey yüzüdür (parça yalnız düşey eksen etrafında döner, okuyan aracın
+  dışından bakar; yatay levha dikilmez, ana görünüş ÜST). Görünüş adları
+  bakış yönünden (Chevalier s.49): sağdan bakış SAĞ, ÖN'ün soluna.
+  Eğik parça en yakın eksene en küçük açıyla oturtulur; istisna parça
+  başına elle verilir.
 - **Tek duvar delikleri (kapak, kutu profil, ekstrüzyon):** delik yalnız
   bir duvardaysa, duvarının göründüğü görünüşte düz çizgiyle çizilir ve
-  orada ölçülenir (dış duvar SOL, iç duvar SAĞ; Y yönünde ÖN / ARKA).
+  orada ölçülenir (yan kapakta dış duvar ÖN, iç duvar ARKA).
   Gereken görünüş seçili değilse program ekler. Böylece hangi deliğin
   hangi yüzde olduğu resimden okunur; öbür görünüşte yalnız merkez
   işareti kalır.
@@ -2380,9 +2388,12 @@ başlıkta yazar.
   doldurur, antet boş kalır.
 - **Ana resim büyük kalır, PDF çok sayfalı olabilir:** detay görünüşleri
   1. sayfada ana resmi küçültüyorsa aynı PDF'in 2. sayfasına
-  ("DETAYLAR") gider; tek sayfada yazı 1,2 mm'nin altında kalıyorsa ve
-  ana görünüş tek başına en az 1,3 kat büyüyorsa yan görünüşler de 2.
-  sayfaya alınır. Bilgi bloğu (parça adı, malzeme) hep 1. sayfadadır.
+  ("DETAYLAR") gider. 1. sayfa dağılmaz: ÖN + bir yan (SAĞ ya da SOL)
+  + bir üst / alt + kesit hep birlikte izdüşüm düzeninde kalır; yalnız
+  ekstra görünüşler (ARKA, ikinci yan, ikinci üst / alt) tek sayfada
+  yazı 1,2 mm'nin altında kalıyorsa ve ana resim en az 1,3 kat
+  büyüyorsa 2. sayfaya alınır; orada tek sırada, aynı hizada dururlar,
+  detaylar altlarına. Bilgi bloğu (parça adı, malzeme) hep 1. sayfadadır.
   2. sayfanın başlığında kendi ölçeği yazar; detay büyütmeleri (`2:1`)
   ayrıca detay adında. DXF'te sayfalar `PAFTA`, `PAFTA_2` … sekmeleridir.
 

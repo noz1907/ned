@@ -465,6 +465,26 @@ try:
     pdf3 = P.bas(cik3, os.path.join(kl, "antetli.pdf"), dpi=72)
     dogru("antetli PDF üretildi", os.path.getsize(pdf3) > 5000)
 
+    print("\n-- 2. sayfaya yalnız ekstra görünüş; orada tek sıra, aynı hiza")
+    al_ = {"ON": (0, 0, 100, 50), "SAG": (-40, 0, -10, 50), "SOL": (120, 0, 150, 50),
+           "UST": (0, -40, 100, -10), "ARKA": (170, 0, 270, 50), "A-A KESIT": (300, 0, 330, 50)}
+    esit("ekstra = ARKA + SOL (SAĞ, ÜST, kesit çekirdek)",
+         P._ekstra_gorunusler(al_, "ON"), ("SOL", "ARKA"))
+    esit("yan yoksa ekstra yalnız ARKA",
+         P._ekstra_gorunusler({"ON": al_["ON"], "SAG": al_["SAG"], "ARKA": al_["ARKA"]}, "ON"), ("ARKA",))
+    esit("ana ÜST ise ALT ekstra",
+         P._ekstra_gorunusler({"ON": al_["ON"], "UST": al_["UST"], "ALT": (0, 60, 100, 90)}, "UST"), ("ALT",))
+    ic_ = (10.0, 10.0, 400.0, 270.0); ant_ = (250.0, 10.0, 400.0, 110.0)
+    sira = P._gorunus_sirasi_yerlestir({"SOL": (120, 5, 150, 55), "ARKA": (170, 0, 270, 50)}, 1.0, ic_, ant_)
+    dogru("sıra kuruldu", sira is not None and set(sira) == {"SOL", "ARKA"}, sira)
+    if sira:
+        dogru("resimdeki hiza korundu (SOL 5 mm yukarıda)",
+              abs((sira["SOL"][1] - sira["ARKA"][1]) - 5.0) < 1e-6, sira)
+        dogru("soldan sağa resimdeki sırayla, ARA_EN_AZ aralıkla",
+              abs(sira["ARKA"][0] - (sira["SOL"][0] + 30 + P.ARA_EN_AZ)) < 1e-6, sira)
+        dogru("üst kenara yaslı", abs(sira["SOL"][1] + 50 - ic_[3]) < 1e-6, sira)
+    dogru("sığmayan sıra None", P._gorunus_sirasi_yerlestir({"ARKA": (0, 0, 1000, 50)}, 1.0, ic_, ant_) is None)
+
     print("\n-- resim no ve ismi sağ üst köşede")
     cik2 = os.path.join(kl, "CIK", "nolu.dxf")
     P.pafta_kur(os.path.join(kl, "kucuk.dxf"), cik2, "A3",

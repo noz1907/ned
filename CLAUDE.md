@@ -161,12 +161,22 @@ DXF'te yazı boyunun katı olarak uygulanır):
     çizim çerçevesine çevirir (`arac_cercevesi`, `cizim_cercevesi`);
     `hizali_kati` (en büyük yüzü yatıran eski hizalama) çizimde
     KULLANILMAZ, yalnız BOM gabarisi içindir. Eğik parça en yakın eksene
-    en küçük açıyla (`eksene_oturt`, 3°). ÖN = aracın önünden bakış;
-    SAĞ / SOL = aracın kendi yanı (`gorunus_adi`, yerleşim 1. açı).
-    **Ana görünüş = uzun-geniş yüzü gösteren bakış** (`ana_gorunus`);
-    istisna parça başına elle (`parca_ayar[kod]["ana_gorunus"]`). "En çok
-    bilgi veren yüzü öne çevirme" YAPILMAZ. Görünüş seçimi: bilgi
-    eklemeyen görünüş çizilmez, SAĞ = SOL / ÜST = ALT ise biri.
+    en küçük açıyla (`eksene_oturt`, 3°).
+    **ÖN GÖRÜNÜŞ = UZUN-GENİŞ DÜŞEY YÜZ** (ANAYASA Chevalier s.49, A "vue
+    de face"; kullanıcı: "dar kenarlar çok nadiren ön görünüştür"): parça
+    yalnız DÜŞEY eksen etrafında 90° döndürülür (`on_yuz_dondurme`,
+    üstü üstte kalır, yatırılmaz, dikilmez); okuyan aracın DIŞINDAN
+    bakar (montaj merkezine göre, `montaj_merkezi`). Yatay geniş yüz
+    (levha, taban) dikilmez: ana görünüş ÜST olur (`ana_gorunus` = en
+    büyük alan; delik / slot yalnız %5 içinde eşit alanlarda karar
+    verdirir). İstisna parça başına elle (`parca_ayar[kod]["ana_gorunus"]`).
+    **Görünüş adları ANAYASA'dan (Chevalier s.49):** ad, ÖN görünüşe göre
+    BAKIŞ YÖNÜNDEN gelir - sağdan bakış SAĞ (ÖN'ün soluna), soldan bakış
+    SOL (sağına), üstten ÜST (altına), alttan ALT (üstüne), ARKA uca
+    (1. açı). Araç modunda da takas yok (aracın kendi yanına göre
+    adlandırma denendi, kaldırıldı). "En çok bilgi veren yüzü öne
+    çevirme" (yatırma) YAPILMAZ. Görünüş seçimi: bilgi eklemeyen görünüş
+    çizilmez, SAĞ = SOL / ÜST = ALT ise biri.
 18. Perspektif üzerine ölçü verilmez.
 19. **GENEL KURAL (kullanıcı): tek yönden görünüp öbür yönden görünmeyen
     delik, slot ya da parça için ek detay resmi ya da komple görünüş
@@ -186,9 +196,15 @@ DXF'te yazı boyunun katı olarak uygulanır):
   düşürüyorsa 2. SAYFAYA ("DETAYLAR", aynı PDF'in sonraki sayfası, kendi
   ölçeğinde) gider; gerekirse daha çok sayfa. Karınca duası yerine çok
   sayfa (kullanıcı: "gerekirse aynı kaynak gibi birden fazla sayfa").
-  Tek sayfada en küçük yazı 1,2 mm'nin altında kalıyorsa ve ana görünüş
-  tek başına en az 1,3 kat büyüyorsa yan görünüşler de 2. sayfaya
-  gider; bilgi bloğu (parça adı, malzeme) hep 1. sayfada, ızgara dışında.
+  1. SAYFA DAĞILMAZ (kullanıcı: "böyle dağınık çizim yapılmaz: ön, sağ
+  ya da sol, alt yaparsın; ekstra arka ve detaylar yaparsın"): ÖN + bir
+  yan (SAĞ, yoksa SOL) + bir üst / alt + kesit hep 1. sayfada izdüşüm
+  düzeninde kalır. Yalnız EKSTRA görünüşler (ARKA, ikinci yan, ikinci
+  üst / alt; `_ekstra_gorunusler`) tek sayfada yazı 1,2 mm'nin altında
+  kalıyorsa ve çekirdek en az 1,3 kat büyüyorsa 2. sayfaya gider; 2.
+  sayfadaki görünüşler TEK SIRADA, resimdeki hizada durur
+  (`_gorunus_sirasi_yerlestir`), detaylar altına. Bilgi bloğu (parça
+  adı, malzeme) hep 1. sayfada, ızgara dışında.
 - Çizim kâğıdın yaklaşık %70-75'ini doldurur; ölçek serbest ve ara
   değerde olabilir (1:12, 1:14, 1:17 ...). Standart 1-2-5 serisine
   zorlanmaz.

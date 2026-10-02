@@ -1017,6 +1017,53 @@ def tam_kagit_plani(d, kutu, kagit=VARSAYILAN_KAGIT, sablon=None, serbest_sayfa2
     return None
 
 
+def _ekstra_gorunusler(al_, ana):
+    """2. sayfaya alınabilecek EKSTRA görünüşler. 1. sayfada kalan çekirdek:
+    ana görünüş, ÖN, bir yan (SAĞ varsa SAĞ, yoksa SOL), bir üst / alt
+    (ÜST varsa ÜST, yoksa ALT) ve kesit. Geri kalan (ARKA, ikinci yan,
+    ikinci üst / alt) ekstradır; sırası resimdeki (soldan sağa)."""
+    cekirdek = {ana, "ON"}
+    for cift in (("SAG", "SOL"), ("UST", "ALT")):
+        if not cekirdek & set(cift):
+            for g in cift:
+                if g in al_:
+                    cekirdek.add(g)
+                    break
+    for a in al_:
+        if "KESIT" in str(a).upper():
+            cekirdek.add(a)
+    return tuple(sorted((a for a in al_ if a not in cekirdek), key=lambda a: al_[a][0]))
+
+
+def _gorunus_sirasi_yerlestir(gor, o, ic, ant):
+    """2. sayfadaki GÖRÜNÜŞLER (ARKA, ikinci yan ...) TEK SIRADA, resimdeki
+    hizada: resimde aynı satırdaysa kâğıtta da aynı düzeyde durur
+    (kullanıcı: "arka ve sağ aynı düzeyde olmalılar"). Sıra kâğıdın sol
+    üstünden başlar, görünüşler resimdeki soldan sağa sırayla ARA_EN_AZ
+    aralıkla; antete değmez. Döner: {ad: (sol, alt)} ya da None (sığmadı)."""
+    if not gor:
+        return {}
+    y0 = min(c[1] for c in gor.values())
+    y1 = max(c[3] for c in gor.values())
+    boy = (y1 - y0) * o
+    sira = sorted(gor, key=lambda a: gor[a][0])
+    gen = sum((gor[a][2] - gor[a][0]) * o for a in sira) + (len(sira) - 1) * ARA_EN_AZ
+    if gen > ic[2] - ic[0] + 1e-6 or boy > ic[3] - ic[1] + 1e-6:
+        return None
+    out, x = {}, ic[0]
+    ust = ic[3]
+    for a in sira:
+        c = gor[a]
+        w, hh = (c[2] - c[0]) * o, (c[3] - c[1]) * o
+        alt = ust - boy + (c[1] - y0) * o
+        k = (x, alt, x + w, alt + hh)
+        if k[0] < ant[2] and k[2] > ant[0] and k[1] < ant[3] and k[3] > ant[1]:
+            return None
+        out[a] = (x, alt)
+        x += w + ARA_EN_AZ
+    return out
+
+
 def _serbest_yerlestir(plan, dolu, ic, ant, adim=4.0):
     """Serbest pencereleri (detaylar) kâğıdın BOŞ yerine koyar: çerçevenin
     içinde, antete ve dolu pencerelere (görünüşler, başlık) ARA_EN_AZ
@@ -1078,12 +1125,19 @@ def _detay_sayfalari(d, pafta_adi, kagit, detaylar, no, resim_adi, sablon, deger
     while kalan and n < 12:
         # bu sayfaya sığan en büyük ölçek; sığmayanlar sonraki sayfaya
         secim, yerler, olcek = {}, {}, None
+        gor2 = {a: c for a, c in kalan.items() if not _serbest_mi(a)}
+        det2 = {a: c for a, c in kalan.items() if _serbest_mi(a)}
         for k in KUCULTME:
             o = 1.0 / k
-            plan = {"olcek": o, "serbest": kalan}
-            sy = _serbest_yerlestir(plan, [], ic, ant)
+            # önce görünüşler tek sırada, aynı hizada; detaylar altına
+            gy = _gorunus_sirasi_yerlestir(gor2, o, ic, ant)
+            if gy is None:
+                continue
+            dolu = [(x, y, x + (gor2[a][2] - gor2[a][0]) * o, y + (gor2[a][3] - gor2[a][1]) * o)
+                    for a, (x, y) in gy.items()]
+            sy = _serbest_yerlestir({"olcek": o, "serbest": det2}, dolu, ic, ant)
             if sy is not None:
-                secim, yerler, olcek = dict(kalan), sy, o
+                secim, yerler, olcek = dict(kalan), dict(gy, **sy), o
                 break
         if not secim:
             # en büyüğü bile hiçbir ölçekte tek sayfaya sığmıyor: teker teker
@@ -1470,11 +1524,16 @@ def pafta_kur(kaynak_dxf, cikti_dxf=None, kagit=VARSAYILAN_KAGIT, olcek=None,
             al_ = {a: b for a, b in gorunus_alanlari(d).items()
                    if a not in (BASLIK_AD, BILGI_AD) and not _serbest_mi(a)}
             yz_tek = (en_kucuk_yazi(kaynak_dxf) * yon_en["olcek"]) if yon_en else 0.0
+            # Yalnız EKSTRA görünüşler gider (kullanıcı: "böyle dağınık çizim
+            # yapılmaz: ön, sağ ya da sol, alt yaparsın; ekstra arka ve
+            # detaylar yaparsın"): ÖN + bir yan + bir üst/alt 1. sayfada
+            # izdüşüm düzeninde kalır; ARKA, ikinci yan, ikinci üst/alt
+            # 2. sayfaya alınabilir.
             if len(al_) >= 2 and (yon_en is None or yz_tek < SAYFA_AYIR_YAZI_MM):
                 ana = max(al_, key=lambda a: (al_[a][2] - al_[a][0]) * (al_[a][3] - al_[a][1]))
-                digerleri = tuple(a for a in al_ if a != ana)
-                tp3 = tam_kagit_plani(d, (x0, y0, x1, y1), kg_ad, sablon, serbest_sayfa2=True,
-                                      sayfa2_gorunus=digerleri)
+                digerleri = _ekstra_gorunusler(al_, ana)
+                tp3 = (tam_kagit_plani(d, (x0, y0, x1, y1), kg_ad, sablon, serbest_sayfa2=True,
+                                       sayfa2_gorunus=digerleri) if digerleri else None)
                 if tp3 and (yon_en is None
                             or tp3["olcek"] > yon_en["olcek"] * SAYFA_AYIR_ORAN + 1e-12):
                     yon_en = tp3

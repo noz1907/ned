@@ -1,6 +1,6 @@
 Pi3D  –  3B modelden parça listesi ve teknik resim
 
-Sürüm   : v1.0.14  (02.10.2026)
+Sürüm   : v1.0.15  (02.10.2026)
 Kaynak  : github.com/noz1907/ned   dal: claude/fikstur-parca-stp-57hwc1
 
 KURULUM
@@ -155,6 +155,28 @@ BU SÜRÜMDE NE VAR
     - kırmızı yalnız kaynağın kendisi (uzun sac kenarı artık kırmızı
       değil); kaynak ekseni ince mavi kesikli.
 
+  v1.0.15: ÖN GÖRÜNÜŞ = UZUN-GENİŞ DÜŞEY YÜZ, görünüş adları ANAYASA'dan
+    (Chevalier s.49; kullanıcı: "dar kenarlar çok nadiren ön görünüştür"):
+    - Parça yalnız düşey eksen etrafında 90° döndürülür (üstü üstte
+      kalır, yatırılmaz, dikilmez): geniş düşey yüz ÖN görünüş olur; okuyan
+      aracın dışından bakar (montaj merkezine göre: sağ kapakta araç önü
+      sağda, sol kapakta solda). Yatay geniş yüz (levha, taban) dikilmez,
+      ana görünüş ÜST kalır. Karluna yan kapak: 1568'lik yüz artık ÖN
+      (eskiden 66'lık dar uç ÖN, geniş yüz "SAĞ" idi).
+    - Görünüş adları bakış yönünden: sağdan bakış SAĞ (ÖN'ün soluna),
+      soldan bakış SOL (sağına), üstten ÜST (altına), ARKA uca. Araç
+      modundaki SAĞ / SOL takası kaldırıldı.
+    - Ana görünüş = en büyük alan; delik sayısı yalnız eşit alanlarda.
+    - Model gürültüsü (0,05 mm içinde iki delik sırası) aynı dizi
+      ölçüsünü iki kez yazdırmaz, "MODEL KONTROL" uyarısı çıkarmaz.
+    - PAFTA: 1. sayfa dağılmaz - ÖN + bir yan + bir üst / alt + kesit
+      birlikte kalır; yalnız ekstra görünüşler (ARKA, ikinci yan ...) 2.
+      sayfaya gider ve orada tek sırada, aynı hizada durur (kullanıcı:
+      "arka ve sağ aynı düzeyde olmalı; ön, sağ ya da sol, alt yaparsın,
+      ekstra arka ve detaylar yaparsın"). Yan kapak: 1. sayfa ÖN + SAĞ +
+      ÜST 1:7, 2. sayfa ARKA 1:6.
+    - test/arac_yonu_denetimi.py (6. bölüm), test/duvar_delik_denetimi.py,
+      test/pafta_denetimi.py (ekstra görünüş + sıra).
   v1.0.14: TEK DUVAR DELİKLERİ (kapaklar) + simetri toleransı
     (kullanıcı: "kapaklarda delik bir yönde var, diğer yönde yok; deliğin
     diğer yüzde olduğu görülmeli ya da görünüm eklenmeli - görünüm ekleme

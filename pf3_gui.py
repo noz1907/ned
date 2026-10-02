@@ -1097,7 +1097,7 @@ class Uygulama(ttk.Frame):
         # --- ARAÇ YÖNÜ: parça KULLANIM yönünde çizilir (yatırılmaz, çevrilmez).
         # Kullanıcı: "araç yönü bizim için önemli; ön panel baş aşağı
         # konulmuş". Aracın önü hangi eksendeyse ÖN görünüş oradan bakar,
-        # ÜST üstten; SAĞ / SOL aracın kendi yanıdır. Küçük ekrana sığsın
+        # ÜST üstten; geniş yüz ÖN'e döner (Chevalier). Küçük ekrana sığsın
         # diye "Çizim" kutusunun içinde durur.
         ttk.Label(sf, text="aracın önü / üstü").grid(row=3, column=0, sticky="w", pady=(4, 0))
         ar_ = ttk.Frame(sf); ar_.grid(row=3, column=1, sticky="w", pady=(4, 0))
@@ -2643,17 +2643,14 @@ class Uygulama(ttk.Frame):
                        "ÜST": "UST", "ALT": "ALT"}
 
     def _parca_ayar_p(self):
-        """Parça istisnaları motor diline: ad -> görünüş anahtarı. Araç
-        modunda SAĞ / SOL adı aracın yanıdır; anahtar takaslı (gorunus_adi)."""
+        """Parça istisnaları motor diline: ad -> görünüş anahtarı (adlar
+        bakış yönünden, Chevalier s.49; araç modunda takas yok)."""
         out = {}
-        arac = self._arac() is not None
         for kod, a in (self.parca_ayar or {}).items():
             ad = str((a or {}).get("ana_gorunus_ad") or "").upper()
             key = self._GOR_AD_ANAHTAR.get(ad)
             if not key:
                 continue
-            if arac and key in ("SAG", "SOL"):
-                key = "SOL" if key == "SAG" else "SAG"
             out[kod] = {"ana_gorunus": key}
         return out
 
@@ -3889,7 +3886,7 @@ class Uygulama(ttk.Frame):
         n = sum(1 for v in self.v_gor.values() if v.get())
         self.v_gor_bilgi.set(f"{n} görünüş seçili (en çok 4). Yerleşim 1. açı "
                              f"(Avrupa): bakılan yanın karşısına; ÜST alta, ALT üste. "
-                             "Araç modunda SAĞ / SOL aracın kendi yanıdır.")
+                             "Adlar bakış yönünden (Chevalier s.49).")
 
     def ornek_uret(self):
         if not self.komp:

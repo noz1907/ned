@@ -877,9 +877,12 @@ ARAC_EKSEN = {"+X": (1.0, 0.0, 0.0), "-X": (-1.0, 0.0, 0.0),
               "+Y": (0.0, 1.0, 0.0), "-Y": (0.0, -1.0, 0.0),
               "+Z": (0.0, 0.0, 1.0), "-Z": (0.0, 0.0, -1.0)}
 BIRIM3 = [[1.0, 0.0, 0.0], [0.0, 1.0, 0.0], [0.0, 0.0, 1.0]]
-# Çizim sırasında açık: SAĞ / SOL görünüş adları aracın kendi yönüne göre
-# (dxf_komponent / calistir kurar; bkz. gorunus_adi).
+# Çizim sırasında açık (dxf_komponent / calistir kurar). Görünüş adları
+# araç modunda da ANAYASA'daki gibidir (bkz. gorunus_adi).
 ARAC_MODU = {"acik": False}
+# Düşey eksen etrafında döndürme: geniş düşey yüz ÖN'e (bkz. cizim_cercevesi)
+DONDUR_Z = {"+X": [[0.0, 1.0, 0.0], [-1.0, 0.0, 0.0], [0.0, 0.0, 1.0]],   # göz +X'ten -> ÖN
+            "-X": [[0.0, -1.0, 0.0], [1.0, 0.0, 0.0], [0.0, 0.0, 1.0]]}   # göz -X'ten -> ÖN
 EKSEN_TOL_DERECE = 3.0      # bu kadar sapma "eksende" sayılır, döndürülmez
 
 
@@ -944,19 +947,67 @@ def eksene_oturt(sh, tol=EKSEN_TOL_DERECE):
             for i in range(3)]
 
 
-def cizim_cercevesi(sh, arac=None):
+def on_yuz_dondurme(k, merkez=None):
+    """ÖN GÖRÜNÜŞ = UZUN-GENİŞ DÜŞEY YÜZ (ANAYASA, Chevalier s.49: A "vue
+    de face" parçayı en iyi anlatan yüzdür; kullanıcı: "dar kenarlar çok
+    nadiren ön görünüştür"). Parça yalnız DÜŞEY eksen etrafında 90°
+    döndürülür: üstü üstte kalır, yatırılmaz, dikilmez (yatay geniş yüz
+    ÜST görünüşte ana görünüş olur). Yan yüz (YZ) ön yüzden (XZ) genişse
+    yan yüz ÖN'e çevrilir; okuyan aracın DIŞINDAN bakar: parça montaj
+    merkezinin sağındaysa (-X) sağdan, solundaysa soldan; merkez
+    bilinmiyorsa +X'ten (araç önü solda). k: çizim çerçevesindeki kutu,
+    merkez: montaj merkezi (aynı çerçeve). Döner: 3x3 R ya da BIRIM3."""
+    L, W = k[3] - k[0], k[4] - k[1]
+    if W <= L * 1.02:
+        return BIRIM3
+    goz = "+X"
+    if merkez is not None:
+        px = (k[0] + k[3]) / 2
+        if px < merkez[0] - 1e-6:
+            goz = "-X"
+    return DONDUR_Z[goz]
+
+
+def cizim_cercevesi(sh, arac=None, montaj_merkez=None):
     """Parçayı ÇİZİM çerçevesine alır ve orijine taşır: önce araç yönü
     (model -> ÖN / SAĞ / ÜST), sonra eğik parça en yakın eksene en küçük
-    açıyla. Parça yatırılmaz, ters çevrilmez: modelde (araçta) nasıl
-    duruyorsa öyle. Döner: (katı, toplam döndürme R)."""
+    açıyla, sonra geniş düşey yüz ÖN'e (düşey eksen etrafında, bkz.
+    on_yuz_dondurme). Parça yatırılmaz, ters çevrilmez: modelde (araçta)
+    nasıl duruyorsa öyle, üstü üstte. montaj_merkez: montajın merkezi
+    (MODEL çerçevesi; dıştan bakış için). Döner: (katı, toplam döndürme R)."""
     Ra = arac_cercevesi(arac)
     s1 = donustur(sh, Ra) if Ra else sh
     R2 = eksene_oturt(s1)
     s2 = donustur(s1, R2) if R2 is not BIRIM3 else s1
+    R = _mat_carp(R2, Ra) if Ra else R2
+    m = None
+    if montaj_merkez is not None:
+        m = [sum(R[r][c] * montaj_merkez[c] for c in range(3)) for r in range(3)]
+    R3 = on_yuz_dondurme(kutu(s2), m)
+    if R3 is not BIRIM3:
+        s2 = donustur(s2, R3)
+        R = _mat_carp(R3, R)
     k = kutu(s2)
     s3 = donustur(s2, BIRIM3, (-k[0], -k[1], -k[2]))
-    R = _mat_carp(R2, Ra) if Ra else R2
     return s3, R
+
+
+def montaj_merkezi(kayit, komp):
+    """Montajın (parça + standart) kutu merkezi, model çerçevesinde; dıştan
+    bakış kararı için (bkz. on_yuz_dondurme). Kanıt yoksa None."""
+    G = [1e18, 1e18, 1e18, -1e18, -1e18, -1e18]
+    for k in komp or []:
+        if k.get("sinif") not in ("parca", "standart"):
+            continue
+        try:
+            b = kutu(kayit[k["indeks"][0]][1])
+        except Exception:
+            continue
+        G = [min(G[0], b[0]), min(G[1], b[1]), min(G[2], b[2]),
+             max(G[3], b[3]), max(G[4], b[4]), max(G[5], b[5])]
+    if G[0] > G[3]:
+        return None
+    return [(G[i] + G[i + 3]) / 2 for i in range(3)]
 
 
 def arac_yonu_oner(kayit, komp):
@@ -1403,7 +1454,7 @@ def komponent_olcu(sh, P):
     # ÇİZİM çerçevesi: parça kullanım (araç) yönünde, yatırılmaz. BOM
     # gabarisi (boy x en x kalınlık) ise parçanın KENDİ eksenlerinden:
     # dik duran 1365 x 787 x 54 panel BOM'da yine öyle yazılır.
-    s, R = cizim_cercevesi(sh, (P or {}).get("arac"))
+    s, R = cizim_cercevesi(sh, (P or {}).get("arac"), (P or {}).get("montaj_merkez"))
     k = kutu(s)
     try:
         kk = kutu(hizali_kati(sh)[0])
@@ -1478,13 +1529,12 @@ GORUNUS_AD = {"ON": "ÖN", "ARKA": "ARKA", "SAG": "SAĞ", "SOL": "SOL",
 
 
 def gorunus_adi(ad):
-    """Görünüşün resimdeki adı. ARAÇ MODUNDA SAĞ / SOL aracın kendi
-    yönüdür: ÖN görünüşte araç okuyana baktığı için aracın sağı resmin
-    solunda kalır; +X'ten bakan görünüş (SAG anahtarı) aracın SOL
-    yanını gösterir, adı da SOL yazılır. Yerleşim değişmez (1. açı:
-    görünüş, bakılan yanın karşısına)."""
-    if ARAC_MODU.get("acik") and ad in ("SAG", "SOL"):
-        return "SOL" if ad == "SAG" else "SAĞ"
+    """Görünüşün resimdeki adı. ANAYASA (Chevalier s.49): ad, ÖN görünüşe
+    (A, vue de face) göre BAKIŞ YÖNÜNDEN gelir - sağdan bakış SAĞ (C, sola
+    konur), soldan bakış SOL (D, sağa), üstten ÜST (B, alta), alttan ALT
+    (E, üste), arkadan ARKA (F, uca). Araç modunda da değişmez (aracın
+    kendi yanına göre SAĞ / SOL takası denendi, kitaba aykırıydı,
+    kaldırıldı); aracın hangi yanı olduğu araç yönü ayarından bellidir."""
     return GORUNUS_AD.get(ad, ad)
 GORUNUS_SIRA = ("ON", "ARKA", "SAG", "SOL", "UST", "ALT")
 SON_RAPOR = {}          # son dxf_komponent'in atladıkları (gabari_yok 0 olmalı)
@@ -4327,16 +4377,27 @@ def konum_plani(o, gorunusler, ham, h, kenarlar=None, tol=0.05,
                                           max(q[0] for q in z["grup"]), max(q[1] for q in z["grup"]))})
             # Aynı ölçüyü iki kez yazma.
             gor, temiz = {}, []
+
+            def ayni_olcu(r):
+                """Aynı (a, b) aralığı (0,05 mm içinde) daha önce alındı mı?
+                Model gürültüsü (152,512 / 152,500'deki iki sıra) aynı
+                "2 x 750" dizisini iki kez yazdırmasın."""
+                for k, q in gor.items():
+                    if abs(k[0] - r["a"]) <= 0.05 and abs(k[1] - r["b"]) <= 0.05 \
+                            and (q.get("metin") or "") == (r.get("metin") or ""):
+                        return q
+                return None
             for r in ara:
                 if r["a"] > r["b"]:   # çizim a<b bekler; ölçünün değeri aynı
                     r["a"], r["b"] = r["b"], r["a"]
                 k = (round(r["a"], 2), round(r["b"], 2))
-                if k not in gor:
+                es = gor.get(k) or ayni_olcu(r)
+                if es is None:
                     gor[k] = r
                     r["seviye"] = 1
                     temiz.append(r)
                 else:                  # aynı konumdaki özellikler birleşir
-                    gor[k].setdefault("dik", []).extend(r.get("dik") or [])
+                    es.setdefault("dik", []).extend(r.get("dik") or [])
             # AYNI HİZA SAYILAN SEVİYELER: modelde 104,2 / 104,3 / 104,5 /
             # 104,6'da dört delik (çizim gürültüsü) dört ayrı ölçü değil,
             # tek sıradır. YAKIN_SEVIYE_MM içindeki datum ölçüleri birleşir:
@@ -4359,10 +4420,14 @@ def konum_plani(o, gorunusler, ham, h, kenarlar=None, tol=0.05,
                             continue
                         kal.setdefault("dik", []).extend(r.get("dik") or [])
                         temiz.remove(r)
-                    PLAN_UYARI.append(
-                        f"{gorunus_adi(gad)} {'düşey' if ad == 'dusey' else ad} "
-                        f"{_sayi(grup[0]['deger'])}..{_sayi(grup[-1]['deger'])} arası "
-                        f"{len(grup)} özellik aynı hizada sayıldı ({_sayi(kal['deger'])})")
+                    # 0,05 mm içindeki fark model gürültüsüdür (152,512 /
+                    # 152,500), uyarı gerektirmez; ters yönlü görünüşte
+                    # (ARKA, SOL) değer eksi çıkar, uyarıda mutlak yazılır.
+                    if grup[-1]["deger"] - grup[0]["deger"] > 0.05:
+                        PLAN_UYARI.append(
+                            f"{gorunus_adi(gad)} {'düşey' if ad == 'dusey' else ad} "
+                            f"{_sayi(abs(grup[0]['deger']))}..{_sayi(abs(grup[-1]['deger']))} arası "
+                            f"{len(grup)} özellik aynı hizada sayıldı ({_sayi(abs(kal['deger']))})")
                 i = j
             # Datumdan ölçüde KISA olan içeride durur (ISO 129-1):
             # ölçü çizgileri kesişmesin.
@@ -6924,9 +6989,12 @@ def ayna_ayni(ka, kb, boy, oran=0.97):
 
 
 def ana_gorunus(gkutu, o):
-    """ANA görünüş: parça döndürülmediği için ÖN olmak zorunda değil - en çok
-    bilgi veren görünüş (bkz. _gorunus_puani: alan + o yönden daire görünen
-    delik / slot). Eşitlikte ÖN."""
+    """ANA görünüş = UZUN-GENİŞ YÜZÜ gösteren bakış (kullanıcı: "uzun geniş
+    hangi yönse ön görünüş o olmalı; dar kenarlar çok nadiren ön
+    görünüştür"). Geniş düşey yüz zaten ÖN'e çevrildiğinden (bkz.
+    on_yuz_dondurme) ÖN kazanır; yalnız yatay geniş yüz (levha, taban
+    sacı; parça dikilmez) ÜST'ü ana yapar. Delik / slot yalnız alanı
+    yaklaşık eşit (%5 içinde) görünüşler arasında karar verdirir."""
     puan = [0.0, 0.0, 0.0]
     try:
         alan = {}
@@ -6943,7 +7011,10 @@ def ana_gorunus(gkutu, o):
                 oz["XYZ".index(sl["eksen"])] += 2
         top = max(1, sum(oz))
         en_alan = max(alan.values()) if alan else 1.0
-        puan = [alan.get(i, 0.0) / max(en_alan, 1e-9) + 0.6 * oz[i] / top for i in range(3)]
+        puan = [alan.get(i, 0.0) / max(en_alan, 1e-9) for i in range(3)]
+        en = max(puan) if puan else 0.0
+        puan = [round(pn, 1) if pn >= en - 0.05 else pn for pn in puan]
+        puan = [pn + (0.6 * oz[i] / top if pn >= en - 0.05 else 0.0) for i, pn in enumerate(puan)]
     except Exception:
         pass
     adaylar = [g for g in gkutu if g in GOR_EKSEN]
@@ -12285,6 +12356,12 @@ def calistir(step, on, kayit, komp, P, asama=(1, 2, 3), esl=None, agac=None,
     asama = set(asama)
     esl = {_tr_sade(a): b for a, b in (esl or {}).items() if b}
     ARAC_MODU["acik"] = arac_cercevesi(P.get("arac")) is not None
+    # montaj merkezi: geniş yüz ÖN'e çevrilirken dıştan bakış için
+    if P.get("montaj_merkez") is None:
+        try:
+            P = dict(P, montaj_merkez=montaj_merkezi(kayit, komp))
+        except Exception:
+            pass
     # parça başına istisna (ana görünüş): kod -> {"ana_gorunus": "UST"}
     parca_ayar = {_tr_sade(a): b for a, b in (P.get("parca_ayar") or {}).items()
                   if isinstance(b, dict) and b}
@@ -12537,7 +12614,7 @@ uretir: KAYNAK/<grup>_kaynak.pdf (yalniz PDF; buyuk modelde uzun surer).
                     help="aracın önü hangi eksende: -X, +X, -Y, +Y; 'oto' (varsayılan) "
                          "parça adlarından (ÖN / ARKA) önerilir, 'yok' model eksenleri. "
                          "Parça kullanım yönünde çizilir, yatırılmaz; ÖN = aracın "
-                         "önünden bakış, SAĞ / SOL aracın kendi yanı")
+                         "önünden bakış; görünüş adları bakış yönünden (Chevalier)")
     ap.add_argument("--arac-ust", default="+Z", help="aracın üstü (varsayılan +Z)")
     ap.add_argument("--kaynak-resmi", action="store_true",
                     help="aşama 2'de kaynak resimlerini de üret (KAYNAK/<grup>_kaynak.pdf; "
