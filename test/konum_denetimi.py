@@ -514,9 +514,11 @@ def main():
               str([p_["slot"] for p_ in pe12]))
         pl12 = O.konum_plani(o12, ("UST",), {"UST": O._kenar_kutusu(ken12)},
                              4.0, {"UST": ken12})
-        # ÜST görünüşünde model X -> görünüş düşey, model Y -> görünüş yatay
+        # Parça KULLANIM yönünde çizilir (v1.0.13: en büyük yüzü yatıran
+        # hizalama kalktı): ÜST görünüşünde model X görünüş YATAY, model Y
+        # görünüş DÜŞEY. X yönündeki slotun boyu yatay sırada okunur.
         uz = (c2[0] - c1[0]) if yatay_ else (c2[1] - c1[1])
-        boy_yon, dik_yon = ("dusey", "yatay") if yatay_ else ("yatay", "dusey")
+        boy_yon, dik_yon = ("yatay", "dusey") if yatay_ else ("dusey", "yatay")
         boy_ = sorted(round(abs(r["b"] - r["a"]), 2) for r in pl12["UST"][boy_yon]
                       if "slot" in (r.get("kaynak") or []))
         dik_ = sorted(round(abs(r["b"] - r["a"]), 2) for r in pl12["UST"][dik_yon]

@@ -1,6 +1,6 @@
 Pi3D  –  3B modelden parça listesi ve teknik resim
 
-Sürüm   : v1.0.12  (02.10.2026)
+Sürüm   : v1.0.13  (02.10.2026)
 Kaynak  : github.com/noz1907/ned   dal: claude/fikstur-parca-stp-57hwc1
 
 KURULUM
@@ -154,6 +154,32 @@ BU SÜRÜMDE NE VAR
       6 yazı boyu), SİM. notu balonun altında.
     - kırmızı yalnız kaynağın kendisi (uzun sac kenarı artık kırmızı
       değil); kaynak ekseni ince mavi kesikli.
+
+  v1.0.13: ARAÇ YÖNÜ, MALZEME / PROFİL DÜZELTMELERİ, ANTET LİSANSA GÖRE
+    (kullanıcı listesi: 1-4 + tek parça yeniden üretim)
+    - ARAÇ YÖNÜ: parça KULLANIM yönünde çizilir, yatırılmaz, çevrilmez
+      (Karluna UST_SAC dik ve doğru yönde; eskiden en büyük yüz yatırılıp
+      üstü alta geliyordu). 3. adımda "aracın önü / üstü" ayarı; "oto"
+      parça adlarından (ÖN / ARKA, SAĞ / SOL) öneri verir; klasöre
+      kaydedilir; --arac-on / --arac-ust. ÖN = aracın önünden bakış,
+      SAĞ / SOL aracın kendi yanı. Eğik parça en yakın eksene en küçük
+      açıyla. Ana görünüş = uzun-geniş yüz; parça başına istisna (ana
+      görünüş elle). Montaj resmi de araç çerçevesinde.
+    - YALNIZ BU PARÇA (DXF + PDF): seçili parçanın detay DXF'i, paftası ve
+      PDF'i yeniden üretilir, öbür dosyalara dokunulmaz.
+    - Malzeme değişince ekran, kütle, BOM.csv/.xlsx ve sonraki adımlar
+      ANINDA güncellenir (büyük harfli kodlarda seçim kaçıyordu: arayüz
+      ham kodla saklıyor, motor sade kodla arıyordu).
+    - Profil parçalar (ekstrüzyon, kutu, boru, çekme L/U) açınım ve lazer
+      listesine girmez (alüminyum ekstrüzyon "bükümlü sac" sanılıyordu).
+    - ANTET LİSANSA GÖRE, TEK EXE: deneme sürümünde her çıktı Pi3D /
+      PiVision antetli; tam lisansta Yardım > Firma anteti… ile A3 antet
+      DXF'i verilir, program kâğıdı, çerçeveyi, antet bloğunu, kutuları
+      ve etiketleri ÖLÇEREK çözer, alanları önerir, kullanıcı tabloda
+      onaylar; şablon LOCALAPPDATA\Pi3D\antet'e yazılır, ayara kaydedilir,
+      değiştirilir / kaldırılır. Pafta DXF / PDF ve kaynak resimleri
+      (normal + balonlu) bu anteti kullanır. exebuild 1/2 seçimi kalktı.
+    - test/antet_otomatik_denetimi.py.
 
   v1.0.12: SANAL TANITIM VERİSİ + pafta düzeltmesi
     - test/sanal_tanitim_modeli.py: kod ile üretilen sanal kaynaklı konsol

@@ -237,19 +237,20 @@ katı yer ister.
 
 ---
 
-## 1b. Logolar ve ikon — logolu / logosuz sürüm
+## 1b. Logolar ve ikon — TEK sürüm, antet lisansa göre
 
-İki sürüm derlenebilir. `EXE_YAP.bat` derlemeye başlarken sorar:
+Tek sürüm derlenir (`py exebuild.py`, `EXE_YAP.bat`): PiVision ve Pi3D
+logoları exe'nin içine gömülüdür. Eski "1 = PI3D / 2 = FIRMA" seçimi
+kalktı; **antet derlemede değil çalışma anında, lisansa göre** seçilir:
 
-```
-  1 = LOGOLU    PiVision ve Pi3D logoları exe'nin İÇİNE gömülür;
-                yanındaki klasörden silinemez, değiştirilemez.
-  2 = LOGOSUZ   hiç logo konmaz; başlıkta yalnız "Pi3D" yazar,
-                exe'nin kendi ikonu da olmaz.
-```
+| lisans | pafta / PDF / kaynak resmi anteti |
+|---|---|
+| DENEME (ya da lisanssız) | **her zaman Pi3D / PiVision anteti** (firma anteti ve `antet_pi3d: 0` yok sayılır) |
+| TAM / A_LISANS | **Yardım > Firma anteti…** ile verilen A3 antet DXF'inden kurulan şablon; yoksa Pi3D anteti |
 
-Sormasını istemiyorsanız `EXE_YAP.bat 1` / `EXE_YAP.bat 2`, ya da
-derlemeden önce `set PI3D_LOGO=0` (logosuz) / `=1` (logolu).
+Firma anteti şablonu `%LOCALAPPDATA%\Pi3D\antet\firma.dxf/.json`'a
+yazılır ve ayar dosyasına kaydedilir; aynı pencereden değiştirilir ya da
+kaldırılır, exe yeniden derlenmez. Ayrıntı: 7. adım, "Firma anteti".
 
 ### Logolu sürüm
 
@@ -282,12 +283,6 @@ python logo_gom.py
 Bu komut `logo/` klasöründen `pi3d_logo.py`'yi yeniden üretir. Yapmazsanız
 kaynak koddan çalıştırdığınızda yeni logoyu görürsünüz ama exe'de eskisi
 kalır. Ayrıntı: `logo/OKU.md`.
-
-### Logosuz sürüm
-
-Gömülü modül ve `logo/` klasörü pakete hiç girmez; exe'nin kendi ikonu
-da olmaz. Başlık şeridinde yalnızca büyük puntoyla **Pi3D** ve altında
-açıklaması yazar. Program bunun dışında birebir aynıdır.
 
 ---
 
@@ -1105,6 +1100,11 @@ Ana ürün → alt montaj → alt montajın altı… kaç kademe varsa o kadar i
 Aynı yapı `BOM_AGAC.csv` (Excel) ve `BOM_AGAC.md` dosyalarına da yazılır;
 `poz` sütunu `1.1.2.3` biçiminde kademe numarasıdır.
 
+**Malzeme değişince** (Hepsine uygula / Seçili satırlara / liste
+dosyası / CATIA BOM) ekrandaki satırlar, kütleler ve `BOM.csv/.xlsx`
+**anında** güncellenir; pafta anteti, açınım ve kaynak adımları da yeni
+malzemeyi görür, BOM'u yeniden çıkarmak gerekmez.
+
 ### Adım 3 — GÖRÜNÜŞ ve KESİT
 
 * **Görünüşler:** ÖN, ARKA, SAĞ, SOL, ÜST, ALT arasından **en çok 4 tane**.
@@ -1116,6 +1116,23 @@ Aynı yapı `BOM_AGAC.csv` (Excel) ve `BOM_AGAC.md` dosyalarına da yazılır;
   malzeme taranır, kesme çizgisi görünüşe **A—A** olarak işaretlenir.
 * **Çizim:** gizli çizgiler açık/kapalı, montaj resmi üretilsin mi,
   en az delik çapı (bunun altındaki silindirler delik değil radüs sayılır).
+* **Araç yönü (Çizim kutusunda):** parça **kullanım (araç) yönünde**
+  çizilir, yatırılmaz, çevrilmez: üstü üstte, önü önde. "Aracın önü"
+  hangi eksendeyse (`-X`, `+X`, `-Y`, `+Y`) ÖN görünüş oradan bakar, ÜST
+  üstten; **SAĞ / SOL aracın kendi sağı / soludur** (sürücü yönü; ÖN
+  görünüşte araç size baktığı için aracın sağı resmin solunda kalır,
+  yerleşim yine 1. açı). `oto`: program parça adlarından (ÖN / ARKA,
+  SAĞ / SOL) öneri verir ve kutuya yazar; `yok`: model eksenleri olduğu
+  gibi. Seçim çıktı klasörüne kaydedilir. Eğik duran parça en yakın
+  eksene **en küçük açıyla** oturtulur; ana görünüş parçanın **uzun-geniş
+  yüzünü** gösteren bakıştır (dik panelde ÖN, yatay plakada ÜST).
+* **İstisna – parça / ana görünüş:** bir parçanın ana görünüşünü elle
+  seçersiniz (ÖN / ARKA / SAĞ / SOL / ÜST / ALT); *Kaydet* ile klasör
+  ayarında saklanır, o parça yeniden üretilince uygulanır.
+* **YALNIZ BU PARÇA (DXF + PDF) ▸:** seçili parçanın detay DXF'i,
+  paftası ve PDF'i yeniden üretilir; öbür dosyalara dokunulmaz (iş kaydı
+  güncellenir). Malzeme, görünüş ya da istisna değişikliğinden sonra
+  bütün montajı yeniden çizmeden tek parçayı almak için.
 * **Örnek resim hangi parçadan üretilsin:** varsayılan olarak en çok çeşit
   delik/radüs taşıyan parça gelir; listeden değiştirebilirsiniz.
 
@@ -1159,6 +1176,11 @@ okunmaz bu sayfa açılır.
    ondalık ayracı virgül ya da nokta olabilir. **Verdiğiniz
    değer saklanır**, bir daha girmeniz gerekmez.
 3. **İŞARETLİ PARÇALARIN AÇINIMINI ÜRET** deyin.
+
+**Profil parçalar** (ekstrüzyon, kutu, boru, çekme L / U) açınım ve
+lazer listesine **girmez**: açınımları yoktur, `PROFIL.xlsx` kesim
+listesindedirler. İnce eşit cidarlı alüminyum ekstrüzyon eskiden taramaya
+"bükümlü sac" dedirtip listeye giriyordu.
 
 #### Bükümlü parçalar nasıl bulunuyor
 
@@ -1577,7 +1599,7 @@ isteyenler (kendi antetini yapıştıracaklar) ayar dosyasına
 
 Firma anteti tanımlıysa Pi3D anteti çizilmez; resim firmanındır.
 
-#### Firma anteti (EXE_YAP.bat'ta 2. seçenek)
+#### Firma anteti (tam lisans: Yardım > Firma anteti…)
 
 Firmanızın kendi antetini kullanabilirsiniz. O zaman **çerçeve, bölge
 işaretleri, antet ve firma logosu firmanın kendi çiziminden gelir**;
@@ -1594,31 +1616,34 @@ Pi3D yalnız kutuları doldurur:
 | Checked – Date / Name | **programda sorulur** (tarih, onaylayan) |
 | FILE | dosya adı |
 
+**Kurulum (lisanslı):** Yardım > **Firma anteti…** > *Antet DXF'ini seç
+ve çöz*. Antetinizi A3 yatay kâğıda çerçevesiyle birlikte DXF kaydedin
+(antet sağ altta, kutuları çizgiyle çizilmiş; blok ise CAD'de patlatın).
+Program **ölçerek** bulur: kâğıt (A3), iç çerçeve, antet bloğu, kapalı
+kutular ve kutudaki yazılar. Yazı okunabiliyorsa (TEXT; "Part Name",
+"Drawing No", "Material", "Weight", "Scale", "Drawn", "Checked", "FILE",
+"Date / Name" sütunları; Türkçe ve Almanca karşılıkları da) alanı
+kendisi önerir; patlatılmış (kontur) yazıda öneri yapamaz, tabloda kutuyu
+siz seçersiniz. Önizlemede kutular numaralı, atananlar yeşildir. **KAYDET**
+deyince şablon `%LOCALAPPDATA%\Pi3D\antet\` altına yazılır, ayara
+kaydedilir ve bütün paftalarda, PDF'lerde ve kaynak resimlerinde (normal
+ve balonlu sunum) kullanılır. Değiştirmek için yeni DXF seçin, kaldırmak
+için **KALDIR** (Pi3D antetine dönülür).
+
+**Deneme sürümünde** firma anteti kullanılmaz: her çıktı Pi3D / PiVision
+antetlidir (lisans alınca açılır).
+
 Tarih, çizen ve onaylayan 7. adımda üç kutuya yazılır ve **saklanır**;
 bir daha girmeniz gerekmez. Değerler DXF'e yazıldığı için **PDF'te de
 çıkar** — baskı paftadan alınır.
 
-**Kâğıt boyu.** Şablon hangi kâğıt için çizildiyse (verilen antet A2,
-594 × 420 mm), başka bir kâğıda basılırken şablonun **tamamı tek bir
-oranla** ölçeklenir: A3'te 0,707, A1'de 1,416, A0'da 2,002. Bunlar
-ISO'nun kendi kâğıt basamağıdır; antet kâğıtla birlikte büyür küçülür,
-sayfadaki oranı hiç değişmez.
+**Kâğıt boyu.** Şablon hangi kâğıt için çizildiyse (A3 önerilir; A2
+verilirse A3'te 0,707 ile ölçeklenir, A1'de 1,416), başka bir kâğıda
+basılırken şablonun **tamamı tek bir oranla** ölçeklenir: ISO'nun kendi
+kâğıt basamağı; antet kâğıtla birlikte büyür küçülür.
 
 **Yön.** Firma anteti yatay çizilmiştir, dikey karşılığı yoktur; bu
 yüzden antetli paftada kâğıt her zaman yatay kalır.
-
-**Sürüm seçimi.** `EXE_YAP.bat` iki sürüm sorar:
-
-```
-1 = PI3D    Pi3D ve PiVision logolari gomulu, FIRMA ANTETI YOK
-            (sag alt kosede Pi3D logolu antet; antet_pi3d: 0 ile
-             bos birakilir, kendi antetinizi oraya yapistirirsiniz)
-2 = FIRMA   Pi3D logolari konmaz; antet klasorundeki FIRMA ANTETI
-            kullanilir, kutularini Pi3D doldurur
-```
-
-Firmanın kendi anteti varken Pi3D'nin logosunu da basmak doğru
-değildir: resim firmanındır.
 
 #### Kendi antetinizi şablona çevirmek
 
@@ -1653,11 +1678,11 @@ kutucuğu kapatırsanız Pi3D kendi sade paftasını çizer. Antet
 bulunamazsa 7. adımda **nereye bakıldığı yazar** — tarih/çizen/
 onaylayan kutuları sessizce yok olmaz.
 
-Antet üç yerde aranır, bu sırayla:
+Antet şu sırayla aranır (yalnız lisanslıda; deneme sürümünde aranmaz):
 
-1. **exe'nin yanındaki** `antet\` klasörü — buraya koyduğunuz antet
-   gömülü olanı geçersiz kılar, exe'yi yeniden derlemeniz gerekmez
-2. exe'ye **gömülü** antet (EXE_YAP.bat → 2 ile derlenmişse)
+1. **ayarda kayıtlı** şablon (Yardım > Firma anteti ile kurulan,
+   `%LOCALAPPDATA%\Pi3D\antet\`)
+2. **exe'nin yanındaki** `antet\` klasörü (hazır `firma.dxf` + `firma.json`)
 3. çıktı klasöründeki `antet\`
 
 Kaynaktan çalıştırıyorsanız `pf3_gui.py`'nin yanındaki `antet\`
@@ -2246,6 +2271,8 @@ Kaynak DXF'lere dokunulmaz; her pafta ayrı bir dosyaya yazılır.
 | `--montaj-yok` | montaj çizimini atla |
 | `--acinim <kod,kod>` / `--acinim HEPSI` | bükümlü sacların açınımı |
 | `--k-faktor <0.40>` | büküm payı K-faktörü; verilen değer saklanır |
+| `--arac-on -X` / `+X` / `-Y` / `+Y` / `oto` / `yok` | aracın önü hangi eksende: parça kullanım yönünde çizilir (`oto`: parça adlarından öneri, `yok`: model eksenleri) |
+| `--arac-ust +Z` | aracın üstü (varsayılan `+Z`) |
 
 ---
 
@@ -2312,8 +2339,11 @@ başlıkta yazar.
 
 **Ölçülendirme kuralları** (ayrıntı ve gerekçe: `CLAUDE.md`):
 
-- **Parça montaj yönünde çizilir, döndürülmez:** modelde nasıl duruyorsa
-  ÖN / SAĞ / ÜST öyledir.
+- **Parça kullanım (araç) yönünde çizilir, döndürülmez:** araçta nasıl
+  duruyorsa öyle; üstü üstte, önü önde. Araç yönü ayarı (3. adım) model
+  eksenlerini ÖN / SAĞ / ÜST'e çevirir; SAĞ / SOL aracın kendi yanıdır.
+  Eğik parça en yakın eksene en küçük açıyla oturtulur. Ana görünüş
+  uzun-geniş yüzdür; istisna parça başına elle verilir.
 - **Dış ölçüler önce ve kesinlikle:** ana görünüş (en çok bilgi veren
   görünüş) iki boyutunu en dışta taşır; derinlik yan görünüşte (sac
   profili kesitte) verilir.
@@ -2443,7 +2473,7 @@ anlamlı çıkmıyorsa o parçada kesit çizilmez, diğer görünüşler yine ç
 | `pfd_dxf2stp.py` | DXF görünüşlerinden 3B STEP üretir (renk = parça kimliği) |
 | `Pi3D_baslat.bat` | Windows'ta tek tıkla kurulum + başlatma |
 | `Pi3D_baslat_KUCUK.bat` | dar disk için küçük kurulum (~800 MB) |
-| `EXE_YAP.bat` + `pi3d.spec` | çalıştırılabilir dosya (.exe) üretir |
+| `EXE_YAP.bat` + `pi3d.spec` | çalıştırılabilir dosya (.exe) üretir (tek sürüm; antet lisansa göre) |
 | `CATIA_MALZEME.md` | CATIA malzemesini kaybetmeden aktarma |
 | `catia_malzeme_cikar.CATScript` | CATIA makrosu: ağacı gezip `malzeme.csv` yazar |
 

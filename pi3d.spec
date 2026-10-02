@@ -37,14 +37,16 @@ from PyInstaller.utils.hooks import collect_all, collect_data_files
 #              firma anteti pakete girer ve paftalarda kullanilir
 # Firmanin kendi anteti varken Pi3D'nin logosunu da basmak dogru
 # degildir: resim firmanindir.
-LOGOLU = os.environ.get("PI3D_LOGO", "1").strip().lower() not in (
-    "0", "yok", "hayir", "hayır", "no", "false", "off")
-ANTETLI = not LOGOLU
-if ANTETLI and not os.path.isdir("antet"):
-    ANTETLI = False
-    print("pi3d.spec: antet/ klasoru yok - program antetsiz calisacak.")
-print(f"pi3d.spec: {'PI3D (logolu, antetsiz)' if LOGOLU else 'FIRMA (antetli)'}"
-      f" surum derleniyor (PI3D_LOGO={os.environ.get('PI3D_LOGO', '1')})")
+# TEK SURUM (v1.0.13+): logolar her zaman gomulur; firma anteti pakete
+# GIRMEZ. Antet calisma aninda lisansa gore secilir: deneme lisansinda Pi3D /
+# PiVision anteti, tam lisansta Yardim > Firma anteti ile verilen A3 antet
+# DXF'inden kurulan sablon (LOCALAPPDATA\Pi3D\antet, ayara kayitli).
+# PI3D_LOGO=0 artik yok sayilir (uyari basilir).
+if os.environ.get("PI3D_LOGO", "1").strip().lower() in ("0", "yok", "hayir", "hayır", "no", "false", "off"):
+    print("pi3d.spec: PI3D_LOGO=0 kalkti - tek surum derlenir, antet lisansa gore secilir.")
+LOGOLU = True
+ANTETLI = False
+print("pi3d.spec: tek surum derleniyor (logolu; firma anteti lisansla, calisma aninda)")
 
 # OCP (OpenCascade) saf .pyd + yanindaki DLL'lerdir; PyInstaller bunlari
 # kendiliginden bulamaz, hepsini acikca toplamak gerekir.

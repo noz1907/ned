@@ -148,12 +148,20 @@ DXF'te yazı boyunun katı olarak uygulanır):
     Birbirine 0,5 mm içinde kalan datum seviyeleri (104,2 / 104,3 / 104,5)
     tek sıradır: ortalamaya en yakın gerçek değer yazılır, başlıkta
     "! MODEL KONTROL" uyarısı çıkar (ölçü uydurulmaz, model denetlenir).
-17. **Parça MONTAJ YÖNÜNDE çizilir, döndürülmez**: modelde nasıl
-    duruyorsa ÖN / SAĞ / ÜST öyledir (kullanıcı: "parça hep doğru yönde
-    olacak, ters neden konulur; montaj yönü neyse ona göre"). "En çok
+17. **Parça KULLANIM (ARAÇ) YÖNÜNDE çizilir, döndürülmez, yatırılmaz**:
+    araçta nasıl duruyorsa öyle, üstü üstte, önü önde (kullanıcı: "parça
+    kesinlikle kullanım yönünde olmalı; araç yönü bizim için önemli; ön
+    panel baş aşağı"). Araç yönü ayarı (`P["arac"]`: önü -X/+X/-Y/+Y,
+    üstü +Z; öneri parça adlarından ÖN/ARKA, SAĞ/SOL) model eksenlerini
+    çizim çerçevesine çevirir (`arac_cercevesi`, `cizim_cercevesi`);
+    `hizali_kati` (en büyük yüzü yatıran eski hizalama) çizimde
+    KULLANILMAZ, yalnız BOM gabarisi içindir. Eğik parça en yakın eksene
+    en küçük açıyla (`eksene_oturt`, 3°). ÖN = aracın önünden bakış;
+    SAĞ / SOL = aracın kendi yanı (`gorunus_adi`, yerleşim 1. açı).
+    **Ana görünüş = uzun-geniş yüzü gösteren bakış** (`ana_gorunus`);
+    istisna parça başına elle (`parca_ayar[kod]["ana_gorunus"]`). "En çok
     bilgi veren yüzü öne çevirme" YAPILMAZ. Görünüş seçimi: bilgi
-    eklemeyen görünüş çizilmez, SAĞ = SOL / ÜST = ALT ise biri; çoğu
-    zaman 3 görünüş yeter.
+    eklemeyen görünüş çizilmez, SAĞ = SOL / ÜST = ALT ise biri.
 18. Perspektif üzerine ölçü verilmez.
 
 ## PDF (pafta)
@@ -171,6 +179,12 @@ DXF'te yazı boyunun katı olarak uygulanır):
 - Çizim kâğıdın yaklaşık %70-75'ini doldurur; ölçek serbest ve ara
   değerde olabilir (1:12, 1:14, 1:17 ...). Standart 1-2-5 serisine
   zorlanmaz.
+- Antet LİSANSA GÖRE: DENEME'de her çıktı Pi3D / PiVision antetli
+  (firma anteti ve `antet_pi3d: 0` yok sayılır); TAM'da Yardım > Firma
+  anteti ile verilen A3 antet DXF'i ölçülerek şablona çevrilir
+  (`pf5_antet.otomatik_tanim`, LOCALAPPDATA\Pi3D\antet, ayar
+  `antet_sablon`), pafta / PDF / kaynak resminde kullanılır. Tek exe
+  (1/2 derleme seçimi kalktı). Firma antet DXF'i depoya girmez.
 - Antet alanına (A3'te sağ alt 150 x 100 mm) ÇİZİM GİRMEZ; firma anteti
   yoksa oraya Pi3D logolu antet çizilir (`antet_pi3d: 0` ile boş). Dolu
   pencereler (görünüşler, başlık) antete değmez, boş hücre antetin

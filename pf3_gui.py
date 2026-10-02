@@ -253,6 +253,8 @@ class Uygulama(ttk.Frame):
         self.tarama_kod = {}               # aynısı: parça kodu -> sonuç
         self.satirlar = []               # hesaplanmış BOM satırları
         self.malzemeler = {}             # kod -> malzeme anahtarı (kullanıcı seçimi)
+        self.parca_ayar = {}             # kod -> {"ana_gorunus_ad": "ÜST"} (istisna)
+        self.arac_oneri = None           # arac_yonu_oner sonucu (model okununca)
         self.ornek_dxf = None
         self.onizleme_png = None
         self.onizleme_resmi = None       # PhotoImage referansı (GC'ye yem olmasın)
@@ -303,6 +305,178 @@ class Uygulama(ttk.Frame):
                 f"({d.get('paket', '')}).\nTam lisans için PiVision'a başvurun.")
             return False
         return True
+
+    def firma_anteti_penceresi(self):
+        """Yardım > Firma anteti: A3 antet DXF'i seçilir, program çerçeveyi,
+        antet bloğunu, kutuları ve etiketleri ÖLÇEREK bulur, alan eşlemesini
+        önerir; kullanıcı tabloda onaylar / düzeltir; şablon kalıcı klasöre
+        yazılır ve ayara kaydedilir (sonradan değiştirilir / kaldırılır).
+        Yalnız tam lisansta: deneme sürümünde her çıktı Pi3D antetlidir."""
+        try:
+            import pf5_antet as PA
+        except Exception as ex:
+            messagebox.showerror("Firma anteti", f"pf5_antet yüklenemedi: {ex}")
+            return
+        PA.lisans_durumu(yenile=True)
+        if not PA.firma_anteti_izinli():
+            messagebox.showinfo(
+                "Firma anteti",
+                "Deneme sürümünde (ya da lisanssız) her pafta Pi3D / PiVision "
+                "antetlidir.\n\nFirma anteti TAM lisansla açılır: Yardım > Lisans ve "
+                "makine kimliği.")
+            return
+        p = tk.Toplevel(self.master)
+        p.title("Firma anteti (A3 antet DXF'inden şablon)")
+        p.geometry("1100x720")
+        f = ttk.Frame(p, padding=10); f.pack(fill="both", expand=True)
+        bil = PA.ayarli_sablon_bilgi()
+        v_durum = tk.StringVar(value=(
+            f"KAYITLI: {bil.get('antet_ad')}  (kaynak {bil.get('antet_kaynak')}, "
+            f"{bil.get('antet_tarih')})" if bil.get("antet_sablon")
+            else "Kayıtlı firma anteti yok: paftalar Pi3D antetli çıkar."))
+        ttk.Label(f, textvariable=v_durum, font=("", 10, "bold"), wraplength=1060,
+                  justify="left").pack(anchor="w")
+        ttk.Label(f, foreground="#555", wraplength=1060, justify="left", text=(
+            "Antetinizi A3 YATAY kâğıda çerçevesiyle birlikte DXF olarak kaydedin (antet "
+            "sağ altta, kutuları çizgiyle çizilmiş, blok ise patlatılmış). Program kâğıdı, "
+            "çerçeveyi, antet bloğunu ve kapalı kutuları ölçer; kutudaki yazı okunabiliyorsa "
+            "(Part Name, Drawing No, Material, Weight, Scale, Drawn, Checked, FILE…) alanı "
+            "kendisi önerir. Aşağıdaki tabloda her alanın hangi kutuya gideceğini onaylayın; "
+            "KAYDET deyince şablon kalıcı klasöre yazılır ve bütün paftalarda, PDF'lerde ve "
+            "kaynak resimlerinde kullanılır.")).pack(anchor="w", pady=(2, 6))
+        ust = ttk.Frame(f); ust.pack(fill="x")
+        durum = {"tanim": None, "secim": {}, "png": None}
+        tuval = tk.Canvas(f, height=300, background="white", highlightthickness=1,
+                          highlightbackground="#bbb")
+        tuval.pack(fill="x", pady=(6, 6))
+        orta = ttk.Frame(f); orta.pack(fill="both", expand=True)
+        sut = ("no", "kutu", "etiket", "alan")
+        tab = ttk.Treeview(orta, columns=sut, show="headings", height=9)
+        for c, ad, w in zip(sut, ("#", "kutu (x, y, en x boy mm)", "kutudaki yazı", "alan"),
+                            (40, 220, 300, 200)):
+            tab.heading(c, text=ad); tab.column(c, width=w, anchor="w")
+        tab.pack(side="left", fill="both", expand=True)
+        sb_ = ttk.Scrollbar(orta, orient="vertical", command=tab.yview)
+        sb_.pack(side="left", fill="y"); tab.configure(yscrollcommand=sb_.set)
+        sag = ttk.Frame(orta, padding=(8, 0)); sag.pack(side="left", fill="y")
+        ttk.Label(sag, text="Seçili kutuya alan ata:").pack(anchor="w")
+        alan_ad = dict(PA.ALAN_ACIKLAMA)
+        v_alan = tk.StringVar()
+        cb_alan = ttk.Combobox(sag, textvariable=v_alan, state="readonly", width=34,
+                               values=["(boş)"] + [f"{k} – {v}" for k, v in alan_ad.items()])
+        cb_alan.pack(anchor="w", pady=(2, 4))
+
+        def tablo_doldur():
+            tab.delete(*tab.get_children())
+            t = durum["tanim"]
+            if not t:
+                return
+            ters = {}
+            for alan, i in durum["secim"].items():
+                ters.setdefault(i, []).append(alan)
+            for i, h in enumerate(t["hucreler"]):
+                tab.insert("", "end", iid=str(i), values=(
+                    i, f"{h[0]:.1f}, {h[1]:.1f}   {h[2] - h[0]:.1f} x {h[3] - h[1]:.1f}",
+                    t["etiketler"][i][:60], ", ".join(ters.get(i, []))))
+            try:
+                PA.tanim_onizleme_png(t, durum["png"], durum["secim"])
+                ham = tk.PhotoImage(file=durum["png"])
+                gw = max(tuval.winfo_width(), 900)
+                k = max(1, -(-ham.width() // gw), -(-ham.height() // 300))
+                durum["resim"] = ham.subsample(k, k) if k > 1 else ham
+                tuval.delete("all")
+                tuval.create_image(gw // 2, 150, image=durum["resim"])
+            except Exception as ex:
+                self._yaz(f"antet önizlemesi çizilemedi: {ex}")
+
+        def ata():
+            sec = tab.selection()
+            if not sec or not durum["tanim"]:
+                return
+            i = int(sec[0])
+            v = v_alan.get()
+            # bu kutudaki eski alanları kaldır
+            for alan in [a for a, j in durum["secim"].items() if j == i]:
+                durum["secim"].pop(alan)
+            if v and not v.startswith("("):
+                alan = v.split(" – ")[0]
+                durum["secim"][alan] = i
+            tablo_doldur()
+            tab.selection_set(str(i))
+
+        def sec_degisti(_e=None):
+            sec = tab.selection()
+            if not sec:
+                return
+            i = int(sec[0])
+            alanlar = [a for a, j in durum["secim"].items() if j == i]
+            v_alan.set(f"{alanlar[0]} – {alan_ad[alanlar[0]]}" if alanlar else "(boş)")
+        tab.bind("<<TreeviewSelect>>", sec_degisti)
+        ttk.Button(sag, text="Ata", command=ata).pack(anchor="w")
+        v_not = tk.StringVar(value="")
+        ttk.Label(sag, textvariable=v_not, foreground="#b00020", wraplength=260,
+                  justify="left").pack(anchor="w", pady=(10, 0))
+
+        def analiz():
+            y = filedialog.askopenfilename(
+                title="Firma anteti DXF (A3 yatay, çerçeveyle)", parent=p,
+                filetypes=[("DXF", "*.dxf"), ("Tümü", "*.*")])
+            if not y:
+                return
+            try:
+                t = PA.otomatik_tanim(y, log=self._yaz)
+            except Exception as ex:
+                messagebox.showerror("Firma anteti", f"Antet çözülemedi:\n\n{ex}", parent=p)
+                return
+            durum["tanim"] = t
+            durum["secim"] = dict(t["oneri"])
+            import tempfile
+            durum["png"] = os.path.join(tempfile.gettempdir(), "pi3d_antet_onizleme.png")
+            v_durum.set(f"ÇÖZÜLDÜ: {os.path.basename(y)}  -  kâğıt {t['kagit_ad'] or '?'} "
+                        f"{t['kagit'][0]:.0f} x {t['kagit'][1]:.0f} mm, {len(t['hucreler'])} kutu, "
+                        f"{len(t['oneri'])} alan önerildi. Tabloyu denetleyip KAYDET deyin.")
+            v_not.set("\n".join(t["notlar"]))
+            tablo_doldur()
+
+        def kaydet():
+            t = durum["tanim"]
+            if not t:
+                messagebox.showinfo("Firma anteti", "Önce antet DXF'ini seçin.", parent=p); return
+            if "parca_adi" not in durum["secim"] and "resim_no" not in durum["secim"]:
+                messagebox.showwarning("Firma anteti", "En azından parça adı ya da resim no "
+                                       "kutusunu atayın.", parent=p); return
+            try:
+                sb = PA.sablon_kur(t, durum["secim"], log=self._yaz)
+            except Exception as ex:
+                messagebox.showerror("Firma anteti", f"Şablon kurulamadı:\n\n{ex}", parent=p)
+                return
+            self.sablon = sb
+            self.antet_neden = ""
+            v_durum.set(f"KAYDEDİLDİ: {sb.bilgi.get('ad')}  ->  {sb.kok}.dxf / .json")
+            self._yaz(f"firma anteti kaydedildi: {sb.kok}")
+            try:
+                self.pafta_doldur()
+            except Exception:
+                pass
+            messagebox.showinfo("Firma anteti", "Firma anteti kaydedildi. Bundan sonraki "
+                                "paftalar, PDF'ler ve kaynak resimleri bu antetle çıkar.\n\n"
+                                "Değiştirmek için aynı pencereden yeni DXF seçin; kaldırmak "
+                                "için KALDIR.", parent=p)
+
+        def kaldir():
+            if PA.sablon_kaldir():
+                self.sablon = None
+                v_durum.set("Firma anteti kaldırıldı: paftalar Pi3D antetli çıkar.")
+                self._yaz("firma anteti kaldırıldı")
+                try:
+                    self.pafta_doldur()
+                except Exception:
+                    pass
+        ttk.Button(ust, text="Antet DXF'ini seç ve çöz…", command=analiz).pack(side="left")
+        ttk.Button(ust, text="KAYDET ve kullan", style="Bas.TButton", command=kaydet
+                   ).pack(side="left", padx=(8, 0), ipadx=8)
+        ttk.Button(ust, text="KALDIR (Pi3D antetine dön)", command=kaldir).pack(side="left", padx=(8, 0))
+        ttk.Button(ust, text="Kapat", command=p.destroy).pack(side="right")
 
     def lisans_penceresi(self):
         """Yardım > Lisans: makine kimliği (kopyala), durum, .lic yükleme."""
@@ -893,8 +1067,11 @@ class Uygulama(ttk.Frame):
                             command=lambda kk=k: self.gorunus_degisti(kk)
                             ).grid(row=i % 3, column=i // 3, sticky="w", padx=(0, 18))
         self.v_gor_bilgi = tk.StringVar()
-        ttk.Label(gf, textvariable=self.v_gor_bilgi, foreground="#555"
-                  ).grid(row=3, column=0, columnspan=2, sticky="w", pady=(6, 0))
+        # wraplength ŞART: uzun tek satır sütunu genişletip Kesit kutusunu
+        # 1280 px ekranda 24 px'e sıkıştırıyordu
+        ttk.Label(gf, textvariable=self.v_gor_bilgi, foreground="#555",
+                  wraplength=330, justify="left"
+                  ).grid(row=3, column=0, columnspan=2, sticky="w", pady=(4, 0))
 
         kf = ttk.LabelFrame(f, text=" Kesit ", padding=8)
         kf.grid(row=1, column=1, sticky="nsew", padx=8)
@@ -909,22 +1086,62 @@ class Uygulama(ttk.Frame):
         sf.grid(row=1, column=2, sticky="nsew")
         self.v_gizli = tk.BooleanVar(value=True)
         self.v_montaj = tk.BooleanVar(value=True)
-        ttk.Checkbutton(sf, text="gizli çizgiler", variable=self.v_gizli).grid(row=0, column=0, columnspan=2, sticky="w")
-        ttk.Checkbutton(sf, text="montaj resmi de üretilsin", variable=self.v_montaj).grid(row=1, column=0, columnspan=2, sticky="w")
+        # gizli çizgi + montaj resmi aynı satırda: altta araç yönü satırı
+        # eklendi, 15 inç ekranda (1280x650) sayfa taşmasın
+        ttk.Checkbutton(sf, text="gizli çizgiler", variable=self.v_gizli).grid(row=0, column=0, sticky="w")
+        ttk.Checkbutton(sf, text="montaj resmi de üretilsin", variable=self.v_montaj).grid(row=0, column=1, sticky="w", padx=(8, 0))
         ttk.Label(sf, text="en az delik çapı (mm)").grid(row=2, column=0, sticky="w", pady=(4, 0))
         self.v_delik = tk.StringVar(value="1.0")
         ttk.Entry(sf, textvariable=self.v_delik, width=7).grid(row=2, column=1, sticky="w", pady=(4, 0))
 
-        of = ttk.LabelFrame(f, text=" Örnek resim hangi parçadan üretilsin ", padding=8)
-        of.grid(row=2, column=0, columnspan=3, sticky="ew", pady=(10, 0))
+        # --- ARAÇ YÖNÜ: parça KULLANIM yönünde çizilir (yatırılmaz, çevrilmez).
+        # Kullanıcı: "araç yönü bizim için önemli; ön panel baş aşağı
+        # konulmuş". Aracın önü hangi eksendeyse ÖN görünüş oradan bakar,
+        # ÜST üstten; SAĞ / SOL aracın kendi yanıdır. Küçük ekrana sığsın
+        # diye "Çizim" kutusunun içinde durur.
+        ttk.Label(sf, text="aracın önü / üstü").grid(row=3, column=0, sticky="w", pady=(4, 0))
+        ar_ = ttk.Frame(sf); ar_.grid(row=3, column=1, sticky="w", pady=(4, 0))
+        self.v_arac_on = tk.StringVar(value="oto (parça adlarından öneri)")
+        self.cb_arac_on = ttk.Combobox(
+            ar_, textvariable=self.v_arac_on, state="readonly", width=20,
+            values=["oto (parça adlarından öneri)", "yok (model eksenleri olduğu gibi)",
+                    "-X", "+X", "-Y", "+Y"])
+        self.cb_arac_on.pack(side="left")
+        self.v_arac_ust = tk.StringVar(value="+Z")
+        ttk.Combobox(ar_, textvariable=self.v_arac_ust, state="readonly", width=4,
+                     values=["+Z", "-Z", "+Y", "-Y", "+X", "-X"]).pack(side="left", padx=(4, 0))
+        # öneri metni (model okununca) kutunun kendisinde ve günlükte durur
+        self.v_arac_bilgi = tk.StringVar(value="")
+
+        of = ttk.LabelFrame(f, text=" Örnek resim hangi parçadan üretilsin ", padding=6)
+        of.grid(row=2, column=0, columnspan=3, sticky="ew", pady=(6, 0))
         self.v_ornek = tk.StringVar()
         self.cb_ornek = ttk.Combobox(of, textvariable=self.v_ornek, state="readonly", width=70)
         self.cb_ornek.pack(side="left")
         ttk.Label(of, foreground="#555", text="  (varsayılan: en çok çeşit delik/radüs taşıyan parça)"
                   ).pack(side="left")
+        # --- parça istisnası (ana görünüş elle) + YALNIZ BU PARÇAYI yeniden
+        # üret: ÖRNEK düğmesiyle aynı satırda (küçük ekranda sayfa taşmasın)
+        # kendi satırında ve ÜÇ sütuna yayılı: iki sütuna sıkışınca 1280 px
+        # ekranda Kesit kutusu 24 px'e düşüyor, radyo düğmeleri kayboluyordu
+        pf_ = ttk.Frame(f); pf_.grid(row=4, column=0, columnspan=3, sticky="w", pady=(0, 4))
+        ttk.Label(pf_, text="İstisna – parça:").pack(side="left")
+        self.v_ist_parca = tk.StringVar()
+        self.cb_ist = ttk.Combobox(pf_, textvariable=self.v_ist_parca, state="readonly", width=34)
+        self.cb_ist.pack(side="left", padx=(4, 6))
+        self.cb_ist.bind("<<ComboboxSelected>>", lambda e: self._istisna_goster())
+        ttk.Label(pf_, text="ana görünüş:").pack(side="left")
+        self.v_ist_gor = tk.StringVar(value="OTOMATİK")
+        ttk.Combobox(pf_, textvariable=self.v_ist_gor, state="readonly", width=9,
+                     values=["OTOMATİK", "ÖN", "ARKA", "SAĞ", "SOL", "ÜST", "ALT"]
+                     ).pack(side="left", padx=(4, 4))
+        ttk.Button(pf_, text="Kaydet", width=7, command=self.istisna_kaydet).pack(side="left")
+        ttk.Button(pf_, text="YALNIZ BU PARÇA (DXF + PDF)  ▸",
+                   command=self.tek_parca_uret).pack(side="left", padx=(6, 0))
+        self.v_ist_bilgi = tk.StringVar(value="")
         self.b_ornek = ttk.Button(f, text="ÖRNEK DXF ÜRET  ▸", style="Bas.TButton",
                                   command=self.ornek_uret)
-        self.b_ornek.grid(row=3, column=2, sticky="e", pady=12, ipadx=14, ipady=5)
+        self.b_ornek.grid(row=3, column=2, sticky="e", pady=(6, 2), ipadx=14, ipady=5)
         f.columnconfigure(0, weight=1); f.columnconfigure(1, weight=1); f.columnconfigure(2, weight=1)
         self.gorunus_degisti(None)
 
@@ -1062,14 +1279,25 @@ class Uygulama(ttk.Frame):
         self.ac_agac.delete(*self.ac_agac.get_children())
         self.ac_satir = {}
         pozlar = self.M.poz_numaralari(self.komp)
+        profil = 0
         for i, k in enumerate(self.komp):
             if k.get("sinif") != "parca":
                 continue        # standart eleman ve kaynak dikişi sac değil
+            if k.get("profil"):
+                # Profil (ekstrüzyon, kutu, boru, çekme L/U) sac değildir:
+                # açınımı yoktur, PROFIL kesim listesine girer. Taramaya
+                # sokulmaz; ince cidarlı ekstrüzyon "bükümlü sac" sanılıp
+                # listeye giriyordu (alüminyum ray).
+                profil += 1
+                continue
             s = self.ac_agac.insert("", "end", values=(
                 pozlar[i], k.get("kod", ""), (k.get("ad") or "")[:60],
                 "", "", "", "taranıyor…"))
             self.ac_satir[s] = i
         self.b_acilim.configure(state="normal" if self.ac_satir else "disabled")
+        if profil:
+            self._yaz(f"açınım listesi: {profil} profil parça (ekstrüzyon / kutu / "
+                      "boru) listeye alınmadı - açınımı yoktur, PROFIL listesindedir")
         if self.ac_satir:
             # Hangi parçanın bükümü var - açınım hesabı YAPMADAN. Tarama
             # parça başına ~20 ms sürer (açınım 15-30 s), yine de arka
@@ -1312,10 +1540,11 @@ class Uygulama(ttk.Frame):
                             "resim no, malzeme, kütle, ölçek, sayfa, çizen ve onaylayan "
                             "kendiliğinden dolar (ayar antet_pi3d: 0 ile kutu boş kalır). "
                             + getattr(self, "antet_neden", "") + "\n"
-                            "Firma anteti istiyorsanız: exe'yi EXE_YAP.bat ile "
-                            "2 (FIRMA) seçeneğinde derleyin, ya da "
-                            "firma.dxf + firma.json dosyalarını şu "
-                            "klasörlerden birine koyun — "
+                            "Firma anteti istiyorsanız (tam lisans): Yardım > Firma "
+                            "anteti… ile A3 antet DXF'inizi verin; program kutuları "
+                            "ölçüp eşler, şablon ayara kaydedilir, sonradan "
+                            "değiştirilebilir. Hazır şablon (firma.dxf + firma.json) "
+                            "şu klasörlerden de okunur — "
                             + "   |   ".join(getattr(self, "antet_aranan", []))
                             )).pack(anchor="w", pady=(0, 6))
         if self.sablon is not None:
@@ -1481,8 +1710,8 @@ class Uygulama(ttk.Frame):
         kod_tip = {a: r["tip"] for a, r in self.tarama_kod.items()}
         sira = []
         for i, k in enumerate(self.komp):
-            if k.get("sinif") != "parca":
-                continue
+            if k.get("sinif") != "parca" or k.get("profil"):
+                continue        # profil: lazer konturu yok (PROFIL listesi)
             ad = k.get("kod") or k.get("ad")
             tip = kod_tip.get(ad)
             if tip is None:
@@ -1611,6 +1840,21 @@ class Uygulama(ttk.Frame):
         except Exception as e:
             self.antet_neden = f"pf5_antet yüklenemedi: {e}"
             return None
+        # LİSANS KURALI: deneme sürümünde (ya da lisanssız) firma anteti
+        # kullanılmaz; her pafta Pi3D / PiVision antetlidir.
+        try:
+            PA.lisans_durumu(yenile=True)
+            if not PA.firma_anteti_izinli():
+                self.antet_neden = ("deneme lisansı: her pafta Pi3D / PiVision antetli "
+                                    "(firma anteti tam lisansla açılır)")
+                return None
+            sb = PA.ayarli_sablon()
+            if sb is not None:
+                self.antet_neden = ""
+                self.antet_aranan = [sb.kok + ".dxf"]
+                return sb
+        except Exception as e:
+            self.antet_neden = f"antet ayarı okunamadı: {e}"
         aday = []
         if getattr(sys, "frozen", False):
             # exe'de İKİ yere bakılır ve ÖNCE EXE'NİN YANINA:
@@ -2039,6 +2283,8 @@ class Uygulama(ttk.Frame):
                     self._bom_geldi(veri)
                 elif tip == "ornek":
                     self._ornek_geldi(veri)
+                elif tip == "tek_parca":
+                    self._tek_parca_geldi(veri)
                 elif tip == "tumu":
                     self._tumu_geldi(veri)
                 elif tip == "kaynak":
@@ -2276,6 +2522,7 @@ class Uygulama(ttk.Frame):
             y.add_command(label="Kullanım kılavuzu", accelerator="F1",
                           command=self.kilavuz_ac)
             y.add_command(label="Lisans ve makine kimliği…", command=self.lisans_penceresi)
+            y.add_command(label="Firma anteti (lisanslı)…", command=self.firma_anteti_penceresi)
             y.add_command(label="Hakkında", command=self.hakkinda)
             cubuk.add_cascade(label="Yardım", menu=y)
             self.master.config(menu=cubuk)
@@ -2376,7 +2623,160 @@ class Uygulama(ttk.Frame):
                 "yogunluk": self.M.RHO,
                 "gorunusler": self.M.gorunus_sec(
                     [k for k, v in self.v_gor.items() if v.get()]),
-                "kesit": bool(self.v_kesit.get())}
+                "kesit": bool(self.v_kesit.get()),
+                "arac": self._arac(), "parca_ayar": self._parca_ayar_p()}
+
+    def _arac(self):
+        """Araç yönü ayarı: {"on": "-X", "ust": "+Z"} ya da None (model
+        eksenleri). 'oto' seçiliyse model okununca çıkan öneri."""
+        v = str(getattr(self, "v_arac_on", None) and self.v_arac_on.get() or "oto").strip().lower()
+        if v.startswith("oto"):
+            o = self.arac_oneri or {}
+            return ({"on": o["on"], "ust": o.get("ust", "+Z")}
+                    if o.get("on") and o["on"] != "yok" else None)
+        if v.startswith("yok"):
+            return None
+        return {"on": v[:2].upper(),
+                "ust": (self.v_arac_ust.get() or "+Z")[:2].upper()}
+
+    _GOR_AD_ANAHTAR = {"ÖN": "ON", "ARKA": "ARKA", "SAĞ": "SAG", "SOL": "SOL",
+                       "ÜST": "UST", "ALT": "ALT"}
+
+    def _parca_ayar_p(self):
+        """Parça istisnaları motor diline: ad -> görünüş anahtarı. Araç
+        modunda SAĞ / SOL adı aracın yanıdır; anahtar takaslı (gorunus_adi)."""
+        out = {}
+        arac = self._arac() is not None
+        for kod, a in (self.parca_ayar or {}).items():
+            ad = str((a or {}).get("ana_gorunus_ad") or "").upper()
+            key = self._GOR_AD_ANAHTAR.get(ad)
+            if not key:
+                continue
+            if arac and key in ("SAG", "SOL"):
+                key = "SOL" if key == "SAG" else "SAG"
+            out[kod] = {"ana_gorunus": key}
+        return out
+
+    def _istisna_kod(self):
+        v = self.v_ist_parca.get() if hasattr(self, "v_ist_parca") else ""
+        for k in self.komp or []:
+            if k["sinif"] == "parca" and v.endswith("  " + k["kod"] + "  " + k["ad"][:40]):
+                return k["kod"]
+        return None
+
+    def _istisna_doldur(self):
+        """İstisna kutusunu parçalarla doldurur (model okununca)."""
+        if not hasattr(self, "cb_ist") or not self.M:
+            return
+        poz = self.M.poz_numaralari(self.komp or [])
+        self.cb_ist.configure(values=[f"{poz[i]}  {k['kod']}  {k['ad'][:40]}"
+                                      for i, k in enumerate(self.komp or [])
+                                      if k["sinif"] == "parca"])
+        self._istisna_goster()
+
+    def _istisna_goster(self):
+        kod = self._istisna_kod()
+        a = self.parca_ayar.get(kod) if kod else None
+        if hasattr(self, "v_ist_gor"):
+            self.v_ist_gor.set((a or {}).get("ana_gorunus_ad") or "OTOMATİK")
+        n = len(self.parca_ayar)
+        self.v_ist_bilgi.set(
+            (f"{n} parçada istisna: " + ", ".join(
+                f"{k} → {v.get('ana_gorunus_ad')}" for k, v in list(self.parca_ayar.items())[:6])
+             + (" …" if n > 6 else "")) if n else "istisna yok (hepsi otomatik)")
+
+    def istisna_kaydet(self):
+        kod = self._istisna_kod()
+        if not kod:
+            messagebox.showinfo("İstisna", "Önce listeden parça seçin."); return
+        g = self.v_ist_gor.get()
+        if g == "OTOMATİK":
+            self.parca_ayar.pop(kod, None)
+        else:
+            self.parca_ayar[kod] = {"ana_gorunus_ad": g}
+        on = (self.v_out.get() or "").strip()
+        if on:
+            try:
+                IS.ayar_kaydet(on, parca_ayar=dict(self.parca_ayar))
+            except Exception:
+                pass
+        self._istisna_goster()
+        self._yaz(f"istisna: {kod} ana görünüş = {g}")
+
+    def tek_parca_uret(self):
+        """YALNIZ seçili parçanın detay DXF'i, paftası ve PDF'i yeniden
+        üretilir; öbür dosyalara dokunulmaz (kullanıcı: "tekrar sadece o
+        parçanın düzeltilmiş şekilde pdf dxf alınabilmesi")."""
+        if not self._lisans_izin("pafta"):
+            return
+        kod = self._istisna_kod()
+        if not kod or not self.komp:
+            messagebox.showinfo("Tek parça", "Önce listeden parça seçin."); return
+        on = (self.v_out.get() or "").strip()
+        if not on:
+            messagebox.showwarning("Klasör", "Önce çıktı klasörünü seçin."); return
+        k = next((x for x in self.komp if x["kod"] == kod and x["sinif"] == "parca"), None)
+        if k is None:
+            return
+        kagit = self.v_kagit.get() if hasattr(self, "v_kagit") else "A3"
+        sablon = self.sablon if self._antet_acik() else None
+
+        def _kutu(ad):
+            try:
+                v = getattr(self, ad).get()
+            except Exception:
+                return ""
+            return v.strip() if isinstance(v, str) else ""
+        ortak = {"cizen": _kutu("v_cizen"), "onaylayan": _kutu("v_onay"),
+                 "cizen_tarih": _kutu("v_tarih"), "onay_tarih": _kutu("v_tarih")}
+        self._basla(f"tek parça üretiliyor: {kod}", f"Tek parça: {kod[:30]}")
+        threading.Thread(target=self._tek_parca_is,
+                         args=(k, self._is_girdisi(), kagit, sablon, ortak),
+                         daemon=True).start()
+
+    def _tek_parca_is(self, k, g, kagit, sablon, ortak):
+        try:
+            import pf4_pafta as PF
+            poz = {r["kod"]: r["poz"] for r in (self.satirlar or getattr(self, "bom_kimlik", None) or [])
+                   if r.get("kod")}
+            if k["kod"] not in poz:
+                pz = self.M.poz_numaralari(self.komp)
+                poz = {x["kod"]: pz[i] for i, x in enumerate(self.komp)}
+            sonuc = self._calistir(g, asama=(2,), komp=[k], tablo_yok=True, poz_harita=poz)
+            ciz = [x for x in sonuc["satirlar"] if str(x.get("dxf", "")).endswith(".dxf")]
+            if not ciz:
+                raise RuntimeError("detay resmi üretilemedi: "
+                                   + "; ".join(str(x.get("dxf")) for x in sonuc["satirlar"]))
+            yeni = ciz[0]
+            dxf = os.path.join(sonuc["dxf_klasor"], yeni["dxf"])
+            # BOM satırını yenisiyle değiştir (malzeme / kütle / dxf adı)
+            for i, r in enumerate(self.satirlar or []):
+                if r.get("kod") == k["kod"]:
+                    self.satirlar[i] = yeni
+            self._yaz(f"  {yeni['dxf']} yeniden çizildi")
+            kim = self._resim_kimligi(yeni["dxf"])
+            antet = dict(ortak, **kim.pop("antet_ek", {}))
+            r = PF.pafta_kur(dxf, None, kagit, resim_no=kim.get("resim_no"),
+                             resim_adi=kim.get("resim_adi"), sablon=sablon, antet=antet)
+            self._yaz(f"  pafta  {r.get('kagit') or kagit} {r['olcek_metni']}")
+            klasor = self._pdf_klasoru()
+            os.makedirs(klasor, exist_ok=True)
+            ad = os.path.splitext(os.path.basename(dxf))[0]
+            ek = str(r.get("kagit") or kagit).replace("-", "")
+            pdf = PF.bas(dxf, os.path.join(klasor, f"{ad}_{ek}.pdf"))
+            self._yaz("  PDF  " + os.path.basename(pdf))
+            self.kuyruk.put(("tek_parca", (dxf, pdf)))
+        except Exception:
+            self.kuyruk.put(("hata", "Tek parça üretilemedi:\n\n"
+                             + traceback.format_exc(limit=4)))
+
+    def _tek_parca_geldi(self, veri):
+        dxf, pdf = veri
+        self._bitir()
+        self._agac_doldur()
+        self.v_durum.set(f"tek parça hazır: {os.path.basename(dxf)}  +  {os.path.basename(pdf)}")
+        messagebox.showinfo("Tek parça", "Yalnız bu parça yeniden üretildi:\n\n"
+                            f"{dxf}\n{pdf}\n\nÖbür dosyalara dokunulmadı.")
 
     def _is_girdisi(self):
         """Tk değişkenlerini ANA İŞ PARÇACIĞINDA okuyup düz veriye çevirir.
@@ -2394,7 +2794,10 @@ class Uygulama(ttk.Frame):
                                gorunusler=list(P["gorunusler"]),
                                kesit=P["kesit"], gizli=P["gizli"],
                                en_az_delik=P["en_az_delik"],
-                               montaj=bool(self.v_montaj.get()))
+                               montaj=bool(self.v_montaj.get()),
+                               arac_secim=(self.v_arac_on.get() if hasattr(self, "v_arac_on") else None),
+                               arac_ust=(self.v_arac_ust.get() if hasattr(self, "v_arac_ust") else None),
+                               parca_ayar=dict(self.parca_ayar or {}))
             except Exception as ex:
                 self._yaz(f"ayar klasöre yazılamadı: {ex}")
         return {"step": self.v_step.get().strip(), "on": on,
@@ -2564,6 +2967,30 @@ class Uygulama(ttk.Frame):
         self.agac = agac
         self.ornek_dxf = None
         self.malzemeler = {}
+        self.parca_ayar = {}
+        # araç yönü önerisi: parça adlarından (ÖN / ARKA, SAĞ / SOL)
+        try:
+            self.arac_oneri = self.M.arac_yonu_oner(kayit, komp)
+        except Exception as ex:
+            self.arac_oneri = None
+            self._yaz(f"araç yönü önerilemedi: {ex}")
+        if hasattr(self, "v_arac_bilgi"):
+            o = self.arac_oneri or {}
+            self.v_arac_bilgi.set(
+                (f"öneri: önü {o['on']}, üstü {o.get('ust', '+Z')}  ({o.get('neden', '')})"
+                 if o.get("on") and o["on"] != "yok"
+                 else f"öneri yok: {o.get('neden', '')} - model eksenleri kullanılır"))
+            self._yaz("araç yönü: " + self.v_arac_bilgi.get())
+            try:
+                oto = (f"oto (öneri: önü {o['on']}, üstü {o.get('ust', '+Z')})"
+                       if o.get("on") and o["on"] != "yok" else "oto (öneri yok: model eksenleri)")
+                v = self.cb_arac_on.cget("values")
+                self.cb_arac_on.configure(values=[oto] + [x for x in v if not str(x).startswith("oto")])
+                if str(self.v_arac_on.get()).startswith("oto"):
+                    self.v_arac_on.set(oto)
+            except Exception:
+                pass
+        self._istisna_doldur()
         self._bitir()
         self._agac_doldur()
         n = sum(1 for k in komp if k["sinif"] == "parca")
@@ -2641,6 +3068,17 @@ class Uygulama(ttk.Frame):
         if a.get("en_az_delik") is not None:
             self.v_delik.set(str(a["en_az_delik"]))
         ne.append("kesit / gizli çizgi / delik ayarı")
+        if a.get("arac_secim") and hasattr(self, "v_arac_on"):
+            self.v_arac_on.set(a["arac_secim"])
+            if a.get("arac_ust"):
+                self.v_arac_ust.set(a["arac_ust"])
+            ne.append("araç yönü")
+        pa = a.get("parca_ayar")
+        if isinstance(pa, dict) and pa:
+            self.parca_ayar = {k: v for k, v in pa.items() if k in kodlar and isinstance(v, dict)}
+            if self.parca_ayar:
+                ne.append(f"{len(self.parca_ayar)} parça istisnası")
+            self._istisna_goster()
         if mal:
             self._agac_doldur()
         return ", ".join(ne)
@@ -3098,6 +3536,47 @@ class Uygulama(ttk.Frame):
                   + (f", biçimce benzer {benzer} parça da" if benzer else ""))
         self.v_bom_ozet.set("AI önerileri uygulandı – BOM'u yeniden çıkarın")
 
+    def _malzeme_satirlari_guncelle(self, kodlar=None):
+        """Malzeme değişince hesaplanmış BOM satırları YERİNDE güncellenir:
+        malzeme adı, kaynağı, kg/adet, toplam kg (kütle = hacim x yoğunluk,
+        hacim satırda zaten var). Ekrandaki liste, pafta anteti (malzeme /
+        kütle), açınım ve kaynak adımları BOM yeniden çıkarılmadan da yeni
+        malzemeyi görür; BOM.csv / .xlsx de yeniden yazılır. Eskiden satırlar
+        siliniyor, ekran "varsayılan"a dönüyor, dosya eski kalıyordu."""
+        if not (self.M and self.satirlar):
+            return 0
+        M, n = self.M, 0
+        for r in self.satirlar:
+            if r.get("sinif") != "parca":
+                continue
+            if kodlar is not None and r.get("kod") not in kodlar:
+                continue
+            k = next((x for x in self.komp or [] if x["kod"] == r.get("kod")), None)
+            if k is None:
+                continue
+            m, kay = M.malzeme_ata(k, self.malzemeler, M.VARSAYILAN_MALZEME)
+            if r.get("malzeme") == m:
+                continue
+            yog = M.yogunluk_kg_mm3(m)
+            r["malzeme"], r["malzeme_ad"] = m, M.MALZEME[m][0]
+            r["yogunluk_g_cm3"] = round(yog * 1e6, 3)
+            r["malzeme_kaynak"] = {"data": "data'dan", "secim": "secim",
+                                   "genel": "varsayilan"}[kay]
+            v = r.get("hacim_mm3") or 0.0
+            if v:
+                r["kutle_kg"] = r["kg_adet"] = round(v * yog, 4)
+                r["toplam_kg"] = round(v * yog * (r.get("adet") or 1), 4)
+            n += 1
+        on = (self.v_out.get() or "").strip()
+        if n and on and os.path.isdir(on):
+            try:
+                bom = [r for r in self.satirlar if r["sinif"] != "kaynak"]
+                M.bom_yaz(on, bom, self.satirlar)
+                self._yaz(f"BOM.csv / BOM.xlsx yeniden yazıldı ({n} parçanın malzemesi değişti)")
+            except Exception as ex:
+                self._yaz(f"! BOM yeniden yazılamadı: {ex}")
+        return n
+
     def malzeme_uygula(self, yalniz_secili):
         if not self.komp:
             return
@@ -3115,7 +3594,7 @@ class Uygulama(ttk.Frame):
                 continue
             self.malzemeler[k["kod"]] = m
             n += 1
-        self.satirlar = []
+        self._malzeme_satirlari_guncelle()
         self._agac_doldur()
         self._yaz(f"malzeme '{m}' {n} parçaya uygulandı")
 
@@ -3181,7 +3660,7 @@ class Uygulama(ttk.Frame):
             if kay == "secim" and m:
                 self.malzemeler[k["kod"]] = m
                 n += 1
-        self.satirlar = []
+        self._malzeme_satirlari_guncelle()
         self._agac_doldur()
         self._malzeme_listesi_tazele()
         self._yaz(f"{os.path.basename(y)}: {len(esl)} kayıt okundu, {n} parça eşleşti")
@@ -3242,7 +3721,7 @@ class Uygulama(ttk.Frame):
                     self.malzemeler[k["kod"]] = m
                     n += 1
             if n:
-                self.satirlar = []
+                self._malzeme_satirlari_guncelle()
                 self._agac_doldur()
                 self._malzeme_listesi_tazele()
                 self._yaz(f"CATIA BOM: {n} parçanın malzemesi CATIA'dan alındı")
@@ -3363,6 +3842,7 @@ class Uygulama(ttk.Frame):
         m = "aluminyum" if cvp else "celik"
         for k in ek:
             self.malzemeler[self.M._tr_sade(k["kod"])] = m
+        self._malzeme_satirlari_guncelle()
         self._yaz(f"ekstrüzyon profil malzemesi: {len(ek)} profil -> "
                   f"{self.M.MALZEME[m][0]} (kullanıcı seçti)")
         return True
@@ -3408,7 +3888,8 @@ class Uygulama(ttk.Frame):
                 self.gorunus_sirasi.remove(k)
         n = sum(1 for v in self.v_gor.values() if v.get())
         self.v_gor_bilgi.set(f"{n} görünüş seçili (en çok 4). Yerleşim 1. açı "
-                             f"(Avrupa): SAĞ sola, SOL sağa, ÜST alta, ALT üste.")
+                             f"(Avrupa): bakılan yanın karşısına; ÜST alta, ALT üste. "
+                             "Araç modunda SAĞ / SOL aracın kendi yanıdır.")
 
     def ornek_uret(self):
         if not self.komp:

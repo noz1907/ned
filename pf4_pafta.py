@@ -174,6 +174,15 @@ _IMGDEF = {}                           # belge -> IMAGEDEF (sayfalar paylaşır)
 def pi3d_antet_acik(istek=None):
     """Pi3D anteti çizilsin mi? Çağıran açıkça söylemişse o; yoksa ayar
     dosyasındaki antet_pi3d (varsayılan 1)."""
+    # DENEME lisansında (ya da lisanssız) her pafta Pi3D / PiVision
+    # antetlidir: ne firma anteti ne boş kutu (kullanıcı: "deneme
+    # sürümünde kesinlikle PiVision çıkacak").
+    try:
+        import pf5_antet as PA
+        if PA.deneme_mi():
+            return True
+    except Exception:
+        pass
     if istek is not None:
         return bool(istek)
     try:
@@ -181,6 +190,27 @@ def pi3d_antet_acik(istek=None):
         return bool(int(pf3_olcu.ayar_oku().get("antet_pi3d", 1)))
     except Exception:
         return True
+
+
+def lisansli_sablon(sablon):
+    """Firma anteti yalnız lisanslıda: DENEME'de verilen şablon yok sayılır."""
+    if sablon is None:
+        return None
+    try:
+        import pf5_antet as PA
+        return None if PA.deneme_mi() else sablon
+    except Exception:
+        return sablon
+
+
+def ayarli_firma_anteti():
+    """Ayarda kayıtlı firma anteti (Yardım > Firma anteti ile kurulan);
+    lisans izin vermiyorsa None."""
+    try:
+        import pf5_antet as PA
+        return PA.ayarli_sablon() if PA.firma_anteti_izinli() else None
+    except Exception:
+        return None
 
 
 def _logo_baytlari(ad):
@@ -1382,6 +1412,7 @@ def pafta_kur(kaynak_dxf, cikti_dxf=None, kagit=VARSAYILAN_KAGIT, olcek=None,
     Döner: {"olcek":, "olcek_metni":, "kagit":, "yer":, "olcu": (gx,gy),
             "alan": (g,y), "dosya":}
     """
+    sablon = lisansli_sablon(sablon)      # DENEME'de firma anteti yok
     _KUTU_ONBELLEK.clear()           # handle'lar belgeye özel
     _IMGDEF.clear()
     if kagit not in KAGIT:
@@ -1816,6 +1847,7 @@ def toplu_pafta(isler, cikti_klasor=None, resim_no=None, resim_adi=None,
 
     cikti_klasor None ise pafta ÇİZİMLERİN KENDİ İÇİNE eklenir; bir
     klasör verilirse kopyalarına eklenir."""
+    sablon = lisansli_sablon(sablon)
     if cikti_klasor:
         os.makedirs(cikti_klasor, exist_ok=True)
     yapilan, hata = [], []
@@ -1902,7 +1934,10 @@ def _cli():
     if n.olcek:                       # ölçeği elle veren sığmayanları da dener
         isler += [{"dosya": s["dosya"], "kagit": n.kagit, "olcek": n.olcek}
                   for s in p["sigmayan"]]
-    r = toplu_pafta(isler, n.kopya, n.no, n.ad)
+    sb = ayarli_firma_anteti()
+    if sb is not None:
+        print(f"  firma anteti: {sb.bilgi.get('ad', 'antet')}")
+    r = toplu_pafta(isler, n.kopya, n.no, n.ad, sablon=sb)
     print()
     if n.bas:
         os.makedirs(n.pdf_klasor, exist_ok=True)

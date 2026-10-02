@@ -44,7 +44,7 @@ DURUM_DOSYASI = "pi3d_is.json"
 # PROGRAMIN SÜRÜM NUMARASI - tek yer. Ekran başlığı, rapor.md, komut
 # satırı (--surum), kaynak resmi anteti ve paket adı buradan okur.
 # Her teslim edilen pakette artırılır: büyük.küçük.düzeltme
-PI3D_SURUM = "1.0.12"
+PI3D_SURUM = "1.0.13"
 PI3D_SURUM_TARIHI = "01.10.2026"
 CIZIM_SURUMU = "2026.09.26"
 
@@ -137,10 +137,14 @@ def imza(*parca):
 def cizim_ayari(P):
     """P'nin çizimi değiştiren kısmı (yoğunluk ayrıca parçaya göre girer)."""
     P = P or {}
+    arac = P.get("arac") if isinstance(P.get("arac"), dict) else None
     return {"gizli": bool(P.get("gizli")),
             "en_az_delik": float(P.get("en_az_delik") or 0.0),
             "gorunusler": list(P.get("gorunusler") or []),
-            "kesit": bool(P.get("kesit"))}
+            "kesit": bool(P.get("kesit")),
+            # araç yönü çizimi değiştirir (parça kullanım yönünde çizilir)
+            "arac": {"on": str(arac.get("on") or "").upper(),
+                     "ust": str(arac.get("ust") or "+Z").upper()} if arac else None}
 
 
 # ------------------------------------------------------------ durum dosyası

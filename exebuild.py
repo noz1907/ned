@@ -1,7 +1,7 @@
 # -*- coding: utf-8 -*-
 """Pi3D — EXE DERLEME ve PAKETLEME (PiProduct exebuild ile aynı düzen)
 ================================================================
-    py exebuild.py            (sorar: 1 = PI3D logolu, 2 = FIRMA antetli)
+    py exebuild.py            (tek sürüm; antet lisansa göre çalışma anında seçilir)
     py exebuild.py 1 --kurulum-yok
 
 Adımlar:
@@ -51,12 +51,13 @@ def version_json(ver, tur):
 
 
 def sor_tur(argv):
+    """TEK sürüm vardır. Antet derlemede değil ÇALIŞMA ANINDA, lisansa göre
+    seçilir: deneme lisansında Pi3D / PiVision anteti; tam lisansta Yardım >
+    Firma anteti ile verilen A3 antet DXF'i (ayara kaydedilir, değiştirilir).
+    Eski "1 / 2" seçimi geriye uyumluluk için kabul edilir, yok sayılır."""
     if argv and argv[0] in ("1", "2"):
-        return argv[0]
-    print("  1 = PI3D  : Pi3D / PiVision logolu, Pi3D anteti")
-    print("  2 = FIRMA : logosuz, antet/ klasöründeki firma anteti")
-    s = input("  Seçim [1]: ").strip()
-    return "2" if s == "2" else "1"
+        print("  (not: 1 / 2 seçimi kalktı - antet lisansa göre çalışma anında seçilir)")
+    return "1"
 
 
 def pyinstaller(tur):
@@ -171,8 +172,8 @@ def main(argv):
     argv = [a for a in argv if not a.startswith("--")]
     ver = surum()
     tur = sor_tur(argv)
-    print(f"\n  Pi3D v{ver}  ({'PI3D logolu' if tur == '1' else 'FIRMA antetli'})\n")
-    version_json(ver, "PI3D" if tur == "1" else "FIRMA")
+    print(f"\n  Pi3D v{ver}  (tek sürüm: antet lisansa göre çalışma anında)\n")
+    version_json(ver, "PI3D")
     print("  [1/5] PyInstaller...")
     pyinstaller(tur)
     print("  [2/5] dağıtım klasörü...")

@@ -26,6 +26,11 @@ import ezdxf                                                  # noqa: E402
 import ezdxf.bbox                                             # noqa: E402
 import pf3_olcu as O                                          # noqa: E402
 import pf4_pafta as P                                         # noqa: E402
+import pf5_antet as _PA                                       # noqa: E402
+# Antet lisansa göre seçilir (DENEME: hep Pi3D anteti, firma anteti yok).
+# Bu denetim pafta mekaniğini sınar; lisans TAM sayılır ki ayar ve şablon
+# davranışı görülsün. Lisans kuralının kendisi antet_otomatik_denetimi'nde.
+_PA._LISANS["d"] = {"gecerli": True, "paket": "TAM"}
 import pf5_antet as A                                         # noqa: E402
 
 HATA = []

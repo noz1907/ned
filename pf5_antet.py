@@ -264,7 +264,16 @@ def sablon_hazirla(kaynak_dxf, cikti_kok, kagit, cerceve, antet, alanlar,
                 blk.add_lwpolyline(p, close=bool(e.is_closed),
                                    dxfattribs={"layer": KATMAN})
             elif tip in ("LINE", "LWPOLYLINE", "SOLID", "CIRCLE", "ARC",
-                         "ELLIPSE", "SPLINE", "HATCH", "POINT"):
+                         "ELLIPSE", "SPLINE", "HATCH", "POINT", "TEXT", "MTEXT"):
+                # Okunabilir etiketler ("Part Name :") de şablona girer;
+                # yazı stili hedefte yoksa kurulur (yoksa DXF açılmaz).
+                if tip in ("TEXT", "MTEXT"):
+                    st = e.dxf.get("style", "Standard") or "Standard"
+                    if st not in t.styles:
+                        try:
+                            t.styles.add(st, font="arial.ttf")
+                        except Exception:
+                            e.dxf.style = "Standard"
                 y = blk.add_foreign_entity(e, copy=True)
                 if y is not None:
                     y.dxf.layer = KATMAN
@@ -515,3 +524,383 @@ def _cli():
 
 if __name__ == "__main__":
     _cli()
+
+
+# ================================================================ otomatik tanım
+# Kullanıcı: "Lisans alınması durumunda antet DXF A3 olarak istensin, o DXF
+# analiz edilecek ve ayar olarak kaydedilecek; bu ayar zaman içinde
+# değiştirilebilir olmalı." Burada firmanın antet DXF'i ÖLÇÜLEREK
+# çözülür: kâğıt, çerçeve, antet bloğu, kapalı kutular ve kutulardaki
+# etiketler. Etiket okunabiliyorsa (TEXT / MTEXT) alan adı anahtar
+# kelimeden önerilir; patlatılmış (kontur) yazıda öneri yapılamaz,
+# kullanıcı kutuyu seçer. Hiçbir şey tahmin edilip sessizce yazılmaz:
+# eşleme tablosu kullanıcıya gösterilir, o onaylar.
+ISO_KAGIT = {"A4": (297.0, 210.0), "A3": (420.0, 297.0), "A2": (594.0, 420.0),
+             "A1": (841.0, 594.0), "A0": (1189.0, 841.0)}
+ANAHTAR_KELIME = [
+    ("resim_no", ("drawing no", "drawing number", "dwg no", "dwg. no", "resim no",
+                  "cizim no", "zeichnungsnr", "zeichnungs nr", "zeichnungsnummer",
+                  "drawing nr", "no de plan")),
+    ("parca_adi", ("part name", "parca adi", "parca ismi", "benennung",
+                   "bezeichnung", "tanim", "description", "designation",
+                   "title", "part")),
+    ("malzeme", ("material", "malzeme", "werkstoff", "matiere", "matériau")),
+    ("kutle", ("weight", "kutle", "agirlik", "gewicht", "mass", "masse", "poids")),
+    ("olcek", ("scale", "olcek", "massstab", "masstab", "echelle", "maßstab")),
+    ("dosya", ("file", "dosya", "datei", "fichier")),
+    ("cizen", ("drawn", "cizen", "gezeichnet", "dessine", "dessiné", "drawn by")),
+    ("onaylayan", ("checked", "approved", "onay", "kontrol", "gepruft", "geprüft",
+                   "verifie", "vérifié", "appr")),
+]
+TARIH_KELIME = ("date", "tarih", "datum")
+AD_KELIME = ("name", "ad", "isim", "adi")
+
+_TR_ASCII = str.maketrans("ıİşŞğĞüÜöÖçÇâÂîÎûÛ", "iissgguuooccaaiiuu")
+
+
+def _sade(t):
+    return (t or "").translate(_TR_ASCII).lower().strip()
+
+
+def kagit_tahmini(w, h):
+    """Ölçülen sınır hangi ISO kâğıdı (yüzde 3 payla); değilse ölçünün kendisi."""
+    for ad, (g, y) in ISO_KAGIT.items():
+        for a, b in ((g, y), (y, g)):
+            if abs(w - a) <= 0.03 * a and abs(h - b) <= 0.03 * b:
+                return ad, (a, b)
+    return None, (round(w, 2), round(h, 2))
+
+
+def _uzun_hatlar(msp, sinir, oran=0.6):
+    """Sınırın yüzde `oran`ından uzun yatay / düşey hatlar (çerçeve adayı)."""
+    x0, y0, x1, y1 = sinir
+    Y, X = _izgara(msp, sinir)
+    W, H = x1 - x0, y1 - y0
+    ys = sorted(k for k, segs in Y.items() if max(e - s for s, e in segs) >= oran * W)
+    xs = sorted(k for k, segs in X.items() if max(e - s for s, e in segs) >= oran * H)
+    return ys, xs
+
+
+def _cerceve_bul(msp, sinir):
+    """Dış sınır ve iç çerçeve: en dıştaki uzun hat çifti kâğıt kenarı ya
+    da dış çizgi, bir içerideki (5-30 mm) çift iç çerçevedir. Tek çift
+    varsa o çerçevedir."""
+    ys, xs = _uzun_hatlar(msp, sinir)
+    if len(ys) < 2 or len(xs) < 2:
+        raise AntetYok("Çerçeve bulunamadı: antet DXF'inde kâğıdı çevreleyen "
+                       "yatay ve düşey uzun çizgiler yok.")
+    dis = (xs[0], ys[0], xs[-1], ys[-1])
+
+    def ic(liste, dis_a, dis_b):
+        a = next((v for v in liste if 4.0 <= v - dis_a <= 35.0), dis_a)
+        b = next((v for v in reversed(liste) if 4.0 <= dis_b - v <= 35.0), dis_b)
+        return a, b
+    cx0, cx1 = ic(xs, dis[0], dis[2])
+    cy0, cy1 = ic(ys, dis[1], dis[3])
+    return dis, (cx0, cy0, cx1, cy1)
+
+
+def _antet_bul(msp, cerceve):
+    """Antet bloğu: çerçevenin alt yarısındaki KISA çizgilerin (çerçeveden
+    kısa) sınırı; çizgiler çerçeve hatlarına oturtulur."""
+    x0, y0, x1, y1 = cerceve
+    W, H = x1 - x0, y1 - y0
+    kx0 = ky0 = float("inf"); kx1 = ky1 = float("-inf")
+    say = 0
+    for e in msp:
+        if e.dxftype() != "LINE":
+            continue
+        a, b = e.dxf.start, e.dxf.end
+        yatay = abs(a.y - b.y) < 0.3 and 2.0 < abs(a.x - b.x) < 0.9 * W
+        dusey = abs(a.x - b.x) < 0.3 and 2.0 < abs(a.y - b.y) < 0.6 * H
+        if not (yatay or dusey):
+            continue
+        # çerçevenin içinde ve alt yarısında
+        ya, yb = min(a.y, b.y), max(a.y, b.y)
+        xa, xb = min(a.x, b.x), max(a.x, b.x)
+        if xa < x0 - 0.5 or xb > x1 + 0.5 or ya < y0 - 0.5 or yb > y0 + 0.5 * H:
+            continue
+        kx0, kx1 = min(kx0, xa), max(kx1, xb)
+        ky0, ky1 = min(ky0, ya), max(ky1, yb)
+        say += 1
+    if say < 4:
+        raise AntetYok("Antet bloğu bulunamadı: çerçevenin alt yarısında kutu "
+                       "çizgileri yok. Antet sağ alt köşede, çizgilerle çizilmiş "
+                       "olmalı (blok ise CAD'de patlatın).")
+    # kenarları çerçeveye yapıştır (antet çoğu zaman çerçeveye dayanır)
+    if abs(kx1 - x1) < 2.0: kx1 = x1
+    if abs(ky0 - y0) < 2.0: ky0 = y0
+    if abs(kx0 - x0) < 2.0: kx0 = x0
+    return (kx0, ky0, kx1, ky1)
+
+
+def _hucre_etiketleri(msp, hc):
+    """Her kutunun içindeki okunabilir yazı (TEXT / MTEXT / ATTDEF)."""
+    out = [""] * len(hc)
+    for e in msp:
+        t = e.dxftype()
+        if t == "TEXT":
+            m, p = e.dxf.text, e.dxf.insert
+        elif t == "MTEXT":
+            m, p = e.plain_text(), e.dxf.insert
+        elif t == "ATTDEF":
+            m, p = (e.dxf.prompt or e.dxf.tag or ""), e.dxf.insert
+        else:
+            continue
+        m = (m or "").strip()
+        if not m:
+            continue
+        try:
+            k = ezdxf.bbox.extents([e], fast=True)
+            cx, cy = (k.extmin.x + k.extmax.x) / 2, (k.extmin.y + k.extmax.y) / 2
+        except Exception:
+            cx, cy = p.x, p.y
+        for i, h in enumerate(hc):
+            if h[0] <= cx <= h[2] and h[1] <= cy <= h[3]:
+                out[i] = (out[i] + " " + m).strip()
+                break
+    return out
+
+
+def alan_oner(hc, etiketler):
+    """Etiketlerden alan önerisi: {alan: kutu indeksi}. Tarih / ad sütunları
+    Drawn / Checked satırlarına göre çözülür. Emin olunmayan hiçbir şey
+    atanmaz; kullanıcı tabloda tamamlar."""
+    sade = [_sade(e) for e in etiketler]
+    es = {}
+    for i, m in enumerate(sade):
+        if not m:
+            continue
+        for alan, kelimeler in ANAHTAR_KELIME:
+            if alan in es:
+                continue
+            if any(k in m for k in kelimeler):
+                # "drawing" ile "drawn" karışmasın: tam kelime araması
+                es[alan] = i
+                break
+
+    def ayni_satir(a, b):
+        ya, yb = (a[1] + a[3]) / 2, (b[1] + b[3]) / 2
+        return abs(ya - yb) < 0.6 * min(a[3] - a[1], b[3] - b[1])
+
+    def ustunde(ust, alt_):
+        # ust kutusu alt_'ın tam üstünde mi (x çakışık, y daha büyük)
+        return (ust[1] >= alt_[3] - 0.5 and min(ust[2], alt_[2]) - max(ust[0], alt_[0]) > 2.0
+                and ust[1] - alt_[3] < 3 * (alt_[3] - alt_[1]))
+    tarih_h = [i for i, m in enumerate(sade) if any(k == m or k in m.split() for k in TARIH_KELIME)]
+    ad_h = [i for i, m in enumerate(sade) if m in AD_KELIME or m.split()[:1] == ["name"]]
+    for alan, tarih_alan in (("cizen", "cizen_tarih"), ("onaylayan", "onay_tarih")):
+        i = es.get(alan)
+        if i is None:
+            continue
+        satir = [j for j in range(len(hc)) if j != i and ayni_satir(hc[j], hc[i])
+                 and hc[j][0] >= hc[i][2] - 0.5]
+        satir.sort(key=lambda j: hc[j][0])
+        bos = [j for j in satir if not sade[j]]
+        # aynı satırda "Date" etiketli kutu: değer onun sağına (etiketli kutu)
+        t_ayni = [j for j in satir if j in tarih_h]
+        if t_ayni:
+            es[tarih_alan] = t_ayni[0]
+            bos = [j for j in bos if j != t_ayni[0]]
+        if bos:
+            # başlık sütunlarına göre: üstündeki "Date" / "Name"
+            tarih_j = next((j for j in bos if any(ustunde(hc[t], hc[j]) for t in tarih_h)), None)
+            ad_j = next((j for j in bos if any(ustunde(hc[t], hc[j]) for t in ad_h)), None)
+            if tarih_alan not in es and tarih_j is not None:
+                es[tarih_alan] = tarih_j
+            if ad_j is not None:
+                es[alan] = ad_j
+            elif tarih_j is None and tarih_alan not in es and len(bos) >= 2:
+                es[tarih_alan], es[alan] = bos[0], bos[1]
+            elif tarih_j is None and tarih_alan not in es and len(bos) == 1:
+                es[alan] = bos[0]
+            elif ad_j is None and len([j for j in bos if j != es.get(tarih_alan)]) >= 1:
+                es[alan] = [j for j in bos if j != es.get(tarih_alan)][0]
+        # değilse: değer etiketin sağına, aynı kutuya (es[alan] = i kalır)
+    return es
+
+
+def otomatik_tanim(kaynak_dxf, log=print):
+    """Firmanın antet DXF'ini ölçerek çözer. Döner:
+      {"kagit_ad", "kagit", "dis", "cerceve", "antet", "hucreler",
+       "etiketler", "oneri": {alan: kutu indeksi}, "notlar": [...]}"""
+    d = ezdxf.readfile(kaynak_dxf)
+    msp = d.modelspace()
+    try:
+        ext = ezdxf.bbox.extents(msp, fast=True)
+    except Exception as ex:
+        raise AntetYok(f"DXF okunamadı: {ex}")
+    if ext is None or not ext.has_data:
+        raise AntetYok("DXF boş.")
+    sinir = (ext.extmin.x, ext.extmin.y, ext.extmax.x, ext.extmax.y)
+    dis, cerceve = _cerceve_bul(msp, sinir)
+    kad, kagit = kagit_tahmini(dis[2] - dis[0], dis[3] - dis[1])
+    notlar = []
+    if kad is None:
+        # dış çizgi kâğıt değilse çizimin sınırına bak
+        kad2, kagit2 = kagit_tahmini(sinir[2] - sinir[0], sinir[3] - sinir[1])
+        if kad2:
+            kad, kagit = kad2, kagit2
+        else:
+            notlar.append(f"kâğıt ISO ölçüsü değil: {kagit[0]} x {kagit[1]} mm ölçüldü")
+    antet = _antet_bul(msp, cerceve)
+    hc = hucreler(msp, antet)
+    hc.sort(key=lambda h: (-h[3], h[0]))
+    if not hc:
+        raise AntetYok("Antette kapalı kutu bulunamadı (dört kenarı çizgili kutu yok).")
+    etiket = _hucre_etiketleri(msp, hc)
+    oneri = alan_oner(hc, etiket)
+    if not any(etiket):
+        notlar.append("kutularda okunabilir yazı yok (yazılar patlatılmış): "
+                      "alanları tablodan elle seçin")
+    log(f"  kâğıt {kad or '?'} {kagit[0]} x {kagit[1]}, çerçeve {tuple(round(v, 1) for v in cerceve)}, "
+        f"antet {tuple(round(v, 1) for v in antet)}, {len(hc)} kutu, "
+        f"{sum(1 for e in etiket if e)} etiket, {len(oneri)} alan önerisi")
+    # çizim sınırı kâğıttan taşıyorsa (dış kenar yoksa) kâğıdı dış çizgi say
+    return {"kaynak": kaynak_dxf, "kagit_ad": kad, "kagit": kagit, "dis": dis,
+            "cerceve": cerceve, "antet": antet, "hucreler": hc,
+            "etiketler": etiket, "oneri": oneri, "notlar": notlar}
+
+
+def tanim_onizleme_png(tanim, png, secim=None, dpi=110):
+    """Antet bölgesinin resmi: kutular numaralı, atanmış alanlar yeşil."""
+    import matplotlib
+    matplotlib.use("Agg")
+    import matplotlib.pyplot as plt
+    from matplotlib.patches import Rectangle
+    from ezdxf.addons.drawing import RenderContext, Frontend
+    from ezdxf.addons.drawing.matplotlib import MatplotlibBackend
+    from ezdxf.addons.drawing.config import Configuration, ColorPolicy, BackgroundPolicy
+    d = ezdxf.readfile(tanim["kaynak"])
+    msp = d.modelspace()
+    x0, y0, x1, y1 = tanim["antet"]
+    pay = 3.0
+    w, h = (x1 - x0 + 2 * pay), (y1 - y0 + 2 * pay)
+    fig = plt.figure(figsize=(min(16, 0.055 * w + 2), min(9, 0.055 * h + 1.5)), dpi=dpi)
+    ax = fig.add_axes([0, 0, 1, 1]); ax.set_axis_off()
+    Frontend(RenderContext(d), MatplotlibBackend(ax),
+             config=Configuration(background_policy=BackgroundPolicy.WHITE,
+                                  color_policy=ColorPolicy.BLACK, min_lineweight=0.2)
+             ).draw_layout(msp, finalize=False)
+    secim = secim or {}
+    ters = {}
+    for alan, i in secim.items():
+        ters.setdefault(i, []).append(alan)
+    for i, hcell in enumerate(tanim["hucreler"]):
+        a, b, c, e = hcell
+        renk = "#1a7f37" if i in ters else "#1d6fd1"
+        ax.add_patch(Rectangle((a, b), c - a, e - b, fill=bool(i in ters),
+                               alpha=0.18 if i in ters else 1.0, color=renk, lw=0.8))
+        ax.text(a + 0.6, e - 0.6, f"{i}" + (" " + ",".join(ters[i]) if i in ters else ""),
+                fontsize=6, color=renk, va="top", ha="left", weight="bold")
+    ax.set_xlim(x0 - pay, x1 + pay); ax.set_ylim(y0 - pay, y1 + pay); ax.set_aspect("equal")
+    fig.savefig(png, facecolor="white"); plt.close(fig)
+    return png
+
+
+# ------------------------------------------------------------ ayar / lisans
+def sablon_klasoru():
+    """Firma anteti şablonunun KALICI yeri (kullanıcı verisi: LOCALAPPDATA\\Pi3D\\antet).
+    Exe yeniden derlenmez; şablon buradan okunur, buradan değiştirilir."""
+    try:
+        import pf17_lisans as L
+        kok = L._veri_klasoru()
+    except Exception:
+        kok = os.path.join(os.path.expanduser("~"), ".config", "Pi3D")
+    d = os.path.join(kok, "antet")
+    try:
+        os.makedirs(d, exist_ok=True)
+    except Exception:
+        pass
+    return d
+
+
+def sablon_kur(tanim, secim, ad=None, log=print, klasor=None):
+    """Onaylanmış eşlemeyle şablonu üretir, kalıcı klasöre yazar ve ayara
+    kaydeder. secim: {alan: kutu indeksi}. Döner: Sablon."""
+    alanlar = {}
+    for alan, i in (secim or {}).items():
+        if alan not in ALAN_ACIKLAMA or i is None or not (0 <= i < len(tanim["hucreler"])):
+            continue
+        h = tanim["hucreler"][i]
+        alanlar[alan] = ((h[0] + h[2]) / 2.0, (h[1] + h[3]) / 2.0)
+    if not alanlar:
+        raise AntetYok("Hiç alan seçilmedi: en azından parça adı ve resim no kutusunu seçin.")
+    kl = klasor or sablon_klasoru()
+    os.makedirs(kl, exist_ok=True)
+    kok = os.path.join(kl, "firma")
+    ad = ad or (f"Firma anteti ({tanim.get('kagit_ad') or 'özel kâğıt'})")
+    sablon_hazirla(tanim["kaynak"], kok, kagit=tuple(tanim["kagit"]),
+                   cerceve=tuple(tanim["cerceve"]), antet=tuple(tanim["antet"]),
+                   alanlar=alanlar, ad=ad, log=log)
+    import time
+    try:
+        import pf3_olcu
+        pf3_olcu.ayar_yaz(antet_sablon=kok, antet_ad=ad,
+                          antet_kaynak=os.path.basename(tanim["kaynak"]),
+                          antet_tarih=time.strftime("%d.%m.%Y %H:%M"))
+    except Exception as ex:
+        log(f"! antet ayarı yazılamadı: {ex}")
+    return Sablon(kok)
+
+
+def sablon_kaldir():
+    """Ayardaki firma antetini kapatır (dosyalar durur; yeniden seçilebilir)."""
+    try:
+        import pf3_olcu
+        pf3_olcu.ayar_yaz(antet_sablon="", antet_ad="", antet_kaynak="", antet_tarih="")
+        return True
+    except Exception:
+        return False
+
+
+def ayarli_sablon():
+    """Ayara kaydedilmiş firma anteti; yoksa None."""
+    try:
+        import pf3_olcu
+        kok = pf3_olcu.ayar_oku().get("antet_sablon") or ""
+    except Exception:
+        return None
+    if not kok:
+        return None
+    try:
+        return Sablon(kok)
+    except Exception:
+        return None
+
+
+def ayarli_sablon_bilgi():
+    try:
+        import pf3_olcu
+        a = pf3_olcu.ayar_oku()
+    except Exception:
+        return {}
+    return {k: a.get(k, "") for k in ("antet_sablon", "antet_ad", "antet_kaynak", "antet_tarih")}
+
+
+_LISANS = {}
+
+
+def lisans_durumu(yenile=False):
+    """Lisans (pf17) bir kez okunur; pafta / kaynak resmi her sayfada sormasın."""
+    if yenile or "d" not in _LISANS:
+        try:
+            import pf17_lisans as L
+            _LISANS["d"] = L.yukle()
+        except Exception:
+            _LISANS["d"] = {"gecerli": False, "paket": ""}
+    return _LISANS["d"]
+
+
+def firma_anteti_izinli(durum=None):
+    """Firma anteti yalnız GEÇERLİ ve DENEME olmayan lisansta. Deneme
+    sürümünde her çıktı Pi3D / PiVision antetlidir (kullanıcı kararı)."""
+    d = durum if durum is not None else lisans_durumu()
+    try:
+        return bool(d.get("gecerli")) and str(d.get("paket") or "").upper() != "DENEME"
+    except Exception:
+        return False
+
+
+def deneme_mi(durum=None):
+    return not firma_anteti_izinli(durum)

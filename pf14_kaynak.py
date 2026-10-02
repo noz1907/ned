@@ -1629,13 +1629,25 @@ def kaynak_resmi(O, kayit, komp, grup, satirlar, yol, P=None, log=print,
                            and gorunurluk(d, isin_tum, goz)[0] >= GORUNUR_ORAN)
         b["gorunen"] = {g for g, n in say.items() if n} or {max(say, key=say.get)}
     bilgi["genel"] = (bolge_l, ana_r)
-    if (P or {}).get("balon"):
-        # SUNUM / BALONLU resim: tablo yok, ad yok; kaynak noktaları
-        # büyütülmüş dairelerde, ana görünüşe uçan çizgiyle bağlı
-        sayfalar = _balon_sayfalari(O, bilgi, detaylar, det_r,
-                                    os.path.dirname(os.path.abspath(yol)))
-    else:
-        sayfalar = _sayfalar(O, bilgi, tab, detaylar, det_r)
+    # firma anteti (lisanslı + ayarda kayıtlı): sayfa düzeni antetin
+    # üstünde kalır; dosya adı ve kod antete yazılır
+    sb = _firma_sablonu()
+    bilgi["_sablon"] = sb
+    bilgi["dosya"] = os.path.basename(yol)
+    bilgi["kod"] = grup.get("kod") or grup.get("dugum_ad") or grup["ad"]
+    global ANTET_Y, BALON_ALT_EK
+    eski_ay, eski_be = ANTET_Y, BALON_ALT_EK
+    if sb is not None:
+        try:
+            ak = sb.antet_kutusu(KAGIT)
+            ANTET_Y = max(ANTET_Y, ak[3] - KENAR + 2.0)
+            BALON_ALT_EK = max(0.0, ANTET_Y - 8.0)
+        except Exception:
+            pass
+    try:
+        sayfalar = _kaynak_sayfalari(O, bilgi, tab, detaylar, det_r, P, yol)
+    finally:
+        ANTET_Y, BALON_ALT_EK = eski_ay, eski_be
     adim(0.9)
     pdf_yaz(sayfalar, yol)
     for d in dikisler:
@@ -1645,10 +1657,44 @@ def kaynak_resmi(O, kayit, komp, grup, satirlar, yol, P=None, log=print,
     return dikisler
 
 
+def _kaynak_sayfalari(O, bilgi, tab, detaylar, det_r, P, yol):
+    if (P or {}).get("balon"):
+        # SUNUM / BALONLU resim: tablo yok, ad yok; kaynak noktaları
+        # büyütülmüş dairelerde, ana görünüşe uçan çizgiyle bağlı
+        return _balon_sayfalari(O, bilgi, detaylar, det_r,
+                                os.path.dirname(os.path.abspath(yol)))
+    return _sayfalar(O, bilgi, tab, detaylar, det_r)
+
+
 # ------------------------------------------------------------ sayfa
 KAGIT = (420.0, 297.0)      # A3 yatay, mm
 KENAR = 10.0
 ANTET_Y = 18.0
+BALON_ALT_EK = 0.0          # firma antetinde balon sütunu antetin üstünde kalır
+
+
+def _firma_sablonu():
+    """Lisanslıda ayara kaydedilmiş firma anteti (pf5); DENEME'de None:
+    kaynak resmi de öbür çıktılar gibi Pi3D antetli çıkar."""
+    try:
+        import pf5_antet as PA
+        return PA.ayarli_sablon() if PA.firma_anteti_izinli() else None
+    except Exception:
+        return None
+
+
+def _antet_degerleri(bilgi, no, toplam):
+    try:
+        import pf3_olcu
+        a = pf3_olcu.ayar_oku()
+    except Exception:
+        a = {}
+    return {"parca_adi": f"{bilgi['ad']}"[:48],
+            "resim_no": str(bilgi.get("kod") or bilgi["ad"])[:40],
+            "dosya": bilgi.get("dosya", ""), "olcek": "-",
+            "cizen": a.get("cizen", ""), "onaylayan": a.get("onaylayan", ""),
+            "cizen_tarih": a.get("tarih", ""), "onay_tarih": a.get("tarih", ""),
+            "sayfa": f"{no}/{toplam}"}
 YH = 2.5                    # kâğıtta yazı yüksekliği, mm
 UCTAN_PAY = 2.0             # dikiş uca bundan yakınsa "uçtan başlar" (0)
 KISA_TABLO = 10             # bu kadar dikişe kadar tablo genel görünüş sayfasında
@@ -1701,9 +1747,22 @@ def _yeni_sayfa(O):
 
 
 def _antet(msp, bilgi, no, toplam):
-    """Çerçeve + alt şerit antet."""
+    """Çerçeve + alt şerit antet. Firma anteti (lisanslı, ayarda kayıtlı)
+    varsa çerçeve ve antet onun çiziminden gelir, şerit çizilmez."""
     W, H = KAGIT
     kat = {"layer": "CERCEVE"}
+    sb = bilgi.get("_sablon")
+    if sb is not None:
+        try:
+            import pf4_pafta as PF
+            sb.ciz(msp, KAGIT, _antet_degerleri(bilgi, no, toplam), stil=PF.yazi_stili(msp.doc))
+            # sayfa başlığı SAĞ üstte: sol üstte "GENEL GÖRÜNÜŞ" başlığı var
+            _yaz(msp, f"KAYNAK RESMİ   SAYFA {no} / {toplam}", W - KENAR - 75.0, H - KENAR - 8.0, 3.5)
+            import pf7_is as IS
+            _yaz(msp, f"Pi3D v{IS.PI3D_SURUM}", KENAR + 6, KENAR + 2.5, 2.0)
+            return
+        except Exception:
+            pass                       # şablon basılamazsa sade şerit
     msp.add_lwpolyline([(KENAR, KENAR), (W - KENAR, KENAR), (W - KENAR, H - KENAR),
                         (KENAR, H - KENAR)], close=True, dxfattribs=kat)
     y1 = KENAR + ANTET_Y
@@ -1942,7 +2001,7 @@ def _balon_yuvalari(n):
     W, H = KAGIT
     R = BALON_R
     ust = H - KENAR - 24.0                 # üstte logo şeridi
-    alt = KENAR + 8.0
+    alt = KENAR + 8.0 + BALON_ALT_EK       # firma antetinde antetin üstü
     sol, sag = KENAR + 4.0 + BALON_ETIKET + R, W - KENAR - 4.0 - BALON_ETIKET - R
 
     def dizi(x, k):
@@ -1986,8 +2045,19 @@ def _balon_sayfalari(O, bilgi, detaylar, det_r, klasor):
         geo = []
         msp = doc.modelspace()
         kat = {"layer": "CERCEVE"}
-        msp.add_lwpolyline([(KENAR, KENAR), (W - KENAR, KENAR), (W - KENAR, H - KENAR),
-                            (KENAR, H - KENAR)], close=True, dxfattribs=kat)
+        sb = bilgi.get("_sablon")
+        if sb is not None:
+            # firma anteti: çerçeve + antet onun çiziminden; Pi3D logosu yok
+            try:
+                import pf4_pafta as PF
+                sb.ciz(msp, KAGIT, _antet_degerleri(bilgi, sayfa_no, len(paketler)),
+                       stil=PF.yazi_stili(doc))
+                logo = None
+            except Exception:
+                sb = None
+        if sb is None:
+            msp.add_lwpolyline([(KENAR, KENAR), (W - KENAR, KENAR), (W - KENAR, H - KENAR),
+                                (KENAR, H - KENAR)], close=True, dxfattribs=kat)
         # --- logo şeridi (uçan: hafif eğik gölge çizgisiyle) + başlık
         if logo:
             try:
@@ -2004,7 +2074,9 @@ def _balon_sayfalari(O, bilgi, detaylar, det_r, klasor):
         _yaz(msp, f"SAYFA {sayfa_no} / {len(paketler)}", W - KENAR - 70.0,
              H - KENAR - 16.0, 3.0)
         import pf7_is as IS
-        _yaz(msp, f"Pi3D v{IS.PI3D_SURUM}", W - KENAR - 30.0, KENAR + 3.0, 2.5)
+        # firma antetinde sürüm yazısı antet kutusuna girmesin: sol alta
+        _yaz(msp, f"Pi3D v{IS.PI3D_SURUM}",
+             (KENAR + 6.0) if sb is not None else (W - KENAR - 30.0), KENAR + 3.0, 2.5)
         yuva, kutu = _balon_yuvalari(len(paket))
         # --- ana görünüş: bu sayfanın bölgelerinin en çok göründüğü izometrik
         bu_harf = {detaylar[i]["bolge"] for i in paket}

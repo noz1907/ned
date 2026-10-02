@@ -25,6 +25,11 @@ sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 import ezdxf                                                  # noqa: E402
 import ezdxf.bbox                                             # noqa: E402
 import pf4_pafta as P                                         # noqa: E402
+import pf5_antet as _PA                                       # noqa: E402
+# Antet lisansa göre seçilir (DENEME: hep Pi3D anteti, firma anteti yok).
+# Bu denetim pafta mekaniğini sınar; lisans TAM sayılır ki ayar ve şablon
+# davranışı görülsün. Lisans kuralının kendisi antet_otomatik_denetimi'nde.
+_PA._LISANS["d"] = {"gecerli": True, "paket": "TAM"}
 
 hata = []
 
