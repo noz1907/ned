@@ -806,6 +806,21 @@ def simetri_farklari(o1, o2):
     return out
 
 
+def simetri_adaylari(olcu_gecmis, temel_ad, tam, temel, es_mi):
+    """Simetrik eş ADAYLARI: önce aynı TAM ad (indeks aynı: "PROFILI_10" <->
+    "Symmetry of PROFILI_10"; kopya sayacı ".1" farkı olabilir); yoksa, bu
+    parça ya da aday İNDEKSSİZ ise ("YAN KAPAK" <-> "Symmetry of YAN
+    KAPAK_1") temelde tek böyle aday. "SACI_3" ile "Symmetry of SACI_1"
+    (ikisi de indeksli, farklı) eşleştirilmez - ayrı parçalardır."""
+    adaylar = [c for c in olcu_gecmis.get(tam, ()) if c[2] != es_mi]
+    if adaylar:
+        return adaylar
+    tl = [t for t in temel_ad.get(temel, ()) if t != tam and (t == temel or tam == temel)]
+    if len(tl) == 1:
+        return [c for c in olcu_gecmis.get(tl[0], ()) if c[2] != es_mi]
+    return []
+
+
 def kaynak_ozeti(satirlar, en_cok=6):
     """[(tür, adet), ...] - en çok geçen önce. satirlar: {ad, adet}."""
     say = {}
@@ -12976,11 +12991,7 @@ def calistir(step, on, kayit, komp, P, asama=(1, 2, 3), esl=None, agac=None,
             tam, temel, es_mi = simetri_anahtari(k["ad"])
             # adaylar: aynı tam ad (kopya sayacı ".1" farkı olabilir: "SACI_5"
             # ile "SACI_5.1" ayrı parça çıkabiliyor); yoksa temelde tek ad
-            adaylar = [c for c in olcu_gecmis.get(tam, ()) if c[2] != es_mi]
-            if not adaylar:
-                tl = [t for t in temel_ad.get(temel, ()) if t != tam]
-                if len(tl) == 1:
-                    adaylar = [c for c in olcu_gecmis.get(tl[0], ()) if c[2] != es_mi]
+            adaylar = simetri_adaylari(olcu_gecmis, temel_ad, tam, temel, es_mi)
             if adaylar:
                 # aday parçalardan biri ayna olarak uyuyorsa sorun yok; hiçbiri
                 # uymuyorsa hacmi en yakın olana göre uyarı

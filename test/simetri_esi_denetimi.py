@@ -54,6 +54,19 @@ def main():
           O.simetri_anahtari("Symmetry of K0 TRIM BAGLANTI PROFILI_10")[0] == "k0 trim baglanti profili_10")
     dogru("YAN SAC SIMETRI -> yan sac, eş", O.simetri_anahtari("YAN SAC SIMETRI")[1:] == ("yan sac", True),
           O.simetri_anahtari("YAN SAC SIMETRI"))
+    print("1b) aday seçimi")
+    from collections import defaultdict
+    og, ta = {}, defaultdict(set)
+    for ad in ("K0 X_1", "Symmetry of K0 X_1", "K0 X_3", "YAN KAPAK", "K0 Y_5", "K0 Y_5.1"):
+        tam, temel, es = O.simetri_anahtari(ad)
+        og.setdefault(tam, []).append(({"ad": ad}, ad, es)); ta[temel].add(tam)
+    def aday(ad):
+        tam, temel, es = O.simetri_anahtari(ad)
+        return [c[1] for c in O.simetri_adaylari(og, ta, tam, temel, es)]
+    dogru("Symmetry of K0 X_3 -> K0 X_3 (aynı indeks)", aday("Symmetry of K0 X_3") == ["K0 X_3"], aday("Symmetry of K0 X_3"))
+    dogru("Symmetry of K0 X_2 -> aday yok (farklı indeks eşleşmez)", aday("Symmetry of K0 X_2") == [], aday("Symmetry of K0 X_2"))
+    dogru("Symmetry of YAN KAPAK_1 -> YAN KAPAK (indekssiz asıl)", aday("Symmetry of YAN KAPAK_1") == ["YAN KAPAK"], aday("Symmetry of YAN KAPAK_1"))
+    dogru("Symmetry of K0 Y_5 -> iki aday (5 ve 5.1)", sorted(aday("Symmetry of K0 Y_5")) == ["K0 Y_5", "K0 Y_5.1"], aday("Symmetry of K0 Y_5"))
     print("2) gerçek ayna")
     d = [(30, 30), (30, 170), (270, 30), (120, 100)]
     o1 = olc(levha(d))
