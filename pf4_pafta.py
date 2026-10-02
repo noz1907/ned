@@ -1077,7 +1077,8 @@ def _detay_sayfalari(d, pafta_adi, kagit, detaylar, no, resim_adi, sablon, deger
                 + ("  (detay büyütmesi ayrıca yazılı)" if any(_serbest_mi(a) for a in secim) else "")
                 + ("" if gorunus_var else "  DETAYLAR"))
         _pafta_cerceve_ciz(pafta, kagit, no, resim_adi, not_, sablon=sablon,
-                           antet_degerleri=dict(deger or {}, sayfa=n),
+                           antet_degerleri=dict(deger or {}, sayfa=n,
+                                                olcek=olcek_metni(olcek)),
                            pi3d_antet=pi3d_antet)
         for ad, (x, y) in yerler.items():
             c = secim[ad]

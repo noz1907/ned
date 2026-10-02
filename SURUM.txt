@@ -1,6 +1,6 @@
 Pi3D  –  3B modelden parça listesi ve teknik resim
 
-Sürüm   : v1.0.11  (01.10.2026)
+Sürüm   : v1.0.12  (02.10.2026)
 Kaynak  : github.com/noz1907/ned   dal: claude/fikstur-parca-stp-57hwc1
 
 KURULUM
@@ -154,6 +154,15 @@ BU SÜRÜMDE NE VAR
       6 yazı boyu), SİM. notu balonun altında.
     - kırmızı yalnız kaynağın kendisi (uzun sac kenarı artık kırmızı
       değil); kaynak ekseni ince mavi kesikli.
+
+  v1.0.12: SANAL TANITIM VERİSİ + pafta düzeltmesi
+    - test/sanal_tanitim_modeli.py: kod ile üretilen sanal kaynaklı konsol
+      montajı (taban plakası, 2 L braket, 3B açınımlı kutu braket, dik sac,
+      4 somun, 6 kaynak dikişi). Hiçbir firmanın verisi değildir; tanıtım
+      ve test için bütün hat (BOM, DXF, açınım, lazer, PDF, kaynak) bunun
+      üstünde koşturulabilir.
+    - Pafta: 2. ve sonraki sayfaların (DETAYLAR / görünüş sayfası) Pi3D
+      antetinde ÖLÇEK artık o sayfanın ölçeğidir (1. sayfanınki yazılıyordu).
 
   v1.0.11: MAKİNE BAZLI LİSANS, EXE DERLEME ve KURULUM SİHİRBAZI
     (PiProduct ile aynı düzen; kullanıcı: "makine bazlı, hiçbir py dosya
