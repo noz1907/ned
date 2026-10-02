@@ -192,8 +192,11 @@ DXF'te yazı boyunun katı olarak uygulanır):
     düz dikdörtgen görünüş çizilmez; sade profilde (ekstrüzyon) kalıbın
     boyuna çizgilerinden başka şey göstermeyen boy görünüşü (ÜST / ALT
     şeridi) çizilmez (`bilgisiz_gorunus(sade)`); tek duvar deliği
-    taşıyan görünüş (19) ve bükümlü sacın profil görünüşü korunur. 6
-    görünüş şart değil, gerekirse evet; sıkışan bölgeler detaya (14).
+    taşıyan görünüş (19) ve bükümlü sacın profil görünüşü korunur.
+    **Ölçü taşımayan görünüş çizilmez**: konum ve gabari planı bir
+    görünüşe hiç ölçü vermiyorsa atılır (tutamakta SOL / ARKA / ALT boş
+    kalıyordu; ÖN, ana, korunan, profil kalır). 6 görünüş şart değil,
+    gerekirse evet; sıkışan bölgeler detaya (14).
     Komut satırı `--gorunus` ya da parça bazlı liste verilirse o liste
     çizilir, elenmez (`gorunus_zorla`).
 18. Perspektif üzerine ölçü verilmez. **Küçük perspektif her resme

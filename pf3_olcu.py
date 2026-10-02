@@ -11052,6 +11052,26 @@ def dxf_komponent(s, o, k, yol, P):
                          rapor=atlanan, sac_kesit=sac_kesit, datum_sv=datum_sv,
                          izgara=izgara, sac_kanat=sac_kanat)
              if P.get("konum", True) else {})
+    # ÖLÇÜ TAŞIMAYAN GÖRÜNÜŞ ÇİZİLMEZ (kullanıcı: "bilgi eklemeyen görünüş
+    # çizilmez; 6 görünüm şart değil, gerekirse evet"): konum planı ve
+    # gabari planı bir görünüşe hiç ölçü vermiyorsa (tutamakta SOL / ARKA /
+    # ALT boş kalıyordu) o görünüş atılır. ÖN, ana görünüş, tek duvar
+    # deliği taşıyan (korunan), sac profili (kesit) ve açıkça istenen
+    # görünüşler kalır. Ölçü TEK KEZ verildiği için atılan görünüşün
+    # ölçüsü yoktur; kalanların planı değişmez.
+    if P.get("konum", True) and not P.get("gorunus_zorla") and len(gorunusler) > 1:
+        ana0 = zorla if zorla in ham else ana_gorunus(ham, o)
+        gplan0 = gabari_plani(ham, sac_kesit, o.get("bukum_ekseni"), ana=ana0)
+        bos = [g_ for g_ in gorunusler
+               if g_ not in ("ON", ana0) and g_ not in korunan and g_ not in (sac_kesit or {})
+               and not ((kplan.get(g_) or {}).get("yatay") or (kplan.get(g_) or {}).get("dusey"))
+               and not gplan0.get(g_)]
+        if bos:
+            gorunusler = tuple(g_ for g_ in gorunusler if g_ not in bos)
+            for g_ in bos:
+                kenarlar.pop(g_, None); ham.pop(g_, None); kenar_olcu.pop(g_, None)
+                kplan.pop(g_, None); izgara.pop(g_, None)
+            yer = gorunus_yerlesimi(L, W, T, g, gorunusler)
     ust, kaydir, gkutu = {}, {}, {}
     for gad in gorunusler:
         ox, oy = yer[gad]

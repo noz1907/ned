@@ -170,7 +170,8 @@ BU SÜRÜMDE NE VAR
     - Model gürültüsü (0,05 mm içinde iki delik sırası) aynı dizi
       ölçüsünü iki kez yazdırmaz, "MODEL KONTROL" uyarısı çıkarmaz.
     - GÖRÜNÜŞ SEÇİMİ OTOMATİK, sayı girişi kalktı: altı görünüşle
-      başlanır, ayna / bilgisiz / ekstrüzyon boy şeridi ölçülerek elenir;
+      başlanır, ayna / bilgisiz / ekstrüzyon boy şeridi / ölçü taşımayan
+      görünüş ölçülerek elenir;
       gerekirse 6 görünüş + detaylar. Komut satırı --gorunus OTO.
     - KÜÇÜK PERSPEKTİF: her detay resminin sağ üstüne izometrik (ölçüsüz),
       paftada serbest pencere, 1. sayfada (--perspektif-yok ile kapanır).
