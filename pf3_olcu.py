@@ -1857,7 +1857,9 @@ def yardimci_gorunusler(msp, s, o, gkutu, kaydir, h, L, W, T, g, harf, y_ust, x_
                 _ara_ciz(msp, "dusey", (sol, a_ + dy), (sol, b_ + dy), c_, h,
                          sik=(b_ - a_) < 3.5 * h)
             j = 1
-        _ara_ciz(msp, "dusey", (sol, alt), (sol, ust), sol - (2.4 + KOSU_ADIM * j) * h, h)
+        # düşey hatlarda rakam yatay yazılır (genişliği ~3,5 h): gabari hattı
+        # zincir hattından 1,8 kademe uzağa, yoksa 138,8 ile 95 biniyordu
+        _ara_ciz(msp, "dusey", (sol, alt), (sol, ust), sol - (2.4 + 1.8 * KOSU_ADIM * j) * h, h)
         tablo_kutu = None
         if tablo_:
             satir_t = sorted(((q[0] - ham_k[0], q[1] - ham_k[1], c) for q, c in del_q),
@@ -1917,7 +1919,7 @@ def yardimci_gorunusler(msp, s, o, gkutu, kaydir, h, L, W, T, g, harf, y_ust, x_
         # ok esas görünüşe çizildi; yardımcı görünüşün kutusu yalnız kendi öbeği
         kt = (min(sol - (2.4 + KOSU_ADIM * (j + 1)) * h, kt[0]) if kt[0] < sol else kt[0],
               min(kt[1], alt - (2.4 + KOSU_ADIM * (i + 1)) * h), max(kt[2], sag), max(kt[3], ust + 4 * h))
-        kt = (max(kt[0], sol - (2.4 + KOSU_ADIM * (j + 2)) * h), max(kt[1], alt - (2.4 + KOSU_ADIM * (i + 2)) * h),
+        kt = (max(kt[0], sol - (2.4 + 1.8 * KOSU_ADIM * (j + 2)) * h), max(kt[1], alt - (2.4 + KOSU_ADIM * (i + 2)) * h),
               min(kt[2], sag + 6 * h), min(kt[3], ust + 4.5 * h))
         if tablo_kutu:
             kt = (min(kt[0], tablo_kutu[0]), min(kt[1], tablo_kutu[1]),
@@ -12972,22 +12974,25 @@ def calistir(step, on, kayit, komp, P, asama=(1, 2, 3), esl=None, agac=None,
         # başlıkta "! MODEL KONTROL", BOM satırında model_uyari.
         try:
             tam, temel, es_mi = simetri_anahtari(k["ad"])
-            es = None
-            if tam in olcu_gecmis and olcu_gecmis[tam][2] != es_mi:
-                es = olcu_gecmis[tam]
-            else:
-                adaylar = [t for t in temel_ad.get(temel, ()) if olcu_gecmis[t][2] != es_mi]
-                if len(adaylar) == 1:
-                    es = olcu_gecmis[adaylar[0]]
-            if es is not None:
-                farklar = simetri_farklari(es[0], o)
-                if farklar:
-                    sat["model_uyari"] = (f"simetrik eşi ({es[1]}) ile uyuşmuyor: "
-                                          + "; ".join(farklar)[:120])
+            # adaylar: aynı tam ad (kopya sayacı ".1" farkı olabilir: "SACI_5"
+            # ile "SACI_5.1" ayrı parça çıkabiliyor); yoksa temelde tek ad
+            adaylar = [c for c in olcu_gecmis.get(tam, ()) if c[2] != es_mi]
+            if not adaylar:
+                tl = [t for t in temel_ad.get(temel, ()) if t != tam]
+                if len(tl) == 1:
+                    adaylar = [c for c in olcu_gecmis.get(tl[0], ()) if c[2] != es_mi]
+            if adaylar:
+                # aday parçalardan biri ayna olarak uyuyorsa sorun yok; hiçbiri
+                # uymuyorsa hacmi en yakın olana göre uyarı
+                sonuc = [(simetri_farklari(c[0], o), c) for c in adaylar]
+                if all(f for f, _c in sonuc):
+                    f_, c_ = min(sonuc, key=lambda t: abs(abs(float(t[1][0].get("hacim_mm3") or 0))
+                                                           - abs(float(o.get("hacim_mm3") or 0))))
+                    sat["model_uyari"] = (f"simetrik eşi ({c_[1]}) ile uyuşmuyor: "
+                                          + "; ".join(f_)[:120])
                     log(f"  ! MODEL KONTROL {k['kod']}: {sat['model_uyari']}")
-            if tam not in olcu_gecmis:
-                olcu_gecmis[tam] = (o, k["kod"], es_mi)
-                temel_ad[temel].add(tam)
+            olcu_gecmis.setdefault(tam, []).append((o, k["kod"], es_mi))
+            temel_ad[temel].add(tam)
         except Exception:
             pass
         sat.update({q: o[q] for q in ("boy_mm", "en_mm", "kalinlik_mm", "hacim_mm3",
