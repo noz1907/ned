@@ -744,16 +744,21 @@ SIMETRI_MM = 0.2             # gabari / delik aralığı farkı bu kadarı aşar
 
 
 def simetri_anahtari(ad):
-    """Simetrik eş adlandırması: "Symmetry of X.2", "Mirror of X", "X SİMETRİ"
-    -> (temel ad, eş mi). Temel ad kopya ekleri atılmış küçük harf."""
+    """Simetrik eş adlandırması: "Symmetry of X_5.2", "Mirror of X", "X SİMETRİ"
+    -> (tam ad, temel ad, eş mi). TAM ad: önek ve kopya sayacı (".2")
+    atılmış, PARÇA İNDEKSİ ("_5") korunmuş - "K0 TRIM BAGLANTI PROFILI_1 /
+    _4 / _10" ayrı parçalardır, "Symmetry of ..._10"un eşi "_10"dur.
+    TEMEL ad: indeks de atılmış; yalnız o temelde TEK asıl parça varsa
+    eşleşmede kullanılır ("YAN KAPAK" <-> "Symmetry of YAN KAPAK_1")."""
     a = _ad_sade(ad).lower()
     es = bool(re.match(r"^(?:symmetry of|mirror of|simetri(?:si)?|sym of)\s+", a, flags=re.I)) \
         or bool(re.search(r"\b(?:simetri|simetrik|symmetry|mirror|sym)\b", a, flags=re.I))
     a = re.sub(r"^(?:symmetry of|mirror of|simetri(?:si)?|sym of)\s+", "", a, flags=re.I)
     a = re.sub(r"\b(?:simetri(?:si|k)?|symmetry|mirror|sym)\b", " ", a, flags=re.I)
-    a = re.sub(r"(?:[._]\d+)+$", "", a)
     a = re.sub(r"\s+", " ", a).strip(" ._,-")
-    return a, es
+    tam = re.sub(r"(?:\.\d+)+$", "", a).strip(" ._,-")           # kopya sayacı ".2"
+    temel = re.sub(r"(?:[._-]\d+)+$", "", tam).strip(" ._,-")     # indeks "_5"
+    return tam, temel, es
 
 
 def simetri_farklari(o1, o2):
@@ -1821,23 +1826,44 @@ def yardimci_gorunusler(msp, s, o, gkutu, kaydir, h, L, W, T, g, harf, y_ust, x_
         Gc, Yc, dx, dy = gorunus_ciz(msp, ken, ox, oy, "YARDIMCI", h=h, olcu2=False, etiket_ciz=False)
         sol, alt = ox, oy
         sag, ust = ox + Gc, oy + Yc
-        # ölçüler: delik konumları yüzün sol / alt kenarından paralel, gabari en dışta
+        # ölçüler: delik konumları yüzün sol / alt kenarından ZİNCİRLE (kenar
+        # -> ilk delik -> sonraki delik; dar halkada ok yerine nokta), gabari
+        # en dışta. Referanstan paralel yığın denendi: kısa ölçülerin
+        # rakamları komşu hatta biniyordu (SOL DİKME 12,6 / 40,1 / 70,1).
         xs = sorted({round(q[0], 2) for q, _c in del_q})
         ys = sorted({round(q[1], 2) for q, _c in del_q})
+        zx = [ham_k[0]] + [v for v in xs if abs(v - ham_k[0]) > 0.2]
+        zy = [ham_k[1]] + [v for v in ys if abs(v - ham_k[1]) > 0.2]
+        # KALABALIK ya da DAR zincir (halka yazıdan kısa) ise konumlar zincir
+        # yerine yardımcı görünüşün DELİK TABLOSUYLA verilir (köşeden X, Y;
+        # SOL DİKME: 1300 mm'lik eğik parçada 16 delik, 12,6 / 9,5 / 4,5'lik
+        # halkalar üst üste biniyordu). Gabari yine çizilir.
+        dar = any((b_ - a_) < 3.0 * h for z in (zx, zy) for a_, b_ in zip(z, z[1:]))
+        tablo_ = len(del_q) > 8 or len(zx) > 7 or len(zy) > 7 or dar
+        if tablo_:
+            zx, zy = zx[:1], zy[:1]
         i = 0
-        for xv in xs:
-            if abs(xv - ham_k[0]) < 0.2:
-                continue
-            _ara_ciz(msp, "yatay", (sol, alt), (xv + dx, alt), alt - (2.4 + KOSU_ADIM * i) * h, h)
-            i += 1
+        if len(zx) > 1:
+            c_ = alt - 2.4 * h
+            for a_, b_ in zip(zx, zx[1:]):
+                _ara_ciz(msp, "yatay", (a_ + dx, alt), (b_ + dx, alt), c_, h,
+                         sik=(b_ - a_) < 3.5 * h)
+            i = 1
         _ara_ciz(msp, "yatay", (sol, alt), (sag, alt), alt - (2.4 + KOSU_ADIM * i) * h, h)
         j = 0
-        for yv in ys:
-            if abs(yv - ham_k[1]) < 0.2:
-                continue
-            _ara_ciz(msp, "dusey", (sol, alt), (sol, yv + dy), sol - (2.4 + KOSU_ADIM * j) * h, h)
-            j += 1
+        if len(zy) > 1:
+            c_ = sol - 2.4 * h
+            for a_, b_ in zip(zy, zy[1:]):
+                _ara_ciz(msp, "dusey", (sol, a_ + dy), (sol, b_ + dy), c_, h,
+                         sik=(b_ - a_) < 3.5 * h)
+            j = 1
         _ara_ciz(msp, "dusey", (sol, alt), (sol, ust), sol - (2.4 + KOSU_ADIM * j) * h, h)
+        tablo_kutu = None
+        if tablo_:
+            satir_t = sorted(((q[0] - ham_k[0], q[1] - ham_k[1], c) for q, c in del_q),
+                             key=lambda t: (round(t[0], 1), round(t[1], 1)))
+            tablo_kutu = _delik_tablosu_ciz(msp, satir_t, sol, alt - (2.4 + KOSU_ADIM * (i + 1)) * h, h,
+                                            f"DELİK TABLOSU - YARDIMCI {hf}  (sıfır: yüzün sol alt köşesi; {len(satir_t)} delik)")
         # etiket
         say = Counter(c for _q, c in del_q)
         caplar = "   ".join(f"{a}x Ø{XL.tr(c, 2)}" for c, a in sorted(say.items()))
@@ -1893,9 +1919,45 @@ def yardimci_gorunusler(msp, s, o, gkutu, kaydir, h, L, W, T, g, harf, y_ust, x_
               min(kt[1], alt - (2.4 + KOSU_ADIM * (i + 1)) * h), max(kt[2], sag), max(kt[3], ust + 4 * h))
         kt = (max(kt[0], sol - (2.4 + KOSU_ADIM * (j + 2)) * h), max(kt[1], alt - (2.4 + KOSU_ADIM * (i + 2)) * h),
               min(kt[2], sag + 6 * h), min(kt[3], ust + 4.5 * h))
+        if tablo_kutu:
+            kt = (min(kt[0], tablo_kutu[0]), min(kt[1], tablo_kutu[1]),
+                  max(kt[2], tablo_kutu[2]), kt[3])
         out.append((f"YARDIMCI {hf}", kt))
         y_cursor = kt[1] - g
     return out
+
+
+def _delik_tablosu_ciz(msp, satir, x0, y_ust, h, baslik):
+    """Delik tablosunu çizer: başlık, sütun başlıkları (NO, X, Y, Ø), satırlar
+    (30'da bir yeni sütun bloğu). satir: [(x, y, cap)] sıralı. Döner: kutu."""
+    onceki = {e.dxf.handle for e in msp}
+    th, sat_h = 0.9 * h, 1.5 * h
+    kol = (0.0, 4.5 * h, 12.0 * h, 19.5 * h)
+    blok_g = 27.0 * h
+    n_blok = max(1, math.ceil(len(satir) / 30.0))
+    per = math.ceil(len(satir) / n_blok)
+    y0 = y_ust - 1.6 * h
+    _yaz(msp, baslik, x0, y0, 1.1 * h)
+    y0 -= 1.6 * h
+    alt_en = y0
+    for b in range(n_blok):
+        bx = x0 + b * blok_g
+        yy = y0
+        for ad_, kx in zip(("NO", "X", "Y", "Ø"), kol):
+            _yaz(msp, ad_, bx + kx, yy, th)
+        yy -= sat_h
+        for idx, (xv, yv, cap) in enumerate(satir[b * per:(b + 1) * per], start=b * per + 1):
+            for metin, kx in zip((str(idx), XL.tr(round(xv, 2), 2), XL.tr(round(yv, 2), 2),
+                                  XL.tr(cap, 2)), kol):
+                _yaz(msp, metin, bx + kx, yy, th)
+            yy -= sat_h
+        alt_en = min(alt_en, yy)
+    yeni = [e for e in msp if e.dxf.handle not in onceki]
+    try:
+        kb = ezdxf.bbox.extents(yeni, fast=False)
+        return (kb.extmin.x - 0.5 * h, kb.extmin.y - 0.5 * h, kb.extmax.x + 0.5 * h, kb.extmax.y + 0.5 * h)
+    except Exception:
+        return (x0, alt_en, x0 + n_blok * blok_g, y_ust)
 
 
 def koordinat_tablolari(msp, o, gorunusler, ham, kaydir, h, x_sol, y_ust, g):
@@ -1919,35 +1981,8 @@ def koordinat_tablolari(msp, o, gorunusler, ham, kaydir, h, x_sol, y_ust, g):
         if len(satir) < KOORDINAT_ESIK:
             continue
         satir.sort(key=lambda t: (round(t[0], 1), round(t[1], 1)))
-        onceki = {e.dxf.handle for e in msp}
-        th, sat_h = 0.9 * h, 1.5 * h
-        kol = (0.0, 4.5 * h, 12.0 * h, 19.5 * h)
-        blok_g = 27.0 * h
-        n_blok = max(1, math.ceil(len(satir) / 30.0))
-        per = math.ceil(len(satir) / n_blok)
-        x0, y0 = x_sol, y_cursor - 1.6 * h
-        _yaz(msp, f"DELİK TABLOSU - {gorunus_adi(gad)}  (sıfır: görünüşün sol alt köşesi; {len(satir)} delik)",
-             x0, y0, 1.1 * h)
-        y0 -= 1.6 * h
-        alt_en = y0
-        for b in range(n_blok):
-            bx = x0 + b * blok_g
-            yy = y0
-            for ad_, kx in zip(("NO", "X", "Y", "Ø"), kol):
-                _yaz(msp, ad_, bx + kx, yy, th)
-            yy -= sat_h
-            for idx, (xv, yv, cap) in enumerate(satir[b * per:(b + 1) * per], start=b * per + 1):
-                for metin, kx in zip((str(idx), XL.tr(round(xv, 2), 2), XL.tr(round(yv, 2), 2),
-                                      XL.tr(cap, 2)), kol):
-                    _yaz(msp, metin, bx + kx, yy, th)
-                yy -= sat_h
-            alt_en = min(alt_en, yy)
-        yeni = [e for e in msp if e.dxf.handle not in onceki]
-        try:
-            kb = ezdxf.bbox.extents(yeni, fast=False)
-            kt = (kb.extmin.x - 0.5 * h, kb.extmin.y - 0.5 * h, kb.extmax.x + 0.5 * h, kb.extmax.y + 0.5 * h)
-        except Exception:
-            kt = (x0, alt_en, x0 + n_blok * blok_g, y_cursor)
+        kt = _delik_tablosu_ciz(msp, satir, x_sol, y_cursor, h,
+                                f"DELİK TABLOSU - {gorunus_adi(gad)}  (sıfır: görünüşün sol alt köşesi; {len(satir)} delik)")
         out.append((f"TABLO {gad}", kt))
         y_cursor = kt[1] - g
     return out
@@ -4579,17 +4614,11 @@ def konum_plani(o, gorunusler, ham, h, kenarlar=None, tol=0.05, tablo_gor=(),
                 if tekrar:
                     continue           # iç ölçüsü ilk eşinde "Nx" ile verildi
                 sira_ = sorted(deg, key=lambda v: abs(v - ref))
-                if not _duzenli_grup(g_):
-                    # DÜZENSİZ öbek: her delik grubun referans deliğinden
-                    # (paralel, 0 -> A, 0 -> B); zincir hizasız delikleri
-                    # karıştırırdı. Kalabalıksa detay mekanizması taşır.
-                    d_ref = [q[1 - eksen] for q in g_ if abs(q[eksen] - ref) < 0.011]
-                    for v2 in sira_[1:]:
-                        d2 = [q[1 - eksen] for q in g_ if abs(q[eksen] - v2) < 0.011]
-                        lokal_zincir.append({"a": ref, "b": v2, "dik_a": d_ref, "dik_b": d2,
-                                             "grup": g_,
-                                             "metin": (on_ek + "<>") if on_ek else None})
-                    continue
+                # DÜZENSİZ öbekte de grup içi ölçü verilir (kullanıcı: "iki
+                # delik arası mesafe önemli - ayrı zımbalar"): referans
+                # delikten başlayan ZİNCİR (komşu delikten deliğe); grubun
+                # referans deliği ortak hattan ölçülüdür. Referanstan paralel
+                # ölçüler denendi, aynı seviyede üst üste biniyordu.
                 dz_ = _dizi(sorted(deg)) if len(deg) >= DIZI_EN_AZ else None
                 if dz_:
                     lokal_zincir.append({"a": sira_[0], "b": sira_[-1],
@@ -12909,7 +12938,8 @@ def calistir(step, on, kayit, komp, P, asama=(1, 2, 3), esl=None, agac=None,
     toplam = len(komp) + (1 if 3 in asama else 0)
 
     satirlar, poz = [], 0
-    olcu_gecmis = {}            # temel ad -> (o, kod): simetrik eş denetimi
+    olcu_gecmis = {}            # tam ad -> (o, kod, eş mi): simetrik eş denetimi
+    temel_ad = defaultdict(set)  # temel ad -> {tam ad}: temelde tek parça varsa eşleşir
     for sira, k in enumerate(komp, 1):
         if dur():
             log("! iptal edildi"); break
@@ -12941,15 +12971,23 @@ def calistir(step, on, kayit, komp, P, asama=(1, 2, 3), esl=None, agac=None,
         # "Symmetry of X" ile X ölçülerek karşılaştırılır; fark varsa
         # başlıkta "! MODEL KONTROL", BOM satırında model_uyari.
         try:
-            temel, es_mi = simetri_anahtari(k["ad"])
-            if temel in olcu_gecmis and es_mi != olcu_gecmis[temel][2]:
-                o_es, kod_es, _e = olcu_gecmis[temel]
-                farklar = simetri_farklari(o_es, o)
+            tam, temel, es_mi = simetri_anahtari(k["ad"])
+            es = None
+            if tam in olcu_gecmis and olcu_gecmis[tam][2] != es_mi:
+                es = olcu_gecmis[tam]
+            else:
+                adaylar = [t for t in temel_ad.get(temel, ()) if olcu_gecmis[t][2] != es_mi]
+                if len(adaylar) == 1:
+                    es = olcu_gecmis[adaylar[0]]
+            if es is not None:
+                farklar = simetri_farklari(es[0], o)
                 if farklar:
-                    sat["model_uyari"] = (f"simetrik eşi ({kod_es}) ile uyuşmuyor: "
+                    sat["model_uyari"] = (f"simetrik eşi ({es[1]}) ile uyuşmuyor: "
                                           + "; ".join(farklar)[:120])
                     log(f"  ! MODEL KONTROL {k['kod']}: {sat['model_uyari']}")
-            olcu_gecmis.setdefault(temel, (o, k["kod"], es_mi))
+            if tam not in olcu_gecmis:
+                olcu_gecmis[tam] = (o, k["kod"], es_mi)
+                temel_ad[temel].add(tam)
         except Exception:
             pass
         sat.update({q: o[q] for q in ("boy_mm", "en_mm", "kalinlik_mm", "hacim_mm3",

@@ -225,7 +225,11 @@ DXF'te yazı boyunun katı olarak uygulanır):
     profilinde zaten ölçülüdür, ölçüsüz görünüş çizilmez):
     yalnız o yüzler, gerçek boy; üstündeki delikler (ekseni yüze dik; esas
     görünüşte eğik diye konumsuz kalırdı) yüzün sol / alt kenarından
-    paralel, yüzün boyu ve eni, "n x Ø". Yüzün KENAR göründüğü esas
+    ZİNCİRLE (dar halkada nokta), yüzün boyu ve eni, "n x Ø". Delik 8'den
+    çok, bir yönde 7'den çok konum ya da halka 3 yazı boyundan darsa
+    konumlar zincir yerine o görünüşün DELİK TABLOSUYLA (yüzün sol alt
+    köşesinden X, Y) verilir (SOL DİKME: 1300 mm'lik eğik parçada 16
+    delik). Referanstan paralel yığın denendi, rakamlar biniyordu. Yüzün KENAR göründüğü esas
     görünüşe bakış oku + harf, yeri çizgi ve yazılarla ölçülerek (yer
     yoksa ok konmaz). Paftada serbest pencere (`YARDIMCI ...`).
 23. **DELİK KOORDİNAT TABLOSU yalnız ÇOK delikli görünüşte** (kullanıcı:

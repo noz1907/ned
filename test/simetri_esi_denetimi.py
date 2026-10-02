@@ -47,10 +47,12 @@ def olc(sh):
 
 def main():
     print("1) ad çözümü")
-    dogru("Symmetry of KAPAK.2 -> kapak, eş", O.simetri_anahtari("Symmetry of KAPAK.2") == ("kapak", True),
+    dogru("Symmetry of KAPAK.2 -> kapak, kapak, eş", O.simetri_anahtari("Symmetry of KAPAK.2") == ("kapak", "kapak", True),
           O.simetri_anahtari("Symmetry of KAPAK.2"))
-    dogru("KAPAK_1 -> kapak, asıl", O.simetri_anahtari("KAPAK_1") == ("kapak", False), O.simetri_anahtari("KAPAK_1"))
-    dogru("YAN SAC SIMETRI -> yan sac, eş", O.simetri_anahtari("YAN SAC SIMETRI") == ("yan sac", True),
+    dogru("KAPAK_1 -> kapak_1, kapak, asıl", O.simetri_anahtari("KAPAK_1") == ("kapak_1", "kapak", False), O.simetri_anahtari("KAPAK_1"))
+    dogru("Symmetry of PROFILI_10 -> profili_10 (indeks korunur)",
+          O.simetri_anahtari("Symmetry of K0 TRIM BAGLANTI PROFILI_10")[0] == "k0 trim baglanti profili_10")
+    dogru("YAN SAC SIMETRI -> yan sac, eş", O.simetri_anahtari("YAN SAC SIMETRI")[1:] == ("yan sac", True),
           O.simetri_anahtari("YAN SAC SIMETRI"))
     print("2) gerçek ayna")
     d = [(30, 30), (30, 170), (270, 30), (120, 100)]
