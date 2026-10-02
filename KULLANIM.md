@@ -1117,6 +1117,16 @@ malzemeyi görür, BOM'u yeniden çıkarmak gerekmez.
   (yan kapak, panel) ARKA sütunun altına, dar parçada en sağa.
   **Küçük perspektif** (izometrik, ölçüsüz) her resmin sağ üstüne
   fazladan konur; kutudan kapatılabilir.
+  **Eğik yüz / eğik büküm kanadı** varsa program yüze dik bakan
+  "YARDIMCI GÖRÜNÜŞ D" ekler: yalnız o yüz, gerçek boyunda; üstündeki
+  delikler yüzün kenarından ölçülü, "n x Ø"; esas görünüşte bakış oku +
+  harf. **Çok delikli görünüşte** (20 ve üstü delik) delik konumları
+  ölçü yerine DELİK TABLOSU ile verilir (NO, X, Y, Ø; sıfır görünüşün
+  sol alt köşesi); az ya da dağınık delikler normal ölçülenir.
+  **Simetrik eş denetimi:** "Symmetry of X" adlı parça X ile ölçülerek
+  karşılaştırılır (hacim, gabari, delik adedi ve aralıkları); gerçekten
+  simetrik değilse resmin başlığında "! MODEL KONTROL: simetrik eşi ile
+  uyuşmuyor" uyarısı ve BOM'da `model_uyari` çıkar.
 * **Kesit:** *olmasın (H)* ya da *A-A kesit eklensin (E)*. Kesme düzlemi
   rastgele ortadan değil, **en çok deliği açan** yerden geçer; kesilen
   malzeme taranır, kesme çizgisi görünüşe **A—A** olarak işaretlenir.

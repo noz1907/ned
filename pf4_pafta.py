@@ -637,7 +637,8 @@ SAYFA1_SERBEST = (IZO_AD, BASLIK_AD)   # 2. sayfaya gitmeyen serbest pencereler 
 def _serbest_mi(ad):
     """DETAY ve PERSPEKTİF görünüşleri izdüşüm ızgarasının parçası değildir:
     kâğıdın boş yerine SERBEST pencere olarak konur (bkz. _serbest_yerlestir)."""
-    return str(ad).startswith("DETAY") or str(ad) == IZO_AD
+    ad = str(ad)
+    return ad.startswith("DETAY") or ad == IZO_AD or ad.startswith("YARDIMCI") or ad.startswith("TABLO")
 
 
 def _serbest_kutular(d, alanlar):
@@ -924,7 +925,13 @@ def cok_pencere_plani(d, kutu, alan_g, alan_y, olcek_zorla=None, serbest_izin=Fa
     baslik = alanlar.get(BASLIK_AD)
     bg = (baslik[2] - baslik[0]) if baslik else 0.0
     bb = (baslik[3] - baslik[1]) if baslik else 0.0
-    serbest = _serbest_kutular(d, alanlar)
+    # Serbest pencerelerin sınırı da 2. sayfaya giden görünüşlerin (ve
+    # serbest bilgi bloğunun) varlıkları HARİÇ ölçülür: ARKA 2. sayfaya
+    # alınınca onun kutu dışındaki ölçüleri en yakın detay / yardımcı
+    # pencereye yazılıyor, pencere şişip ARKA'nın kopyasını gösteriyordu.
+    haric_ = list(gor2.values()) + list(bilgi_serbest.values())
+    serbest = {k: v for k, v in _gorunus_kutulari(d, alanlar, haric=haric_).items()
+               if _serbest_mi(k)} if any(_serbest_mi(a) for a in alanlar) else {}
     if serbest and not (serbest_izin or serbest_sayfa2):
         return None          # detaylar yalnız tam kâğıt planında yerleşir
     # Detaylar 2. SAYFAYA gidebilir; perspektif (IZO) hep 1. sayfada kalır

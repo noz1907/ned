@@ -739,6 +739,68 @@ def kaynak_tipi(ad):
     return a or "kaynak"
 
 
+SIMETRI_HACIM_ORAN = 0.005   # simetrik eş: hacim farkı bu oranı aşarsa uyarı
+SIMETRI_MM = 0.2             # gabari / delik aralığı farkı bu kadarı aşarsa uyarı
+
+
+def simetri_anahtari(ad):
+    """Simetrik eş adlandırması: "Symmetry of X.2", "Mirror of X", "X SİMETRİ"
+    -> (temel ad, eş mi). Temel ad kopya ekleri atılmış küçük harf."""
+    a = _ad_sade(ad).lower()
+    es = bool(re.match(r"^(?:symmetry of|mirror of|simetri(?:si)?|sym of)\s+", a, flags=re.I)) \
+        or bool(re.search(r"\b(?:simetri|simetrik|symmetry|mirror|sym)\b", a, flags=re.I))
+    a = re.sub(r"^(?:symmetry of|mirror of|simetri(?:si)?|sym of)\s+", "", a, flags=re.I)
+    a = re.sub(r"\b(?:simetri(?:si|k)?|symmetry|mirror|sym)\b", " ", a, flags=re.I)
+    a = re.sub(r"(?:[._]\d+)+$", "", a)
+    a = re.sub(r"\s+", " ", a).strip(" ._,-")
+    return a, es
+
+
+def simetri_farklari(o1, o2):
+    """İki parçanın AYNA olarak aynı olup olmadığını ÖLÇER (kullanıcı:
+    "simetrik isimlendirmeli parçayı simetrisiyle karşılaştır; gerçekten
+    simetrik değilse uyar"). Ayna düzlemi bilinmeden karşılaştırılabilen
+    büyüklükler: hacim, yüzey, sıralı gabari, çap başına delik adedi ve
+    delikler arası uzaklık kümesi (aynada değişmez), slot adedi. Döner:
+    fark açıklamaları listesi (boşsa simetrik)."""
+    out = []
+    try:
+        v1, v2 = abs(float(o1.get("hacim_mm3") or 0)), abs(float(o2.get("hacim_mm3") or 0))
+        if v1 and abs(v1 - v2) > SIMETRI_HACIM_ORAN * max(v1, v2):
+            out.append(f"hacim {XL.tr(v1 / 1000, 1)} / {XL.tr(v2 / 1000, 1)} cm3")
+        g1 = sorted(float(o1.get(q) or 0) for q in ("boy_mm", "en_mm", "kalinlik_mm"))
+        g2 = sorted(float(o2.get(q) or 0) for q in ("boy_mm", "en_mm", "kalinlik_mm"))
+        if any(abs(a - b) > SIMETRI_MM for a, b in zip(g1, g2)):
+            out.append("gabari " + " x ".join(XL.tr(v, 1) for v in g1) + " / "
+                       + " x ".join(XL.tr(v, 1) for v in g2))
+
+        def delik_oz(o):
+            oz = {}
+            for d in o.get("delikler") or []:
+                m = d.get("merkezler") or []
+                uz = sorted(round(math.dist(a, b), 1) for i, a in enumerate(m) for b in m[i + 1:])
+                k = round(float(d.get("cap_mm") or 0), 2)
+                oz.setdefault(k, [0, []])
+                oz[k][0] += int(d.get("adet") or len(m))
+                oz[k][1] += uz
+            return oz
+        d1, d2 = delik_oz(o1), delik_oz(o2)
+        for cap in sorted(set(d1) | set(d2)):
+            a, b = d1.get(cap, [0, []]), d2.get(cap, [0, []])
+            if a[0] != b[0]:
+                out.append(f"Ø{XL.tr(cap, 1)} delik adedi {a[0]} / {b[0]}")
+                continue
+            ua, ub = sorted(a[1]), sorted(b[1])
+            if len(ua) == len(ub) and any(abs(x - y) > SIMETRI_MM for x, y in zip(ua, ub)):
+                out.append(f"Ø{XL.tr(cap, 1)} delik aralıkları farklı")
+        s1, s2_ = len(o1.get("slotlar") or []), len(o2.get("slotlar") or [])
+        if s1 != s2_:
+            out.append(f"slot adedi {s1} / {s2_}")
+    except Exception:
+        pass
+    return out
+
+
 def kaynak_ozeti(satirlar, en_cok=6):
     """[(tür, adet), ...] - en çok geçen önce. satirlar: {ad, adet}."""
     say = {}
@@ -1257,6 +1319,7 @@ def delik_ve_radus(sh, en_az_cap=1.0, tam_oran=0.90, slot_listesi=None):
                 m2[e] = c.Coord(e + 1)        # eksen yönünde yüzeyin orta noktası
             tek[an] = {"r": r, "eksen": e, "aci": aci, "boy": boy,
                        "merkez": tuple(m2), "egim": egim, "yon": yon, "_en_aci": aci,
+                       "dir": (d.X(), d.Y(), d.Z()),       # eksen yönü (eğik delik için)
                        # eksen boyunca yayılım: içi boş kutuda iki duvarı da delen
                        # delik iki ayrı silindir yüzüdür; birleşince boy 2 mm kalır
                        # ama yayılım kutuyu boydan boya geçer (bkz. delik_duvarlari)
@@ -1280,7 +1343,8 @@ def delik_ve_radus(sh, en_az_cap=1.0, tam_oran=0.90, slot_listesi=None):
                          # yakındaki iki gerçek seviye arasında (283,987 /
                          # 284,004) hangisi olduğu belirsiz kalıyordu.
                          "merkezler": [[round(v, 4) for v in h["merkez"]] for h in lst[:200]],
-                         "egim": [round(h["egim"], 6) for h in lst[:200]]})
+                         "egim": [round(h["egim"], 6) for h in lst[:200]],
+                         "yonler": [[round(v, 6) for v in h.get("dir", (0.0, 0.0, 0.0))] for h in lst[:200]]})
     # SLOT: aynı yarıçaplı, aynı eksenli (paralel) iki YARIM silindir
     # (~180°), eksenleri birbirinden uzak. Görünüşten (HLR) değil 3B'den
     # bulunur: gizli kalan slot da (üst flanşın altındaki) konum alır.
@@ -1615,6 +1679,290 @@ def izdusum(p, gad):
     """3B noktanın o görünüşteki (ham) 2B karşılığı — HLR ile aynı eksenler."""
     i1, i2, tx, ty = GOR_EKSEN[gad]
     return (-p[i1] if tx else p[i1], -p[i2] if ty else p[i2])
+
+
+EGIK_YUZ_ACI = 3.0        # normali her eksenden bu kadar sapan düz yüz "eğik"
+EGIK_YUZ_ALAN_ORAN = 0.02 # eğik yüz kümesi en büyük yüzün bu oranından küçükse yardımcı görünüş yok
+KOORDINAT_ESIK = 20       # bir görünüşte bu kadar (ve üstü) delik: koordinat tablosu
+
+
+def _izdusum_n(p, n, x):
+    """3B nokta -> (n göz yönü, x yatay) görünüşünde 2B; HLR ile aynı çerçeve
+    (y = n x x)."""
+    y = _capraz(n, x)
+    return (sum(a * b for a, b in zip(p, x)), sum(a * b for a, b in zip(p, y)))
+
+
+def egik_yuzler(s, L, W, T, h, ince=6.0):
+    """EKSENLERE EĞİK düz yüz kümeleri (eğik büküm kanadı, eğik duvar):
+    normali her eksenden EGIK_YUZ_ACI'dan çok sapan düz yüzler, aynı
+    (ya da zıt - sacın iki yüzü) normalde kümelenir; küme alanı en büyük
+    yüzün EGIK_YUZ_ALAN_ORAN'ından ve (6 h)²'den küçükse atılır. İNCE yüz
+    (düzlem içi en kısa boyu `ince`'den küçük: sacın kalınlık kenarı, eğik
+    kanadın uç yüzü) yardımcı görünüş gerektirmez, sayılmaz. Döner:
+    [{"n": dışa normal, "yuzler": [...], "alan", "merkez"}], büyükten küçüğe."""
+    m = TopTools_IndexedMapOfShape()
+    TopExp.MapShapes_s(s, TopAbs_FACE, m)
+    cos_eksen = math.cos(math.radians(EGIK_YUZ_ACI))
+    cos_ayni = math.cos(math.radians(1.0))
+    kume = []
+    for i in range(1, m.Extent() + 1):
+        f = TopoDS.Face_s(m.FindKey(i))
+        ad = BRepAdaptor_Surface(f)
+        if ad.GetType() != GeomAbs_Plane:
+            continue
+        nd = ad.Plane().Axis().Direction()
+        n = (nd.X(), nd.Y(), nd.Z())
+        if f.Orientation() == TopAbs_REVERSED:
+            n = (-n[0], -n[1], -n[2])
+        if max(abs(v) for v in n) >= cos_eksen:
+            continue                                  # eksene dik yüz: eğik değil
+        # düzlem içi boyutlar: köşe noktaları (x, y = n x x) eksenlerine izdüşer
+        xv = _capraz((0.0, 0.0, 1.0), n)
+        xv = _birim(xv) if math.hypot(*xv) > 1e-6 else (1.0, 0.0, 0.0)
+        yv = _capraz(n, xv)
+        px, py = [], []
+        exv = TopExp_Explorer(f, TopAbs_VERTEX)
+        while exv.More():
+            pt = BRep_Tool.Pnt_s(TopoDS.Vertex_s(exv.Current()))
+            q = (pt.X(), pt.Y(), pt.Z())
+            px.append(sum(a * b for a, b in zip(q, xv))); py.append(sum(a * b for a, b in zip(q, yv)))
+            exv.Next()
+        if px and min(max(px) - min(px), max(py) - min(py)) < ince:
+            continue                                  # ince kenar yüzü
+        g = GProp_GProps(); BRepGProp.SurfaceProperties_s(f, g)
+        a = g.Mass(); c = g.CentreOfMass(); c = (c.X(), c.Y(), c.Z())
+        for k in kume:
+            d = sum(p * q for p, q in zip(k["n"], n))
+            if abs(d) >= cos_ayni:                    # aynı ya da zıt normal (sacın iki yüzü)
+                k["yuzler"].append(f); k["alan"] += a; k["agirlik"].append((a, c))
+                break
+        else:
+            kume.append({"n": n, "yuzler": [f], "alan": a, "agirlik": [(a, c)]})
+    en_buyuk = max(L * W, L * T, W * T, 1e-9)
+    out = []
+    for k in kume:
+        if k["alan"] < max(EGIK_YUZ_ALAN_ORAN * en_buyuk, (6.0 * h) ** 2):
+            continue
+        ta = sum(a for a, _c in k["agirlik"]) or 1.0
+        k["merkez"] = tuple(sum(a * c[i] for a, c in k["agirlik"]) / ta for i in range(3))
+        out.append(k)
+    out.sort(key=lambda k: -k["alan"])
+    return out[:4]
+
+
+def _ok_ciz(msp, bas, uc, h):
+    """Bakış oku: bas -> uc, ucunda kapalı ok başı (ISO 128-3 bakış oku)."""
+    dx, dy = uc[0] - bas[0], uc[1] - bas[1]
+    uz = math.hypot(dx, dy) or 1.0
+    ux, uy = dx / uz, dy / uz
+    b = 0.9 * h
+    msp.add_line(bas, uc, dxfattribs={"layer": "OLCU"})
+    p1 = (uc[0] - b * ux + 0.35 * b * uy, uc[1] - b * uy - 0.35 * b * ux)
+    p2 = (uc[0] - b * ux - 0.35 * b * uy, uc[1] - b * uy + 0.35 * b * ux)
+    msp.add_solid([uc, p1, p2], dxfattribs={"layer": "OLCU"})
+
+
+def yardimci_gorunusler(msp, s, o, gkutu, kaydir, h, L, W, T, g, harf, y_ust, x_sol):
+    """EĞİK YÜZ İÇİN YARDIMCI GÖRÜNÜŞ (kullanıcı: "eğik yüz / büküm için
+    detay lazım"; ISO 128-3: standart yerde olmayan görünüşe harf + bakış
+    oku). Eğik yüz kümesine DİK bakılır: yalnız o yüzler çizilir (gerçek
+    boy), üstündeki delikler (ekseni yüze dik; esas görünüşlerde eğik
+    diye konumsuz kalırdı) yüzün sol / alt kenarından paralel ölçülenir,
+    yüzün gerçek boyu ve eni verilir, çap "n x Ø". Yüzün KENAR olarak
+    göründüğü esas görünüşe bakış oku + harf konur (yer ölçülerek; yer
+    yoksa ok konmaz, etiket yine yazar). Görünüşler öbeğin sağında
+    (x_sol, y_ust) altından başlayarak alt alta; paftada serbest.
+    Döner: [(ad, kutu)]."""
+    out = []
+    try:
+        kumeler = egik_yuzler(s, L, W, T, h, ince=max(6.0, 2.5 * float(o.get("sac_kalinlik_mm") or 0.0)))
+    except Exception:
+        return out
+    delikler = o.get("delikler") or []
+    y_cursor = y_ust
+    for k in kumeler:
+        n = _birim(k["n"])
+        # yatay eksen: Z ile n'in çarpımı (görünüşte Z olabildiğince yukarı)
+        x = _capraz((0.0, 0.0, 1.0), n)
+        if math.hypot(*x) < 1e-6:
+            x = (1.0, 0.0, 0.0)
+        x = _birim(x)
+        try:
+            ken = hlr(bilesik(k["yuzler"]), n, x, gizli=False)
+        except Exception:
+            continue
+        if not ken["GORUNEN"]:
+            continue
+        ham_k = _kenar_kutusu(ken)
+        G_, Y_ = ham_k[2] - ham_k[0], ham_k[3] - ham_k[1]
+        # yüzdeki delikler: ekseni n'e paralel, izdüşümü yüzün içinde
+        cos_p = math.cos(math.radians(EGIK_YUZ_ACI))
+        del_q = []                       # (q, cap)
+        for d in delikler:
+            for c, v in zip(d.get("merkezler") or [], d.get("yonler") or []):
+                if abs(sum(a * b for a, b in zip(v, n))) < cos_p:
+                    continue
+                q = _izdusum_n(c, n, x)
+                if ham_k[0] - 0.5 <= q[0] <= ham_k[2] + 0.5 and ham_k[1] - 0.5 <= q[1] <= ham_k[3] + 0.5:
+                    del_q.append((q, d["cap_mm"]))
+        # Deliksiz eğik yüz yardımcı görünüş GEREKTİRMEZ: gerçek eni sac
+        # profilinde (kanat boyu) zaten ölçülüdür; ölçü taşımayan görünüş
+        # çizilmez (kabin koruma: 45° kanatlar iki boş şerit çiziyordu).
+        if not del_q:
+            continue
+        try:
+            hf = next(harf)
+        except StopIteration:
+            break
+        onceki = {e.dxf.handle for e in msp}
+        oy = y_cursor - Y_ - 4.0 * h     # etiket için yer
+        ox = x_sol
+        Gc, Yc, dx, dy = gorunus_ciz(msp, ken, ox, oy, "YARDIMCI", h=h, olcu2=False, etiket_ciz=False)
+        sol, alt = ox, oy
+        sag, ust = ox + Gc, oy + Yc
+        # ölçüler: delik konumları yüzün sol / alt kenarından paralel, gabari en dışta
+        xs = sorted({round(q[0], 2) for q, _c in del_q})
+        ys = sorted({round(q[1], 2) for q, _c in del_q})
+        i = 0
+        for xv in xs:
+            if abs(xv - ham_k[0]) < 0.2:
+                continue
+            _ara_ciz(msp, "yatay", (sol, alt), (xv + dx, alt), alt - (2.4 + KOSU_ADIM * i) * h, h)
+            i += 1
+        _ara_ciz(msp, "yatay", (sol, alt), (sag, alt), alt - (2.4 + KOSU_ADIM * i) * h, h)
+        j = 0
+        for yv in ys:
+            if abs(yv - ham_k[1]) < 0.2:
+                continue
+            _ara_ciz(msp, "dusey", (sol, alt), (sol, yv + dy), sol - (2.4 + KOSU_ADIM * j) * h, h)
+            j += 1
+        _ara_ciz(msp, "dusey", (sol, alt), (sol, ust), sol - (2.4 + KOSU_ADIM * j) * h, h)
+        # etiket
+        say = Counter(c for _q, c in del_q)
+        caplar = "   ".join(f"{a}x Ø{XL.tr(c, 2)}" for c, a in sorted(say.items()))
+        aci = math.degrees(math.acos(min(1.0, max(abs(v) for v in n))))
+        _yaz(msp, f"YARDIMCI GÖRÜNÜŞ {hf}  (eğik yüze dik bakış, {XL.tr(round(aci, 1), 1)}°)",
+             sol, ust + 0.8 * h, 1.3 * h)
+        if caplar:
+            _yaz(msp, caplar, sol, ust + 3.4 * h, h)
+        # bakış oku: yüzün KENAR göründüğü esas görünüşte
+        ok_kondu = False
+        for gad, gk in gkutu.items():
+            if gad not in GORUNUS:
+                continue
+            e = GORUNUS[gad][0]
+            if abs(sum(a * b for a, b in zip(e, n))) > 0.15:
+                continue
+            d2 = izdusum(n, gad)
+            nd = math.hypot(*d2)
+            if nd < 1e-6:
+                continue
+            d2 = (d2[0] / nd, d2[1] / nd)
+            kx, ky = kaydir.get(gad, (0.0, 0.0))
+            m2 = izdusum(k["merkez"], gad)
+            m2 = (m2[0] + kx, m2[1] + ky)
+            # Ok yüzün hemen DIŞINA, dışa normal boyunca: yer çizgi
+            # parçalarıyla ve yazılarla ÖLÇÜLEREK bulunur (kutudan çıkış
+            # noktası ince kanatta oku yüzden çok uzağa atıyordu).
+            yazilar = _yazi_kutulari(msp)
+            alan = (gk[0] - 30 * h, gk[1] - 30 * h, gk[2] + 30 * h, gk[3] + 30 * h)
+            cizgi = _cizgi_parcalari(msp, alan, katman=("GORUNEN", "GIZLI", "EKSEN", "OLCU", "BOLGE"))
+            for t in (2.5, 4.0, 6.0, 9.0, 12.0, 16.0):
+                uc = (m2[0] + d2[0] * t * h, m2[1] + d2[1] * t * h)
+                bas = (uc[0] + d2[0] * 4.0 * h, uc[1] + d2[1] * 4.0 * h)
+                hx, hy = bas[0] + d2[0] * 1.0 * h, bas[1] + d2[1] * 1.0 * h
+                kutu_ok = (min(bas[0], uc[0], hx) - 0.6 * h, min(bas[1], uc[1], hy) - 0.6 * h,
+                           max(bas[0], uc[0], hx) + 1.5 * h, max(bas[1], uc[1], hy) + 1.6 * h)
+                if _cakisiyor(kutu_ok, yazilar, 0.3 * h) or _cizgi_kesiyor(kutu_ok, cizgi, 0.2 * h):
+                    continue
+                _ok_ciz(msp, bas, uc, h)
+                _yaz(msp, hf, hx, hy, 1.3 * h)
+                ok_kondu = True
+                break
+            if ok_kondu:
+                break
+        yeni = [e for e in msp if e.dxf.handle not in onceki and e.dxf.layer != GORUNUS_KATMAN]
+        try:
+            kb = ezdxf.bbox.extents(yeni, fast=False)
+            kt = (kb.extmin.x, kb.extmin.y, kb.extmax.x, kb.extmax.y)
+        except Exception:
+            kt = (sol - 6 * h, alt - 6 * h, sag, ust + 4 * h)
+        # ok esas görünüşe çizildi; yardımcı görünüşün kutusu yalnız kendi öbeği
+        kt = (min(sol - (2.4 + KOSU_ADIM * (j + 1)) * h, kt[0]) if kt[0] < sol else kt[0],
+              min(kt[1], alt - (2.4 + KOSU_ADIM * (i + 1)) * h), max(kt[2], sag), max(kt[3], ust + 4 * h))
+        kt = (max(kt[0], sol - (2.4 + KOSU_ADIM * (j + 2)) * h), max(kt[1], alt - (2.4 + KOSU_ADIM * (i + 2)) * h),
+              min(kt[2], sag + 6 * h), min(kt[3], ust + 4.5 * h))
+        out.append((f"YARDIMCI {hf}", kt))
+        y_cursor = kt[1] - g
+    return out
+
+
+def koordinat_tablolari(msp, o, gorunusler, ham, kaydir, h, x_sol, y_ust, g):
+    """DELİK KOORDİNAT TABLOSU (kullanıcı: "çok çoklu delikte koordinat
+    koyalım; 4 delik ya da dağınık 3-4'lük gruplarda hayır"): bir görünüşte
+    KOORDINAT_ESIK ve üstü delik varsa o görünüşün delikleri konum
+    ölçüsüyle değil tabloyla verilir (NO, X, Y, Ø; sıfır görünüşün sol alt
+    köşesi, önce X sonra Y sırası). Tablo paftada serbest penceredir.
+    Döner: [(ad, kutu)]; tablo gereken görünüşler tablo_gorunusleri ile
+    konum planından önce bulunur."""
+    out = []
+    y_cursor = y_ust
+    for gad in gorunusler:
+        satir = []
+        for d in o.get("delikler") or []:
+            if delik_gorunusu(d, gorunusler) != gad or d.get("eksen") not in ("X", "Y", "Z"):
+                continue
+            for c in d.get("merkezler") or []:
+                q = izdusum(c, gad)
+                satir.append((q[0] - ham[gad][0], q[1] - ham[gad][1], d["cap_mm"]))
+        if len(satir) < KOORDINAT_ESIK:
+            continue
+        satir.sort(key=lambda t: (round(t[0], 1), round(t[1], 1)))
+        onceki = {e.dxf.handle for e in msp}
+        th, sat_h = 0.9 * h, 1.5 * h
+        kol = (0.0, 4.5 * h, 12.0 * h, 19.5 * h)
+        blok_g = 27.0 * h
+        n_blok = max(1, math.ceil(len(satir) / 30.0))
+        per = math.ceil(len(satir) / n_blok)
+        x0, y0 = x_sol, y_cursor - 1.6 * h
+        _yaz(msp, f"DELİK TABLOSU - {gorunus_adi(gad)}  (sıfır: görünüşün sol alt köşesi; {len(satir)} delik)",
+             x0, y0, 1.1 * h)
+        y0 -= 1.6 * h
+        alt_en = y0
+        for b in range(n_blok):
+            bx = x0 + b * blok_g
+            yy = y0
+            for ad_, kx in zip(("NO", "X", "Y", "Ø"), kol):
+                _yaz(msp, ad_, bx + kx, yy, th)
+            yy -= sat_h
+            for idx, (xv, yv, cap) in enumerate(satir[b * per:(b + 1) * per], start=b * per + 1):
+                for metin, kx in zip((str(idx), XL.tr(round(xv, 2), 2), XL.tr(round(yv, 2), 2),
+                                      XL.tr(cap, 2)), kol):
+                    _yaz(msp, metin, bx + kx, yy, th)
+                yy -= sat_h
+            alt_en = min(alt_en, yy)
+        yeni = [e for e in msp if e.dxf.handle not in onceki]
+        try:
+            kb = ezdxf.bbox.extents(yeni, fast=False)
+            kt = (kb.extmin.x - 0.5 * h, kb.extmin.y - 0.5 * h, kb.extmax.x + 0.5 * h, kb.extmax.y + 0.5 * h)
+        except Exception:
+            kt = (x0, alt_en, x0 + n_blok * blok_g, y_cursor)
+        out.append((f"TABLO {gad}", kt))
+        y_cursor = kt[1] - g
+    return out
+
+
+def tablo_gorunusleri(o, gorunusler):
+    """Koordinat tablosu gereken görünüşler: delik sayısı KOORDINAT_ESIK ve
+    üstü (dağınık küçük gruplar eşiğin altında kalır, normal ölçülenir)."""
+    say = Counter()
+    for d in o.get("delikler") or []:
+        if d.get("eksen") in ("X", "Y", "Z"):
+            g_ = delik_gorunusu(d, gorunusler)
+            if g_:
+                say[g_] += len(d.get("merkezler") or []) or int(d.get("adet") or 0)
+    return {g_ for g_, n in say.items() if n >= KOORDINAT_ESIK}
 
 
 # ---------------------------------------------------------------- datum
@@ -3991,7 +4339,7 @@ def _datum_seviyesi(liste, m, L, tol=SEVIYE_TOL):
     return None if en is None else en[1]
 
 
-def konum_plani(o, gorunusler, ham, h, kenarlar=None, tol=0.05,
+def konum_plani(o, gorunusler, ham, h, kenarlar=None, tol=0.05, tablo_gor=(),
                 seviye=None, rapor=None, sac_kesit=None, datum_sv=None,
                 izgara=None, sac_kanat=False):
     """Konum ölçülerinin planı - HİÇBİR ŞEY ÇİZMEDEN.
@@ -4060,6 +4408,8 @@ def konum_plani(o, gorunusler, ham, h, kenarlar=None, tol=0.05,
             ilk = delik_gorunusu(d, gorunusler)
             if gad != ilk:
                 continue
+            if gad in tablo_gor:
+                continue               # koordinat tablosu verir (çok delikli görünüş)
             egim = d.get("egim") or [0.0] * len(d.get("merkezler") or [])
             for c, eg in zip(d.get("merkezler") or [], egim):
                 if eg > DELIK_EGIM_SINIR:
@@ -11063,9 +11413,10 @@ def dxf_komponent(s, o, k, yol, P):
         except Exception:
             sac_kanat = False
     PLAN_UYARI.clear()
+    tablo_gor = tablo_gorunusleri(o, gorunusler) if P.get("koordinat_tablosu", True) else set()
     kplan = (konum_plani(o, gorunusler, ham, h, kenar_olcu, seviye=seviye,
                          rapor=atlanan, sac_kesit=sac_kesit, datum_sv=datum_sv,
-                         izgara=izgara, sac_kanat=sac_kanat)
+                         izgara=izgara, sac_kanat=sac_kanat, tablo_gor=tablo_gor)
              if P.get("konum", True) else {})
     # ÖLÇÜ TAŞIMAYAN GÖRÜNÜŞ ÇİZİLMEZ (kullanıcı: "bilgi eklemeyen görünüş
     # çizilmez; 6 görünüm şart değil, gerekirse evet"): konum planı ve
@@ -11079,6 +11430,7 @@ def dxf_komponent(s, o, k, yol, P):
         gplan0 = gabari_plani(ham, sac_kesit, o.get("bukum_ekseni"), ana=ana0)
         bos = [g_ for g_ in gorunusler
                if g_ not in ("ON", ana0) and g_ not in korunan and g_ not in (sac_kesit or {})
+               and g_ not in tablo_gor
                and not ((kplan.get(g_) or {}).get("yatay") or (kplan.get(g_) or {}).get("dusey"))
                and not gplan0.get(g_)]
         if bos:
@@ -11138,7 +11490,7 @@ def dxf_komponent(s, o, k, yol, P):
         kanat_olculeri(msp, s, o, sac_kesit, kaydir, gkutu, h)
     if sac_kesit:
         kalinlik_notu(msp, s, o, sac_kesit, kaydir, gkutu, h)
-    uyari = list(dict.fromkeys(PLAN_UYARI))
+    uyari = list(P.get("model_uyari") or []) + list(dict.fromkeys(PLAN_UYARI))
     if sac_kanat:
         try:
             e_ = o["bukum_ekseni"]
@@ -11177,6 +11529,26 @@ def dxf_komponent(s, o, k, yol, P):
             print(f"    perspektif çizilemedi: {ex}"[:100])
         if izo_kutu:
             ust[IZO_AD] = izo_kutu[3]
+    # YARDIMCI GÖRÜNÜŞLER (eğik yüz) ve DELİK KOORDİNAT TABLOLARI: öbeğin
+    # sağında, perspektifin altında alt alta; paftada serbest pencere.
+    ek_pencere = []
+    x_sag = max(b[2] for b in gkutu.values()) + g
+    y_ek = (izo_kutu[1] if izo_kutu else max(b[3] for b in gkutu.values())) - g
+    if P.get("yardimci", True):
+        try:
+            ek_pencere += yardimci_gorunusler(msp, s, o, gkutu, kaydir, h, L, W, T, g, harf_,
+                                              y_ek, x_sag)
+        except Exception as ex:
+            print(f"    yardımcı görünüş çizilemedi: {ex}"[:100])
+        if ek_pencere:
+            y_ek = min(kt[1] for _a, kt in ek_pencere) - g
+    if tablo_gor:
+        try:
+            ek_pencere += koordinat_tablolari(msp, o, gorunusler, ham, kaydir, h, x_sag, y_ek, g)
+        except Exception as ex:
+            print(f"    koordinat tablosu çizilemedi: {ex}"[:100])
+    for ad_e, kt in ek_pencere:
+        ust[ad_e] = kt[3]
     if kplan:
         # Datum ve simetri EN SON: yerlerini bütün yazı ve çizgiler
         # konduktan sonra ölçerek bulurlar.
@@ -11273,6 +11645,8 @@ def dxf_komponent(s, o, k, yol, P):
         gorunus_isareti(msp, ad_d, kt)
     if izo_kutu:
         gorunus_isareti(msp, IZO_AD, izo_kutu)
+    for ad_e, kt in ek_pencere:
+        gorunus_isareti(msp, ad_e, kt)
     if KESIT_AD in ust:
         gorunus_isareti(msp, KESIT_AD,
                         (ky0[0], ky0[1], ky0[0] + kg, ust[KESIT_AD]))
@@ -12535,6 +12909,7 @@ def calistir(step, on, kayit, komp, P, asama=(1, 2, 3), esl=None, agac=None,
     toplam = len(komp) + (1 if 3 in asama else 0)
 
     satirlar, poz = [], 0
+    olcu_gecmis = {}            # temel ad -> (o, kod): simetrik eş denetimi
     for sira, k in enumerate(komp, 1):
         if dur():
             log("! iptal edildi"); break
@@ -12561,6 +12936,22 @@ def calistir(step, on, kayit, komp, P, asama=(1, 2, 3), esl=None, agac=None,
         yog = yogunluk if yogunluk else yogunluk_kg_mm3(mal)
         ana = kayit[k["indeks"][0]][1]
         s2, o = komponent_olcu(ana, dict(P, yogunluk=yog))
+        # SİMETRİK EŞ DENETİMİ (kullanıcı: "simetrik isimlendirmeli parçayı
+        # simetrisiyle karşılaştır; gerçekten simetrik değilse uyar"):
+        # "Symmetry of X" ile X ölçülerek karşılaştırılır; fark varsa
+        # başlıkta "! MODEL KONTROL", BOM satırında model_uyari.
+        try:
+            temel, es_mi = simetri_anahtari(k["ad"])
+            if temel in olcu_gecmis and es_mi != olcu_gecmis[temel][2]:
+                o_es, kod_es, _e = olcu_gecmis[temel]
+                farklar = simetri_farklari(o_es, o)
+                if farklar:
+                    sat["model_uyari"] = (f"simetrik eşi ({kod_es}) ile uyuşmuyor: "
+                                          + "; ".join(farklar)[:120])
+                    log(f"  ! MODEL KONTROL {k['kod']}: {sat['model_uyari']}")
+            olcu_gecmis.setdefault(temel, (o, k["kod"], es_mi))
+        except Exception:
+            pass
         sat.update({q: o[q] for q in ("boy_mm", "en_mm", "kalinlik_mm", "hacim_mm3",
                                       "kutle_kg", "yuzey_mm2", "sac_kalinlik_mm",
                                       "delik_adedi", "radus_adedi")})
@@ -12617,6 +13008,8 @@ def calistir(step, on, kayit, komp, P, asama=(1, 2, 3), esl=None, agac=None,
                     P_ = dict(P_, kesit=bool(pa["kesit"]))
                 if pa.get("perspektif") is not None:
                     P_ = dict(P_, perspektif=bool(pa["perspektif"]))
+                if sat.get("model_uyari"):
+                    P_ = dict(P_, model_uyari=[sat["model_uyari"]])
                 dxf_komponent(s2, o_, sat, os.path.join(dxf_kl, dosya), P_)
                 IS.cizim_kaydet(on, "dxf", dosya, imza=im, kod=k["kod"],
                                 step_ozet=step_oz)

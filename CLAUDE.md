@@ -216,6 +216,35 @@ DXF'te yazı boyunun katı olarak uygulanır):
     (açık liste), `kesit`, `perspektif`}; ortak ayarı o parça için ezer,
     çizim imzasına girer (`IS.imza(..., pa)`), GUI'de istisna satırı +
     "YALNIZ BU PARÇA (DXF + PDF)" ile yalnız o parça yeniden üretilir.
+22. **EĞİK YÜZ İÇİN YARDIMCI GÖRÜNÜŞ** (kullanıcı: "eğik yüz / büküm için
+    detay lazım"; ISO 128-3): normali her eksenden 3°'den çok sapan düz
+    yüz kümesi (eğik büküm kanadı, eğik duvar; ince kenar yüzleri ve en
+    büyük yüzün %2'sinden küçükler sayılmaz) ÜSTÜNDE DELİK VARSA yüze
+    DİK bakan "YARDIMCI GÖRÜNÜŞ D" çizilir (`egik_yuzler`,
+    `yardimci_gorunusler`; deliksiz eğik kanat çizilmez: gerçek eni sac
+    profilinde zaten ölçülüdür, ölçüsüz görünüş çizilmez):
+    yalnız o yüzler, gerçek boy; üstündeki delikler (ekseni yüze dik; esas
+    görünüşte eğik diye konumsuz kalırdı) yüzün sol / alt kenarından
+    paralel, yüzün boyu ve eni, "n x Ø". Yüzün KENAR göründüğü esas
+    görünüşe bakış oku + harf, yeri çizgi ve yazılarla ölçülerek (yer
+    yoksa ok konmaz). Paftada serbest pencere (`YARDIMCI ...`).
+23. **DELİK KOORDİNAT TABLOSU yalnız ÇOK delikli görünüşte** (kullanıcı:
+    "çok çoklu delikte koordinat koyalım; 4 delik ya da dağınık 3-4'lük
+    gruplarda hayır"): bir görünüşte `KOORDINAT_ESIK` (20) ve üstü delik
+    varsa o deliklerin konumu ölçüyle değil tabloyla verilir (NO, X, Y, Ø;
+    sıfır görünüşün sol alt köşesi; önce X sonra Y; 30 satırda bir yeni
+    sütun); çap etiketi ve merkez işaretleri kalır. Eşiğin altı normal
+    ölçülenir. `tablo_gorunusleri`, `koordinat_tablolari`; paftada serbest
+    (`TABLO ...`); `P["koordinat_tablosu"]` ile kapanır.
+24. **SİMETRİK EŞ DENETİMİ** (kullanıcı: "simetrik isimlendirmeli parçayı
+    simetrisiyle karşılaştır; gerçekten simetrik değilse uyar"):
+    "Symmetry of X" / "Mirror of X" / "X SİMETRİ" adlı parça X ile
+    ÖLÇÜLEREK karşılaştırılır (`simetri_anahtari`, `simetri_farklari`):
+    hacim (%0,5), yüzey, sıralı gabari (0,2 mm), çap başına delik adedi,
+    delikler arası uzaklık kümesi (aynada değişmez), slot adedi. Fark
+    varsa başlıkta "! MODEL KONTROL: simetrik eşi (kod) ile uyuşmuyor:
+    ...", BOM satırında `model_uyari`, günlükte satır. Ölçü uydurulmaz,
+    model denetlenir.
 21. **Bu mantıklar KURALDIR**: kullanıcının verdiği her yerleşim / seçim
     mantığı gerekçesiyle buraya ve `OLCULENDIRME_KURALLARI.md`'ye yazılır;
     program seçim yaparken önce bu kuralları uygular, ezbere karar vermez.
