@@ -2344,6 +2344,15 @@ başlıkta yazar.
   eksenlerini ÖN / SAĞ / ÜST'e çevirir; SAĞ / SOL aracın kendi yanıdır.
   Eğik parça en yakın eksene en küçük açıyla oturtulur. Ana görünüş
   uzun-geniş yüzdür; istisna parça başına elle verilir.
+- **Tek duvar delikleri (kapak, kutu profil, ekstrüzyon):** delik yalnız
+  bir duvardaysa, duvarının göründüğü görünüşte düz çizgiyle çizilir ve
+  orada ölçülenir (dış duvar SOL, iç duvar SAĞ; Y yönünde ÖN / ARKA).
+  Gereken görünüş seçili değilse program ekler. Böylece hangi deliğin
+  hangi yüzde olduğu resimden okunur; öbür görünüşte yalnız merkez
+  işareti kalır.
+- **Simetri yalnız tam simetride:** 0,05 mm'den fazla asimetrik delik
+  çiftleri ayrı ayrı ölçülenir; simetri ekseni ancak gerçekten
+  simetrikse çizilir.
 - **Dış ölçüler önce ve kesinlikle:** ana görünüş (en çok bilgi veren
   görünüş) iki boyutunu en dışta taşır; derinlik yan görünüşte (sac
   profili kesitte) verilir.

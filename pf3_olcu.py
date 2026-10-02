@@ -1037,6 +1037,79 @@ def arac_kayit(kayit, arac):
 
 
 # ---------------------------------------------------------------- delikler
+def delik_duvarlari(delikler, k):
+    """TEK DUVAR delikleri hangi yüzde? Kutu profil / ekstrüzyon / kapalı
+    kutuda delik çoğu zaman yalnız BİR duvardadır (Karluna yan kapak:
+    4 delik dış duvarda, 6 delik iç duvarda). Resim iki duvarı ayırt
+    etmezse okuyan hepsini aynı yüze deler. Delik derinliği parçanın o
+    eksendeki kalınlığından belirgin kısa ise ("tek duvar"), merkezinin
+    hangi yarıda olduğuna göre "min" / "max" duvar yazılır ve grup
+    duvara göre bölünür; boydan boya delik "orta" (iki yüzden de aynı).
+    Kullanıcı: "deliğin diğer yönde olduğu görülmeli; görünüm eklenmesi
+    daha doğru" - bkz. delik_gorunusu."""
+    out = []
+    for d in delikler or []:
+        e = "XYZ".find(str(d.get("eksen", "")))
+        if e < 0 or not d.get("merkezler"):
+            d["taraf"] = "orta"; out.append(d); continue
+        ext = k[e + 3] - k[e]
+        der = max(float(d.get("derinlik_mm") or 0.0), float(d.get("yayilim_mm") or 0.0))
+        if ext <= 1e-6 or der <= 0 or der >= 0.6 * ext:
+            d["taraf"] = "orta"; out.append(d); continue
+        mid = (k[e] + k[e + 3]) / 2.0
+        gruplar = {"min": [], "max": []}
+        for i, c in enumerate(d["merkezler"]):
+            gruplar["min" if c[e] < mid else "max"].append(i)
+        for taraf, idx in gruplar.items():
+            if not idx:
+                continue
+            d2 = dict(d)
+            d2["merkezler"] = [d["merkezler"][i] for i in idx]
+            if d.get("egim"):
+                d2["egim"] = [d["egim"][i] for i in idx if i < len(d["egim"])]
+            d2["adet"] = len(idx)
+            d2["taraf"] = taraf
+            out.append(d2)
+    return out
+
+
+def delik_gorunusu(d, gorunusler):
+    """Deliğin ÖLÇÜLENECEĞİ görünüş: duvarının göründüğü yön (kural 4.12:
+    özellik görünür olduğu görünüşte ölçülür). "max" duvar deliği gözü
+    +eksende olan görünüşte (X: SAĞ, Y: ARKA, Z: ÜST), "min" duvar deliği
+    -eksende olanda (SOL, ÖN, ALT); boydan boya delik ilk seçili
+    görünüşte. Tercih edilen görünüş seçili değilse ilk seçili olana düşer
+    (dxf_komponent gerekli görünüşü zaten ekler, bkz. gerekli_delik_gorunusleri)."""
+    adaylar = DELIK_GOR.get(d.get("eksen"), ())
+    if not adaylar:
+        return None
+    taraf = d.get("taraf")
+    if taraf in ("min", "max"):
+        i = "XYZ".index(d["eksen"])
+        tercih = [g for g in adaylar
+                  if (GORUNUS[g][0][i] > 0) == (taraf == "max")]
+        for g in tercih:
+            if g in gorunusler:
+                return g
+    return next((g for g in adaylar if g in gorunusler), None)
+
+
+def gerekli_delik_gorunusleri(o, gorunusler):
+    """Tek duvar delikleri için EKLENMESİ gereken görünüşler: deliğin duvarı
+    seçili görünüşlerin hiçbirinde görünmüyorsa o görünüş eklenir
+    (kullanıcı: "görünüm ekleme daha doğru olur")."""
+    ek = []
+    for d in (o or {}).get("delikler") or []:
+        if d.get("taraf") not in ("min", "max"):
+            continue
+        i = "XYZ".index(d["eksen"])
+        for g in DELIK_GOR.get(d["eksen"], ()):
+            if (GORUNUS[g][0][i] > 0) == (d["taraf"] == "max"):
+                if g not in gorunusler and g not in ek:
+                    ek.append(g)
+    return ek
+
+
 def delik_ve_radus(sh, en_az_cap=1.0, tam_oran=0.90, slot_listesi=None):
     """İç silindirik yüzeyleri DELİK ve RADÜS olarak ayırır.
 
@@ -1099,6 +1172,10 @@ def delik_ve_radus(sh, en_az_cap=1.0, tam_oran=0.90, slot_listesi=None):
         if an in tek:
             tek[an]["aci"] += aci
             tek[an]["boy"] = max(tek[an]["boy"], boy)
+            if e >= 0:
+                u = c.Coord(e + 1)
+                tek[an]["u0"] = min(tek[an].get("u0", u), u - boy / 2.0)
+                tek[an]["u1"] = max(tek[an].get("u1", u), u + boy / 2.0)
             tek[an]["egim"] = max(tek[an]["egim"], egim)
             if aci > tek[an]["_en_aci"]:
                 tek[an]["_en_aci"], tek[an]["yon"] = aci, yon
@@ -1107,7 +1184,12 @@ def delik_ve_radus(sh, en_az_cap=1.0, tam_oran=0.90, slot_listesi=None):
             if e >= 0:
                 m2[e] = c.Coord(e + 1)        # eksen yönünde yüzeyin orta noktası
             tek[an] = {"r": r, "eksen": e, "aci": aci, "boy": boy,
-                       "merkez": tuple(m2), "egim": egim, "yon": yon, "_en_aci": aci}
+                       "merkez": tuple(m2), "egim": egim, "yon": yon, "_en_aci": aci,
+                       # eksen boyunca yayılım: içi boş kutuda iki duvarı da delen
+                       # delik iki ayrı silindir yüzüdür; birleşince boy 2 mm kalır
+                       # ama yayılım kutuyu boydan boya geçer (bkz. delik_duvarlari)
+                       "u0": (c.Coord(e + 1) - boy / 2.0) if e >= 0 else 0.0,
+                       "u1": (c.Coord(e + 1) + boy / 2.0) if e >= 0 else 0.0}
 
     delik_g, radus_g = defaultdict(list), defaultdict(list)
     for h in tek.values():
@@ -1121,6 +1203,7 @@ def delik_ve_radus(sh, en_az_cap=1.0, tam_oran=0.90, slot_listesi=None):
         delikler.append({"cap_mm": cap, "adet": len(lst),
                          "eksen": "XYZ"[eks] if eks >= 0 else "eğik",
                          "derinlik_mm": round(max(h["boy"] for h in lst), 2),
+                         "yayilim_mm": round(max(h.get("u1", 0.0) - h.get("u0", 0.0) for h in lst), 2),
                          # 4 ondalık: 2 ondalığa yuvarlanan merkez (284,00)
                          # yakındaki iki gerçek seviye arasında (283,987 /
                          # 284,004) hangisi olduğu belirsiz kalıyordu.
@@ -1330,6 +1413,7 @@ def komponent_olcu(sh, P):
     o["slotlar"] = []
     o["delikler"], o["radusler"] = delik_ve_radus(s, P.get("en_az_delik", 1.0),
                                                   slot_listesi=o["slotlar"])
+    o["delikler"] = delik_duvarlari(o["delikler"], k)
     # Yarım silindirleri bölünmüş slotu (P06'daki üç büyük R40 slot)
     # yukarıdaki arama kaçırıyordu: slotlar konumsuz kalıyordu. Düz yüzün
     # İÇ TELİ iki eşit yarım daire + doğrulardan oluşuyorsa o da slottur.
@@ -2333,7 +2417,7 @@ def cap_olculeri(msp, o, yer, kaydir, gkutu, h, ust, en_cok_grup=8):
     kova = defaultdict(list)
     for tip, liste in (("cap", o.get("delikler") or []), ("radus", o.get("radusler") or [])):
         for d in liste:
-            gad = next((g for g in DELIK_GOR.get(d["eksen"], ()) if g in yer), None)
+            gad = delik_gorunusu(d, yer)
             if not gad or not d.get("merkezler"):
                 continue
             r = (d["cap_mm"] / 2.0) if tip == "cap" else d["yaricap_mm"]
@@ -3835,8 +3919,7 @@ def konum_plani(o, gorunusler, ham, h, kenarlar=None, tol=0.05,
             # ile SOL aynı delikleri gösterir; ikisinde birden ölçmek
             # "her öznitelik bir kez" kuralına aykırı ve resmi kalabalık
             # yapıyordu.
-            ilk = next((g for g in DELIK_GOR.get(d["eksen"], ())
-                        if g in gorunusler), None)
+            ilk = delik_gorunusu(d, gorunusler)
             if gad != ilk:
                 continue
             egim = d.get("egim") or [0.0] * len(d.get("merkezler") or [])
@@ -3987,6 +4070,14 @@ def konum_plani(o, gorunusler, ham, h, kenarlar=None, tol=0.05,
             imza_gor = set()
             for g_ in gruplar:
                 deg = sorted({round(q[eksen], 2) for q in g_})
+                # 0,05 mm içindeki değerler aynı hizadır: 152,49 ile 152,5
+                # arasında "3x 0" diye bir ölçü çıkıyordu (yan kapak)
+                top = []
+                for v_ in deg:
+                    if top and abs(v_ - top[-1]) <= 0.05:
+                        continue
+                    top.append(v_)
+                deg = top
                 if len(deg) < 2:
                     continue
                 im_ = _grup_imzasi(g_)
@@ -4132,8 +4223,11 @@ def konum_plani(o, gorunusler, ham, h, kenarlar=None, tol=0.05,
             L = e1 - e0
             orta = (e0 + e1) / 2.0
             tekil_l = sorted(tekil)
+            # Yalnız TAM simetri (0,05 mm): eski 0,002·L payı 1805 mm'lik
+            # yan kapakta 3,6 mm'ydi; 66/172 ile 65/171'deki delikleri
+            # simetrik sayıp sağ çifti ölçüsüz bırakıyordu (1 mm yanlış).
             simetrik = (len(tekil_l) >= 2 and L > 1e-9 and all(
-                any(abs((e0 + e1 - x) - y) <= max(0.05, 0.002 * L)
+                any(abs((e0 + e1 - x) - y) <= 0.05
                     for y in tekil_l) for x in tekil_l))
             if simetrik:
                 # Ölçülen yarı, DATUMUN bulunduğu yarıdır.
@@ -10656,6 +10750,17 @@ def dxf_komponent(s, o, k, yol, P):
     zorla = str(P.get("ana_gorunus_zorla") or "").upper()
     if zorla in GORUNUS and zorla not in gorunusler:
         gorunusler = list(gorunusler) + [zorla]
+    # TEK DUVAR DELİĞİ: duvarının göründüğü görünüş yoksa EKLENİR (kullanıcı:
+    # "kapaklarda delik bir yönde var, diğer yönde yok; görünüm eklenmesi
+    # şart"). Delik orada düz çizgiyle çizilir ve ölçülenir.
+    ek_gor = gerekli_delik_gorunusleri(o, gorunusler)
+    if ek_gor:
+        gorunusler = list(gorunusler) + ek_gor
+    # tek duvar deliği taşıyan görünüşler ayna / bilgisizlik elemesinden korunur
+    korunan = set(ek_gor) | {delik_gorunusu(d, gorunusler)
+                             for d in (o.get("delikler") or [])
+                             if d.get("taraf") in ("min", "max")}
+    korunan.discard(None)
     # Görünüşler arası boşluk: araya giren ölçü çizgisi + yazı + kılavuz kadar.
     # Görünüşler arası boşluk: ölçü hatları + yazılar sığsın (pafta boşluğu
     # kâğıtta yine sıkıştırır). Dar olunca ÖN'ün ölçüleri ÜST'ün satırına
@@ -10673,7 +10778,8 @@ def dxf_komponent(s, o, k, yol, P):
     # yana A3'e 1:10'da sığmadığı için pafta 1:20'ye düşüyor, yazılar
     # kâğıtta 0,8 mm kalıyordu (kullanıcı: "karınca duası"). Görünüşleri
     # kullanıcı kendisi seçtiyse dokunulmaz.
-    if not P.get("gorunus_zorla") and "SAG" in gorunusler and "SOL" in gorunusler:
+    if (not P.get("gorunus_zorla") and "SAG" in gorunusler and "SOL" in gorunusler
+            and "SOL" not in korunan):
         try:
             _sk = sac_kesit_gorunusleri(s, o, gorunusler)
         except Exception:
@@ -10692,6 +10798,8 @@ def dxf_komponent(s, o, k, yol, P):
     # çizgiler aynaya çevrilip ızgarada karşılaştırılır.
     if not P.get("gorunus_zorla"):
         for a_, b_ in (("SAG", "SOL"), ("UST", "ALT"), ("ON", "ARKA")):
+            if b_ in korunan:
+                continue               # tek duvar deliği: o görünüş şart
             if a_ in kenarlar and b_ in kenarlar and ayna_ayni(kenarlar[a_], kenarlar[b_],
                                                                max(L, W, T)):
                 del kenarlar[b_]
@@ -10706,6 +10814,8 @@ def dxf_komponent(s, o, k, yol, P):
         for b_ in [g_ for g_ in gorunusler if g_ != "ON"]:
             if len(gorunusler) <= 2:
                 break
+            if b_ in korunan:
+                continue
             if bilgisiz_gorunus(kenarlar[b_], b_, o, _sk2):
                 del kenarlar[b_]
                 gorunusler = tuple(g_ for g_ in gorunusler if g_ != b_)

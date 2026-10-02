@@ -145,6 +145,11 @@ DXF'te yazı boyunun katı olarak uygulanır):
     grupların iç ölçüsü bir kez: "3x 70".
     Sacın iki yüzü (paralel, kalınlık kadar aralı çizgiler) TEK duvardır:
     açı ve ölçü bir kez sayılır (4 eğik duvar "4x 30°", 8x değil).
+    **Tek duvar deliği** (içi boş kutu / ekstrüzyon: delik yalnız bir
+    duvarda) duvarının GÖRÜNDÜĞÜ görünüşte düz çizgiyle çizilir ve
+    ölçülenir; gereken görünüş yoksa EKLENİR (`delik_duvarlari`,
+    `delik_gorunusu`, `gerekli_delik_gorunusleri`). Simetri yalnız TAM
+    simetride (0,05 mm; L'ye bağlı pay yok).
     Birbirine 0,5 mm içinde kalan datum seviyeleri (104,2 / 104,3 / 104,5)
     tek sıradır: ortalamaya en yakın gerçek değer yazılır, başlıkta
     "! MODEL KONTROL" uyarısı çıkar (ölçü uydurulmaz, model denetlenir).

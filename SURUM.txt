@@ -1,6 +1,6 @@
 Pi3D  –  3B modelden parça listesi ve teknik resim
 
-Sürüm   : v1.0.13  (02.10.2026)
+Sürüm   : v1.0.14  (02.10.2026)
 Kaynak  : github.com/noz1907/ned   dal: claude/fikstur-parca-stp-57hwc1
 
 KURULUM
@@ -154,6 +154,24 @@ BU SÜRÜMDE NE VAR
       6 yazı boyu), SİM. notu balonun altında.
     - kırmızı yalnız kaynağın kendisi (uzun sac kenarı artık kırmızı
       değil); kaynak ekseni ince mavi kesikli.
+
+  v1.0.14: TEK DUVAR DELİKLERİ (kapaklar) + simetri toleransı
+    (kullanıcı: "kapaklarda delik bir yönde var, diğer yönde yok; deliğin
+    diğer yüzde olduğu görülmeli ya da görünüm eklenmeli - görünüm ekleme
+    daha doğru"):
+    - İçi boş kutu / ekstrüzyon / kapalı kutuda delik yalnız BİR duvarda
+      ise (derinliği o eksendeki kalınlıktan belirgin kısa) delikler
+      duvara göre bölünür; her delik DUVARININ GÖRÜNDÜĞÜ görünüşte düz
+      çizgiyle çizilip ölçülenir (dış duvar SOL'da, iç duvar SAĞ'da; Y
+      ekseni için ÖN / ARKA). Gereken görünüş seçili değilse EKLENİR ve
+      ayna / bilgisizlik elemesinden korunur. Boydan boya delik eskisi gibi
+      ilk seçili görünüşte (Karluna yan kapak: 4 dış + 6 iç duvar deliği;
+      arka kapağa ARKA görünüşü eklendi).
+    - Simetri yalnız TAM simetride (0,05 mm): eski 0,002·L payı 1805 mm'lik
+      parçada 3,6 mm'ydi; 66/172 ile 65/171 delikleri simetrik sayılıp
+      sağ çift ölçüsüz kalıyordu (1 mm yanlış).
+    - Grup içi 0,05 mm içindeki hizalar tek sayılır ("3x 0" ölçüsü çıkmaz).
+    - test/duvar_delik_denetimi.py.
 
   v1.0.13: ARAÇ YÖNÜ, MALZEME / PROFİL DÜZELTMELERİ, ANTET LİSANSA GÖRE
     (kullanıcı listesi: 1-4 + tek parça yeniden üretim)
