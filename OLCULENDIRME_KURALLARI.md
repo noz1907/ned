@@ -97,7 +97,7 @@ katı). Üç kaynağın uzlaşması:
 | 4.6 | Rakam kendi aralığının hizasında; düşey zincirde rakamlar hattın aynı yanında, aynı eksende. | Komşu aralığa kayan rakam yanlış okunur. | K; CH s.9 ("aynı hiza") | `_yazi_hizasinda` |
 | 4.7 | Kısa ölçüler içeride, uzunlar dışarıda; ölçü çizgileri kesişmez; ölçü çizgisi kontur ya da eksenle aynı doğrultuda olmaz. | | CH s.9; ISO 129-1 | `_seviyele`, `_ara_yerlestir` |
 | 4.8 | Eşit adımlı dizi: kenardan ilk delik, sonra **"n x p = toplam"** (n aralık sayısı). Izgara (sık kesim): iç ölçü verilmez, bölge kesik çizgiyle işaretlenir, başı ve sonu referanstan. | Lazer DXF'i içi verir. | K; CH s.7 | `_dizi`, `izgara_bolgeleri` |
-| 4.9 | Delik grubu (kare / daire içinde yakın, **düzenli** desen): ilk delik referanstan, sonra delikten deliğe; aynı desenler bir kez "3x 70". Düzensiz öbekte her delik referanstan. | Freze mantığı: 0→A→B. | K | `_delik_gruplari`, `_duzenli_grup`, `_grup_imzasi` |
+| 4.9 | Delik grubu (kare / daire içinde yakın delikler): ilk delik referanstan; **düzenli** desende delikten deliğe zincir / dizi, **düzensiz** öbekte her delik grubun referans deliğinden paralel (iki delik arası mesafe kendi içinde önemli: ayrı zımbalar); kalabalıksa detayda, değilse parça üzerinde; aynı desenler bir kez "3x 70". Düzensiz öbekte her delik referanstan. | Freze mantığı: 0→A→B. | K | `_delik_gruplari`, `_duzenli_grup`, `_grup_imzasi` |
 | 4.10 | Aynı eleman bir kez: "6x Ø45", "9x SLOT 6", "4x 30°". | Tekrar bilgi eklemez. | K; CH s.7, s.40 | `cap_olculeri`, slot dedupe, `aci_olculeri` |
 | 4.11 | **İki aşama**: önce biçim ölçüleri (gabari, kademe, kanat), sonra konum ölçüleri (delik merkezleri). Zincirin bir ucu ölçüsüz (gabari kapatır). | | RC s.5–8, s.12 | `dxf_komponent` sırası, `_gabari_yolu_ayir` |
 | 4.12 | Gizli (kesik) çizgiye ölçü verilmez; özellik görünür olduğu görünüşte ölçülür. Silindirik biçim merkezine, prizmatik biçim yüzeyine göre konumlanır. | | RC s.9, s.10 | `DELIK_GOR` (ilk görünen görünüş), `konum_plani` |
@@ -168,3 +168,22 @@ Bilinçli olarak yapılmayan ya da sonraya bırakılanlar; gerekçesiyle:
   aday.
 - **Kesit (A-A) tarama** yalnız isteğe bağlı kesitte; bükümlü sacda profil
   görünüşü kesit yerine kullanılır.
+
+## 10. Web araştırması (02.10.2026) - kendi cümlelerimizle
+
+Kullanıcı: "web'ten 2D AutoCAD ölçülü resimler araştır, çok farklı kurallar
+ve düzenler görebilirsin." Arama özetleri okundu (imalatçı rehberleri,
+ISO 129-1 / 5456-2 / 128-3, ASME Y14.3, forumlar); metin kopyalanmadı.
+
+| # | Bulunan kural (özet) | Bizde |
+|---|---|---|
+| 10.1 | Sacta ana datum deliklerin açıldığı büyük düz yüz; en / boy kenarları ikinci ve üçüncü datum. | Uygulandı (3.1, 3.2). |
+| 10.2 | Delik deseninde ilk delik iki kenardan, öbürleri ilk delikten; iki delik arası mesafe işlevselse doğrudan yazılır, tolerans yazılan ölçüye uygulanır. | Uygulandı (4.9: düzenli zincir / dizi, düzensiz öbekte referans delikten paralel). |
+| 10.3 | Çok delikli lazer / zımba parçada koordinat (ordinat) ölçülendirme: sol alt köşe 0,0, hata birikmez; delik tablosu (X, Y, takım, adet). | **Kullanıcı istemiyor** (tek hatta rakam dizme yok, 4.2). Delik tablosu seçenek olarak ADAY (9). |
+| 10.4 | Görünüş sayısı gereken en az (2-3); gizli çizgi gerektirmeyen görünüşler seçilir; eğik yüz için yardımcı görünüş. | Uygulandı (2.2: otomatik seçim, ölçüsüz görünüş çizilmez). Yardımcı görünüş ADAY. |
+| 10.5 | Ana görünüş en çok bilgi veren bakış, parça çalışma / montaj konumunda (ISO 5456-2); 1. açı yerleşimi. | Uygulandı (2.1, 2.3, 2.9, 2.10). |
+| 10.6 | Kesit iki uçta aynı büyük harf (A-A), kâğıdın altından okunur; standart yerinde olmayan görünüşe harf + bakış oku. | Kesit uygulandı (2.6). Sütun düzeninde ARKA adıyla işaretli (ad yazılı), ok konmuyor. |
+| 10.7 | İlk ölçü hattı konturdan 7-10 mm, uzatma taşması 1,5-2 mm, konturla uzatma arasında boşluk. | Uygulandı (1.x, ANAYASA). |
+| 10.8 | Delik daire göründüğü görünüşte, merkez çizgisine ölçülenir; gizli çizgiye ölçü verilmez. | Uygulandı (4.12). |
+| 10.9 | Sac BÜKÜLMÜŞ hâliyle ölçülenir; açınım yalnız istenirse, açınım gabarisi referans (parantez); açınımda büküm çizgileri, yön, iç büküm yarıçapı; iki büküm arası sanal keskin köşeye. | Bükümlü hâl + sanal köşe uygulandı (5.6). Açınımda iç yarıçap notu ve parantezli gabari ADAY. |
+| 10.10 | DFM: delik kenara en az t (1,5-2t), büküme en az 2,5t + R; delikler arası en az 2t / 3Ø; eşit aralıklı delikler "n x p". | "n x p" uygulandı (4.8). Kenara / büküme çok yakın delik için "MODEL KONTROL" uyarısı ADAY. |

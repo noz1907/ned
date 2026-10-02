@@ -180,6 +180,11 @@ BU SÜRÜMDE NE VAR
     - YERLEŞİM: geniş görünümlü parçada sütun düzeni (ALT, ÖN, ÜST, ARKA
       alt alta; SAĞ solda, SOL sağda), dar parçada standart haç.
     - Pi3D anteti alçaldı (150 x 65; firma yapıştıracaksa 150 x 100).
+    - WEB ARAŞTIRMASI özeti (OLCULENDIRME_KURALLARI.md bölüm 10): bulunan
+      kurallar bizdeki karşılığıyla; adaylar işaretli.
+    - DELİK GRUBU: düzensiz öbekte de grup içi ölçü (her delik grubun
+      referans deliğinden paralel) - iki delik arası mesafe ayrı zımba
+      için önemli; kalabalıksa detaya taşınır.
     - PAFTA: 1. sayfa dağılmaz - ÖN + bir yan + bir üst / alt + kesit
       birlikte kalır; yalnız ekstra görünüşler (ARKA, ikinci yan ...) 2.
       sayfaya gider ve orada tek sırada, aynı hizada durur (kullanıcı:

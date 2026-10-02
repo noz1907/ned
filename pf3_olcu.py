@@ -3947,18 +3947,22 @@ def _delik_gruplari(nokta_cap, kutu_, h):
         ob = defaultdict(list)
         for i in range(n):
             ob[bul(i)].append(lst[i])
-        out.extend(g for g in ob.values()
-                   if 2 <= len(g) <= GRUP_EN_COK and _duzenli_grup(g))
+        # Düzensiz öbek de GRUPTUR (kullanıcı: "iki delik arası mesafeler
+        # kendi içinde önemli - ayrı zımbalar olabilir"): içi referans
+        # delikten paralel ölçülenir (bkz. konum_plani), zincir değil.
+        out.extend(g for g in ob.values() if 2 <= len(g) <= GRUP_EN_COK)
     return out
 
 
 def _duzenli_grup(g, tol=0.2):
-    """Delikten deliğe ölçü yalnız DÜZENLİ desende anlamlıdır: iki delik ya
-    da tam dikdörtgen desen (her sütunda her satırın deliği var). Düzensiz
-    öbekte zincir birbirine hizasız deliklerin farkını yazar (P06: 6,5 /
-    25 / 31,5 / 174,5 - kimsenin işine yaramayan sayılar); o delikler
-    referanstan tek tek ölçülür. Kullanıcı: "kare veya daire içindeki
-    delikler art arda"."""
+    """Grup DÜZENLİ mi: iki delik ya da tam dikdörtgen desen (her sütunda
+    her satırın deliği var). Düzenli grupta zincir / dizi ("3 x 70");
+    DÜZENSİZ öbekte zincir hizasız deliklerin farkını yazar (P06: 6,5 /
+    25 / 31,5 / 174,5 - işe yaramayan sayılar), onun yerine her delik
+    grubun REFERANS deliğinden (datuma en yakın) paralel ölçülür: iki
+    delik arası mesafe kendi içinde önemlidir (ayrı zımbalar). Kullanıcı:
+    "kare veya daire içindeki delikler art arda; grup halindeki delikler
+    kalabalıksa detayda, değilse doğrudan parça üzerinde"."""
     if len(g) == 2:
         return True
     xs = sorted({round(q[0] / tol) for q in g})
@@ -4225,6 +4229,17 @@ def konum_plani(o, gorunusler, ham, h, kenarlar=None, tol=0.05,
                 if tekrar:
                     continue           # iç ölçüsü ilk eşinde "Nx" ile verildi
                 sira_ = sorted(deg, key=lambda v: abs(v - ref))
+                if not _duzenli_grup(g_):
+                    # DÜZENSİZ öbek: her delik grubun referans deliğinden
+                    # (paralel, 0 -> A, 0 -> B); zincir hizasız delikleri
+                    # karıştırırdı. Kalabalıksa detay mekanizması taşır.
+                    d_ref = [q[1 - eksen] for q in g_ if abs(q[eksen] - ref) < 0.011]
+                    for v2 in sira_[1:]:
+                        d2 = [q[1 - eksen] for q in g_ if abs(q[eksen] - v2) < 0.011]
+                        lokal_zincir.append({"a": ref, "b": v2, "dik_a": d_ref, "dik_b": d2,
+                                             "grup": g_,
+                                             "metin": (on_ek + "<>") if on_ek else None})
+                    continue
                 dz_ = _dizi(sorted(deg)) if len(deg) >= DIZI_EN_AZ else None
                 if dz_:
                     lokal_zincir.append({"a": sira_[0], "b": sira_[-1],

@@ -75,7 +75,11 @@ DXF'te yazı boyunun katı olarak uygulanır):
 4. **Dağılım**: ölçü gösterdiği özelliğe yakın yana konur, dört yana
    dengeli dağılır; uzatma çizgisi özelliğin kendisinden başlar.
 5. **Delik grupları** (kare / daire içinde yakın delikler): ilk delik
-   referanstan, öbürleri delikten deliğe art arda.
+   referanstan, öbürleri delikten deliğe art arda. **İki delik arası
+   mesafe kendi içinde önemlidir** (kullanıcı: "genellikle ayrı zımbalar
+   olabilir"): düzenli desende zincir / dizi, düzensiz öbekte her delik
+   grubun referans deliğinden paralel; grup ölçüleri kalabalıksa
+   detayda, değilse doğrudan parça üzerinde.
 6. **Aynı eleman bir kez**: "9x SLOT 6", "3 x 200 = 600", "6x Ø45".
    Simetrik eşe ikinci ölçü konmaz; simetri ekseni çizilir.
 7. **DIŞ ÖLÇÜLER KESİNLİKLE YER ALIR**, önce onlar: ANA görünüş (en
@@ -140,8 +144,9 @@ DXF'te yazı boyunun katı olarak uygulanır):
     **Sacta delik / kesik** pres ya da lazerle yapılır: konumu verilir;
     çap, boy, genişlik yalnız özel ise. Özel şekillerde (pencere, anahtar
     deliği) yalnız konum, ana eksene göre. Çok abartmadan ölçü.
-    Delikten deliğe zincir yalnız DÜZENLİ desende (iki delik ya da tam
-    dikdörtgen); düzensiz öbekte her delik referanstan. Aynı desenli
+    Delikten deliğe ZİNCİR yalnız DÜZENLİ desende (iki delik ya da tam
+    dikdörtgen); düzensiz öbekte her delik grubun REFERANS deliğinden
+    paralel (zincir hizasız delikleri karıştırır). Aynı desenli
     grupların iç ölçüsü bir kez: "3x 70".
     Sacın iki yüzü (paralel, kalınlık kadar aralı çizgiler) TEK duvardır:
     açı ve ölçü bir kez sayılır (4 eğik duvar "4x 30°", 8x değil).
