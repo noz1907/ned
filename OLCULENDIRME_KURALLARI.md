@@ -154,6 +154,15 @@ katı). Üç kaynağın uzlaşması:
 | 8.5 | Pencere sınırı yazıyı **ölçerek** (MTEXT tek satır, ölçü bloğu içindeki de, Türkçe harf noktaları) kapsar; yazı kırpılmaz. | "6x Ø45" kırpılıyordu, "ÜST" "UST" çıkıyordu. | K | `_varlik_kutulari`, `_mtext_kutusu` |
 | 8.6 | Yazılar okunur: PDF'te yazı ~1 mm altına düşerse ölçek / yerleşim gözden geçirilir. | | K | `yazi_mm` raporu |
 
+## 8b. Sonuç analizi ve düzeltme döngüsü (kullanıcı, 03.10.2026) - ONAY BEKLİYOR
+
+| no | kural | gerekçe | kaynak | kod |
+|---|---|---|---|---|
+| 8b.1 | Çizim bitince sonuç **kâğıt ölçeğinde** (PDF'teki gerçek rakam boyu) ölçülerek denetlenir; sorun bulunursa düzeltilir ve DXF + PDF **birlikte** yeniden üretilir. | Kullanıcı: "PDF'te sonuç analiz edilsin, gerekirse düzeltme, sonra PDF ve DXF tekrar çıksın". DXF 1:1 iken sığan ölçü 1:7 kâğıtta birbirine girer. | K | (yok - planlanıyor) |
+| 8b.2 | Sorun ölçütleri: halka rakamdan kısa (`KISA_HALKA`·h); aynı köşede yığılma (iki ölçü yazısı 1 yazı boyundan yakın ya da 3·h x 3·h köşede 3'ten çok ölçü); görünüş adı ile ölçü çakışması; delik grubu ölçüsünün ana görünüşte sıkışması. | Kasa P01 ARKA sol üst köşe: 66, 5, 50, 21,5, 7,5, 73 + "ARKA" iç içe. | K | `_kosu_hatti` (kısa halka yalnız dış zincirde), `_delik_gruplari` (denetimsiz) |
+| 8b.3 | Düzeltme: bölge DETAYA alınır (14. kuralla aynı: köşeye yakınsa köşeye uzar; referans kenar-köşe ya da ana görünüşte ölçülü bağlantı deliği); ana görünüşte dış ölçüler ve uzun zincir kalır. | Kullanıcı: "dış ölçüleri verirdim ama burayı detaya alırdım, ana ölçüden / delikten / köşeden referanslayarak". | K; CH s.20 | `bolge_sec`, `detay_gorunusleri` |
+| 8b.4 | Sorunlu örnekler listede tutulur (test/OKU.md); her değişiklik önce onlarla sınanır. | "Bunları mantıksal bazda sakla; resim datası taranırken 'burası şöyle daha doğru olur' denebilsin." | K | test/OKU.md |
+
 ## 9. Kitapta olup programda (henüz) olmayanlar
 
 Bilinçli olarak yapılmayan ya da sonraya bırakılanlar; gerekçesiyle:

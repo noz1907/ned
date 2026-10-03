@@ -272,6 +272,34 @@ DXF'te yazı boyunun katı olarak uygulanır):
     hangi yüzde olduğu resimden okunmalıdır (Karluna yan kapak: 4 delik
     dış duvarda, 6 delik iç duvarda).
 
+25. **SONUÇ ANALİZİ ve DÜZELTME DÖNGÜSÜ** (kullanıcı: "bunları mantıksal
+    bazda sakla; resim datası taranırken 'burası şöyle daha doğru olur'
+    denebilsin; PDF'te sonuç analiz edilsin, gerekirse düzeltme, sonra
+    PDF ve DXF yeniden çıksın"; "ölçüler birbirine girmesin: dış ölçüleri
+    verirdim ama burayı detaya alırdım, ana ölçüden / delikten / köşeden
+    referanslayarak"). Çizim bitince sonuç KÂĞIT ÖLÇEĞİNDE (PDF'teki
+    gerçek rakam boyuyla) ÖLÇÜLEREK denetlenir, sorunlu bölge DETAYA
+    alınır, DXF ve PDF birlikte yeniden üretilir. Sorun ölçütleri:
+    - halka rakamdan kısa (`KISA_HALKA`·h): 5, 7,5 gibi ölçüler ana
+      görünüşte okunmaz;
+    - aynı köşede yığılan ölçüler: iki ölçü yazısı birbirine 1 yazı
+      boyundan yakın, ya da bir köşe kutusunda (3·h x 3·h) 3'ten çok ölçü;
+    - görünüş adı ("ARKA") ile ölçü yazısı / çizgisi çakışması;
+    - **delik grubu ölçüleri** (ilk delik referanstan, sonra delikten
+      deliğe) bugün dış zincirin kısa-halka / detay denetiminden GEÇMİYOR
+      (`_delik_gruplari` ayrı yol): grubun ilk halkası kısa ya da grup
+      başka ölçüyle yığılıyorsa grup bütünüyle detaya gider.
+    Düzeltme: bölge = yığılan ölçülerin özellik kutusu, köşeye yakınsa
+    köşeye uzar; ana görünüşte dış ölçüler (gabari, uzun zincir) KALIR,
+    bölgenin bütün konumları detayda; detay referansı bölge datum
+    kenarını / köşeyi içeriyorsa kenar-köşe, içermiyorsa ana görünüşte
+    ölçülü BAĞLANTI deliği (14. kuralla aynı). Örnek: kasa P01 "K0 KABIN
+    KORUMA - ON DUVAR SACI" ARKA sol üst köşe: 66, 5, 50, 21,5, 7,5, 73 ve
+    "ARKA" yazısı iç içe; 164/260/912/404/67, 465,5, 435 kalmalı, köşe
+    DETAY olmalı. Sorunlu örnekler `test/OKU.md`'deki listede tutulur,
+    her değişiklik onlarla sınanır. UYGULAMA KULLANICI ONAYI ("tamam")
+    BEKLİYOR.
+
 ## PDF (pafta)
 
 - PDF okumak ve atölyede iş yapmak içindir; DXF'le aynı şey değildir.

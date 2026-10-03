@@ -65,3 +65,10 @@ python test/test_gizli_cizgi.py && python test/pafta_denetimi.py && \
 python test/logo_denetimi.py && python test/gui_sayfa_kurulum.py && \
 python test/gui_cagri_denetimi.py && python test/gui_dongu_denetimi.py
 ```
+
+## Sorunlu örnekler (sonuç analizi döngüsü için, CLAUDE.md 25)
+
+| model / parça | görünüş | sorun | olması gereken |
+|---|---|---|---|
+| kasa c2d5b103, P01 K0 KABIN KORUMA - ON DUVAR SACI (ARKA, sayfa 2, 1:7) | sol üst köşe | 66, 5, 50, 21,5, 7,5, 73 ölçüleri ve "ARKA" yazısı iç içe; 5 ve 7,5 halkası rakamdan kısa; delik grubu ölçüleri kısa-halka denetiminden geçmiyor | dış ölçüler (164/260/912/404/67, 465,5, 435) ana görünüşte kalır; köşe DETAY, referans köşe / kenar |
+
