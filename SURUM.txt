@@ -160,6 +160,12 @@ BU SÜRÜMDE NE VAR
       uzatma / eksen / gizli / tarama 0,09 mm (ISO 128 çizgi grubu, kalın :
       ince = 2 : 1; kullanıcı: "ölçü çizgileriyle karışıyor"). DXF
       katmanında ve PDF'te; lazer kesim DXF'i değişmedi (KONTUR_KAL).
+    - ÖRNEK ÖNİZLEMESİ SIĞAR ve BÜYÜR (kullanıcı: "resim görülmüyor,
+      nesini onaylayayım; sığmayan her durumda pencere yap, mümkün olan
+      yerde genişlet"): resim tuvale iki yönde sığdırılır (eskiden geniş
+      resmin üstü ve altı kesiliyordu); BÜYÜT / çift tık ile ayrı,
+      yakınlaştırmalı, kaydırmalı pencere; parça resimleri de çift tıkla
+      büyük pencerede. Önizleme PNG'si 200 dpi.
     - EKSTRÜZYON PROFİL MALZEMESİ AYRI PENCEREDE (Evet / Hayır kutusu
       kalktı; kullanıcı: "hani ben değiştirebiliyordum, resim
       gösteriyordun; binlerce parçada nereden bulacağım, arama yok"):

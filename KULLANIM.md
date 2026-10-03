@@ -1200,6 +1200,14 @@ malzemeyi görür, BOM'u yeniden çıkarmak gerekmez.
 
 ### Adım 4 — ÖRNEK ONAY
 
+Örnek resim tuvale **iki yönde de sığdırılır** (geniş resimde üst ve alt
+kesilmez). **BÜYÜT** düğmesi ya da resme çift tık: ekranın %90'ı kadar
+ayrı pencerede, kaydırma çubuklu; *Sığdır*, *1:1*, *+*, *−*, Ctrl +
+tekerlek yakınlaştırır, sol tuşla sürüklenir, Esc kapatır. BOM
+sayfasındaki küçük parça resmi ve karar pencerelerindeki resim de çift
+tıkla büyük pencerede açılır. Kural: **sığmayan her şey ayrı pencerede,
+genişleyebilen her şey genişler.**
+
 Üretilen örnek resim pencerede gösterilir. Yazı boyutları gerçek boyutta
 çizilir, yani önizlemede gördüğünüz çakışma gerçek çakışmadır.
 

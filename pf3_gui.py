@@ -133,9 +133,10 @@ def klasor_ac(yol):
         pass
 
 
-def dxf_onizleme(dxf_yol, png_yol, gen=11.0, boy=7.5):
+def dxf_onizleme(dxf_yol, png_yol, gen=11.0, boy=7.5, dpi=200):
     """DXF'i PNG'ye çevirir. Yazılar gerçek boyutta çizilir, böylece
-    önizlemede görünen çakışma gerçek çakışmadır."""
+    önizlemede görünen çakışma gerçek çakışmadır. dpi 200: büyütme
+    penceresinde 2 kat yakınlaşınca da keskin kalsın."""
     import ezdxf, matplotlib
     matplotlib.use("Agg")
     import matplotlib.pyplot as plt
@@ -235,7 +236,7 @@ def dxf_onizleme(dxf_yol, png_yol, gen=11.0, boy=7.5):
     for t, x, y, hh in yazi:
         ax.text(x, y, str(t).replace("%%c", "Ø"), fontsize=hh * pb * 0.95,
                 color="#036", family="monospace", va="bottom", ha="left")
-    fig.savefig(png_yol, dpi=100, facecolor="white")
+    fig.savefig(png_yol, dpi=dpi, facecolor="white")
     plt.close(fig)
     return png_yol
 
@@ -992,6 +993,8 @@ class Uygulama(ttk.Frame):
                                  highlightthickness=1, highlightbackground="#ccc")
         self.c_parca.pack(fill="both", expand=True)
         self._tuval_yeniden_ciz(self.c_parca)
+        self.c_parca.bind("<Double-1>", lambda e: self.parca_resmi_penceresi(self.c_parca))
+        ttk.Label(rf, foreground="#777", text="çift tık: büyük pencere").pack(anchor="w")
         self._resim_onbellek, self._resim_istek = {}, None
         self.ag = ttk.Treeview(cer, columns=sut, show="tree headings",
                                selectmode="extended")
@@ -1185,10 +1188,15 @@ class Uygulama(ttk.Frame):
         self.tuval = tk.Canvas(f, bg="white", highlightthickness=1, highlightbackground="#bbb")
         self.tuval.pack(fill="both", expand=True, pady=6)
         self.tuval.bind("<Configure>", lambda e: self._onizleme_ciz())
+        self.tuval.bind("<Double-1>", lambda e: self.onizleme_penceresi())
         af = ttk.Frame(f); af.pack(fill="x")
         ttk.Button(af, text="◂  AYARA DÖN", command=lambda: self.defter.select(2)).pack(side="left")
         ttk.Button(af, text="DXF'i harici programda aç",
                    command=self.ornek_ac).pack(side="left", padx=8)
+        ttk.Button(af, text="BÜYÜT  (ayrı pencere, yakınlaştır)",
+                   command=self.onizleme_penceresi).pack(side="left")
+        ttk.Label(af, foreground="#555", text="resme çift tıklayınca da açılır"
+                  ).pack(side="left", padx=8)
         self.b_onay = ttk.Button(af, text="ONAYLA  –  TÜM ÇİZİMLERİ ÜRET  ▸",
                                  style="Bas.TButton", command=self.tumunu_uret)
         self.b_onay.pack(side="right", ipadx=14, ipady=5)
@@ -3657,6 +3665,31 @@ class Uygulama(ttk.Frame):
         if anahtar == self._resim_istek:
             self._parca_resmi_ciz(ken)
 
+    def parca_resmi_penceresi(self, kaynak):
+        """Küçük parça resmine çift tık: aynı kenarlar ekranın %80'i kadar
+        ayrı pencerede, pencere büyüdükçe yeniden çizilir (kullanıcı:
+        "sığmayan her durumda pencere yap, mümkün olan yerde genişlet")."""
+        ken = getattr(kaynak, "_son_ken", None)
+        if not ken:
+            return None
+        w = tk.Toplevel(self)
+        w.title("Parça resmi" + ((" – " + self.v_parca_ad.get().splitlines()[0])
+                                 if kaynak is getattr(self, "c_parca", None)
+                                 and hasattr(self, "v_parca_ad") else ""))
+        try:
+            sw, sh = w.winfo_screenwidth(), w.winfo_screenheight()
+            gw, gh = int(sw * 0.8), int(sh * 0.8)
+            w.geometry(f"{gw}x{gh}+{(sw - gw) // 2}+{(sh - gh) // 3}")
+        except Exception:
+            pass
+        c = tk.Canvas(w, bg="white", highlightthickness=0)
+        c.pack(fill="both", expand=True)
+        c._son_ken = ken
+        self._tuval_yeniden_ciz(c)
+        w.bind("<Escape>", lambda e: w.destroy())
+        self._parca_resmi_pencere = {"w": w, "c": c}
+        return w
+
     def _tuval_yeniden_ciz(self, c):
         """Tuvalin boyutu değişince son resim yeni boyuta göre yeniden
         çizilir (resim hep görünen alana sığar)."""
@@ -4353,6 +4386,7 @@ class Uygulama(ttk.Frame):
                       highlightbackground="#bbb")
         c.pack(padx=4, pady=(4, 2), fill="both", expand=True)
         self._tuval_yeniden_ciz(c)
+        c.bind("<Double-1>", lambda e: self.parca_resmi_penceresi(c))
         kuyruk_ = queue.Queue()
         istek = {"id": None}
 
@@ -4751,19 +4785,119 @@ class Uygulama(ttk.Frame):
         except Exception as ex:
             self.kuyruk.put(("durum", f"önizleme yapılamadı: {ex}"))
 
+    @staticmethod
+    def _resmi_sigdir(png, gw, gh, oran=None):
+        """PNG'yi gw x gh alana SIĞACAK biçimde (iki yönde de) ölçekler ya da
+        verilen oranda büyütür; PhotoImage döner. Pillow varsa keskin
+        (LANCZOS), yoksa tam sayı küçültme. Eskiden iki yönün KÜÇÜK
+        katsayısı alınıyordu: geniş resim tuvalden taşıyor, ÖN görünüşün
+        üstü ve ARKA'nın altı kesiliyordu (kullanıcı: "resim görülmüyor,
+        nesini onaylayayım")."""
+        try:
+            from PIL import Image, ImageTk
+            im = Image.open(png)
+            if oran is None:
+                oran = min(gw / max(im.width, 1), gh / max(im.height, 1))
+            yeni = (max(1, int(im.width * oran)), max(1, int(im.height * oran)))
+            if yeni != im.size:
+                im = im.resize(yeni, Image.LANCZOS)
+            return ImageTk.PhotoImage(im), oran
+        except Exception:
+            ham = tk.PhotoImage(file=png)
+            if oran is None:
+                k = max(1, max(-(-ham.width() // max(gw, 1)), -(-ham.height() // max(gh, 1))))
+                return (ham.subsample(k, k) if k > 1 else ham), 1.0 / k
+            if oran >= 1:
+                z = max(1, int(round(oran)))
+                return (ham.zoom(z, z) if z > 1 else ham), float(z)
+            k = max(1, int(round(1.0 / oran)))
+            return (ham.subsample(k, k) if k > 1 else ham), 1.0 / k
+
     def _onizleme_ciz(self):
         if not self.onizleme_png or not os.path.isfile(self.onizleme_png):
             return
         try:
-            ham = tk.PhotoImage(file=self.onizleme_png)
             gw = max(self.tuval.winfo_width(), 1)
             gh = max(self.tuval.winfo_height(), 1)
-            k = max(1, min(-(-ham.width() // gw), -(-ham.height() // gh)))
-            self.onizleme_resmi = ham.subsample(k, k) if k > 1 else ham
+            self.onizleme_resmi, _ = self._resmi_sigdir(self.onizleme_png, gw - 4, gh - 4)
             self.tuval.delete("all")
             self.tuval.create_image(gw // 2, gh // 2, image=self.onizleme_resmi)
         except Exception as ex:
             self.v_durum.set(f"önizleme çizilemedi: {ex}")
+
+    def onizleme_penceresi(self, png=None, baslik=None):
+        """ÖNİZLEME AYRI PENCEREDE, YAKINLAŞTIRMALI (kullanıcı: "sığmayan
+        her durumda pencere yap, mümkün olan yerde genişlet"): ekranın
+        %90'ı kadar pencere, kaydırma çubukları; Sığdır / 1:1 / + / −
+        düğmeleri, Ctrl + tekerlek yakınlaştırır, tekerlek kaydırır, sol
+        tuşla sürüklenir. Açılışta resim pencereye sığdırılır."""
+        png = png or self.onizleme_png
+        if not png or not os.path.isfile(png):
+            messagebox.showinfo("Önizleme", "Henüz gösterilecek önizleme yok.")
+            return None
+        w = tk.Toplevel(self)
+        w.title(baslik or ("Önizleme – " + (self.v_ornek_bilgi.get() if hasattr(self, "v_ornek_bilgi") else "")))
+        try:
+            sw, sh = w.winfo_screenwidth(), w.winfo_screenheight()
+            gw, gh = int(sw * 0.9), int(sh * 0.88)
+            w.geometry(f"{gw}x{gh}+{(sw - gw) // 2}+{max(0, (sh - gh) // 3)}")
+        except Exception:
+            pass
+        ust = ttk.Frame(w, padding=(6, 4)); ust.pack(fill="x")
+        cer = ttk.Frame(w); cer.pack(fill="both", expand=True)
+        c = tk.Canvas(cer, bg="white", highlightthickness=0)
+        sy = ttk.Scrollbar(cer, orient="vertical", command=c.yview)
+        sx = ttk.Scrollbar(w, orient="horizontal", command=c.xview)
+        c.configure(yscrollcommand=sy.set, xscrollcommand=sx.set)
+        sy.pack(side="right", fill="y"); c.pack(side="left", fill="both", expand=True)
+        sx.pack(fill="x")
+        durum = {"oran": None, "resim": None, "png": png}
+        v_oran = tk.StringVar(value="")
+
+        def ciz(oran=None):
+            gw_, gh_ = max(c.winfo_width(), 50), max(c.winfo_height(), 50)
+            durum["resim"], durum["oran"] = self._resmi_sigdir(png, gw_ - 2, gh_ - 2, oran)
+            c.delete("all")
+            iw, ih = durum["resim"].width(), durum["resim"].height()
+            x = max((gw_ - iw) // 2, 0); y = max((gh_ - ih) // 2, 0)
+            c.create_image(x, y, image=durum["resim"], anchor="nw")
+            c.configure(scrollregion=(0, 0, max(iw, gw_), max(ih, gh_)))
+            v_oran.set(f"%{durum['oran'] * 100:.0f}")
+
+        def yakin(kat):
+            o = (durum["oran"] or 1.0) * kat
+            o = min(max(o, 0.05), 8.0)
+            ciz(o)
+        ttk.Button(ust, text="Sığdır", command=lambda: ciz(None)).pack(side="left")
+        ttk.Button(ust, text="1:1", command=lambda: ciz(1.0)).pack(side="left", padx=4)
+        ttk.Button(ust, text="＋", width=3, command=lambda: yakin(1.25)).pack(side="left")
+        ttk.Button(ust, text="－", width=3, command=lambda: yakin(0.8)).pack(side="left", padx=4)
+        ttk.Label(ust, textvariable=v_oran, width=6).pack(side="left")
+        ttk.Label(ust, foreground="#555", text=(
+            "Ctrl + tekerlek yakınlaştırır, tekerlek kaydırır, sol tuşla sürükleyin")).pack(side="left", padx=10)
+        ttk.Button(ust, text="Kapat", command=w.destroy).pack(side="right")
+
+        def teker(e):
+            if e.state & 0x4:                     # Ctrl
+                yakin(1.25 if (e.num == 4 or e.delta > 0) else 0.8)
+            elif e.state & 0x1:                   # Shift: yatay
+                c.xview_scroll(-1 if (e.num == 4 or e.delta > 0) else 1, "units")
+            else:
+                c.yview_scroll(-1 if (e.num == 4 or e.delta > 0) else 1, "units")
+        for olay in ("<MouseWheel>", "<Button-4>", "<Button-5>"):
+            c.bind(olay, teker)
+        c.bind("<ButtonPress-1>", lambda e: c.scan_mark(e.x, e.y))
+        c.bind("<B1-Motion>", lambda e: c.scan_dragto(e.x, e.y, gain=1))
+        ilk = {"ok": False}
+
+        def boyut(e):
+            if not ilk["ok"]:
+                ilk["ok"] = True
+                ciz(None)
+        c.bind("<Configure>", boyut)
+        w.bind("<Escape>", lambda e: w.destroy())
+        self._onizleme_pencere = {"w": w, "c": c, "durum": durum, "ciz": ciz, "yakin": yakin}
+        return w
 
 
 class MalzemeSihirbazi:
