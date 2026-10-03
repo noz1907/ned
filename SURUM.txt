@@ -1,6 +1,6 @@
 Pi3D  –  3B modelden parça listesi ve teknik resim
 
-Sürüm   : v1.0.18  (03.10.2026)
+Sürüm   : v1.0.19  (03.10.2026)
 Kaynak  : github.com/noz1907/ned   dal: claude/fikstur-parca-stp-57hwc1
 
 KURULUM
@@ -155,6 +155,32 @@ BU SÜRÜMDE NE VAR
     - kırmızı yalnız kaynağın kendisi (uzun sac kenarı artık kırmızı
       değil); kaynak ekseni ince mavi kesikli.
 
+  v1.0.19 (03.10.2026): ölçü / tolerans düzenleme, açınımda yalnız dış ölçü
+  ve delik konumu
+    - ÖLÇÜ / TOLERANS DÜZENLE (5. sekme ve Dosya menüsü; model gerekmez):
+      çıktı klasöründeki detay resimleri arama kutulu listede; seçilen
+      resmin önizlemesinde her ölçünün NUMARASI (yalnız pencerede; DXF /
+      PDF'e yazılmaz); numaralı ölçü listesi. Özel ± yaz, toleransı sil
+      (referans ölçü, parantez içinde), genel toleransa dön, ölçüyü sil;
+      ölçü DEĞERİ değişmez (ölçü modelden gelir, doğrudur). KAYDET: DXF
+      düzenlenir, paftası ve PDF'i yeniden basılır; düzenleme ölçü
+      kimliğiyle parçanın ayarına yazılır, model yeniden çizilince aynen
+      uygulanır. Her ölçünün numarası, kimliği ve toleransı DXF'te XDATA.
+    - Tolerans yazısı ölçülerek yerleşir; yanında yer yoksa ölçü yazısının
+      içine ("39 ±0,05") yazılır ve yazı temiz yere kaydırılır; tolerans
+      resimde görünmeden kalmaz. Parantezli referans ölçü de ölçülerek
+      temiz yere alınır; kalan sorun pencerede uyarı olarak çıkar.
+    - AÇINIM: yalnız DIŞ ÖLÇÜLER (boy, en) ve DELİK KONUMLARI (sol alt
+      köşeden koordinatlı ölçü, "0" köşede; X değerleri yakın kenarda üstte
+      ya da altta, Y değerleri solda; kılavuz başka deliğin üstünden
+      geçecekse o delik başlıkta x; y). Büküm konum ölçüleri kaldırıldı
+      (büküm yerleri çizelgede). Bir yönde 25'ten çok konum (sık desen) ise
+      ölçü konmaz, lazer DXF'i verir. Açınım resminde ÜÇ RESİM: ölçülü
+      açınım, ÖLÇÜSÜZ açınım (kontur + büküm eksenleri) ve izometrik
+      bükümlü resim; DXF'te ve PDF'te.
+    - LAZER DXF'inde ölçü / yazı yok (yalnız KESIM katmanında konturlar;
+      denetimle güvence altında).
+    - Açınımda profil etiketleri (B12) PERSPEKTİF yazısına binmiyor.
   v1.0.18 (03.10.2026): sonuç analizi döngüsü, tolerans, parça bazlı K,
   kayar arayüz
     - SONUÇ ANALİZİ DÖNGÜSÜ (kâğıt ölçeğinde): her detay resmi çizildikten

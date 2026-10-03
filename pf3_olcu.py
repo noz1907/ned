@@ -2403,6 +2403,11 @@ GORUNUS_KATMAN = "PI3D_GORUNUS_ALANI"   # görünüş yerleri; çizim değildir
 GORUNUS_APPID = "PI3D"
 
 
+def _pi3d_appid(doc):
+    if GORUNUS_APPID not in doc.appids:
+        doc.appids.add(GORUNUS_APPID)
+
+
 def gorunus_isareti(msp, ad, kutu_):
     """Bir görünüşün resimde nerede durduğunu işaretler.
 
@@ -6108,6 +6113,13 @@ def _disari_ciz(msp, yon, p1, p2, cizgi, disa, m, h, metin=None):
             bas = (cizgi, cy)
         if math.dist(bas, hedef) > 0.3 * h:
             dim._kilavuz = msp.add_line(bas, hedef, dxfattribs={"layer": "OLCU"})
+            # kılavuz ölçüsüne bağlı: ölçü silinince o da silinir (olcu_duzenle)
+            try:
+                _pi3d_appid(msp.doc)
+                dim._kilavuz.set_xdata(GORUNUS_APPID, [(1000, "KILAVUZ"),
+                                                       (1005, dim.dimension.dxf.handle)])
+            except Exception:
+                pass
     return dim
 
 
@@ -6873,12 +6885,13 @@ def tolerans_isle(msp, o, k, P, gkutu, kaydir, detaylar, kplan, h, sac_kesit, sa
         else:
             bant = tolerans_bandi(tur, sur["boy"], L_ref, t_sac, sinif)
         kimlik = "|".join([gad, tur, yon, XL.tr(round(deger, 2), 2)] + [str(v) for v in uclar])
-        oge = {"id": kimlik, "gorunus": gad, "tur": tur, "yon": yon, "deger": round(deger, 3),
+        oge = {"_h": e.dxf.handle, "_ky": ky,
+               "id": kimlik, "gorunus": gad, "tur": tur, "yon": yon, "deger": round(deger, 3),
                "surec": (sur["kanat"] if (tur == "konum" and gad in (sac_kesit or {}) and sac_kanat)
                          else sur["aci"] if tur == "aci" else sur["boy"] if tur == "gabari" else sur["konum"]),
                "bant": bant, "tol": (round(bant / 2.0, 3) if bant else None),
                "L_ref": round(float(L_ref or 0.0), 1), "uclar": uclar, "ozel": False}
-        if kimlik in ozel and ozel[kimlik] is not None:
+        if kimlik in ozel and ozel[kimlik] is not None and ozel[kimlik] != "ref":
             try:
                 v = ozel[kimlik]
                 oge["tol"] = round(float(v if not isinstance(v, (list, tuple)) else max(abs(float(v[0])), abs(float(v[1])))), 3)
@@ -6887,6 +6900,21 @@ def tolerans_isle(msp, o, k, P, gkutu, kaydir, detaylar, kplan, h, sac_kesit, sa
             except Exception:
                 pass
         liste.append(oge)
+    # KULLANICI DÜZELTMELERİ (ölçü düzenleme penceresi, kimliğe göre):
+    # "sil" -> ölçü resimden çıkar; ozel[id] == "ref" -> toleranssız
+    # (referans ölçü, parantez içinde, ISO 129-1)
+    silinecek = {str(a) for a in (ayar.get("sil") or [])}
+    if silinecek or any(v == "ref" for v in ozel.values()):
+        kalan = []
+        for x in liste:
+            if x["id"] in silinecek:
+                olcu_varligini_sil(msp, x["_h"])
+                continue
+            if ozel.get(x["id"]) == "ref":
+                referans_olcu_yap(msp, x["_h"])
+                x.update(ref=True, tol=None, bant=None, ozel=True)
+            kalan.append(x)
+        liste = kalan
     # ZİNCİR BİRİKİMİ: aynı görünüş + yönde uç uca eklenen konum ölçüleri
     # (bir ölçünün ucu öbürünün başlangıcı) datumdan itibaren toplanır;
     # birikim o uzaklığın bandını aşıyorsa uyarı (paralel ölçü / ara
@@ -6937,37 +6965,307 @@ def tolerans_isle(msp, o, k, P, gkutu, kaydir, detaylar, kplan, h, sac_kesit, sa
                   + (f" · kanat {pm(tolerans_bandi('konum', 'abkant'))}" if sac_kanat else "")
                   + f" · açı ±{XL.tr(aci_ / 2.0, 2)}°"
                   + (f" · diklik {XL.tr(TOLERANS['diklik'].get(sur['konum'], 0.6), 1)}" if sur['konum'] in TOLERANS['diklik'] else "")]
+    olculeri_numarala(msp, liste)
     return liste, notlar, uyari
+
+
+def olculeri_numarala(msp, liste):
+    """Her ölçüye resim içinde KALICI bir numara verir (düzenleme
+    penceresinde balon olarak görünür, resimde yazılmaz) ve DXF'e XDATA
+    olarak yazar: düzenleme model olmadan da DXF'ten yapılabilsin.
+    Sıra: görünüş sırası (ÖN, ÜST, ALT, SAĞ, SOL, ARKA, detaylar), görünüş
+    içinde yukarıdan aşağı, soldan sağa."""
+    sira = ["ON", "UST", "ALT", "SAG", "SOL", "ARKA"]
+
+    def anahtar(x):
+        g = x["gorunus"]
+        gi = sira.index(g) if g in sira else (len(sira) + (0 if g.startswith("DETAY") else 1))
+        ky = x.get("_ky") or (0, 0, 0, 0)
+        return (gi, g, -round((ky[1] + ky[3]) / 2.0, 0), round((ky[0] + ky[2]) / 2.0, 0))
+    doc = msp.doc
+    _pi3d_appid(doc)
+    for no, x in enumerate(sorted(liste, key=anahtar), 1):
+        x["no"] = no
+        e = doc.entitydb.get(x.get("_h")) if x.get("_h") else None
+        if e is None:
+            continue
+        try:
+            e.set_xdata(GORUNUS_APPID, [
+                (1000, "OLCU"), (1000, x["id"][:250]), (1071, no), (1000, x["tur"]),
+                (1040, float(x["deger"])), (1040, float(x["tol"]) if x.get("tol") is not None else -1.0),
+                (1000, x["gorunus"]), (1071, 1 if x.get("ref") else 0),
+                (1071, 1 if x.get("ozel") else 0)])
+        except Exception:
+            pass
+    return liste
+
+
+def olcu_varligini_sil(msp, handle):
+    """Ölçüyü, bloğunu, kılavuzunu ve ± etiketini resimden siler."""
+    doc = msp.doc
+    e = doc.entitydb.get(handle)
+    for x in list(msp.query("LINE TEXT")):
+        try:
+            xd = x.get_xdata(GORUNUS_APPID)
+        except Exception:
+            continue
+        vals = [v for _c, v in xd]
+        if vals and vals[0] in ("KILAVUZ", "TOL") and len(vals) > 1 and vals[1] == handle:
+            msp.delete_entity(x)
+    if e is not None:
+        try:
+            ad = e.dxf.get("geometry", None)
+            msp.delete_entity(e)
+            if ad and ad in doc.blocks:
+                doc.blocks.delete_block(ad, safe=False)
+        except Exception:
+            pass
+
+
+def referans_olcu_yap(msp, handle):
+    """Toleranssız (referans) ölçü: rakam parantez içinde (ISO 129-1).
+    Parantez rakamı genişletir: yazı bir çizgiye / yazıya değerse ölçü
+    çizgisi boyunca temiz yere kaydırılır (ÖLÇÜLEREK). Döner: temiz mi."""
+    e = msp.doc.entitydb.get(handle)
+    if e is None:
+        return False
+    try:
+        t = str(e.dxf.get("text", "") or "<>")
+        if not t.startswith("("):
+            e.dxf.text = "(" + (t if t else "<>") + ")"
+        _olcu_yeniden_isle(msp, e)
+        return _olcu_yazisini_temizle(msp, e)
+    except Exception:
+        return False
+
+
+def _olcu_yazisi_temiz_mi(msp, e, h):
+    ky = _olcu_yazi_kutusu(_Olcu(e))
+    if not ky:
+        return True, None
+    dolu = [k for k in _yazi_kutulari(msp) if not (abs(k[0] - ky[0]) < 1e-6 and abs(k[1] - ky[1]) < 1e-6)]
+    alan = (ky[0] - 3 * h, ky[1] - 3 * h, ky[2] + 3 * h, ky[3] + 3 * h)
+    # ölçünün KENDİ çizgileri de sayılır (çakışma denetimi gibi): yazı
+    # kendi uzatma çizgisinin içinden de geçmemeli; kutu her yandan
+    # kısa kenarının %18'i kadar küçültülür (kenara değmek serbest)
+    cz = list(_cizgi_parcalari(msp, alan, katman=("GORUNEN", "GIZLI", "OLCU", "EKSEN", "BOLGE")))
+    cz += [c for c in _dim_cizgileri(_Olcu(e)) if c not in cz]
+    p_ = 0.18 * min(ky[2] - ky[0], ky[3] - ky[1])
+    k2 = (ky[0] + p_, ky[1] + p_, ky[2] - p_, ky[3] - p_)
+    temiz = not _cakisiyor(ky, dolu, 0.1 * h) and not _cizgi_kesiyor(k2, cz, 0.0)
+    return temiz, ky
+
+
+def _olcu_yazisini_temizle(msp, e):
+    """Metni değişen ölçünün yazısı başka bir şeye değiyorsa ölçü çizgisi
+    boyunca (iki yana, artan adımla) temiz bir yere taşır."""
+    from ezdxf.entities.dimstyleoverride import DimStyleOverride
+    try:
+        h = float(msp.doc.dimstyles.get(OLCU_STILI).dxf.dimtxt)
+    except Exception:
+        h = 3.5
+    temiz, ky = _olcu_yazisi_temiz_mi(msp, e, h)
+    if temiz or ky is None:
+        return True
+    cx, cy = (ky[0] + ky[2]) / 2.0, (ky[1] + ky[3]) / 2.0
+    try:
+        aci = math.radians(float(e.dxf.get("angle", 0.0)))
+    except Exception:
+        aci = 0.0
+    ux, uy = math.cos(aci), math.sin(aci)
+    nx, ny = -uy, ux
+    w = max(ky[2] - ky[0], ky[3] - ky[1])
+    # önce ölçü çizgisi boyunca, sonra dışarı (kılavuzla)
+    adaylar = [((cx + ux * k * w, cy + uy * k * w), False)
+               for k in (0.6, -0.6, 1.2, -1.2, 1.8, -1.8, 2.6, -2.6)]
+    adaylar += [((cx + nx * m * h + ux * k * w, cy + ny * m * h + uy * k * w), True)
+                for m in (2.0, -2.0, 3.5, -3.5) for k in (0.0, 0.8, -0.8)]
+    for yer, kilavuz in adaylar:
+        try:
+            ov = DimStyleOverride(e)
+            ov.set_location(yer, leader=kilavuz, relative=False)
+            ov.render()
+        except Exception:
+            continue
+        if _olcu_yazisi_temiz_mi(msp, e, h)[0]:
+            return True
+    return False
+
+
+def _olcu_yeniden_isle(msp, e):
+    """Metni değişen ölçünün bloğunu yeniden üretir."""
+    from ezdxf.entities.dimstyleoverride import DimStyleOverride
+    ad = e.dxf.get("geometry", None)
+    try:
+        DimStyleOverride(e).render()
+    except Exception:
+        return
+    if ad and ad != e.dxf.get("geometry", None) and ad in msp.doc.blocks:
+        try:
+            msp.doc.blocks.delete_block(ad, safe=False)
+        except Exception:
+            pass
+
+
+# ------------------------------------------------------------------
+# ÖLÇÜ DÜZENLEME (kullanıcı: "her resim seçilebilir olmalı; tüm ölçüler
+# numaralı çıkmalı; toleransı değiştirebilmeli ya da silebilmeliyim;
+# ölçüyü silebilmeliyim; değeri değiştirmek yok - ölçüyü doğru kabul
+# ediyorum; değişiklik PDF ve DXF dahil"). Model gerekmez: numara, kimlik
+# ve tolerans DXF'te XDATA olarak durur.
+def olcu_listesi(dxf_yol):
+    """DXF'teki numaralı ölçüler: [{no, id, tur, deger, tol, gorunus, ref,
+    ozel, kutu (yazı kutusu, model mm), handle}] (numara sırasıyla)."""
+    d = ezdxf.readfile(dxf_yol)
+    return _olcu_listesi_doc(d)
+
+
+def _olcu_listesi_doc(d):
+    out = []
+    for e in d.modelspace().query("DIMENSION"):
+        try:
+            v = [x for _c, x in e.get_xdata(GORUNUS_APPID)]
+        except Exception:
+            continue
+        if not v or v[0] != "OLCU" or len(v) < 7:
+            continue
+        ky = _olcu_yazi_kutusu(_Olcu(e)) or _dim_kutusu(_Olcu(e))
+        out.append({"no": int(v[2]), "id": v[1], "tur": v[3], "deger": float(v[4]),
+                    "tol": (None if float(v[5]) < 0 else float(v[5])), "gorunus": v[6],
+                    "ref": bool(v[7]) if len(v) > 7 else False,
+                    "ozel": bool(v[8]) if len(v) > 8 else False,
+                    "kutu": ky, "handle": e.dxf.handle})
+    out.sort(key=lambda x: x["no"])
+    return out
+
+
+def olcu_duzenle(dxf_yol, sil=(), ref=(), tol=None, genel=(), log=print):
+    """Ölçü düzenlemesini DXF'e uygular (model gerekmez).
+
+    sil   : silinecek ölçü numaraları
+    ref   : toleransı SİLİNECEK numaralar -> referans ölçü "(123)"
+    tol   : {numara: ±} özel tolerans (ölçünün yanına "±x" yazılır)
+    genel : özel / referans kaldırılıp genel toleransa dönecek numaralar
+    Değer DEĞİŞTİRİLMEZ (ölçü modelden ve doğrudur). Döner: kimliğe göre
+    kalıcı kayıt {"sil": [id], "olcu": {id: ± | "ref"}, "genel": [id]} -
+    parça yeniden çizilince aynı düzenleme kimlikle yeniden uygulanır."""
+    tol = dict(tol or {})
+    d = ezdxf.readfile(dxf_yol)
+    msp = d.modelspace()
+    _pi3d_appid(d)
+    try:
+        h = float(d.dimstyles.get(OLCU_STILI).dxf.dimtxt)
+    except Exception:
+        h = 3.5
+    liste = _olcu_listesi_doc(d)
+    no_ = {x["no"]: x for x in liste}
+    kayit = {"sil": [], "olcu": {}, "genel": []}
+
+    def etiketi_kaldir(handle):
+        for x in list(msp.query("TEXT")):
+            try:
+                vals = [v for _c, v in x.get_xdata(GORUNUS_APPID)]
+            except Exception:
+                continue
+            if vals and vals[0] == "TOL" and len(vals) > 1 and vals[1] == handle:
+                msp.delete_entity(x)
+        e_ = d.entitydb.get(handle)
+        if e_ is not None:
+            t_ = str(e_.dxf.get("text", "") or "")
+            if " ±" in t_:
+                e_.dxf.text = t_.split(" ±")[0]
+                _olcu_yeniden_isle(msp, e_)
+
+    def xdata_guncelle(x):
+        e = d.entitydb.get(x["handle"])
+        if e is None:
+            return
+        e.set_xdata(GORUNUS_APPID, [
+            (1000, "OLCU"), (1000, x["id"][:250]), (1071, x["no"]), (1000, x["tur"]),
+            (1040, float(x["deger"])), (1040, float(x["tol"]) if x.get("tol") is not None else -1.0),
+            (1000, x["gorunus"]), (1071, 1 if x.get("ref") else 0), (1071, 1 if x.get("ozel") else 0)])
+
+    def parantezi_kaldir(x):
+        e = d.entitydb.get(x["handle"])
+        if e is None:
+            return
+        t = str(e.dxf.get("text", "") or "")
+        if t.startswith("(") and t.endswith(")"):
+            e.dxf.text = t[1:-1]
+            _olcu_yeniden_isle(msp, e)
+    for n in sil:
+        x = no_.get(int(n))
+        if x:
+            olcu_varligini_sil(msp, x["handle"])
+            kayit["sil"].append(x["id"])
+            no_.pop(int(n), None)
+    for n in genel:
+        x = no_.get(int(n))
+        if not x:
+            continue
+        etiketi_kaldir(x["handle"])
+        parantezi_kaldir(x)
+        x.update(ref=False, ozel=False)
+        xdata_guncelle(x)
+        kayit["genel"].append(x["id"])
+    for n in ref:
+        x = no_.get(int(n))
+        if not x:
+            continue
+        etiketi_kaldir(x["handle"])
+        if not referans_olcu_yap(msp, x["handle"]):
+            log(f"  ! {n} numaralı referans ölçünün parantezli yazısına temiz yer bulunamadı")
+            kayit.setdefault("yer_yok", []).append(int(n))
+        x.update(ref=True, ozel=True, tol=None)
+        xdata_guncelle(x)
+        kayit["olcu"][x["id"]] = "ref"
+    yeni_etiket = []
+    for n, v in tol.items():
+        x = no_.get(int(n))
+        if not x:
+            continue
+        etiketi_kaldir(x["handle"])
+        parantezi_kaldir(x)
+        x.update(ref=False, ozel=True, tol=round(abs(float(v)), 3))
+        xdata_guncelle(x)
+        kayit["olcu"][x["id"]] = x["tol"]
+        yeni_etiket.append({"_h": x["handle"], "tol": x["tol"], "ozel": True, "ref": False})
+    yazilan = tolerans_etiketleri(msp, yeni_etiket, h) if yeni_etiket else 0
+    sorun = [x for x in yeni_etiket if x.get("yer_sorunu")]
+    if yeni_etiket and (yazilan < len(yeni_etiket) or sorun):
+        log(f"  ! {len(sorun) + len(yeni_etiket) - yazilan} toleransın yazısına tam temiz yer "
+            "bulunamadı (ölçü yazısının içine yazıldı) - resmi kontrol edin")
+    kayit["uyari"] = len(sorun) + len(yeni_etiket) - yazilan
+    gec = dxf_yol + ".yeni"
+    d.saveas(gec)
+    os.replace(gec, dxf_yol)
+    log(f"  ölçü düzenlendi: {len(kayit['sil'])} silindi, "
+        f"{sum(1 for v in kayit['olcu'].values() if v == 'ref')} toleranssız, "
+        f"{sum(1 for v in kayit['olcu'].values() if v != 'ref')} özel ±, {len(kayit['genel'])} genele döndü")
+    return kayit
 
 
 def tolerans_etiketleri(msp, liste, h):
     """Parça bazlı ÖZEL toleransı olan ölçülerin yanına "±x" yazar (genel
     tolerans notu dışına çıkanlar; ISO: yalnız sapan ölçüye yazılır).
     Yer ölçülerek bulunur: yazıya ya da çizgiye değerse yazılmaz, sayılır."""
-    ozel = [x for x in liste if x.get("ozel") and x.get("tol") is not None]
+    ozel = [x for x in liste if x.get("ozel") and x.get("tol") is not None and not x.get("ref")]
     if not ozel:
         return 0
-    kimlik = {x["id"]: x for x in ozel}
     yazilan = 0
     dolu = _yazi_kutulari(msp)
-    for e in msp.query("DIMENSION"):
+    doc = msp.doc
+    _pi3d_appid(doc)
+    for x in list(ozel):
+        e = doc.entitydb.get(x.get("_h")) if x.get("_h") else None
+        if e is None:
+            continue
         try:
             ky = _olcu_yazi_kutusu(_Olcu(e))
         except Exception:
             ky = None
         if not ky:
             continue
-        # eşleşme: yazı kutusu merkezi (liste id'si yazı kutusundan türetilmedi,
-        # o yüzden değer + görünüş karşılaştırılır)
-        try:
-            olc = float(e.get_measurement())
-        except Exception:
-            continue
-        aday = [x for x in ozel if abs(x["deger"] - olc) < 0.06 or abs(x["deger"] - olc * 2) < 0.06
-                or abs(x["deger"] - olc * 2.5) < 0.06]
-        if not aday:
-            continue
-        x = aday[0]
         metin = "±" + XL.tr(x["tol"], 2)
         cizgi = _cizgi_parcalari(msp, (ky[0] - 6 * h, ky[1] - 4 * h, ky[2] + 10 * h, ky[3] + 4 * h),
                                  katman=("GORUNEN", "GIZLI", "OLCU", "EKSEN", "BOLGE"))
@@ -6977,9 +7275,30 @@ def tolerans_etiketleri(msp, liste, h):
             if kt and not _cakisiyor(kt, dolu, 0.15 * h) and not _cizgi_kesiyor(kt, cizgi, 0.1 * h):
                 dolu.append(kt)
                 yazilan += 1
+                try:
+                    te.set_xdata(GORUNUS_APPID, [(1000, "TOL"), (1005, x["_h"])])
+                except Exception:
+                    pass
                 break
             msp.delete_entity(te)
-        ozel.remove(x)
+        else:
+            # Yanında yer yok: tolerans ÖLÇÜ YAZISININ İÇİNE ("39 ±0,05"),
+            # yazı ölçülerek temiz yere kaydırılır. Tolerans resimde
+            # görünmeden kalmaz (YANLIŞ SONUÇ ASLA).
+            try:
+                t0 = str(e.dxf.get("text", "") or "<>")
+                if "±" not in t0:
+                    e.dxf.text = (t0 or "<>") + " " + metin
+                    _olcu_yeniden_isle(msp, e)
+                temiz = _olcu_yazisini_temizle(msp, e)
+                yazilan += 1
+                ky2 = _olcu_yazi_kutusu(_Olcu(e))
+                if ky2:
+                    dolu.append(ky2)
+                if not temiz:
+                    x["yer_sorunu"] = True
+            except Exception:
+                pass
     return yazilan
 
 
@@ -11070,9 +11389,16 @@ def dxf_acilim(r, k, yol, P=None):
             msp.delete_entity(e)
             ex = kt[2] + 0.5 * yazi_h
     d = 4.0 * h
+    # AÇINIMDA YALNIZ DIŞ ÖLÇÜLER ve DELİK KONUMLARI (kullanıcı: "açınımda
+    # sadece dış ölçüler ve delik pozisyonları olabilir, bunun dışında ölçü
+    # olmayacak"). Delik konumları sol alt köşeden KOORDİNATLI (ordinate)
+    # ölçüyle: X değerleri üstte, Y değerleri solda; gabari onların dışında.
+    ust_band, alt_band, sol_band, tabloya = (_acinim_delik_konumlari(msp, r, boy, gen, h)
+                                             if kesim else (0.0, 0.0, 0.0, []))
+    d = 4.0 * h + alt_band
     msp.add_linear_dim(base=(0, -d), p1=(0, 0), p2=(boy, 0),
                        dimstyle=OLCU_STILI, dxfattribs={"layer": "OLCU"}).render()
-    msp.add_linear_dim(base=(-d, 0), p1=(0, 0), p2=(0, gen), angle=90,
+    msp.add_linear_dim(base=(-4.0 * h - sol_band, 0), p1=(0, 0), p2=(0, gen), angle=90,
                        dimstyle=OLCU_STILI, dxfattribs={"layer": "OLCU"}).render()
     # Büküm çizelgesi. Konumlar burada yazılı olduğu için ölçü çizgisi
     # yalnız az bükümlü parçalara konur; çok bükümlüde üst üste binerdi.
@@ -11201,6 +11527,12 @@ def dxf_acilim(r, k, yol, P=None):
             L_ = math.hypot(dx_, dy_) or 1.0
             _etiket_koy(f"B{i}", m[0], m[1], dx_ / L_, dy_ / L_, 0.8 * yazi_h, "EKSEN")
         y = oy + py0 - 2.0 * h
+        # profil etiketleri (K12, B12 ...) profilin altına taşabilir: başlık
+        # ölçülen en alt yazının altından başlar (PERSPEKTİF yazısı B12'ye
+        # biniyordu - ALT_SAC)
+        alt_ = [kt[1] for kt in _yazi_kutulari(msp) if kt[0] >= x - 1e-6]
+        if alt_:
+            y = min(y, min(alt_) - 1.2 * h)
     izo = r.get("izo")
     if izo:
         pts = [p for q in izo for p in q]
@@ -11218,37 +11550,9 @@ def dxf_acilim(r, k, yol, P=None):
             msp.add_lwpolyline([(a * olc2 + ox, b * olc2 + oy) for a, b in q],
                                dxfattribs={"layer": "GORUNEN"})
         y = oy + iy0 * olc2 - 2.0 * h
-    if r["bukumler"] and not r.get("cok_yonlu") and len(r["bukumler"]) <= 8:
-        # Kullanıcı: "hem paralel hem de düz ölçü ver; bükümü kalan ölçü
-        # olarak baksak da açınımı teyit için önemli". PARALEL: her büküm
-        # ekseni alt kenardan (datum) - sağ tarafta, kademeli. DÜZ: kenar ->
-        # B1 -> B2 ... -> kenar zinciri, sol tarafta tek hatta: blank'ta
-        # çizilip ölçülecek kanat boyları.
-        # Sağ taraf büküm etiketlerinin ve çizelgenin: ölçüler SOLA.
-        # Zincir (düz) en içte, paraleller onun dışında kademeli.
-        eks = sorted((b["acinimda_bas_mm"] + b["acinimda_son_mm"]) / 2.0
-                     for b in r["bukumler"])
-        sinir = [0.0] + eks + [gen]
-        for a_, b_ in zip(sinir, sinir[1:]):
-            # dar halkanın rakamı dışarı taşıp komşuya biner: 5 yazı
-            # boyundan kısa halka zincirde yazılmaz (paralel ölçü verir)
-            if b_ - a_ >= 5.0 * h:
-                msp.add_linear_dim(base=(-d - 3.5 * h, 0), p1=(0, a_), p2=(0, b_),
-                                   angle=90, dimstyle=OLCU_STILI,
-                                   dxfattribs={"layer": "OLCU"}).render()
-        # rakam yatay okunur (ISO yöntem 2): kademeler arası 5 yazı boyu,
-        # yoksa komşu paralellerin rakamları üst üste biniyordu
-        for i, e_ in enumerate(eks, 1):
-            msp.add_linear_dim(base=(-d - 3.5 * h - i * 5.0 * h, 0), p1=(0, 0),
-                               p2=(0, e_), angle=90,
-                               dimstyle=OLCU_STILI,
-                               dxfattribs={"layer": "OLCU"}).render()
-        # Kontur basamak (çıkıntı / girinti) ölçüleri: yerleri henüz
-        # ölçülerek konmuyor, gabari ölçüsüyle çakışıyordu; ölçülü yerleşim
-        # yazılana kadar KAPALI (P.get("acinim_basamak") ile açılır).
-        if (P or {}).get("acinim_basamak") or ayar_oku().get("acinim_basamak"):
-            _kontur_basamak_olculeri(msp, r, boy, gen, h, d,
-                                     sol_bas=3.5 * h + len(eks) * 5.0 * h)
+    # Büküm ekseni KONUM ÖLÇÜLERİ (zincir + paralel) kaldırıldı (kullanıcı:
+    # açınımda yalnız dış ölçüler ve delik konumları); büküm eksenlerinin
+    # yeri büküm çizelgesinde (EKSEN sütunu) yazılıdır.
     poz = f"POZ {k['poz']}   " if k.get("poz") else ""
     sat = [(f"{poz}{k.get('kod','')}   {(k.get('ad') or '')[:60]}   AÇINIM", 1.5 * h),
            (f"adet: {k.get('adet','-')}", 1.1 * h),
@@ -11288,13 +11592,201 @@ def dxf_acilim(r, k, yol, P=None):
             # bitiyordu; okuyan neyin yanlış olduğunu anlayamıyordu.
             for p in textwrap.wrap(r["kontur_notu"], 108):
                 sat.append((p, 1.0 * h))
-    y = gen + 4.0 * h + len(sat) * 2.2 * h
+    if tabloya:
+        sat.append((f"DELİK KONUMU (sol alt köşeden x; y - ölçü çizgisi başka deliğin "
+                    f"üstünden geçeceği için burada): " + "  ".join(
+                        f"{XL.tr(x_, 1)}; {XL.tr(y_, 1)}" for x_, y_ in tabloya[:12])
+                    + ("  ..." if len(tabloya) > 12 else ""), 1.0 * h))
+    y = gen + 4.0 * h + ust_band + len(sat) * 2.2 * h
     for metin, yaz_h in sat:
         _yaz(msp, metin, 0.0, y, yaz_h)
         y -= 2.2 * h
+    # İKİNCİ RESİM: ÖLÇÜSÜZ AÇINIM (kullanıcı: "üç resim olacak: ölçülü,
+    # ölçüsüz ve izometrik bükümlü; hem DXF'te hem PDF'te"). Aynı kontur,
+    # delikler ve büküm eksenleri, hiçbir ölçü ve yazı olmadan; ölçülünün
+    # altında. Üçüncü resim (izometrik, bükülmüş) sağ sütunda.
+    if kesim or r.get("bukumler"):
+        dy = -(gen + d + 7.0 * h)
+        _yaz(msp, "ÖLÇÜSÜZ AÇINIM (kesim konturu ve büküm eksenleri)", 0.0, dy + gen + 1.5 * h, 1.1 * h)
+        konturlar = (list(r["kontur_dis"]) + list(r["kontur_delik"])) if kesim else \
+            [[(0, 0), (boy, 0), (boy, gen), (0, gen)]]
+        for w in konturlar:
+            msp.add_lwpolyline([(a, b + dy) for a, b in w], close=True,
+                               dxfattribs={"layer": "GORUNEN"})
+        for b in r["bukumler"]:
+            if b.get("cizgi"):
+                (x1_, y1_), (x2_, y2_) = b["cizgi"]
+            else:
+                orta = (b["acinimda_bas_mm"] + b["acinimda_son_mm"]) / 2.0
+                (x1_, y1_), (x2_, y2_) = (0.0, orta), (boy, orta)
+            msp.add_line((x1_, y1_ + dy), (x2_, y2_ + dy), dxfattribs={"layer": "EKSEN"})
     doc.saveas(yol)
     return yol
 
+
+ACINIM_KONUM_EN_COK = 25   # bir yönde bundan çok farklı konum varsa ölçülmez (lazer DXF'i verir)
+
+
+def _acinim_delik_konumlari(msp, r, boy, gen, h):
+    """Açınımda DELİK KONUMLARI: sol alt köşeden KOORDİNATLI ölçü (ISO 129-1
+    ordinate; sıfır "0" köşede).
+
+    Her farklı X değeri için kılavuz, o X'teki deliklerden ÜST ya da ALT
+    kenara daha yakın olanından kenara çıkar (uzun kılavuz parçayı boydan
+    boya kesmesin); her farklı Y değeri için o Y'deki en soldaki delikten
+    sola. Kılavuz başka bir deliğin üstünden geçecekse (kural 12) o değer
+    ölçülmez, başlıkta x; y olarak yazılır. Rakam yerleri ÖLÇÜLÜR: başka
+    yazıya ya da çizgiye değiyorsa banttan dışarı kaydırılır. Bir yönde
+    ACINIM_KONUM_EN_COK'tan çok değer varsa (ızgara, sık delik) ölçü
+    konmaz: konumlar lazer DXF'indedir (kural 11).
+    Döner: (üst bant, alt bant, sol bant, tabloya düşen [(x, y)])."""
+    delik = []
+    for w in r.get("kontur_delik") or []:
+        if len(w) < 3:
+            continue
+        xs, ys = [p[0] for p in w], [p[1] for p in w]
+        delik.append(((min(xs) + max(xs)) / 2.0, (min(ys) + max(ys)) / 2.0,
+                      (min(xs), min(ys), max(xs), max(ys))))
+    if not delik:
+        return 0.0, 0.0, 0.0, []
+
+    def tekil(vs):
+        out = []
+        for v in sorted(vs):
+            if not out or v - out[-1] > 0.05:
+                out.append(v)
+        return out
+    xs_ = tekil([c[0] for c in delik])
+    ys_ = tekil([c[1] for c in delik])
+    if len(xs_) > ACINIM_KONUM_EN_COK or len(ys_) > ACINIM_KONUM_EN_COK:
+        _yaz(msp, f"{len(delik)} delik / kesik: konumları lazer DXF'inde (sık desen, ölçü konmadı)",
+             0.0, -4.0 * h - 3.0 * h, 1.0 * h)
+        return 0.0, 0.0, 0.0, []
+
+    def engel_var(p, q, kendi):
+        x0, x1 = min(p[0], q[0]), max(p[0], q[0])
+        y0, y1 = min(p[1], q[1]), max(p[1], q[1])
+        for c in delik:
+            if c is kendi:
+                continue
+            k = c[2]
+            if k[0] - 1e-6 <= x1 and x0 <= k[2] + 1e-6 and k[1] - 1e-6 <= y1 and y0 <= k[3] + 1e-6:
+                return True
+        return False
+
+    def yay(degerler, aralik):
+        p = list(degerler)
+        for i in range(1, len(p)):
+            p[i] = max(p[i], p[i - 1] + aralik)
+        kay = (sum(p) - sum(degerler)) / max(len(p), 1)
+        p = [v - kay for v in p]
+        for i in range(1, len(p)):
+            p[i] = max(p[i], p[i - 1] + aralik)
+        return p
+    tabloya, ust, alt, sol = [], [], [], []
+    for xv in xs_:
+        aday = [c for c in delik if abs(c[0] - xv) <= 0.05]
+        tepe = max(aday, key=lambda c: c[1])
+        dip = min(aday, key=lambda c: c[1])
+        secenek = sorted([("ust", gen - tepe[2][3], tepe), ("alt", dip[2][1], dip)], key=lambda t: t[1])
+        for yan, _uz, c in secenek:
+            hedef = gen if yan == "ust" else 0.0
+            bas = c[2][3] if yan == "ust" else c[2][1]
+            if not engel_var((xv, bas), (xv, hedef), c):
+                (ust if yan == "ust" else alt).append((xv, c))
+                break
+        else:
+            tabloya.append((tepe[0], tepe[1]))
+    for yv in ys_:
+        c = min((c for c in delik if abs(c[1] - yv) <= 0.05), key=lambda c: c[0])
+        if engel_var((0.0, yv), (c[2][0], yv), c):
+            if (c[0], c[1]) not in tabloya:
+                tabloya.append((c[0], c[1]))
+            continue
+        sol.append((yv, c))
+    dolu = _yazi_kutulari(msp)
+    # GABARİ ölçülerinin uzatma çizgileri sonra çizilecek: yolları şimdiden
+    # geçici çizgiyle AYRILIR, koordinat rakamları üstlerine konmasın
+    # ("510" sol üstte gabarinin uzatma çizgisine biniyordu)
+    gecici = [msp.add_line((0.0, gen), (-80.0 * h, gen), dxfattribs={"layer": "OLCU"}),
+              msp.add_line((0.0, 0.0), (-80.0 * h, 0.0), dxfattribs={"layer": "OLCU"}),
+              msp.add_line((0.0, 0.0), (0.0, -80.0 * h), dxfattribs={"layer": "OLCU"}),
+              msp.add_line((boy, 0.0), (boy, -80.0 * h), dxfattribs={"layer": "OLCU"})]
+
+    def koy(tip, feat, metin_yeri, kaydir):
+        """Koordinatlı ölçüyü koyar; rakam bir şeye değiyorsa 'kaydir'
+        yönünde kaydırıp yeniden dener (en çok 6 kez)."""
+        for n in range(7):
+            ty = (metin_yeri[0] + kaydir[0] * n, metin_yeri[1] + kaydir[1] * n)
+            ofs = (ty[0] - feat[0], ty[1] - feat[1])
+            if tip == "x":
+                d_ = msp.add_ordinate_x_dim(feat, ofs, origin=(0, 0), dimstyle=OLCU_STILI,
+                                            dxfattribs={"layer": "OLCU"})
+            else:
+                d_ = msp.add_ordinate_y_dim(feat, ofs, origin=(0, 0), dimstyle=OLCU_STILI,
+                                            dxfattribs={"layer": "OLCU"})
+            d_.render()
+            ky = _olcu_yazi_kutusu(d_)
+            alan = (ky[0] - 2 * h, ky[1] - 2 * h, ky[2] + 2 * h, ky[3] + 2 * h) if ky else None
+            cz = _cizgi_parcalari(msp, alan, katman=("GORUNEN", "EKSEN", "OLCU")) if alan else []
+            cz = [c_ for c_ in cz if not _kendi_cizgisi(d_, c_)]
+            if ky and not _cakisiyor(ky, dolu, 0.2 * h) and not _cizgi_kesiyor(ky, cz, 0.1 * h):
+                dolu.append(ky)
+                return ky
+            _olcu_sil(msp, d_)
+        return None
+    yazi_uzun = lambda v: (len(XL.tr(v, 1)) * 0.75 + 0.5) * h
+    ust_band = alt_band = sol_band = 0.0
+    for liste, yan in ((ust, "ust"), (alt, "alt")):
+        if not liste:
+            continue
+        # sıfır ("0") yalnız bir bantta: üst varsa üstte
+        sifir = (yan == "ust" or not ust) and not any(abs(v) < 0.05 for v, _c in liste)
+        degerler = ([0.0] if sifir else []) + [v for v, _c in liste]
+        yer = yay(degerler, 1.4 * h)
+        hedefler = ([(0.0, None)] if len(degerler) > len(liste) else []) + liste
+        tepe_ = 0.0
+        for (xv, c), tx in zip(hedefler, yer):
+            if yan == "ust":
+                feat = (xv, c[1]) if c else (0.0, gen)
+                ky = koy("x", feat, (tx, gen + 2.5 * h), (0.0, 1.0 * h))
+            else:
+                feat = (xv, c[1]) if c else (0.0, 0.0)
+                ky = koy("x", feat, (tx, -2.5 * h), (0.0, -1.0 * h))
+            if ky is None and c:
+                tabloya.append((c[0], c[1]))
+            elif ky:
+                tepe_ = max(tepe_, (ky[3] - gen) if yan == "ust" else -ky[1])
+        if yan == "ust":
+            ust_band = tepe_ + 0.5 * h
+        else:
+            alt_band = tepe_ + 0.5 * h
+    if sol:
+        degerler = [0.0] + [v for v, _c in sol] if not any(abs(v) < 0.05 for v, _c in sol) else [v for v, _c in sol]
+        yer = yay(degerler, 1.6 * h)
+        hedefler = ([(0.0, None)] if len(degerler) > len(sol) else []) + sol
+        sol_ = 0.0
+        for (yv, c), ty in zip(hedefler, yer):
+            feat = (c[0], yv) if c else (0.0, 0.0)
+            ky = koy("y", feat, (-1.5 * h, ty), (-1.0 * h, 0.0))
+            if ky is None and c:
+                if (c[0], c[1]) not in tabloya:
+                    tabloya.append((c[0], c[1]))
+            elif ky:
+                sol_ = max(sol_, -ky[0])
+        sol_band = sol_ + 0.5 * h
+    for g_ in gecici:
+        msp.delete_entity(g_)
+    return ust_band, alt_band, sol_band, tabloya
+
+
+def _kendi_cizgisi(dim, parca):
+    """parça (iki uçlu çizgi) ölçünün kendi çizgilerinden biri mi?"""
+    for c in _dim_cizgileri(dim):
+        if (math.dist(c[0], parca[0]) < 1e-6 and math.dist(c[1], parca[1]) < 1e-6) or \
+                (math.dist(c[0], parca[1]) < 1e-6 and math.dist(c[1], parca[0]) < 1e-6):
+            return True
+    return False
 
 def poz_numaralari(komp, poz_harita=None):
     """Komponent sırasına göre poz numaraları. calistir'daki ile aynı
@@ -12275,10 +12767,10 @@ def dxf_komponent(s, o, k, yol, P):
             tol_liste, tol_not, tol_uyari = tolerans_isle(
                 msp, o, k, P, gkutu, kaydir, detaylar, kplan_ana if kplan else None,
                 h, sac_kesit, sac_kanat)
-            k["olculer"] = tol_liste
+            SON_RAPOR["tolerans_etiket"] = tolerans_etiketleri(msp, tol_liste, h)
+            k["olculer"] = [{a: v for a, v in x.items() if not a.startswith("_")} for x in tol_liste]
             k["tolerans_uyari"] = tol_uyari
             SON_RAPOR["tolerans_uyari"] = tol_uyari
-            SON_RAPOR["tolerans_etiket"] = tolerans_etiketleri(msp, tol_liste, h)
         except Exception as ex:
             tol_not = [f"tolerans hesaplanamadı: {ex}"[:90]]
     diger = [

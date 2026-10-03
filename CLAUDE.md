@@ -336,6 +336,35 @@ DXF'te yazı boyunun katı olarak uygulanır):
     (GUI TOLERANS penceresi); `parca_ayar[kod]["k_faktor"]` (açınım K
     sütunu, `k_parca` -> `acilim_yaz` / `lazer_yaz`; çizim imzasına girmez).
 
+27. **ÖLÇÜ / TOLERANS DÜZENLEME** (kullanıcı: "her resim seçilebilir
+    olmalı; ölçüler numaralı çıkmalı; toleransı değiştirebilmeli ya da
+    silebilmeliyim; ölçüyü silebilmeliyim; değiştirme olmaz çünkü ölçüyü
+    doğru kabul ediyorum; değişiklik PDF ve DXF dahil; genel akışın içinde
+    ya da dışında"): her ölçü çizimde numaralanır (`olculeri_numarala`:
+    görünüş sırası, yukarıdan aşağı, soldan sağa) ve DXF'e XDATA yazılır
+    (PI3D: OLCU, kimlik, no, tür, değer, ±, görünüş, ref, özel; kılavuz
+    ve ± etiketi ölçünün handle'ıyla bağlı). `olcu_listesi` / `olcu_duzenle`
+    model olmadan DXF'i düzenler: özel ± (etiket ölçülerek; yer yoksa
+    ölçü yazısının içine), toleransı sil = referans ölçü "(..)" (ISO 129-1),
+    genele dön, ölçüyü sil (blok, kılavuz, etiketle). DEĞER DEĞİŞMEZ.
+    Kayıt kimlikle `parca_ayar[kod]["tolerans"]` = {olcu: {id: ± | "ref"},
+    sil: [id]}; yeniden çizimde `tolerans_isle` uygular. GUI
+    `olcu_duzenle_penceresi`: resim listesi + numara balonlu önizleme
+    (balon yalnız pencerede) + ölçü listesi; KAYDET = DXF + pafta + PDF.
+28. **AÇINIM ve LAZER ÖLÇÜSÜ** (kullanıcı: "lazer kesimde ölçülendirme
+    yok; açınımda yalnız dış ölçüler ve delik pozisyonları, bunun dışında
+    ölçü olmayacak; üç resim: ölçülü, ölçüsüz ve izometrik bükümlü - hem
+    DXF'te hem PDF'te"): lazer DXF'i yalnız KESIM konturları (CAM her
+    çizgiyi keser). Açınımda doğrusal ölçü yalnız boy ve en; delik
+    konumları sol alt köşeden KOORDİNATLI ölçü (`_acinim_delik_konumlari`:
+    "0" köşede; X kılavuzu yakın kenara, Y sola; kılavuz başka deliğin
+    üstünden geçecekse başlıkta x; y; bir yönde 25'ten çok konum varsa
+    ölçü yok, lazer DXF'i verir; rakam yeri ölçülür, gabari yolu önceden
+    ayrılır). Büküm konum ölçüsü YOK (yerleri büküm çizelgesinde).
+    Açınım resminde: ölçülü açınım, altında ÖLÇÜSÜZ açınım (kontur +
+    büküm eksenleri), sağda izometrik bükümlü resim; çizelgeler (büküm,
+    abkant kanat) ve profil kalır.
+
 ## PDF (pafta)
 
 - PDF okumak ve atölyede iş yapmak içindir; DXF'le aynı şey değildir.

@@ -1220,6 +1220,21 @@ toplu, seçili ölçüye özel ±; **KAYDET ve YENİDEN ÜRET** yalnız o parça
 DXF + PDF'ini yeniler. Zincir birikimi bandı aşan ölçü listede uyarı
 alır. Açınım ve lazer resmine tolerans yazılmaz.
 
+**Ölçü / tolerans düzenleme (model gerekmez):** 5. sekmede **ÖLÇÜ /
+TOLERANS DÜZENLE…** (ya da Dosya menüsü). Solda çıktı klasöründeki detay
+resimleri (arama kutulu); ortada seçilen resim, her ölçünün yanında
+kırmızı NUMARA balonu (yalnız bu pencerede görünür, resme yazılmaz;
+çift tık büyütür); sağda numaralı ölçü listesi. Bir ya da birkaç ölçü
+seçip:
+* **Özel ± uygula** - ölçünün yanına "±0,05" yazılır;
+* **Toleransı SİL** - ölçü referans ölçü olur, rakam parantez içinde;
+* **Genel toleransa dön**;
+* **Ölçüyü SİL** - ölçü resimden çıkar;
+* **Değişikliği geri al** (kaydetmeden önce).
+Ölçünün DEĞERİ değişmez. **KAYDET**: DXF düzenlenir, paftası ve PDF'i
+yeniden basılır; düzenleme saklanır, parça modelden yeniden çizilirse de
+uygulanır. Yazı sıkışırsa pencere uyarır.
+
 ### Adım 4 — ÖRNEK ONAY
 
 Örnek resim tuvale **iki yönde de sığdırılır** (geniş resimde üst ve alt
@@ -1266,6 +1281,11 @@ okunmaz bu sayfa açılır.
    ondalık ayracı virgül ya da nokta olabilir. **Verdiğiniz
    değer saklanır**, bir daha girmeniz gerekmez.
 3. **İŞARETLİ PARÇALARIN AÇINIMINI ÜRET** deyin.
+
+**Açınım resmi:** yalnız dış ölçüler (boy, en) ve delik konumları (sol
+alt köşeden koordinatlı ölçü; "0" köşede). Büküm yerleri büküm
+çizelgesinde. Resimde üç çizim: ölçülü açınım, altında ÖLÇÜSÜZ açınım,
+sağda izometrik bükümlü resim. Lazer DXF'inde ölçü ve yazı yoktur.
 
 **K-faktörü parça bazlı:** listedeki **K** sütununa çift tıklayın, o
 parçanın K'sini yazın (boş = yukarıdaki ortak K). Değer saklanır; ÜRET

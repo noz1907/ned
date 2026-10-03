@@ -195,6 +195,19 @@ sözlükte duracak (`pf3_olcu.TOLERANS`), ISO sınıfı seçeneği ayrıca.
 | 11.19 | **Hassas işler** (kontrol fikstürü, honlama, hassas taşlama, yüzey toleransı) bu genel tablonun dışındadır: parça bazlı özel ± / ISO sınıfı; yüzey ve geometrik tolerans ileride | | K | parca_ayar tolerans |
 | 11.18 | **K-faktörü parça bazlı**: listeden parça seçilir, K yazılır, yalnız o parçanın açınımı (ve lazer DXF'i) yeniden üretilir | | K | `TOLERANS`, `tolerans_bandi` |
 
+## 12. Ölçü düzenleme ve açınım / lazer ölçüsü (kullanıcı, 03.10.2026; v1.0.19)
+
+| no | kural | gerekçe | kaynak | kod |
+|---|---|---|---|---|
+| 12.1 | Her ölçü resimde numaralanır (görünüş sırası, yukarıdan aşağı, soldan sağa); numara yalnız düzenleme penceresinde görünür, DXF / PDF'e yazılmaz. | Kullanıcı: "ölçüler numaralandırılmış çıkmalı; bu görsel sadece değişiklik yapmak için". | K | `olculeri_numarala`, XDATA |
+| 12.2 | Ölçünün DEĞERİ düzenlenmez; yalnız toleransı (özel ±, sil = referans ölçü, genele dön) ve ölçünün kendisi (sil). | "Değiştirme olmaz çünkü ölçüyü doğru kabul ediyorum." | K | `olcu_duzenle` |
+| 12.3 | Toleransı silinen ölçü REFERANS ölçüdür: rakam parantez içinde, tolerans uygulanmaz. | ISO 129-1 bilgi (referans) ölçüsü. | ISO 129-1 | `referans_olcu_yap` |
+| 12.4 | Özel tolerans ölçünün yanına (yer ölçülerek); yer yoksa ölçü yazısının içine ("39 ±0,05"); tolerans resimde görünmeden kalmaz. | YANLIŞ SONUÇ ASLA. | K | `tolerans_etiketleri` |
+| 12.5 | Düzenleme hem DXF'i hem PDF'i günceller ve kimlikle saklanır; model yeniden çizilince aynen uygulanır. Model olmadan da yapılır. | "Değişiklik PDF, DXF dahil; genel akışın içinde ya da dışında." | K | `_olcu_duzenlemesini_kaydet`, `tolerans_isle` |
+| 12.6 | Lazer DXF'inde ölçü / yazı yok. | CAM her çizgiyi keser. | K | `dxf_lazer` |
+| 12.7 | Açınımda yalnız dış ölçüler (boy, en) ve delik konumları (sol alt köşeden koordinatlı ölçü); büküm konumları çizelgede. | "Açınımda sadece dış ölçüler ve delik pozisyonları." | K; ISO 129-1 koordinatlı ölçü | `_acinim_delik_konumlari` |
+| 12.8 | Açınım resminde üç resim: ölçülü, ölçüsüz (kontur + büküm eksenleri), izometrik bükümlü; DXF ve PDF. | "Her 3 resim olacak: ölçülü, ölçüsüz ve izometrik bükümlü; hem DXF'te hem PDF'te." | K | `dxf_acilim` |
+
 ## 9. Kitapta olup programda (henüz) olmayanlar
 
 Bilinçli olarak yapılmayan ya da sonraya bırakılanlar; gerekçesiyle:

@@ -133,10 +133,13 @@ def klasor_ac(yol):
         pass
 
 
-def dxf_onizleme(dxf_yol, png_yol, gen=11.0, boy=7.5, dpi=200):
+def dxf_onizleme(dxf_yol, png_yol, gen=11.0, boy=7.5, dpi=200, isaretler=None):
     """DXF'i PNG'ye çevirir. Yazılar gerçek boyutta çizilir, böylece
     önizlemede görünen çakışma gerçek çakışmadır. dpi 200: büyütme
-    penceresinde 2 kat yakınlaşınca da keskin kalsın."""
+    penceresinde 2 kat yakınlaşınca da keskin kalsın.
+
+    isaretler: [(x, y, metin, renk)] - YALNIZ ÖNİZLEMEDE görünen numara
+    balonları (ölçü düzenleme penceresi); DXF'e ve PDF'e yazılmaz."""
     import ezdxf, matplotlib
     matplotlib.use("Agg")
     import matplotlib.pyplot as plt
@@ -236,6 +239,19 @@ def dxf_onizleme(dxf_yol, png_yol, gen=11.0, boy=7.5, dpi=200):
     for t, x, y, hh in yazi:
         ax.text(x, y, str(t).replace("%%c", "Ø"), fontsize=hh * pb * 0.95,
                 color="#036", family="monospace", va="bottom", ha="left")
+    # NUMARA BALONLARI: rakamı ÖRTMEZ - yazı kutusunun sağ üst köşesinin
+    # dışına, balon yarıçapı kadar açık konur; ince çizgiyle yazıya bağlanır
+    yari = (6.0 * 1.25 / 2.0) / pb               # balon yarıçapı (veri birimi)
+    for isa in (isaretler or []):
+        if len(isa) == 3:
+            (kx0, ky0, kx1, ky1), t, renk = isa
+            bx, by = kx1 + 1.6 * yari, ky1 + 1.2 * yari
+            ax.plot([kx1, bx], [ky1, by], color=renk or "#c0392b", linewidth=0.5, zorder=9)
+        else:
+            bx, by, t, renk = isa
+        ax.text(bx, by, str(t), fontsize=6.0, color="white", ha="center", va="center",
+                fontweight="bold", zorder=10,
+                bbox=dict(boxstyle="circle,pad=0.2", fc=renk or "#c0392b", ec="none", alpha=0.85))
     fig.savefig(png_yol, dpi=dpi, facecolor="white")
     plt.close(fig)
     return png_yol
@@ -1241,6 +1257,8 @@ class Uygulama(ttk.Frame):
         ttk.Button(af, text="Klasörü aç", command=self.klasoru_ac).pack(side="left", padx=8)
         ttk.Button(af, text="Listeyi tazele", command=self._cikti_listesi
                    ).pack(side="left")
+        ttk.Button(af, text="ÖLÇÜ / TOLERANS DÜZENLE…", command=self.olcu_duzenle_penceresi
+                   ).pack(side="left", padx=8)
         # (İptal düğmesi artık ortak durum çubuğunda, her sayfadan
         #  erişilebilir.)
 
@@ -2787,6 +2805,8 @@ class Uygulama(ttk.Frame):
             d = tk.Menu(cubuk, tearoff=0)
             d.add_command(label="Yeni iş  (ekranı sıfırla)", accelerator="Ctrl+N",
                           command=self.yeni_is)
+            d.add_command(label="Ölçü / tolerans düzenle…  (model gerekmez)",
+                          command=self.olcu_duzenle_penceresi)
             d.add_separator()
             d.add_command(label="Çıkış", accelerator="Ctrl+Q", command=self.cikis)
             cubuk.add_cascade(label="Dosya", menu=d)
@@ -3116,6 +3136,289 @@ class Uygulama(ttk.Frame):
                 pass
         self._istisna_goster()
         self._yaz(f"istisna: {kod} → {self._istisna_ozet(a)}")
+
+    def olcu_duzenle_penceresi(self, dxf=None):
+        """ÖLÇÜ / TOLERANS DÜZENLEME (kullanıcı: "her resim seçilebilir
+        olmalı; ölçüler numaralı çıkmalı; toleransı değiştirebilmeli ya da
+        silebilmeli, ölçüyü silebilmeliyim - değeri değil, ölçü doğrudur;
+        değişiklik PDF ve DXF dahil; genel akışın içinde ya da dışında").
+
+        Model GEREKMEZ: çıktı klasöründeki detay resimleri listelenir (arama
+        kutulu); seçilen resim önizlenir, her ölçünün yanında NUMARA
+        balonu (yalnız bu pencerede; DXF / PDF'e yazılmaz). Sağda numaralı
+        ölçü listesi: değer (değişmez), tolerans. İşlemler: özel ± yaz,
+        toleransı sil (referans ölçü, parantez içinde), genel toleransa
+        dön, ölçüyü sil (geri al kaydetmeden önce). KAYDET: DXF düzenlenir,
+        paftası ve PDF'i yeniden basılır; düzenleme ölçü kimliğiyle
+        parçanın ayarına yazılır - model sonradan yeniden çizilirse aynı
+        düzenleme yeniden uygulanır. Açınım ve lazer resimleri listede
+        yoktur (açınımda yalnız dış ölçü ve delik konumu, lazerde ölçü yok)."""
+        import tempfile
+        on = (self.v_out.get() or "").strip()
+        dxf_kl = os.path.join(on, "DXF") if on else ""
+        dosyalar = []
+        if dxf_kl and os.path.isdir(dxf_kl):
+            dosyalar = sorted(a for a in os.listdir(dxf_kl)
+                              if a.lower().endswith(".dxf") and not a.startswith("00_"))
+        if not dosyalar and not dxf:
+            dxf = filedialog.askopenfilename(title="Düzenlenecek detay resmi (DXF)",
+                                             filetypes=[("DXF", "*.dxf")])
+            if not dxf:
+                return None
+        if dxf and os.path.basename(dxf) not in dosyalar:
+            dxf_kl = os.path.dirname(dxf)
+            dosyalar = [os.path.basename(dxf)] + [a for a in dosyalar if a != os.path.basename(dxf)]
+        M = self.M
+        w = tk.Toplevel(self)
+        w.title("Ölçü / tolerans düzenle")
+        try:
+            sw, sh = w.winfo_screenwidth(), w.winfo_screenheight()
+            gw, gh = int(sw * 0.94), int(sh * 0.88)
+            w.geometry(f"{gw}x{gh}+{(sw - gw) // 2}+{max(0, (sh - gh) // 4)}")
+        except Exception:
+            pass
+        ust = ttk.Frame(w, padding=(8, 6)); ust.pack(fill="x")
+        ttk.Label(ust, wraplength=1300, justify="left", text=(
+            "Resmi seçin; önizlemede her ölçünün yanında NUMARASI görünür (yalnız bu pencerede). "
+            "Ölçünün değeri değişmez - modelden gelir. Toleransı değiştirebilir, silebilir "
+            "(referans ölçü olur) ya da ölçüyü silebilirsiniz. KAYDET hem DXF'i hem PDF'i günceller.")
+                  ).pack(anchor="w")
+        pw = ttk.PanedWindow(w, orient="horizontal"); pw.pack(fill="both", expand=True, padx=8)
+        sol = ttk.Frame(pw); pw.add(sol, weight=1)
+        ag_d = self._karar_listesi(sol, ("dosya",), ("RESİM",), (230,), yuk=24)
+        for a in dosyalar:
+            ag_d.insert("", "end", values=(a,))
+        orta = ttk.Frame(pw); pw.add(orta, weight=4)
+        c = tk.Canvas(orta, bg="white", highlightthickness=1, highlightbackground="#bbb")
+        c.pack(fill="both", expand=True)
+        ttk.Label(orta, foreground="#555", text="çift tık: büyük pencere (yakınlaştır, kaydır)").pack(anchor="w")
+        sag = ttk.Frame(pw); pw.add(sag, weight=3)
+        kol = ("no", "gorunus", "tur", "deger", "tol", "durum")
+        ag = self._karar_listesi(sag, kol, ("NO", "görünüş", "tür", "değer", "tolerans", "değişiklik"),
+                                 (40, 80, 70, 80, 80, 140), yuk=18)
+        fb = ttk.Frame(sag); fb.pack(fill="x", pady=(6, 2))
+        ttk.Label(fb, text="özel ±").pack(side="left")
+        v_tol = tk.StringVar()
+        ttk.Entry(fb, textvariable=v_tol, width=7).pack(side="left", padx=(4, 4))
+        fb2 = ttk.Frame(sag); fb2.pack(fill="x", pady=2)
+        fb3 = ttk.Frame(sag); fb3.pack(fill="x", pady=2)
+        v_bilgi = tk.StringVar(value="")
+        ttk.Label(sag, textvariable=v_bilgi, foreground="#555", wraplength=420, justify="left").pack(anchor="w")
+        alt = ttk.Frame(w, padding=(8, 6)); alt.pack(fill="x")
+        TUR = {"gabari": "gabari", "konum": "konum", "ic_kesim": "iç kesim", "delik_cap": "delik Ø",
+               "radus": "radüs", "aci": "açı"}
+        durum = {"dxf": None, "liste": [], "deg": {}, "png": None, "resim": None}
+
+        def tol_metni(x):
+            dg = durum["deg"].get(x["no"])
+            if dg == "sil":
+                return "-"
+            if dg == "ref" or (dg is None and x.get("ref")):
+                return "yok (ref)"
+            if isinstance(dg, float):
+                return "±" + XL.tr(dg, 2)
+            if dg == "genel" or not x.get("ozel"):
+                return ("genel ±" + XL.tr(x["tol"], 2)) if x.get("tol") is not None else "genel"
+            return "±" + XL.tr(x["tol"], 2) if x.get("tol") is not None else "-"
+
+        def degisim_metni(x):
+            return {"sil": "SİLİNECEK", "ref": "tolerans silinecek", "genel": "genele dönecek"}.get(
+                durum["deg"].get(x["no"]), ("özel ± yazılacak" if isinstance(durum["deg"].get(x["no"]), float) else ""))
+
+        def satir(x):
+            return (x["no"], x["gorunus"], TUR.get(x["tur"], x["tur"]),
+                    XL.tr(x["deger"], 2) + ("°" if x["tur"] == "aci" else ""), tol_metni(x), degisim_metni(x))
+
+        def resmi_ciz():
+            if not durum["dxf"]:
+                return
+            isaret = []
+            for x in durum["liste"]:
+                k_ = x.get("kutu")
+                if not k_:
+                    continue
+                dg = durum["deg"].get(x["no"])
+                renk = "#7f8c8d" if dg == "sil" else ("#2471a3" if dg else "#c0392b")
+                isaret.append((tuple(k_), x["no"], renk))
+            png = os.path.join(tempfile.gettempdir(), "pi3d_olcu_" + os.path.basename(durum["dxf"]) + ".png")
+            try:
+                dxf_onizleme(durum["dxf"], png, isaretler=isaret)
+            except Exception as ex:
+                v_bilgi.set(f"önizleme çizilemedi: {ex}"[:120]); return
+            durum["png"] = png
+            sigdir()
+
+        def sigdir(_e=None):
+            if not durum["png"]:
+                return
+            gw_, gh_ = max(c.winfo_width(), 50), max(c.winfo_height(), 50)
+            durum["resim"], _o = self._resmi_sigdir(durum["png"], gw_ - 4, gh_ - 4)
+            c.delete("all")
+            c.create_image(gw_ // 2, gh_ // 2, image=durum["resim"])
+        c.bind("<Configure>", sigdir)
+        c.bind("<Double-1>", lambda e: durum["png"] and self.onizleme_penceresi(
+            durum["png"], "Ölçü numaraları – " + os.path.basename(durum["dxf"] or "")))
+
+        def listeyi_doldur():
+            for i_ in set(ag.get_children()) | set(ag.tum_satirlar):
+                if ag.exists(i_):
+                    ag.delete(i_)
+            ag.tum_satirlar.clear()
+            for x in durum["liste"]:
+                ag.insert("", "end", iid=str(x["no"]), values=satir(x))
+            ag.suz()
+
+        def resim_sec(_e=None):
+            sel = ag_d.selection()
+            if not sel:
+                return
+            if durum["deg"] and not messagebox.askyesno(
+                    "Ölçü düzenle", "Kaydedilmemiş değişiklikler var; atılsın mı?", parent=w):
+                return
+            ad = ag_d.set(sel[0], "dosya")
+            durum["dxf"] = os.path.join(dxf_kl, ad)
+            durum["deg"] = {}
+            try:
+                durum["liste"] = M.olcu_listesi(durum["dxf"])
+            except Exception as ex:
+                durum["liste"] = []
+                v_bilgi.set(f"okunamadı: {ex}"[:120])
+            if not durum["liste"]:
+                v_bilgi.set("Bu resimde numaralı ölçü yok: resim eski sürümle üretilmiş. "
+                            "Yeniden üretin (model gerekir) ya da başka resim seçin.")
+            else:
+                v_bilgi.set(f"{len(durum['liste'])} ölçü.")
+            listeyi_doldur()
+            resmi_ciz()
+        ag_d.bind("<<TreeviewSelect>>", resim_sec)
+
+        def secili():
+            return [durum_x for durum_x in durum["liste"] if str(durum_x["no"]) in ag.selection()]
+
+        def isle(tur):
+            sec = secili()
+            if not sec:
+                messagebox.showinfo("Ölçü düzenle", "Listeden ölçü seçin (Ctrl ile birden çok).", parent=w)
+                return
+            if tur == "tol":
+                try:
+                    v = round(abs(float(v_tol.get().strip().replace(",", ".").lstrip("±+"))), 3)
+                    if v <= 0:
+                        raise ValueError
+                except ValueError:
+                    messagebox.showwarning("Tolerans", "± için pozitif bir sayı yazın (0,2 gibi).", parent=w)
+                    return
+            for x in sec:
+                if tur == "geri":
+                    durum["deg"].pop(x["no"], None)
+                else:
+                    durum["deg"][x["no"]] = v if tur == "tol" else tur
+                ag.item(str(x["no"]), values=satir(x))
+            resmi_ciz()
+        ag.configure(selectmode="extended")
+        ttk.Button(fb, text="Özel ± uygula", command=lambda: isle("tol")).pack(side="left")
+        ttk.Button(fb2, text="Toleransı SİL (referans ölçü)", command=lambda: isle("ref")).pack(side="left")
+        ttk.Button(fb2, text="Genel toleransa dön", command=lambda: isle("genel")).pack(side="left", padx=4)
+        ttk.Button(fb3, text="Ölçüyü SİL", command=lambda: isle("sil")).pack(side="left")
+        ttk.Button(fb3, text="Değişikliği geri al", command=lambda: isle("geri")).pack(side="left", padx=4)
+
+        def kaydet():
+            if not durum["dxf"] or not durum["deg"]:
+                messagebox.showinfo("Ölçü düzenle", "Kaydedilecek değişiklik yok.", parent=w); return
+            dg = durum["deg"]
+            sil = [n for n, v in dg.items() if v == "sil"]
+            ref = [n for n, v in dg.items() if v == "ref"]
+            gen_ = [n for n, v in dg.items() if v == "genel"]
+            tol = {n: v for n, v in dg.items() if isinstance(v, float)}
+            try:
+                kayit = M.olcu_duzenle(durum["dxf"], sil=sil, ref=ref, tol=tol, genel=gen_, log=self._yaz)
+            except Exception as ex:
+                messagebox.showerror("Ölçü düzenle", f"DXF düzenlenemedi:\n{ex}", parent=w); return
+            self._olcu_duzenlemesini_kaydet(durum["dxf"], kayit)
+            pdf = self._pafta_ve_pdf_yenile(durum["dxf"])
+            durum["deg"] = {}
+            durum["liste"] = M.olcu_listesi(durum["dxf"])
+            listeyi_doldur()
+            resmi_ciz()
+            uyar = ""
+            if kayit.get("uyari"):
+                uyar += f"  ! {kayit['uyari']} toleransın yazısına tam temiz yer bulunamadı."
+            if kayit.get("yer_yok"):
+                uyar += f"  ! {', '.join(map(str, kayit['yer_yok']))} numaralı referans ölçü yazısı sıkışık."
+            v_bilgi.set("Kaydedildi: DXF" + (" + PDF (" + os.path.basename(pdf) + ")" if pdf else
+                                             " (PDF basılamadı - günlüğe bakın)") + uyar)
+            if uyar:
+                messagebox.showwarning("Ölçü düzenle", "Kaydedildi, ancak:\n" + uyar.replace("  ! ", "\n• ")
+                                       + "\n\nResmi kontrol edin (önizleme çift tık).", parent=w)
+        ttk.Button(alt, text="KAYDET  –  DXF + PDF güncelle  ▸", style="Bas.TButton",
+                   command=kaydet).pack(side="left", ipadx=10, ipady=3)
+        ttk.Button(alt, text="Kapat", command=w.destroy).pack(side="right")
+        self._olcu_pencere = {"w": w, "ag_d": ag_d, "ag": ag, "durum": durum, "isle": isle,
+                              "kaydet": kaydet, "v_tol": v_tol}
+        if dosyalar:
+            ilk = next((i_ for i_ in ag_d.get_children()
+                        if not dxf or ag_d.set(i_, "dosya") == os.path.basename(dxf)), None)
+            if ilk:
+                ag_d.selection_set(ilk); ag_d.see(ilk)
+                w.after(50, resim_sec)
+        return w
+
+    def _olcu_duzenlemesini_kaydet(self, dxf, kayit):
+        """Düzenlemeyi parçanın ayarına (ölçü kimliğiyle) yazar: model
+        yeniden çizilince aynı düzenleme uygulanır."""
+        on = (self.v_out.get() or "").strip()
+        kod = None
+        try:
+            kod = (IS.durum_oku(on)["dxf"].get(os.path.basename(dxf)) or {}).get("kod") if on else None
+        except Exception:
+            kod = None
+        if not kod:
+            return
+        a = dict((self.parca_ayar or {}).get(kod) or {})
+        tol = dict(a.get("tolerans") or {})
+        olcu = dict(tol.get("olcu") or {})
+        sil = list(tol.get("sil") or [])
+        for i_ in kayit.get("genel") or []:
+            olcu.pop(i_, None)
+        olcu.update(kayit.get("olcu") or {})
+        for i_ in kayit.get("sil") or []:
+            if i_ not in sil:
+                sil.append(i_)
+        if olcu:
+            tol["olcu"] = olcu
+        else:
+            tol.pop("olcu", None)
+        if sil:
+            tol["sil"] = sil
+        if tol:
+            a["tolerans"] = tol
+        self.parca_ayar[kod] = a
+        try:
+            IS.ayar_kaydet(on, parca_ayar=dict(self.parca_ayar))
+        except Exception:
+            pass
+
+    def _pafta_ve_pdf_yenile(self, dxf):
+        """Düzenlenen DXF'in paftası ve PDF'i (aynı kâğıt, aynı antet)."""
+        try:
+            import pf4_pafta as PF
+            kagit = self.v_kagit.get() if hasattr(self, "v_kagit") else "A3"
+            sablon = self.sablon if hasattr(self, "_antet_acik") and self._antet_acik() else None
+            kim = self._resim_kimligi(os.path.basename(dxf)) if hasattr(self, "_resim_kimligi") else {}
+            antet = dict(kim.pop("antet_ek", {}) if isinstance(kim, dict) else {})
+            r = PF.pafta_kur(dxf, None, kagit, resim_no=kim.get("resim_no"),
+                             resim_adi=kim.get("resim_adi"), sablon=sablon, antet=antet)
+            klasor = self._pdf_klasoru() if hasattr(self, "_pdf_klasoru") else os.path.join(
+                os.path.dirname(os.path.dirname(dxf)), "PDF")
+            os.makedirs(klasor, exist_ok=True)
+            ad = os.path.splitext(os.path.basename(dxf))[0]
+            ek = str(r.get("kagit") or kagit).replace("-", "")
+            pdf = PF.bas(dxf, os.path.join(klasor, f"{ad}_{ek}.pdf"))
+            self._yaz(f"  pafta {r['olcek_metni']} + PDF  {os.path.basename(pdf)}")
+            return pdf
+        except Exception as ex:
+            self._yaz(f"  ! pafta / PDF yenilenemedi: {ex}"[:160])
+            return None
 
     SUREC_SECENEK = (("otomatik (parça türünden)", ""), ("CNC freze / torna", "cnc"),
                      ("konvansiyonel torna / freze (+0,15)", "konvansiyonel"),
@@ -4604,8 +4907,11 @@ class Uygulama(ttk.Frame):
         tum = []                                  # ekleme sırasıyla bütün satırlar
 
         def suz(*_a):
-            if not tum:
-                tum.extend(ag.get_children())
+            # silinen satırlar çıkar, yeni eklenenler sona girer
+            tum[:] = [iid for iid in tum if ag.exists(iid)]
+            for iid in ag.get_children():
+                if iid not in tum:
+                    tum.append(iid)
             # Tüm satırlar geri takılır, sonra uymayanlar ayrılır: sıra korunur
             for i, iid in enumerate(tum):
                 ag.reattach(iid, "", i)
@@ -4623,7 +4929,7 @@ class Uygulama(ttk.Frame):
             if kalan and not (ag.selection() and ag.selection()[0] in kalan):
                 ag.selection_set(kalan[0]); ag.see(kalan[0])
         v_ara.trace_add("write", suz)
-        ag.ara_kutusu, ag.v_ara, ag.suz = e, v_ara, suz
+        ag.ara_kutusu, ag.v_ara, ag.suz, ag.tum_satirlar = e, v_ara, suz, tum
         ag.after(50, lambda: (not tum and tum.extend(ag.get_children()),
                               v_say.set(f"{len(tum)} satır")))
         return ag
