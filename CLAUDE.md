@@ -23,6 +23,7 @@ koşulur: eksenleri paralel olmayan parçada HATA 0, çakışma 0.
 - Her teslimde `PI3D_SURUM` (pf7_is.py) artar, `SURUM.txt` ve
   `KULLANIM.md` güncellenir.
 - Müşteriye giden paket: `py exebuild.py` → `Pi3D_Kurulum_v<sürüm>.exe`
+  (`EXE_YAP.bat` sorar: 1 yalnız exe, 2 müşteri paketi, 3 ikisi)
   (Inno Setup). Pakette `.py` / `.pyc` / `.spec`, özel anahtar,
   `lisans_masasi/` OLMAZ (bariyer). Lisans makine bazlı (`pf17_lisans`,
   PiProduct düzeni): deneme 8 model, sonra TAM. Özel anahtar depoya
@@ -292,7 +293,7 @@ DXF'te yazı boyunun katı olarak uygulanır):
   `antet_sablon`), pafta / PDF / kaynak resminde kullanılır. Tek exe
   (1/2 derleme seçimi kalktı). Firma antet DXF'i depoya girmez.
 - Antet alanına ÇİZİM GİRMEZ. Pi3D anteti çizilirken (DENEME ya da firma
-  anteti yokken) kutu ALÇAKTIR: A3'te sağ alt 150 x 65 mm
+  anteti yokken) kutu ALÇAKTIR: A3'te sağ alt 150 x 40 mm (logo şeridi 12 + 4 satır)
   (`ANTET_BOY_PI3D`; kullanıcı: "antet yüksek gelmiş, normal antette bu
   yerleşim mümkün"); firma kendi antetini yapıştıracaksa (`antet_pi3d:
   0`) 150 x 100 boş kalır. Dolu pencereler (görünüşler, başlık) antete

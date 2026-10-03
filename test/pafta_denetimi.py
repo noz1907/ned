@@ -196,10 +196,10 @@ try:
     esit("A3 çerçevesi", P.cerceve("A3"), (15.0, 15.0, 405.0, 282.0))
     # Pi3D anteti çizilirken kutu alçaktır (65 mm; kullanıcı: "antet yüksek
     # gelmiş"); firma kendi antetini yapıştıracaksa (antet_pi3d: 0) 150 x 100.
-    esit("A3 antet kutusu (Pi3D anteti)", P.antet_kutusu("A3"), (255.0, 15.0, 405.0, 80.0))
+    esit("A3 antet kutusu (Pi3D anteti)", P.antet_kutusu("A3"), (255.0, 15.0, 405.0, 55.0))
     ak = P.antet_kutusu("A3")
     esit("antet eni", ak[2] - ak[0], 150.0)
-    esit("antet boyu (Pi3D)", ak[3] - ak[1], 65.0)
+    esit("antet boyu (Pi3D)", ak[3] - ak[1], 40.0)
     _eski_acik = P.pi3d_antet_acik
     P.pi3d_antet_acik = lambda *a, **k: False
     esit("antet boyu (firma yapıştıracak)", P.antet_kutusu("A3")[3] - 15.0, 100.0)
@@ -520,7 +520,7 @@ try:
     sol = P.cizim_alanlari("A3")["sol"]
     esit("çizim alanı başlık yüzünden daralmadı",
          (round(ust[3] - ust[1]), round(sol[3] - sol[1])),
-         (177, 242))
+         (202, 242))
     dogru("başlık için ayrılan yer iç paydan büyük değil",
           P.BASLIK_SERIT + 1.0 <= P.IC_PAY + 0.8,
           f"BASLIK_SERIT={P.BASLIK_SERIT} IC_PAY={P.IC_PAY}")

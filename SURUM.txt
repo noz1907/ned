@@ -179,7 +179,10 @@ BU SÜRÜMDE NE VAR
       perspektif parça için; YALNIZ BU PARÇA ile üretilir.
     - YERLEŞİM: geniş görünümlü parçada sütun düzeni (ALT, ÖN, ÜST, ARKA
       alt alta; SAĞ solda, SOL sağda), dar parçada standart haç.
-    - Pi3D anteti alçaldı (150 x 65; firma yapıştıracaksa 150 x 100).
+    - Pi3D anteti alçaldı (150 x 40: logo şeridi 12 mm + 4 satır, DOSYA
+      satırı kalktı; firma yapıştıracaksa 150 x 100).
+    - EXE_YAP.bat seçenek sorar: 1 yalnız exe (PyInstaller), 2 müşteri
+      paketi (exebuild: bariyer + Inno), 3 ikisi.
     - YARDIMCI GÖRÜNÜŞ: eğik yüz / eğik büküm kanadı için yüze dik bakış
       ("YARDIMCI GÖRÜNÜŞ D"), delikleri kenardan zincirle (kalabalıksa
       delik tablosu), gerçek boy;

@@ -103,7 +103,7 @@ def kagit_adi(kagit):
 KENAR = 15.0                 # çerçeve kâğıdın kenarından bu kadar içeride
 DIS_PAY = 5.0                # ince dış çizgi kâğıdın kenarından
 ANTET_EN, ANTET_BOY = 150.0, 100.0     # sağ alt köşede boş bırakılan kutu (firma anteti yapıştırılacak)
-ANTET_BOY_PI3D = 65.0                  # Pi3D anteti çizilince (DENEME) alçak kutu: resim yeri kazanır
+ANTET_BOY_PI3D = 40.0                  # Pi3D anteti çizilince (DENEME) alçak kutu: resim yeri kazanır (kullanıcı: "çok büyük, resimler sığmıyor")
 
 # Bölge bölümleri (ISO 5457): rakamlar soldan sağa, harfler yukarıdan
 # aşağıya. "B3'teki delik" demek için. Sütun ve satır sayısı çifttir.
@@ -165,9 +165,9 @@ KAT_BOLGE = "PAFTA_BOLGE"
 # Ayar dosyasında antet_pi3d: 0 ise kutu eskisi gibi BOŞ bırakılır.
 PI3D_ANTET_PNG = "pi3d_antet.png"
 PI3D_ANTET_PX = (1031, 240)           # logo şeridi piksel ölçüsü (en, boy)
-PI3D_ANTET_BANT = 17.0                # logo şeridi yüksekliği (mm)
+PI3D_ANTET_BANT = 12.0                # logo şeridi yüksekliği (mm)
 PI3D_ANTET_ETIKET = 2.0               # alan adı yazı boyu (mm)
-PI3D_ANTET_DEGER = 3.2                # alan değeri yazı boyu (mm)
+PI3D_ANTET_DEGER = 2.6                # alan değeri yazı boyu (mm); 7 mm'lik satıra etiket + değer sığar
 PI3D_LACIVERT = (19, 53, 83)          # PiVision yazısının kâğıt üstündeki rengi
 _IMGDEF = {}                           # belge -> IMAGEDEF (sayfalar paylaşır)
 
@@ -320,9 +320,9 @@ def _pi3d_antet_ciz(pafta, kagit, deger, stil):
         anahtar = id(d)
         if anahtar not in _IMGDEF:
             _IMGDEF[anahtar] = d.add_image_def(filename=ad, size_in_pixel=PI3D_ANTET_PX)
-        hi = bant - 5.0
+        hi = bant - 3.0
         wi = hi * PI3D_ANTET_PX[0] / PI3D_ANTET_PX[1]
-        pafta.add_image(image_def=_IMGDEF[anahtar], insert=(x0 + 3.0, yb + 2.5),
+        pafta.add_image(image_def=_IMGDEF[anahtar], insert=(x0 + 3.0, yb + 1.5),
                         size_in_units=(wi, hi), dxfattribs={"layer": KAT_ANTET})
     else:
         _antet_yazi(pafta, "Pi3D  ·  PiVision", x0 + 3.0, yb + 9.0, W - 6.0, 6.0, stil)
@@ -332,8 +332,8 @@ def _pi3d_antet_ciz(pafta, kagit, deger, stil):
     except Exception:
         surum = "Pi3D"
     _antet_yazi(pafta, surum, x1 - 2.0, yb + 1.5, 40.0, PI3D_ANTET_ETIKET, stil, sag=True)
-    # --- alanlar: 5 satır, bazıları iki sütun
-    r = (yb - y0) / 5.0
+    # --- alanlar: 4 satır, iki sütun (kutu 150 x 40: resme yer kalsın;
+    # DOSYA satırı kalktı - dosya adı resim no ile aynıdır)
     xm = x0 + W / 2.0
 
     def m(ad):
@@ -343,15 +343,16 @@ def _pi3d_antet_ciz(pafta, kagit, deger, stil):
                                "kagit", "cizen", "cizen_tarih", "onaylayan", "onay_tarih")} | \
         {"sayfa": deger.get("sayfa")}
     satirlar = [
-        [("PARÇA ADI", deger.get("parca_adi", ""))],
-        [("RESİM NO", deger.get("resim_no", "")), ("DOSYA", deger.get("dosya", ""))],
-        [("MALZEME", deger.get("malzeme", "")), ("KÜTLE", deger.get("kutle", ""))],
+        [("PARÇA ADI", deger.get("parca_adi", "") or deger.get("resim_no", ""))],
+        [("RESİM NO", deger.get("resim_no", "")),
+         ("MALZEME  ·  KÜTLE", "  ·  ".join(v for v in (deger.get("malzeme", ""), deger.get("kutle", "")) if v))],
         [("ÖLÇEK", deger.get("olcek", "")),
          ("KÂĞIT / SAYFA", "  ·  ".join(v for v in (deger.get("kagit", ""),
                                                    f"sayfa {deger['sayfa']}" if deger.get("sayfa") else "") if v))],
         [("ÇİZEN", "  ".join(v for v in (deger.get("cizen", ""), deger.get("cizen_tarih", "")) if v)),
          ("ONAYLAYAN", "  ".join(v for v in (deger.get("onaylayan", ""), deger.get("onay_tarih", "")) if v))],
     ]
+    r = (yb - y0) / float(len(satirlar))
     for i, hucreler in enumerate(satirlar):
         yt = yb - i * r                     # satırın üst kenarı
         if i:
@@ -361,8 +362,10 @@ def _pi3d_antet_ciz(pafta, kagit, deger, stil):
         for j, (etiket, v) in enumerate(hucreler):
             xa = x0 if (j == 0) else xm
             gen = (W if len(hucreler) == 1 else W / 2.0) - 4.0
-            _antet_yazi(pafta, etiket, xa + 2.0, yt - PI3D_ANTET_ETIKET - 1.2, gen, PI3D_ANTET_ETIKET, stil)
-            _antet_yazi(pafta, v, xa + 2.0, yt - r + 2.0, gen, PI3D_ANTET_DEGER, stil)
+            # etiket satırın üstünde (0,8 mm pay), değer altında: 7 mm'lik
+            # satırda ikisi binmez (etiket 0,8..2,8; değer 3,6..6,2)
+            _antet_yazi(pafta, etiket, xa + 2.0, yt - PI3D_ANTET_ETIKET - 0.8, gen, PI3D_ANTET_ETIKET, stil)
+            _antet_yazi(pafta, v, xa + 2.0, yt - r + 0.8, gen, PI3D_ANTET_DEGER, stil)
 
 
 class PaftaYok(Exception):

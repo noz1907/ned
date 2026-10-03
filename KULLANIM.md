@@ -239,7 +239,7 @@ katı yer ister.
 
 ## 1b. Logolar ve ikon — TEK sürüm, antet lisansa göre
 
-Tek sürüm derlenir (`py exebuild.py`, `EXE_YAP.bat`): PiVision ve Pi3D
+Tek sürüm derlenir (`EXE_YAP.bat` menüsü: 1 yalnız exe, 2 müşteri paketi = `py exebuild.py`, 3 ikisi): PiVision ve Pi3D
 logoları exe'nin içine gömülüdür. Eski "1 = PI3D / 2 = FIRMA" seçimi
 kalktı; **antet derlemede değil çalışma anında, lisansa göre** seçilir:
 
@@ -2417,7 +2417,7 @@ başlıkta yazar.
   boyunun katı olarak uygulanır; DXF'teki ölçü stili bu değerlerdendir.
 - **PDF okumak içindir**, üstünden ölçü alınmaz; ölçü 1:1 DXF'ten
   alınır. PDF'te ölçek serbesttir (1:9, 1:11, 1:13 …): çizim kâğıdı
-  doldurur, antet boş kalır. Pi3D anteti alçaktır (150 x 65 mm); firma
+  doldurur, antet boş kalır. Pi3D anteti alçaktır (150 x 40 mm: logo şeridi + 4 satır); firma
   kendi antetini yapıştıracaksa (`antet_pi3d: 0`) 150 x 100 boş kalır.
   Başlık bloğu ve bilgi bloğu ızgaraya girmeden kâğıdın boş yerine
   konabilir (ölçeği düşürmesin diye); küçük perspektif de öyle.
@@ -2528,7 +2528,7 @@ anlamlı çıkmıyorsa o parçada kesit çizilmez, diğer görünüşler yine ç
 | `pfd_dxf2stp.py` | DXF görünüşlerinden 3B STEP üretir (renk = parça kimliği) |
 | `Pi3D_baslat.bat` | Windows'ta tek tıkla kurulum + başlatma |
 | `Pi3D_baslat_KUCUK.bat` | dar disk için küçük kurulum (~800 MB) |
-| `EXE_YAP.bat` + `pi3d.spec` | çalıştırılabilir dosya (.exe) üretir (tek sürüm; antet lisansa göre) |
+| `EXE_YAP.bat` + `pi3d.spec` | derleme menüsü: 1 yalnız exe (PyInstaller, `dist\Pi3D`), 2 müşteri kurulum paketi (`exebuild.py`: bariyer + zip + Inno Setup), 3 ikisi; `EXE_YAP.bat 2` gibi parametreyle de çalışır |
 | `CATIA_MALZEME.md` | CATIA malzemesini kaybetmeden aktarma |
 | `catia_malzeme_cikar.CATScript` | CATIA makrosu: ağacı gezip `malzeme.csv` yazar |
 
