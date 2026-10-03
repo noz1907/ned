@@ -391,6 +391,13 @@ ve kısa bir ses çalar. Hata olursa kırmızı **✖ HATA**, iptalde turuncu
 **■ İPTAL EDİLDİ** yazar. Yeşil yazıyı görmeden bir sonraki adıma
 geçmeyin.
 
+**Yapılan işin düğmesi pasif kalır:** iş aynı girdilerle bitince o
+sayfanın alt iş düğmesi (İNCELE, BOM ÇIKART, ÖRNEK, ÇİZİMLERİ ÜRET,
+KAYNAK RESİMLERİ, AÇINIM, LAZER, PAFTAYA AL, BAS) pasifleşir ve metninde
+**✓ yapıldı** yazar; yeniden basmaya gerek yoktur. Model, malzeme, çizim
+ayarı, istisna ya da listedeki seçim değişince düğme kendiliğinden
+açılır. Hatayla ya da iptalle biten iş düğmeyi kilitlemez.
+
 ### Adım 1 — VERİ
 
 * **Model dosyası:** *Gözat…* ile `.stp` / `.step`, `.igs` / `.iges` ya da
