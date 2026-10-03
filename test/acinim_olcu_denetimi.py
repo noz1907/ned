@@ -80,6 +80,62 @@ dogru("tablo kapalı: büküm / abkant tablosu yok",
       not any(t.startswith(("BÜKÜM  AÇI", "ABKANT", "KANAT  DIŞ")) for t in yazi2), yazi2[:8])
 dogru("tablo kapalı: ölçüsüz ve izometrik resim yine var",
       any("ÖLÇÜSÜZ AÇINIM" in t for t in yazi2) and any("PERSPEKTİF" in t for t in yazi2))
+# IZGARA: sık delik deseni tek tek ölçülmez; kesik çerçeve + iki köşe;
+# hiçbir ölçü çizgisi desenin içinden geçmez; seyrek delikler yine ölçülür
+boy3, gen3 = 800.0, 300.0
+# desen alt kenara yakın: 325'teki deliğin kılavuzu en yakın (alt) kenara
+# desenin içinden giderdi, üste çıkmalı; 400; 50 deliğinin sola giden Y
+# kılavuzu desenden geçerdi, Y değeri başlığa düşmeli
+izg = [(300.0 + 10.0 * i, 40.0 + 10.0 * j) for i in range(6) for j in range(3)]
+seyrek3 = [(30.0, 20.0), (30.0, 280.0), (325.0, 110.0), (400.0, 50.0)]
+r3 = dict(r, acinim_genislik_mm=gen3, acinim_boy_mm=boy3,
+          kontur_dis=[[(0, 0), (boy3, 0), (boy3, gen3), (0, gen3)]],
+          kontur_delik=[daire(x, y) for x, y in izg + seyrek3])
+y3 = os.path.join(kl, "a3.dxf")
+M.dxf_acilim(r3, {"kod": "T3", "ad": "T3", "adet": 1, "poz": 1}, y3)
+m3 = ezdxf.readfile(y3).modelspace()
+bolge = [e for e in m3.query("LWPOLYLINE") if e.dxf.layer == "BOLGE"]
+dogru("ızgara kesik çerçeveyle işaretli", len(bolge) == 1, len(bolge))
+kx0, ky0, kx1, ky1 = 297.0, 37.0, 353.0, 63.0
+deg3 = set()
+icinden = []
+
+
+def kesisir(a, b, k):
+    """a-b doğru parçası k kutusunun İÇİNE (0,5 mm içeriden) giriyor mu."""
+    x0, y0, x1, y1 = k[0] + 0.5, k[1] + 0.5, k[2] - 0.5, k[3] - 0.5
+    t0, t1 = 0.0, 1.0
+    dx, dy = b[0] - a[0], b[1] - a[1]
+    for pp, qq in ((-dx, a[0] - x0), (dx, x1 - a[0]), (-dy, a[1] - y0), (dy, y1 - a[1])):
+        if abs(pp) < 1e-12:
+            if qq < 0:
+                return False
+            continue
+        t = qq / pp
+        if pp < 0:
+            t0 = max(t0, t)
+        else:
+            t1 = min(t1, t)
+    return t0 < t1
+
+
+for e in m3.query("DIMENSION"):
+    if (e.dxf.dimtype & 7) != 6:
+        continue
+    mm = e.get_measurement()
+    deg3.add(round(abs(mm[0] if (e.dxf.dimtype & 64) else mm[1]), 1))
+    for v in e.virtual_entities():
+        if v.dxftype() == "LINE" and kesisir(v.dxf.start, v.dxf.end, (kx0, ky0, kx1, ky1)):
+            icinden.append(round(abs(mm[0] if (e.dxf.dimtype & 64) else mm[1]), 1))
+dogru("ızgara deliklerinin iç konumları yok", not any(abs(v - x) < 0.06 for v in deg3 for x in (310.0, 340.0, 350.0)),
+      sorted(deg3))
+dogru("ızgara başı ve sonu ölçülü (297 / 353 ya da 37 / 63)",
+      any(abs(v - 297.0) < 0.06 or abs(v - 37.0) < 0.06 for v in deg3)
+      and any(abs(v - 353.0) < 0.06 or abs(v - 63.0) < 0.06 for v in deg3), sorted(deg3))
+dogru("seyrek delikler ölçülü (30, 325, 110)", {30.0, 325.0, 110.0} <= deg3, sorted(deg3))
+dogru("hiçbir ölçü çizgisi ızgaranın içinden geçmiyor", not icinden, icinden)
+not3 = " ".join(e.dxf.text for e in m3.query("TEXT") if "DELİK KONUMU" in e.dxf.text)
+dogru("desenden geçecek kılavuz başlığa düştü (400; 50)", "400; 50" in not3, not3[:120])
 # lazer
 ly = os.path.join(kl, "l.dxf")
 M.dxf_lazer(r["kontur_dis"], r["kontur_delik"], ly)

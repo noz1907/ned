@@ -11640,7 +11640,8 @@ def dxf_acilim(r, k, yol, P=None):
     return yol
 
 
-ACINIM_KONUM_EN_COK = 25   # bir yönde bundan çok farklı konum varsa ölçülmez (lazer DXF'i verir)
+ACINIM_KONUM_EN_COK = 60   # bir yönde bundan çok farklı konum varsa ölçülmez (lazer DXF'i verir)
+ACINIM_IZGARA_EN_AZ = 8    # birbirine kendi boyunun 2 katından yakın bu kadar delik = ızgara bölgesi
 
 
 def _acinim_delik_konumlari(msp, r, boy, gen, h):
@@ -11652,9 +11653,11 @@ def _acinim_delik_konumlari(msp, r, boy, gen, h):
     boya kesmesin); her farklı Y değeri için o Y'deki en soldaki delikten
     sola. Kılavuz başka bir deliğin üstünden geçecekse (kural 12) o değer
     ölçülmez, başlıkta x; y olarak yazılır. Rakam yerleri ÖLÇÜLÜR: başka
-    yazıya ya da çizgiye değiyorsa banttan dışarı kaydırılır. Bir yönde
-    ACINIM_KONUM_EN_COK'tan çok değer varsa (ızgara, sık delik) ölçü
-    konmaz: konumlar lazer DXF'indedir (kural 11).
+    yazıya ya da çizgiye değiyorsa banttan dışarı kaydırılır. Izgara
+    (ACINIM_IZGARA_EN_AZ yakın delik) kesik çerçeve + iki köşe olur ve
+    ENGELDİR (kural 11). Kalan rakamlar kenara sığmıyorsa ya da bir yönde
+    ACINIM_KONUM_EN_COK'tan çok değer varsa ölçü konmaz: konumlar lazer
+    DXF'indedir.
     Döner: (üst bant, alt bant, sol bant, tabloya düşen [(x, y)])."""
     delik = []
     for w in r.get("kontur_delik") or []:
@@ -11663,6 +11666,47 @@ def _acinim_delik_konumlari(msp, r, boy, gen, h):
         xs, ys = [p[0] for p in w], [p[1] for p in w]
         delik.append(((min(xs) + max(xs)) / 2.0, (min(ys) + max(ys)) / 2.0,
                       (min(xs), min(ys), max(xs), max(ys))))
+    if not delik:
+        return 0.0, 0.0, 0.0, []
+    # IZGARA (sık desen: petek, delikli bölge) - kural 11: iç ölçüsü
+    # verilmez, bölge kesik çerçeveyle işaretlenir, köşeleri sol alt
+    # köşeden ölçülür. Öbek: birbirine kendi boyunun 2 katından yakın en az
+    # ACINIM_IZGARA_EN_AZ delik. Kalan seyrek delikler tek tek ölçülür.
+    n_ = len(delik)
+    kok_ = list(range(n_))
+
+    def bul(i):
+        while kok_[i] != i:
+            kok_[i] = kok_[kok_[i]]
+            i = kok_[i]
+        return i
+    boyut = [max(c[2][2] - c[2][0], c[2][3] - c[2][1]) for c in delik]
+    for i in range(n_):
+        for j in range(i + 1, n_):
+            if math.hypot(delik[i][0] - delik[j][0], delik[i][1] - delik[j][1]) \
+                    <= 2.0 * max(boyut[i], boyut[j]):
+                kok_[bul(i)] = bul(j)
+    obek = defaultdict(list)
+    for i in range(n_):
+        obek[bul(i)].append(i)
+    izgara_, seyrek = [], []
+    for uye in obek.values():
+        if len(uye) >= ACINIM_IZGARA_EN_AZ:
+            izgara_.append(uye)
+        else:
+            seyrek.extend(uye)
+    ozel = [delik[i] for i in seyrek]
+    izgara_kutu = []
+    for uye in izgara_:
+        x0 = min(delik[i][2][0] for i in uye); y0 = min(delik[i][2][1] for i in uye)
+        x1 = max(delik[i][2][2] for i in uye); y1 = max(delik[i][2][3] for i in uye)
+        msp.add_lwpolyline([(x0, y0), (x1, y0), (x1, y1), (x0, y1)], close=True,
+                           dxfattribs={"layer": "BOLGE"})
+        izgara_kutu.append((x0, y0, x1, y1))
+        # bölgenin iki köşesi ölçülür (başı ve sonu)
+        ozel.append((x0, y0, (x0, y0, x0, y0)))
+        ozel.append((x1, y1, (x1, y1, x1, y1)))
+    delik = ozel
     if not delik:
         return 0.0, 0.0, 0.0, []
 
@@ -11674,7 +11718,10 @@ def _acinim_delik_konumlari(msp, r, boy, gen, h):
         return out
     xs_ = tekil([c[0] for c in delik])
     ys_ = tekil([c[1] for c in delik])
-    if len(xs_) > ACINIM_KONUM_EN_COK or len(ys_) > ACINIM_KONUM_EN_COK:
+    # sığma ÖLÇÜLÜR: rakamlar bantta 1,4 (X) / 1,6 (Y) yazı boyu aralıkla
+    # dizilir; kenar boyuna sığmayacak kadar çok değer varsa ölçü konmaz
+    sigmaz = (len(xs_) * 1.4 * h > 1.2 * boy + 4.0 * h or len(ys_) * 1.6 * h > 1.2 * gen + 4.0 * h)
+    if sigmaz or len(xs_) > ACINIM_KONUM_EN_COK or len(ys_) > ACINIM_KONUM_EN_COK:
         _yaz(msp, f"{len(delik)} delik / kesik: konumları lazer DXF'inde (sık desen, ölçü konmadı)",
              0.0, -4.0 * h - 3.0 * h, 1.0 * h)
         return 0.0, 0.0, 0.0, []
@@ -11688,6 +11735,19 @@ def _acinim_delik_konumlari(msp, r, boy, gen, h):
             k = c[2]
             if k[0] - 1e-6 <= x1 and x0 <= k[2] + 1e-6 and k[1] - 1e-6 <= y1 and y0 <= k[3] + 1e-6:
                 return True
+        # ızgara bölgesi de ENGELDİR: ölçü çizgisi altıgen / delik
+        # deseninin içinden geçmez. Bölge köşesinin kendi çizgisi bölgeye
+        # yalnız o köşede değebilir (kenar boyunca gitmek de engel).
+        for k in izgara_kutu:
+            ax0, ax1 = max(x0, k[0]), min(x1, k[2])
+            ay0, ay1 = max(y0, k[1]), min(y1, k[3])
+            if ax0 > ax1 + 1e-6 or ay0 > ay1 + 1e-6:
+                continue
+            kx, ky = kendi[0], kendi[1]
+            if ax1 - ax0 <= 1e-6 and ay1 - ay0 <= 1e-6 and abs(ax0 - kx) <= 1e-6 \
+                    and abs(ay0 - ky) <= 1e-6:
+                continue
+            return True
         return False
 
     def yay(degerler, aralik):

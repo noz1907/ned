@@ -174,10 +174,14 @@ BU SÜRÜMDE NE VAR
       köşeden koordinatlı ölçü, "0" köşede; X değerleri yakın kenarda üstte
       ya da altta, Y değerleri solda; kılavuz başka deliğin üstünden
       geçecekse o delik başlıkta x; y). Büküm konum ölçüleri kaldırıldı
-      (büküm yerleri çizelgede). Bir yönde 25'ten çok konum (sık desen) ise
-      ölçü konmaz, lazer DXF'i verir. Açınım resminde ÜÇ RESİM: ölçülü
+      (büküm yerleri çizelgede). Açınım resminde ÜÇ RESİM: ölçülü
       açınım, ÖLÇÜSÜZ açınım (kontur + büküm eksenleri) ve izometrik
       bükümlü resim; DXF'te ve PDF'te.
+    - AÇINIMDA IZGARA: sık delik / altıgen desen (en az 8 yakın delik) tek
+      tek ölçülmez; kesik çerçeveyle işaretlenir, başı ve sonu (iki köşe)
+      koordinatla verilir; ölçü çizgileri desenin içinden geçmez. Desen
+      ayrılınca öbür delikler yine ölçülür (Karluna ÜST SAÇ: 114 delikte
+      önce hiç konum yoktu). Konum rakamları kenara sığmazsa ölçü konmaz.
     - LAZER DXF'inde ölçü / yazı yok (yalnız KESIM katmanında konturlar;
       denetimle güvence altında).
     - Açınımda profil etiketleri (B12) PERSPEKTİF yazısına binmiyor; ölçüsüz

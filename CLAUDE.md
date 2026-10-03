@@ -358,9 +358,15 @@ DXF'te yazı boyunun katı olarak uygulanır):
     çizgiyi keser). Açınımda doğrusal ölçü yalnız boy ve en; delik
     konumları sol alt köşeden KOORDİNATLI ölçü (`_acinim_delik_konumlari`:
     "0" köşede; X kılavuzu yakın kenara, Y sola; kılavuz başka deliğin
-    üstünden geçecekse başlıkta x; y; bir yönde 25'ten çok konum varsa
-    ölçü yok, lazer DXF'i verir; rakam yeri ölçülür, gabari yolu önceden
-    ayrılır). Büküm konum ölçüsü YOK (yerleri büküm çizelgesinde).
+    üstünden geçecekse başlıkta x; y; rakam yeri ölçülür, gabari yolu
+    önceden ayrılır). **IZGARA** (11. kural): birbirine kendi boyunun 2
+    katından yakın en az 8 delik / kesik (altıgen desen) tek tek ölçülmez;
+    bölge kesik çerçeveyle işaretlenir, iki köşesi (başı ve sonu) sol alt
+    köşeden ölçülür; çerçeve ENGELDİR, hiçbir ölçü çizgisi desenin
+    içinden geçmez (geçecekse o delik başlıkta x; y). Kalan konum
+    rakamları kenar boyuna SIĞMIYORSA (ölçülerek) ya da bir yönde 60'tan
+    çoksa ölçü yok, lazer DXF'i verir (Karluna UST_SAC: 114 delik, 96'sı
+    ızgara; önce hiç konum yoktu). Büküm konum ölçüsü YOK (yerleri büküm çizelgesinde).
     Açınım resminde: ölçülü açınım, altında ÖLÇÜSÜZ açınım (kontur +
     büküm eksenleri), sağda izometrik bükümlü resim; çizelgeler (büküm,
     abkant kanat) ve profil kalır. **Tablolar SEÇENEKLİ** (kullanıcı: "tablo
