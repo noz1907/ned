@@ -11641,7 +11641,6 @@ def dxf_acilim(r, k, yol, P=None):
 
 
 ACINIM_KONUM_EN_COK = 60   # bir yönde bundan çok farklı konum varsa ölçülmez (lazer DXF'i verir)
-ACINIM_IZGARA_EN_AZ = 8    # birbirine kendi boyunun 2 katından yakın bu kadar delik = ızgara bölgesi
 
 
 def _acinim_delik_konumlari(msp, r, boy, gen, h):
@@ -11654,7 +11653,7 @@ def _acinim_delik_konumlari(msp, r, boy, gen, h):
     sola. Kılavuz başka bir deliğin üstünden geçecekse (kural 12) o değer
     ölçülmez, başlıkta x; y olarak yazılır. Rakam yerleri ÖLÇÜLÜR: başka
     yazıya ya da çizgiye değiyorsa banttan dışarı kaydırılır. Izgara
-    (ACINIM_IZGARA_EN_AZ yakın delik) kesik çerçeve + iki köşe olur ve
+    (`izgara_obekleri`, detay resmiyle aynı kural) kesik çerçeve + iki köşe olur ve
     ENGELDİR (kural 11). Kalan rakamlar kenara sığmıyorsa ya da bir yönde
     ACINIM_KONUM_EN_COK'tan çok değer varsa ölçü konmaz: konumlar lazer
     DXF'indedir.
@@ -11668,41 +11667,23 @@ def _acinim_delik_konumlari(msp, r, boy, gen, h):
                       (min(xs), min(ys), max(xs), max(ys))))
     if not delik:
         return 0.0, 0.0, 0.0, []
-    # IZGARA (sık desen: petek, delikli bölge) - kural 11: iç ölçüsü
+    # IZGARA (kural 11): sık kesim deseninin iç konumları tek tek
     # verilmez, bölge kesik çerçeveyle işaretlenir, köşeleri sol alt
-    # köşeden ölçülür. Öbek: birbirine kendi boyunun 2 katından yakın en az
-    # ACINIM_IZGARA_EN_AZ delik. Kalan seyrek delikler tek tek ölçülür.
-    n_ = len(delik)
-    kok_ = list(range(n_))
+    # köşeden ölçülür. Öbek kuralı detay resmiyle AYNI (`izgara_obekleri`:
+    # en az IZGARA_EN_AZ kesim, boşluk dar ölçünün IZGARA_BAG katından az,
+    # en az iki sıra ve iki sütun); cıvata deliği öbekleri ızgara sayılmaz,
+    # tek tek ölçülür (8 yakın delik ölçütü uzun şasi kolunda 39 cıvata
+    # deliğini tek bölgeye bağlıyordu). Kalan seyrek delikler tek tek ölçülür.
+    izgara_kutu = [o[:4] for o in izgara_obekleri([c[2] for c in delik])]
 
-    def bul(i):
-        while kok_[i] != i:
-            kok_[i] = kok_[kok_[i]]
-            i = kok_[i]
-        return i
-    boyut = [max(c[2][2] - c[2][0], c[2][3] - c[2][1]) for c in delik]
-    for i in range(n_):
-        for j in range(i + 1, n_):
-            if math.hypot(delik[i][0] - delik[j][0], delik[i][1] - delik[j][1]) \
-                    <= 2.0 * max(boyut[i], boyut[j]):
-                kok_[bul(i)] = bul(j)
-    obek = defaultdict(list)
-    for i in range(n_):
-        obek[bul(i)].append(i)
-    izgara_, seyrek = [], []
-    for uye in obek.values():
-        if len(uye) >= ACINIM_IZGARA_EN_AZ:
-            izgara_.append(uye)
-        else:
-            seyrek.extend(uye)
-    ozel = [delik[i] for i in seyrek]
-    izgara_kutu = []
-    for uye in izgara_:
-        x0 = min(delik[i][2][0] for i in uye); y0 = min(delik[i][2][1] for i in uye)
-        x1 = max(delik[i][2][2] for i in uye); y1 = max(delik[i][2][3] for i in uye)
+    def izgarada(c):
+        k = c[2]
+        return any(o[0] - 1e-6 <= k[0] and k[2] <= o[2] + 1e-6 and o[1] - 1e-6 <= k[1]
+                   and k[3] <= o[3] + 1e-6 for o in izgara_kutu)
+    ozel = [c for c in delik if not izgarada(c)]
+    for x0, y0, x1, y1 in izgara_kutu:
         msp.add_lwpolyline([(x0, y0), (x1, y0), (x1, y1), (x0, y1)], close=True,
                            dxfattribs={"layer": "BOLGE"})
-        izgara_kutu.append((x0, y0, x1, y1))
         # bölgenin iki köşesi ölçülür (başı ve sonu)
         ozel.append((x0, y0, (x0, y0, x0, y0)))
         ozel.append((x1, y1, (x1, y1, x1, y1)))

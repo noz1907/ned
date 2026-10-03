@@ -136,6 +136,19 @@ dogru("seyrek delikler ölçülü (30, 325, 110)", {30.0, 325.0, 110.0} <= deg3,
 dogru("hiçbir ölçü çizgisi ızgaranın içinden geçmiyor", not icinden, icinden)
 not3 = " ".join(e.dxf.text for e in m3.query("TEXT") if "DELİK KONUMU" in e.dxf.text)
 dogru("desenden geçecek kılavuz başlığa düştü (400; 50)", "400; 50" in not3, not3[:120])
+# cıvata deliği dizisi (Ø6, 40 aralık, iki sıra) IZGARA DEĞİLDİR: tek tek ölçülür
+civ = [(100.0 + 40.0 * i, 60.0 + 40.0 * j) for i in range(8) for j in range(2)]
+r4 = dict(r3, kontur_delik=[daire(x, y) for x, y in civ])
+y4 = os.path.join(kl, "a4.dxf")
+M.dxf_acilim(r4, {"kod": "T4", "ad": "T4", "adet": 1, "poz": 1}, y4)
+m4 = ezdxf.readfile(y4).modelspace()
+dogru("cıvata dizisi ızgara sayılmadı", not [e for e in m4.query("LWPOLYLINE") if e.dxf.layer == "BOLGE"])
+deg4 = set()
+for e in m4.query("DIMENSION"):
+    if (e.dxf.dimtype & 7) == 6:
+        mm = e.get_measurement()
+        deg4.add(round(abs(mm[0] if (e.dxf.dimtype & 64) else mm[1]), 1))
+dogru("cıvata dizisinin her konumu ölçülü", {100.0 + 40.0 * i for i in range(8)} | {60.0, 100.0} <= deg4, sorted(deg4))
 # lazer
 ly = os.path.join(kl, "l.dxf")
 M.dxf_lazer(r["kontur_dis"], r["kontur_delik"], ly)

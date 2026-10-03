@@ -359,8 +359,11 @@ DXF'te yazı boyunun katı olarak uygulanır):
     konumları sol alt köşeden KOORDİNATLI ölçü (`_acinim_delik_konumlari`:
     "0" köşede; X kılavuzu yakın kenara, Y sola; kılavuz başka deliğin
     üstünden geçecekse başlıkta x; y; rakam yeri ölçülür, gabari yolu
-    önceden ayrılır). **IZGARA** (11. kural): birbirine kendi boyunun 2
-    katından yakın en az 8 delik / kesik (altıgen desen) tek tek ölçülmez;
+    önceden ayrılır). **IZGARA** (11. kural): detay resmiyle AYNI öbek kuralı
+    (`izgara_obekleri`: en az 12 kesim, boşluk dar ölçünün 2,5 katından
+    az, en az iki sıra ve iki sütun; cıvata deliği öbeği ızgara değildir,
+    8 yakın delik ölçütü uzun şasi kolunda 39 cıvata deliğini gizliyordu)
+    tek tek ölçülmez;
     bölge kesik çerçeveyle işaretlenir, iki köşesi (başı ve sonu) sol alt
     köşeden ölçülür; çerçeve ENGELDİR, hiçbir ölçü çizgisi desenin
     içinden geçmez (geçecekse o delik başlıkta x; y). Kalan konum

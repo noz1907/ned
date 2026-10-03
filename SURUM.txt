@@ -177,8 +177,8 @@ BU SÜRÜMDE NE VAR
       (büküm yerleri çizelgede). Açınım resminde ÜÇ RESİM: ölçülü
       açınım, ÖLÇÜSÜZ açınım (kontur + büküm eksenleri) ve izometrik
       bükümlü resim; DXF'te ve PDF'te.
-    - AÇINIMDA IZGARA: sık delik / altıgen desen (en az 8 yakın delik) tek
-      tek ölçülmez; kesik çerçeveyle işaretlenir, başı ve sonu (iki köşe)
+    - AÇINIMDA IZGARA: sık delik / altıgen desen (detay resmiyle aynı kural:
+      en az 12 kesim, iki sıra ve iki sütun; cıvata öbeği değil) tek tek ölçülmez; kesik çerçeveyle işaretlenir, başı ve sonu (iki köşe)
       koordinatla verilir; ölçü çizgileri desenin içinden geçmez. Desen
       ayrılınca öbür delikler yine ölçülür (Karluna ÜST SAÇ: 114 delikte
       önce hiç konum yoktu). Konum rakamları kenara sığmazsa ölçü konmaz.
