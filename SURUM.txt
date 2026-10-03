@@ -180,7 +180,13 @@ BU SÜRÜMDE NE VAR
       bükümlü resim; DXF'te ve PDF'te.
     - LAZER DXF'inde ölçü / yazı yok (yalnız KESIM katmanında konturlar;
       denetimle güvence altında).
-    - Açınımda profil etiketleri (B12) PERSPEKTİF yazısına binmiyor.
+    - Açınımda profil etiketleri (B12) PERSPEKTİF yazısına binmiyor; ölçüsüz
+      açınım çizilmiş her şeyin altına ölçülerek konur.
+    - AÇINIM TABLOLARI SEÇENEKLİ (kullanıcı: "tablo kalsın ya da seçenek
+      koy, müşteri isteyebilir"): büküm çizelgesi, abkant kanat dış ölçüleri
+      tablosu ve profildeki kanat değerleri varsayılan açık; 6. sekmede
+      "Açınım resminde tablolar" kutusu (saklanır), komut satırı
+      --acinim-tablo-yok. Seçim değişince "eksik" üretimde açınım yenilenir.
   v1.0.18 (03.10.2026): sonuç analizi döngüsü, tolerans, parça bazlı K,
   kayar arayüz
     - SONUÇ ANALİZİ DÖNGÜSÜ (kâğıt ölçeğinde): her detay resmi çizildikten

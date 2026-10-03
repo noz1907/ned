@@ -71,6 +71,15 @@ dogru("ÖLÇÜSÜZ AÇINIM resmi var", any("ÖLÇÜSÜZ AÇINIM" in t for t in y
 dis = [e for e in msp.query("LWPOLYLINE") if len(e) == 4]
 dogru("dış kontur iki kez (ölçülü + ölçüsüz)", len(dis) >= 2, len(dis))
 dogru("izometrik resim var", any("PERSPEKTİF" in t for t in yazi))
+# tablolar seçenekli (varsayılan açık)
+dogru("varsayılan: büküm çizelgesi var", any(t.startswith("BÜKÜM  AÇI") for t in yazi))
+y2 = os.path.join(kl, "a2.dxf")
+M.dxf_acilim(r, {"kod": "T", "ad": "T", "adet": 1, "poz": 1}, y2, {"acinim_tablo": False})
+yazi2 = [e.dxf.text for e in ezdxf.readfile(y2).modelspace().query("TEXT")]
+dogru("tablo kapalı: büküm / abkant tablosu yok",
+      not any(t.startswith(("BÜKÜM  AÇI", "ABKANT", "KANAT  DIŞ")) for t in yazi2), yazi2[:8])
+dogru("tablo kapalı: ölçüsüz ve izometrik resim yine var",
+      any("ÖLÇÜSÜZ AÇINIM" in t for t in yazi2) and any("PERSPEKTİF" in t for t in yazi2))
 # lazer
 ly = os.path.join(kl, "l.dxf")
 M.dxf_lazer(r["kontur_dis"], r["kontur_delik"], ly)

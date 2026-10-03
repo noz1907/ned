@@ -11409,12 +11409,20 @@ def dxf_acilim(r, k, yol, P=None):
     # burada çıkılmaz, yalnız çizelge atlanır.
     x = max(boy + 4.0 * h, etiket_sag + 2.0 * h)
     y = gen
-    if r["bukumler"]:
+    # TABLOLAR SEÇENEKLİ (kullanıcı: "tablo kalsın ya da seçenek koy,
+    # müşteri isteyebilir"): büküm çizelgesi, abkant kanat dış ölçüleri
+    # tablosu ve profildeki kanat değerleri P["acinim_tablo"] ile (varsayılan
+    # açık). Kapalıyken profil ve izometrik resim kalır, K / B adları kalır.
+    tablo = (P or {}).get("acinim_tablo")
+    if tablo is None:
+        tablo = ayar_oku().get("acinim_tablo", True)
+    tablo = bool(tablo)
+    if r["bukumler"] and tablo:
         _yaz(msp, ("BÜKÜM  AÇI      İÇ R   PAY    EKSEN (uç noktaları x; y - sol alt köşeden)"
                    if r.get("cok_yonlu") else
                    "BÜKÜM  AÇI      İÇ R   PAY    EKSEN (alt kenardan)   BÖLGE"), x, y, h)
-    y -= 2.0 * h
-    for i, b in enumerate(r["bukumler"], 1):
+        y -= 2.0 * h
+    for i, b in enumerate(r["bukumler"] if tablo else [], 1):
         eks = (b["acinimda_bas_mm"] + b["acinimda_son_mm"]) / 2.0
         if b.get("cizgi"):
             (cx1, cy1), (cx2, cy2) = b["cizgi"]
@@ -11431,7 +11439,7 @@ def dxf_acilim(r, k, yol, P=None):
                       f"{XL.tr(b['acinimda_bas_mm'], 2, False)} - "
                       f"{XL.tr(b['acinimda_son_mm'], 2, False)}", x, y, h)
         y -= 1.8 * h
-    kanat = kanat_dis_olculeri(r)
+    kanat = kanat_dis_olculeri(r) if tablo else []
     if kanat:
         # ABKANT (CNC): usta profili kanat DIŞ ölçüsüyle girer; dayamayı
         # tezgâh hesaplar. Büküm ekseni tezgâh için dayanak değildir.
@@ -11478,7 +11486,9 @@ def dxf_acilim(r, k, yol, P=None):
         y -= 1.5 * h
         _yaz(msp, "PROFİL - büküm ekseni yönünden bakış (K: kanat, B: büküm)"
              + (f"   ölçek {XL.tr(olc)}:1" if olc != 1.0 else ""), x, y, h)
-        y -= 2.5 * h
+        # profil etiketleri (B, K) profilin üstüne de taşar: başlıkla arası
+        # 4 yazı boyu (P05 UST_SAC'ta B2 başlığa biniyordu)
+        y -= 4.0 * h
         ox, oy = x + 3.0 * h - px0, y - (py1 - py0) - 2.0 * h - py0
         for q in pr["cizgi"]:
             msp.add_lwpolyline([(a + ox, b + oy) for a, b in q],
@@ -11520,7 +11530,7 @@ def dxf_acilim(r, k, yol, P=None):
                 dolu_.append(kt)
         for i, (p, n) in enumerate(pr["kanat"], 1):
             sg = 1.0 if (p[0] - cx) * n[0] + (p[1] - cy) * n[1] >= 0 else -1.0
-            et = f"K{i}" + (f" {XL.tr(kdo[i - 1], 1)}" if len(kdo) == len(pr["kanat"]) else "")
+            et = f"K{i}" + (f" {XL.tr(kdo[i - 1], 1)}" if tablo and len(kdo) == len(pr["kanat"]) else "")
             _etiket_koy(et, p[0], p[1], sg * n[0], sg * n[1], yazi_h, "OLCU")
         for i, m in enumerate(pr["bukum"], 1):
             dx_, dy_ = m[0] - cx, m[1] - cy
@@ -11606,10 +11616,16 @@ def dxf_acilim(r, k, yol, P=None):
     # delikler ve büküm eksenleri, hiçbir ölçü ve yazı olmadan; ölçülünün
     # altında. Üçüncü resim (izometrik, bükülmüş) sağ sütunda.
     if kesim or r.get("bukumler"):
-        dy = -(gen + d + 7.0 * h)
-        _yaz(msp, "ÖLÇÜSÜZ AÇINIM (kesim konturu ve büküm eksenleri)", 0.0, dy + gen + 1.5 * h, 1.1 * h)
         konturlar = (list(r["kontur_dis"]) + list(r["kontur_delik"])) if kesim else \
             [[(0, 0), (boy, 0), (boy, gen), (0, gen)]]
+        # Yer ÖLÇÜLÜR: ölçüsüz kopya çizilmiş HER ŞEYİN (sağ sütundaki profil
+        # ve izometrik dahil) altına; konturun gerçek sınırından (3B açınımda
+        # kontur 0..en aralığının dışına taşabilir)
+        ky_ = [p[1] for w in konturlar for p in w]
+        kx_ = [p[0] for w in konturlar for p in w]
+        alt_ = min([b[1] for b in _varlik_kutulari(msp)] or [0.0])
+        dy = alt_ - 4.0 * h - max(ky_)
+        _yaz(msp, "ÖLÇÜSÜZ AÇINIM", min(kx_), dy + max(ky_) + 1.5 * h, 1.1 * h)
         for w in konturlar:
             msp.add_lwpolyline([(a, b + dy) for a, b in w], close=True,
                                dxfattribs={"layer": "GORUNEN"})
@@ -11913,8 +11929,9 @@ def acilim_yaz(kayit, komp, P, klasor, kodlar=None, k_faktor=K_FAKTOR, k_parca=N
             ilerleme(i, len(secili), ad)
         # güncel açınım atlanır - lazer dosyası da varsa (eski sürüm
         # açınımın yanına lazer yazmıyordu)
+        tablo_ = bool((P or {}).get("acinim_tablo", ayar_oku().get("acinim_tablo", True)))
         if eksik and IS.onceden_uretilmis(kok, "acinim", ad, step_oz,
-                                          k_faktor=kf) \
+                                          k_faktor=kf, tablo=tablo_) \
                 and IS.onceden_uretilmis(kok, "lazer", ad, step_oz, k_faktor=kf):
             log(f"  {ad}: açınım güncel (aynı model, K={k_faktor}) - atlandı")
             continue
@@ -11944,7 +11961,7 @@ def acilim_yaz(kayit, komp, P, klasor, kodlar=None, k_faktor=K_FAKTOR, k_parca=N
         r["dxf"] = os.path.basename(dosya)
         sonuc.append(r)
         IS.cizim_kaydet(kok, "acinim", ad, dxf=r["dxf"], step_ozet=step_oz,
-                        k_faktor=kf)
+                        k_faktor=kf, tablo=tablo_)
         log(f"  {os.path.basename(dosya)}  {XL.tr(r['acinim_genislik_mm'])} x "
             f"{XL.tr(r['acinim_boy_mm'])} mm, t={XL.tr(r['kalinlik_mm'])}, "
             f"{r['bukum_sayisi']} büküm")
@@ -14361,6 +14378,9 @@ uretir: KAYNAK/<grup>_kaynak.pdf (yalniz PDF; buyuk modelde uzun surer).
                          "ON,ARKA,SAG,SOL,UST,ALT")
     ap.add_argument("--perspektif-yok", action="store_true",
                     help="resme küçük izometrik perspektif konmasın")
+    ap.add_argument("--acinim-tablo-yok", action="store_true",
+                    help="açınım resminde büküm çizelgesi, abkant kanat tablosu ve "
+                         "profildeki kanat değerleri olmasın (varsayılan: var)")
     ap.add_argument("--analiz-yok", action="store_true",
                     help="sonuç analizi döngüsü kapalı: çizim kâğıtta ölçülüp "
                          "gerekirse yeniden çizilmesin (hızlı deneme)")
@@ -14410,6 +14430,7 @@ uretir: KAYNAK/<grup>_kaynak.pdf (yalniz PDF; buyuk modelde uzun surer).
          "gorunusler": list(gor), "kesit": bool(a.kesit),
          "perspektif": not a.perspektif_yok,
          "sonuc_analizi": not a.analiz_yok, "kagit": a.kagit,
+         **({"acinim_tablo": False} if a.acinim_tablo_yok else {}),
          "kaynak_resmi": bool(a.kaynak_resmi), "kaynak_balon": bool(a.kaynak_balon)}
     print("görünüşler: " + ("otomatik (özelliklere göre, 6'ya kadar)" if oto
                            else ", ".join(GORUNUS_AD[g] for g in gor))

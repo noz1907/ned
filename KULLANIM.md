@@ -1286,6 +1286,9 @@ okunmaz bu sayfa açılır.
 alt köşeden koordinatlı ölçü; "0" köşede). Büküm yerleri büküm
 çizelgesinde. Resimde üç çizim: ölçülü açınım, altında ÖLÇÜSÜZ açınım,
 sağda izometrik bükümlü resim. Lazer DXF'inde ölçü ve yazı yoktur.
+Büküm çizelgesi ve abkant kanat ölçüleri tablosu isteğe bağlıdır:
+6. sekmedeki **Açınım resminde tablolar** kutusu (seçim saklanır;
+komut satırında `--acinim-tablo-yok`).
 
 **K-faktörü parça bazlı:** listedeki **K** sütununa çift tıklayın, o
 parçanın K'sini yazın (boş = yukarıdaki ortak K). Değer saklanır; ÜRET

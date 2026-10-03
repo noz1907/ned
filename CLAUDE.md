@@ -363,7 +363,12 @@ DXF'te yazı boyunun katı olarak uygulanır):
     ayrılır). Büküm konum ölçüsü YOK (yerleri büküm çizelgesinde).
     Açınım resminde: ölçülü açınım, altında ÖLÇÜSÜZ açınım (kontur +
     büküm eksenleri), sağda izometrik bükümlü resim; çizelgeler (büküm,
-    abkant kanat) ve profil kalır.
+    abkant kanat) ve profil kalır. **Tablolar SEÇENEKLİ** (kullanıcı: "tablo
+    kalsın ya da seçenek koy, müşteri isteyebilir"): `P["acinim_tablo"]` /
+    ayar `acinim_tablo` (varsayılan açık), GUI 6. sekme kutusu,
+    `--acinim-tablo-yok`; kapalıyken profil ve izometrik kalır, K / B
+    adları kalır, kanat değerleri yazılmaz. Açınım kaydına `tablo` girer.
+    Ölçüsüz kopya çizilmiş HER ŞEYİN altına ölçülerek konur.
 
 ## PDF (pafta)
 

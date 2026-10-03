@@ -207,6 +207,7 @@ sözlükte duracak (`pf3_olcu.TOLERANS`), ISO sınıfı seçeneği ayrıca.
 | 12.6 | Lazer DXF'inde ölçü / yazı yok. | CAM her çizgiyi keser. | K | `dxf_lazer` |
 | 12.7 | Açınımda yalnız dış ölçüler (boy, en) ve delik konumları (sol alt köşeden koordinatlı ölçü); büküm konumları çizelgede. | "Açınımda sadece dış ölçüler ve delik pozisyonları." | K; ISO 129-1 koordinatlı ölçü | `_acinim_delik_konumlari` |
 | 12.8 | Açınım resminde üç resim: ölçülü, ölçüsüz (kontur + büküm eksenleri), izometrik bükümlü; DXF ve PDF. | "Her 3 resim olacak: ölçülü, ölçüsüz ve izometrik bükümlü; hem DXF'te hem PDF'te." | K | `dxf_acilim` |
+| 12.9 | Açınım tabloları (büküm çizelgesi, abkant kanat ölçüleri, profil kanat değerleri) seçenekli, varsayılan açık. | "Tablo kalsın ya da seçenek koy, müşteri isteyebilir." | K | `P["acinim_tablo"]` |
 
 ## 9. Kitapta olup programda (henüz) olmayanlar
 

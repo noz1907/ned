@@ -1365,6 +1365,13 @@ class Uygulama(ttk.Frame):
             "büküm payı = açı × (iç yarıçap + K × kalınlık). Tezgâha ve "
             "malzemeye göre değişir; yumuşak çelikte 0,40 – 0,50.")
                   ).pack(side="left")
+        # Açınım tabloları seçenekli (kullanıcı: "tablo kalsın ya da
+        # seçenek koy, müşteri isteyebilir"); seçim saklanır
+        self.v_ac_tablo = tk.BooleanVar(value=True)
+        alt2 = ttk.Frame(f); alt2.pack(fill="x", pady=(4, 0))
+        ttk.Checkbutton(alt2, variable=self.v_ac_tablo,
+                        text="Açınım resminde tablolar (büküm çizelgesi, abkant kanat ölçüleri)",
+                        command=self._ac_tablo_kaydet).pack(side="left")
         ttk.Button(alt, text="Tümünü seç",
                    command=lambda: self.ac_agac.selection_set(
                        self.ac_agac.get_children())).pack(side="right", padx=4)
@@ -1607,6 +1614,13 @@ class Uygulama(ttk.Frame):
                 "Açınım yapılamadı",
                 "Seçilen parçaların hiçbirinin açınımı çıkarılamadı.\\n\\n"
                 + "\\n\\n".join(f"{a}:\\n{m}" for a, m in hata[:3]))
+
+    def _ac_tablo_kaydet(self):
+        try:
+            if self.M:
+                self.M.ayar_yaz(acinim_tablo=bool(self.v_ac_tablo.get()))
+        except Exception:
+            pass
 
     def _k_metni(self, k):
         """Parçanın K sütunu: parça bazlı K varsa o, yoksa boş (ortak K)."""
@@ -2991,6 +3005,11 @@ class Uygulama(ttk.Frame):
     def _motor_geldi(self, M):
         self.M = M
         self._malzeme_listesi_tazele()
+        try:
+            if hasattr(self, "v_ac_tablo"):
+                self.v_ac_tablo.set(bool(M.ayar_oku().get("acinim_tablo", True)))
+        except Exception:
+            pass
         self._kfaktoru_tazele()
         self._pafta_ayari_tazele()
         self.v_durum.set("hazır – STEP dosyasını seçin")
@@ -3012,6 +3031,7 @@ class Uygulama(ttk.Frame):
                 "perspektif": bool(self.v_perspektif.get()) if hasattr(self, "v_perspektif") else True,
                 "kesit": bool(self.v_kesit.get()),
                 "sonuc_analizi": True,
+                "acinim_tablo": bool(self.v_ac_tablo.get()) if hasattr(self, "v_ac_tablo") else True,
                 "kagit": (self.v_kagit.get() if hasattr(self, "v_kagit") else None) or None,
                 "arac": self._arac(), "parca_ayar": self._parca_ayar_p()}
 
