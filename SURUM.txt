@@ -187,6 +187,10 @@ BU SÜRÜMDE NE VAR
     - DELİK KOORDİNAT TABLOSU: bir görünüşte 20 ve üstü delik varsa konum
       ölçüsü yerine tablo (NO, X, Y, Ø; sıfır görünüşün sol alt köşesi);
       az ya da dağınık delikler normal ölçülenir.
+    - STANDART PARÇA TANIMI PENCERESİ: belirsiz parçalar ayrı pencerede
+      liste olarak; seçince izometrik resmi, ölçüsü, gerekçesi; her parça
+      için STANDART / ÜRETİM / olduğu gibi kalsın, adsız katıya ad verme
+      (ad_kurali ile kalıcı). Kalanları kabul et / Excel'e yaz ve dur.
     - SİMETRİK EŞ DENETİMİ: "Symmetry of X" parçası X ile ölçülerek
       karşılaştırılır; fark varsa başlıkta "! MODEL KONTROL", BOM'da
       model_uyari (test/simetri_esi_denetimi.py).

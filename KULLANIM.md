@@ -748,16 +748,28 @@ ya da tüm çizimlerden ÖNCE sorar:
 | tanınmadı: adsız katı | adı yok, biçimi bilinen bir elemana uymuyor |
 | ad ile biçim çelişiyor | adı üretim diyor, biçimi standart eleman |
 
-Soru penceresinde:
+**Standart parça tanımı penceresi** (ayrı pencere, liste + resim):
+solda belirsiz parçaların listesi (durum, kod, ad, adet, ölçü, şimdiki
+sınıf, karar); satırı seçince sağda parçanın **izometrik resmi**, ölçüsü,
+önerisi ve gerekçesi gelir. Her parça için anında karar:
 
-- **EVET** – olduğu gibi kabul et ve devam et. Kabul, tarihiyle çıktı
+- **STANDART (satın alınan)** / **ÜRETİM parçası** – sınıf değişir, kural
+  saklanır (biçimce benzer parçalar da değişir).
+- **ad / kod** kutusu – adsız katıya (SOLID) ad verirsiniz; BOM'da ve
+  dosya adlarında o ad kullanılır, aynı model yeniden okununca da
+  uygulanır (`ad_kurali`).
+- **Olduğu gibi kalsın** – dokunmadan sıradakine geçer.
+
+Alt düğmeler:
+
+- **Kalanları olduğu gibi kabul et ve DEVAM** – kabul, tarihiyle çıktı
   klasörüne ve `rapor.md`'ye yazılır ("çıkana razı olundu").
-- **HAYIR** – liste `STANDART_KONTROL.xlsx` olarak yazılır, iş durur.
+- **Listeyi Excel'e yaz ve DUR** – liste `STANDART_KONTROL.xlsx` olarak yazılır, iş durur.
   Tasarımcı CAD'de düzeltir (Source = Made/Bought ya da parça adı) **ya da**
   listedeki `kaynak` sütununa **Bought / Made** yazar; dosya 2. adımda
   **Malzeme listesi yükle (Excel / CSV)…** ile geri verilince sınıflar oradan alınır (aynı
   numarayı taşıyan farklı parçalar ölçüleriyle ayrılır).
-- **İPTAL** – vazgeç.
+- **Vazgeç** – hiçbir şey üretilmez (yapılan sınıf / ad kararları kalır).
 
 Aynı liste bir kez kabul edildiyse bir daha sorulmaz. İşaretler **karar
 değildir**: 5 gerçek modelde adı standart diyen 60 komponentin hepsi en az

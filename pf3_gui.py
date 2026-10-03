@@ -3364,8 +3364,8 @@ class Uygulama(ttk.Frame):
         if anahtar == self._resim_istek:
             self._parca_resmi_ciz(ken)
 
-    def _parca_resmi_ciz(self, ken):
-        c = self.c_parca
+    def _parca_resmi_ciz(self, ken, c=None):
+        c = c or self.c_parca
         c.delete("all")
         W, H, pay = int(c["width"]), int(c["height"]), 10
         if not ken:
@@ -3833,29 +3833,16 @@ class Uygulama(ttk.Frame):
         imza = tuple((r[0], r[1], r[2], r[3]) for r in liste)
         if getattr(self, "_kontrol_kabul", None) == imza:
             return True
-        say = {}
-        for r in liste:
-            say[r[0]] = say.get(r[0], 0) + 1
-        ornek = "\n".join(f"  • {r[2][:32]}  x{r[3]}  –  {r[6] or r[0]}" for r in liste[:6])
-        cvp = messagebox.askyesnocancel(
-            "Standart parça tanımı",
-            f"{len(liste)} parçanın standart (satın alınan) mı üretim mi olduğu "
-            "modelden kesin anlaşılamadı:\n\n"
-            + "\n".join(f"  {n}  {d}" for d, n in say.items())
-            + f"\n\n{ornek}" + ("\n  ..." if len(liste) > 6 else "")
-            + "\n\nEVET  →  olduğu gibi kabul et ve devam et\n"
-              "HAYIR →  listeyi Excel'e yaz ve DUR: tasarımcı CAD'de düzeltsin "
-              "(Source = Made/Bought ya da parça adı) veya 'kaynak' sütununu "
-              "doldurup 2. adımda 'Malzeme listesi yükle…' ile geri verin\n"
-              "İPTAL →  vazgeç")
+        cvp = self._standart_karar_penceresi(liste)
         on = (self.v_out.get() or "").strip()
         if cvp is None:
             return False
         if cvp:
-            self._kontrol_kabul = imza
+            kalan = self.M.kontrol_listesi(self.komp)
+            self._kontrol_kabul = tuple((r[0], r[1], r[2], r[3]) for r in kalan)
             if on:
-                IS.kontrol_kaydet(on, len(liste), True)
-            self._yaz(f"standart tanımı: {len(liste)} belirsiz parça olduğu gibi kabul edildi")
+                IS.kontrol_kaydet(on, len(kalan), True)
+            self._yaz(f"standart tanımı: {len(kalan)} belirsiz parça olduğu gibi kabul edildi")
             return True
         if not on:
             messagebox.showinfo("Standart parça tanımı", "Önce çıktı klasörünü seçin.")
@@ -3869,6 +3856,174 @@ class Uygulama(ttk.Frame):
         self._yaz(f"standart tanımı kontrol listesi yazıldı: {y}")
         klasor_ac(y)
         return False
+
+    def _standart_karar_penceresi(self, liste):
+        """BELİRSİZ PARÇALAR AYRI PENCEREDE (kullanıcı: "ürünleri ayrı listede
+        farklı pencerede açsın, parça görseli de gelsin, seçtiğimde bakayım
+        karar vereyim; adsız katıya ad verebileyim ya da eskisi gibi kalsın
+        diyebileyim"): solda liste, sağda seçili parçanın izometrik resmi,
+        ölçüsü, gerekçesi ve AD kutusu. Her parça için karar anında
+        uygulanır: STANDART / ÜRETİM (sınıf kuralı saklanır, biçimce
+        benzerleri de değişir), ad kutusu değiştiyse ad / kod düzeltilir
+        (ad_kurali: biçim anahtarına göre saklanır, aynı model yeniden
+        okununca uygulanır), OLDUĞU GİBİ KALSIN. Alt düğmeler: kalanları
+        kabul et ve devam / Excel'e yaz ve dur / vazgeç.
+        Döner: True devam, False dur (Excel), None vazgeç."""
+        kod_k = {k["kod"]: k for k in self.komp}
+        w = tk.Toplevel(self)
+        w.title("Standart parça tanımı")
+        w.transient(self.master)
+        w.geometry("1120x600")
+        sonuc = {"cvp": None, "degisen": 0, "ad": 0}
+        ttk.Label(w, text=(f"{len(liste)} parçanın standart (satın alınan) mı üretim mi olduğu "
+                           "modelden kesin anlaşılamadı. Satırı seçin, resmine bakın; sınıfını "
+                           "düzeltin, adsız katıya ad verin ya da olduğu gibi bırakın."),
+                  wraplength=1080, justify="left").pack(anchor="w", padx=10, pady=(8, 4))
+        pw = ttk.PanedWindow(w, orient="horizontal")
+        pw.pack(fill="both", expand=True, padx=10)
+        sol = ttk.Frame(pw); pw.add(sol, weight=3)
+        kol = ("durum", "kod", "ad", "adet", "olcu", "sinif", "karar")
+        bas = ("durum", "kod", "ad", "adet", "ölçü", "şimdiki", "karar")
+        gen = (175, 110, 210, 40, 110, 70, 110)
+        ag = ttk.Treeview(sol, columns=kol, show="headings", height=20, selectmode="browse")
+        for k_, b_, g_ in zip(kol, bas, gen):
+            ag.heading(k_, text=b_); ag.column(k_, width=g_, anchor="w")
+        sb = ttk.Scrollbar(sol, orient="vertical", command=ag.yview)
+        ag.configure(yscrollcommand=sb.set)
+        ag.pack(side="left", fill="both", expand=True); sb.pack(side="right", fill="y")
+        satir_k, satir_r = {}, {}
+        for r in liste:
+            iid = ag.insert("", "end", values=(r[0], str(r[1])[:30], str(r[2])[:50], r[3], r[4], r[5], ""))
+            satir_k[iid], satir_r[iid] = kod_k.get(r[1]), r
+        sag = ttk.Frame(pw); pw.add(sag, weight=2)
+        c = tk.Canvas(sag, width=380, height=290, bg="white", highlightthickness=1,
+                      highlightbackground="#bbb")
+        c.pack(padx=4, pady=(4, 2))
+        v_bilgi = tk.StringVar(value="listeden bir parça seçin")
+        ttk.Label(sag, textvariable=v_bilgi, wraplength=370, justify="left").pack(anchor="w", padx=4)
+        af = ttk.Frame(sag); af.pack(anchor="w", padx=4, pady=(6, 2), fill="x")
+        ttk.Label(af, text="ad / kod:").pack(side="left")
+        v_ad = tk.StringVar()
+        ttk.Entry(af, textvariable=v_ad, width=42).pack(side="left", padx=(4, 0), fill="x", expand=True)
+        bf = ttk.Frame(sag); bf.pack(anchor="w", padx=4, pady=4)
+        kuyruk_ = queue.Queue()
+        istek = {"id": None}
+        self._standart_pencere = {"ag": ag, "satir_k": satir_k, "v_ad": v_ad, "sonuc": sonuc, "w": w}
+
+        def secili():
+            sel = ag.selection()
+            return (sel[0], satir_k.get(sel[0])) if sel else (None, None)
+
+        def secildi(_e=None):
+            iid, k = secili()
+            if not k:
+                return
+            r = satir_r[iid]
+            v_bilgi.set(f"{k['kod']}\n{k['ad']}\nölçü: {r[4]}   adet: {r[3]}\n"
+                        f"şimdiki sınıf: {r[5]}   öneri: {r[6] or '-'}\ngerekçe: {str(r[7])[:160]}")
+            v_ad.set(k["ad"])
+            anahtar = id(k); istek["id"] = anahtar
+            if anahtar in self._resim_onbellek:
+                self._parca_resmi_ciz(self._resim_onbellek[anahtar], c)
+                return
+            c.delete("all")
+            if not self.kayit:
+                c.create_text(190, 145, text="model yüklü değil", fill="#888")
+                return
+            c.create_text(190, 145, text="çiziliyor…", fill="#888")
+            sh = self.kayit[k["indeks"][0]][1]
+
+            def is_():
+                try:
+                    r3 = 1.0 / math.sqrt(3.0); r2 = 1.0 / math.sqrt(2.0)
+                    ken = self.M.hlr(sh, (r3, -r3, r3), (r2, r2, 0.0), gizli=False)["GORUNEN"]
+                except Exception:
+                    ken = None
+                kuyruk_.put((anahtar, ken))
+            threading.Thread(target=is_, daemon=True).start()
+
+        def bekle():
+            try:
+                while True:
+                    anahtar, ken = kuyruk_.get_nowait()
+                    self._resim_onbellek[anahtar] = ken
+                    if anahtar == istek["id"]:
+                        self._parca_resmi_ciz(ken, c)
+            except queue.Empty:
+                pass
+            if w.winfo_exists():
+                w.after(120, bekle)
+
+        def ad_uygula(k):
+            """Ad kutusu değiştiyse ad / kod düzeltilir ve kural saklanır."""
+            yeni = (v_ad.get() or "").strip()
+            if not yeni or yeni == k["ad"]:
+                return False
+            kural = dict(self.M.ayar_oku().get("ad_kurali") or {})
+            kural[self.M.kural_anahtari(k["ad"], k)] = yeni
+            self.M.ayar_yaz(ad_kurali=kural)
+            eski_kod, eski_ad = k["kod"], k["ad"]
+            k["ad"] = yeni
+            if not eski_kod or eski_kod == eski_ad or self.M.TN.isimsiz(eski_kod) \
+                    or str(eski_kod).upper().startswith(("SOLID", "COMPOUND")):
+                k["kod"] = yeni
+            k.pop("isimsiz", None)
+            sonuc["ad"] += 1
+            self._yaz(f"ad düzeltildi: {eski_kod} -> {yeni} (kural saklandı)")
+            return True
+
+        def sonraki(iid):
+            nxt = ag.next(iid)
+            if nxt:
+                ag.selection_set(nxt); ag.see(nxt)
+
+        def karar(yeni):
+            iid, k = secili()
+            if not k:
+                return
+            adli = ad_uygula(k)
+            if yeni:
+                self._sinif_uygula([k], yeni)
+                sonuc["degisen"] += 1
+                etiket = "STANDART" if yeni == "standart" else "ÜRETİM"
+                self._yaz(f"standart tanımı: {k['kod'][:40]} -> {etiket} (kural saklandı)")
+            else:
+                etiket = "olduğu gibi"
+            ag.set(iid, "karar", etiket + (" + ad" if adli else ""))
+            ag.set(iid, "sinif", k["sinif"]); ag.set(iid, "ad", k["ad"][:50]); ag.set(iid, "kod", k["kod"][:30])
+            sonraki(iid)
+        self._standart_pencere["karar"] = karar
+        ttk.Button(bf, text="STANDART (satın alınan)", command=lambda: karar("standart")).pack(side="left")
+        ttk.Button(bf, text="ÜRETİM parçası", command=lambda: karar("parca")).pack(side="left", padx=6)
+        ttk.Button(bf, text="Olduğu gibi kalsın", command=lambda: karar(None)).pack(side="left")
+        ttk.Label(sag, foreground="#555", wraplength=370, justify="left", text=(
+            "Karar anında uygulanır ve kural olarak saklanır: biçimce benzer parçalar da değişir; "
+            "ad düzeltmesi aynı model yeniden okununca da uygulanır.")).pack(anchor="w", padx=4)
+        alt = ttk.Frame(w); alt.pack(fill="x", padx=10, pady=8)
+
+        def bitir(cvp):
+            sonuc["cvp"] = cvp
+            w.destroy()
+        ttk.Button(alt, text="Kalanları olduğu gibi kabul et ve DEVAM", command=lambda: bitir(True)).pack(side="left")
+        ttk.Button(alt, text="Listeyi Excel'e yaz ve DUR", command=lambda: bitir(False)).pack(side="left", padx=8)
+        ttk.Button(alt, text="Vazgeç", command=lambda: bitir(None)).pack(side="right")
+        w.protocol("WM_DELETE_WINDOW", lambda: bitir(None))
+        ag.bind("<<TreeviewSelect>>", secildi)
+        bekle()
+        if ag.get_children():
+            ag.selection_set(ag.get_children()[0]); secildi()
+        try:
+            w.grab_set()
+        except Exception:
+            pass
+        w.wait_window()
+        self._standart_pencere = None
+        if sonuc["degisen"] or sonuc["ad"]:
+            # Sınıf / ad değişince BOM, poz ve dosya adları değişir: eski BOM geçersiz.
+            self.satirlar = []
+            self._agac_doldur(); self._acilim_doldur(); self._ornek_adaylari()
+            self.v_bom_ozet.set(f"{sonuc['degisen']} sınıf, {sonuc['ad']} ad düzeltildi – BOM yeniden çıkarılacak")
+        return sonuc["cvp"]
 
     def _profil_malzeme_sor(self):
         """EKSTRÜZYON profilin malzemesi CAD'den / dosyadan gelmiyorsa SORAR

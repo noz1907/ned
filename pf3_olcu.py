@@ -468,6 +468,29 @@ def katalogdan_sinifla(kayit, komp, kural=None, katalog=None, log=print):
     return n
 
 
+def ad_kurali_uygula(komp, kural_ad, log=print):
+    """Kullanıcının adsız katıya verdiği AD (standart parça tanımı
+    penceresi): biçim anahtarına (hacim + üç ölçü) göre saklanır, aynı
+    model yeniden okununca ad ve kod düzeltilir. Döner: değişen sayısı."""
+    if not kural_ad:
+        return 0
+    n = 0
+    for k in komp:
+        yeni = kural_ad.get(kural_anahtari(k["ad"], k))
+        if not yeni or yeni == k["ad"]:
+            continue
+        eski = k["kod"]
+        k["ad"] = yeni
+        if not eski or eski == k.get("ad") or TN.isimsiz(eski) \
+                or str(eski).upper().startswith(("SOLID", "COMPOUND")):
+            k["kod"] = yeni
+        k.pop("isimsiz", None)
+        n += 1
+    if n:
+        log(f"ad düzeltmesi: {n} adsız katıya daha önce verilen ad uygulandı")
+    return n
+
+
 def _kural(kural, k):
     """Komponent için kullanıcının kuralı (yoksa None)."""
     if not kural:
@@ -12705,6 +12728,7 @@ def step_komponentleri(step, P, log=print):
             f"Tam BOM için CAD'den STEP olarak kaydedin.")
     kural = ayar_oku().get("sinif_kurali") or {}
     komp = komponentle(kayit, P, kural)
+    ad_kurali_uygula(komp, ayar_oku().get("ad_kurali") or {}, log)
     agac = ag[0] if ag else None
     if agac:
         agactan_sinifla(agac, komp, kural, log)
