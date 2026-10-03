@@ -766,7 +766,7 @@ ya da tüm çizimlerden ÖNCE sorar:
 | tanınmadı: adsız katı | adı yok, biçimi bilinen bir elemana uymuyor |
 | ad ile biçim çelişiyor | adı üretim diyor, biçimi standart eleman |
 
-**Standart parça tanımı penceresi** (ayrı pencere, liste + resim):
+**Standart parça tanımı penceresi** (ayrı pencere, liste + **Ara** kutusu + resim):
 solda belirsiz parçaların listesi (durum, kod, ad, adet, ölçü, şimdiki
 sınıf, karar); satırı seçince sağda parçanın **izometrik resmi**, ölçüsü,
 önerisi ve gerekçesi gelir. Her parça için anında karar:
@@ -911,10 +911,16 @@ konumları aynen ölçülür.
 
 **Ekstrüzyonun malzemesi SORULUR.** Malzeme CAD'den, malzeme dosyasından
 ya da parça adından ("AlMg3") gelmiyorsa program çelik de alüminyum da
-varsaymaz: BOM ve Tümünü Üret'ten önce "Evet = Alüminyum, Hayır = Çelik,
-İptal = vazgeç" diye sorar; cevap o profillerin koduna yazılır, klasör
-ayarında saklanır, bir daha sorulmaz. Komut satırında terminal varsa
-sorar, yoksa uyarı yazar.
+varsaymaz: BOM ve Tümünü Üret'ten önce **ayrı pencerede sorar** (standart
+parça tanımı penceresiyle aynı düzen): solda malzemesi belirsiz
+profillerin listesi ve **Ara** kutusu (kod / ad / kesit; binlerce parçada
+bulmak için), sağda seçili parçanın resmi, kesiti, ölçüsü. Her parçaya
+**ALÜMİNYUM**, **ÇELİK** ya da kutudan seçilen herhangi bir malzeme
+verilir; "kutudaki malzemeyi kararsız kalanların hepsine" tek tıkla.
+Hepsi kararlı olunca **DEVAM**; "Vazgeç" iş durdurur, malzeme 2. adımda
+elle verilir. Cevap o profillerin koduna yazılır, klasör ayarında
+saklanır, bir daha sorulmaz. Komut satırında terminal varsa sorar, yoksa
+uyarı yazar.
 
 **Kısa ekstrüzyon da profildir.** Boyu kesitinin 3 katından kısa parça
 normalde profil sayılmaz (plaka, blok); ama kesiti ekstrüzyon kanıtı
@@ -2467,11 +2473,13 @@ başlıkta yazar.
 deliğin merkezinden geçer; yazılar görünüşün üstünde satır satır dizilir,
 ne birbirine ne görünüşe biner.
 
-Katmanlar: `GORUNEN`, `GIZLI` (kesik), `EKSEN` (uzun-kısa), `OLCU`, `YAZI`,
-`TARAMA` — hepsi 0,09 mm çizgi kalınlığında. (DXF'te çizgi kalınlığı
-serbest bir sayı değil, sabit bir merdivendir: 0,05 – 0,09 – 0,13 – 0,15…
-"0,10" o listede yok; yazılırsa 0,13'e yuvarlanır. İstenen 0,10'a en
-yakın geçerli değer 0,09'dur.)
+Katmanlar: `GORUNEN` (ana gövde, **0,18 mm** - ölçü çizgisinden bir tık
+kalın, ISO 128 kalın : ince = 2 : 1), `GIZLI` (kesik), `EKSEN` (uzun-kısa),
+`OLCU`, `YAZI`, `TARAMA` — bunlar 0,09 mm. Kalınlık DXF katmanındadır;
+PDF'te de öyle basılır; lazer kesim DXF'i (`KESIM`) 0,09 kalır. (DXF'te
+çizgi kalınlığı serbest bir sayı değil, sabit bir merdivendir: 0,05 –
+0,09 – 0,13 – 0,15 – 0,18… "0,10" o listede yok; yazılırsa 0,13'e
+yuvarlanır.)
 
 **Görünen çizginin üstüne gizli çizgi çizilmez.** Teknik resim kuralı
 budur: bir kenar hem görünüyor hem arkada da varsa, görünen kazanır.

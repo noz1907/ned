@@ -28,6 +28,13 @@ koşulur: eksenleri paralel olmayan parçada HATA 0, çakışma 0.
   `lisans_masasi/` OLMAZ (bariyer). Lisans makine bazlı (`pf17_lisans`,
   PiProduct düzeni): deneme 8 model, sonra TAM. Özel anahtar depoya
   girmez (`lisans_masasi/keys/` .gitignore'da).
+- **Parça hakkında karar isteyen her soru** (standart mı üretim mi,
+  ekstrüzyon profilin malzemesi ...) EVET / HAYIR kutusuyla değil AYNI
+  TÜR PENCEREYLE sorulur: sorunlu parçaların listesi + ARAMA kutusu
+  (binlerce parçada bulunabilsin) + seçilince parça resmi ve bilgisi +
+  parça başına karar (`_karar_listesi`, `_resim_paneli`,
+  `_standart_karar_penceresi`, `_malzeme_karar_penceresi`). Parça resmi
+  tuvalin GÖRÜNEN boyutuna göre çizilir, boyut değişince yeniden çizilir.
 - Testler: `test/` (bkz. `test/OKU.md`). Çakışma denetimi:
   `python test/cizim_cakisma_denetimi.py <dxf klasörü>` - sonuç 0 olmalı.
 
@@ -101,7 +108,10 @@ DXF'te yazı boyunun katı olarak uygulanır):
     kesik çizgiyle işaretlenir, başı ve sonu referanstan ölçülür.
 12. **Çakışma YOK**: yazı yazıya, yazı herhangi bir çizgiye (ölçü,
     uzatma, kılavuz, eksen dahil), çizgi çizginin üstüne binmez.
-    Çizgiler ince, ölçü çizgisi kalın asla.
+    Çizgiler ince, ölçü çizgisi kalın asla. **Görünen kontur (ana gövde)
+    bir tık kalın**: 0,18 mm, öbür her şey 0,09 mm (ISO 128 kalın : ince =
+    2 : 1; `KONTUR_KAL`, `CIZGI_KAL`; kullanıcı: "ölçü çizgileriyle
+    karışıyor"); lazer kesim DXF'i değişmez.
     **Ölçü / uzatma çizgisi delik, slot, pencere üstünden geçmez**:
     özellikten dışarı giden yol başka bir özelliği kesiyorsa ölçü temiz
     olan öbür yana alınır; iki yan da kapalıysa o bölge DETAYA taşınır

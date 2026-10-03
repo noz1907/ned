@@ -1,6 +1,6 @@
 Pi3D  –  3B modelden parça listesi ve teknik resim
 
-Sürüm   : v1.0.15  (02.10.2026)
+Sürüm   : v1.0.16  (03.10.2026)
 Kaynak  : github.com/noz1907/ned   dal: claude/fikstur-parca-stp-57hwc1
 
 KURULUM
@@ -155,6 +155,29 @@ BU SÜRÜMDE NE VAR
     - kırmızı yalnız kaynağın kendisi (uzun sac kenarı artık kırmızı
       değil); kaynak ekseni ince mavi kesikli.
 
+  v1.0.16 (03.10.2026): arayüz ve çizgi kalınlığı
+    - ANA GÖVDE ÇİZGİSİ BİR TIK KALIN: görünen kontur 0,18 mm, ölçü /
+      uzatma / eksen / gizli / tarama 0,09 mm (ISO 128 çizgi grubu, kalın :
+      ince = 2 : 1; kullanıcı: "ölçü çizgileriyle karışıyor"). DXF
+      katmanında ve PDF'te; lazer kesim DXF'i değişmedi (KONTUR_KAL).
+    - EKSTRÜZYON PROFİL MALZEMESİ AYRI PENCEREDE (Evet / Hayır kutusu
+      kalktı; kullanıcı: "hani ben değiştirebiliyordum, resim
+      gösteriyordun; binlerce parçada nereden bulacağım, arama yok"):
+      standart parça penceresiyle aynı düzen - arama kutulu liste, parça
+      resmi, parça başına ALÜMİNYUM / ÇELİK / herhangi bir malzeme,
+      kalanlara tek tıkla. Standart parça penceresine de ARAMA kutusu.
+    - BOM sayfası "Seçili parça" resmi tuvalin GÖRÜNEN boyutuna göre
+      çizilir (kısa listede alttan kesiliyordu, parça görünmüyordu);
+      pencere büyüyünce yeniden çizilir. Parça resimleri tek işçide sırayla
+      çizilir (listede hızlı gezinince yığılan HLR işleri yavaşlatıyordu).
+    - YENİ İŞ ve ÇIKIŞ düğmeleri (alt çubuk; Dosya menüsü, Ctrl+N /
+      Ctrl+Q): iş bitince ekran kapatılıp açılmadan sıfırlanır (motor,
+      lisans, kayıtlı ayarlar ve üretilmiş dosyalar kalır); ÇIKIŞ çalışan
+      iş varsa sorar (kullanıcı: "işlem bittikten sonra sistemi
+      yenileyebilmeliyim, kapatıp açma gerekmemeli; bir de quit butonu").
+    - Açınım sayfası KAYAR PENCERE: kısa pencerede listenin altındaki
+      özet ve ÜRET düğmesi kaydırma çubuğu / fare tekerleğiyle görülür
+      (kullanıcı: "kayar pencere o, onu istiyorum").
   v1.0.15: ÖN GÖRÜNÜŞ = UZUN-GENİŞ DÜŞEY YÜZ, görünüş adları ANAYASA'dan
     (Chevalier s.49; kullanıcı: "dar kenarlar çok nadiren ön görünüştür"):
     - Parça yalnız düşey eksen etrafında 90° döndürülür (üstü üstte
@@ -169,14 +192,6 @@ BU SÜRÜMDE NE VAR
     - Ana görünüş = en büyük alan; delik sayısı yalnız eşit alanlarda.
     - Model gürültüsü (0,05 mm içinde iki delik sırası) aynı dizi
       ölçüsünü iki kez yazdırmaz, "MODEL KONTROL" uyarısı çıkarmaz.
-    - YENİ İŞ ve ÇIKIŞ düğmeleri (alt çubuk; Dosya menüsü, Ctrl+N /
-      Ctrl+Q): iş bitince ekran kapatılıp açılmadan sıfırlanır (motor,
-      lisans, kayıtlı ayarlar ve üretilmiş dosyalar kalır); ÇIKIŞ çalışan
-      iş varsa sorar (kullanıcı: "işlem bittikten sonra sistemi
-      yenileyebilmeliyim, kapatıp açma gerekmemeli; bir de quit butonu").
-    - Açınım sayfası KAYAR PENCERE: kısa pencerede listenin altındaki
-      özet ve ÜRET düğmesi kaydırma çubuğu / fare tekerleğiyle görülür
-      (kullanıcı: "kayar pencere o, onu istiyorum").
     - GÖRÜNÜŞ SEÇİMİ OTOMATİK, sayı girişi kalktı: altı görünüşle
       başlanır, ayna / bilgisiz / ekstrüzyon boy şeridi / ölçü taşımayan
       görünüş ölçülerek elenir;

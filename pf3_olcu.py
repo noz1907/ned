@@ -2381,8 +2381,14 @@ def hlr(sh, goz, xref, gizli=True):
 # "10" (0,10 mm) bu listede yok; yazılırsa en yakın değere, 0,13'e yuvarlanır.
 # İstenen 0,1 mm'ye en yakın geçerli değer 0,09 mm olduğu için 9 kullanılır.
 CIZGI_KAL = 9
+# ANA GÖVDE (görünen kontur) ölçü çizgisinden BİR TIK kalın: ISO 128 çizgi
+# grupları kalın:ince = 2:1 verir (0,18 / 0,09 çifti); kullanıcı: "ana
+# gövde çizgisi bir tık daha koyu ve kalın olsun, ölçü çizgileriyle
+# karışıyor". Ölçü, uzatma, eksen, gizli, tarama ince (0,09) kalır; lazer
+# kesim DXF'i (KESIM) değişmez.
+KONTUR_KAL = 18
 KATMAN = {
-    "GORUNEN": (7, CIZGI_KAL),      # görünen kenar
+    "GORUNEN": (7, KONTUR_KAL),     # görünen kenar: ana gövde, kalın
     "GIZLI":   (8, CIZGI_KAL),      # görünmeyen kenar (kesik)
     "EKSEN":   (1, CIZGI_KAL),      # merkez çizgisi
     "OLCU":    (4, CIZGI_KAL),      # ölçülendirme

@@ -53,7 +53,7 @@ katı). Üç kaynağın uzlaşması:
 
 | # | Kural | Gerekçe | Kaynak | Kod |
 |---|-------|---------|--------|-----|
-| 1.1 | Kontur kalın, ölçü / uzatma / kılavuz / eksen / tarama **ince** sürekli çizgi. Ölçü çizgisi kalın asla. | Ölçü resmi bastırmaz. | K; CH s.2; ISO 128 | katman kalınlıkları 0,09 (DXF merdiveni) |
+| 1.1 | Kontur (görünen kenar, ana gövde) **bir tık kalın: 0,18 mm**; ölçü / uzatma / kılavuz / eksen / gizli / tarama **ince** 0,09 mm sürekli çizgi. Ölçü çizgisi kalın asla. | Ölçü resmi bastırmaz; kullanıcı: "ana gövde ölçü çizgileriyle karışıyor"; ISO 128 çizgi grubu kalın : ince = 2 : 1. | K; CH s.2; ISO 128 | `KONTUR_KAL` 18, `CIZGI_KAL` 9 (DXF merdiveni); lazer `KESIM` 0,09 |
 | 1.2 | Ok dolu, 30°, boyu yazı boyu kadar; bir resimde tek tip uç. Dar zincir halkasında ok yerine **nokta**. | Küçük halkada oklar üst üste biner, kuyruk komşu rakama girer. | CH s.3; K ("aynı hizada") | `_ara_ciz(sik=True)`: `DOTSMALL`, `dimsoxd` |
 | 1.3 | Parçanın **içinde** biten kılavuz (kalınlık "t 1,5", not) noktayla, kontura değen kılavuz okla biter. | | CH s.9 | `kalinlik_notu` |
 | 1.4 | Yazı boyu parçaya göre: `yazi_boyu = min(20, max(1,8, boy/70))`; PDF'te en az ~1 mm, hedef 1,2–2 mm. | "Karınca duası" olmaz. | K; CH s.3 (3,5 mm) | `yazi_boyu`, pafta `yazi_mm` |
