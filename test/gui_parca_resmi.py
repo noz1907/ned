@@ -63,8 +63,12 @@ def olc(boy):
 
 w1, h1, g1 = olc("1280x650")
 w2, h2, g2 = olc("1366x900")
-if h2 > h1 + 20 and g2 <= g1 + 1:
-    HATA.append(f"pencere büyüyünce resim büyümedi ({g1:.0f} -> {g2:.0f})")
+# kayar sayfada kısa pencerede tuval ezilmez (sayfa kayar); resim en
+# azından küçülmemeli ve tuvali doldurmalı
+if h2 > h1 + 20 and g2 < g1 - 1:
+    HATA.append(f"pencere büyüyünce resim küçüldü ({g1:.0f} -> {g2:.0f})")
+if g2 < 0.85 * w2:
+    HATA.append(f"geniş resim tuvali doldurmuyor ({g2:.0f} / {w2})")
 kok.destroy()
 if HATA:
     print("\nHATA:"); [print(" ", h) for h in HATA]

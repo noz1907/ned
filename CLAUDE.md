@@ -297,8 +297,17 @@ DXF'te yazı boyunun katı olarak uygulanır):
     Ayrıntı günlüğü: `PI3D_AYRINTI=1` (her deneme: kayıp, yığılma, bölge).
     Sorunlu örnekler `test/OKU.md`'deki listede tutulur, her değişiklik
     onlarla sınanır (`test/yigilma_denetimi.py`).
+    **KÂĞIT ÖLÇEĞİNDE ikinci tur** (`sonuc_analizi_dongusu`, v1.0.18): resim
+    çizildikten sonra pafta planı kuru koşulur (`pafta_kur(yalniz_plan=True)`,
+    dosyaya yazılmaz); ölçü rakamı kâğıtta `SONUC_YAZI_MM` (2,5) altında ya
+    da yazılar `SONUC_ARALIK_MM` (0,8) içinde ise kural: yazı boyu çarpanı
+    (`yazi_kat`, en çok 1,8) büyütülür, yığılma aralığı +0,5·h; DXF yeniden
+    çizilir (PDF aynı DXF'ten). En çok `SONUC_TUR` (3) tur; büyütmek kâğıtta
+    kazandırmıyorsa (çizim büyüyüp ölçek düşüyor) durur, en iyi tur (rakam
+    en büyük, yığılma en az) dosyada kalır. Bulgu ve karar günlükte ve
+    olculer.json'da (`analiz`). `P["sonuc_analizi"]`, `--analiz-yok`.
 
-26. **TOLERANS** (kullanıcı tablosu 03.10.2026; kod onayı bekliyor):
+26. **TOLERANS** (kullanıcı tablosu 03.10.2026; onay "tamam", v1.0.18):
     tolerans REFERANS ZİNCİRİNE göre verilir (referansın kendi
     belirsizliği + uzaklık); değerler toplam bant: boy <= 1 m 0,3, <= 1,5
     m 0,5, üstü 0,8 (CNC; konvansiyonel +0,15); pres delik konumu 0,4;
@@ -311,6 +320,21 @@ DXF'te yazı boyunun katı olarak uygulanır):
     tolerans girilmez; düzeltme arayüzü toplu ya da ölçü ölçü, DXF + PDF
     birlikte güncellenir; K-faktörü parça bazlı. Ayrıntı ve kaynaklar:
     `OLCULENDIRME_KURALLARI.md` 11.
+    UYGULAMA: `pf3_olcu.TOLERANS` (tek sözlük), `ISO2768`, `tolerans_bandi`,
+    `surec_tahmini` (bükümlü sac: kesim lazer, konum pres, kanat abkant;
+    düz sac lazer / pres; profil; öbürü CNC), `tolerans_isle` (çizilmiş
+    her ölçü: görünüş, tür, yön, değer, süreç, bant, ±, referanstan uzaklık
+    `L_ref`, zincir birikimi, uyarı; kimlik `id` aynı çizimde değişmez),
+    `tolerans_etiketleri` (özel ± ölçünün yanına, yer ölçülerek). Gabari =
+    değer gabariye eşit VE uçlar görünüşün iki kenarında. **Ara referans**
+    (kullanıcı): CNC ve preste boydan boya işte her ~500 mm'de referans
+    noktası zinciri böler (3 m'de bile ±2'nin altı); **abkant ve rollformda
+    ara referans OLMAZ**. Kontrol fikstürü gibi hassas işlerde (honlama,
+    taşlama, yüzey toleransı) tablo yetmez: parça bazlı özel ± / ISO sınıfı
+    kullanılır; ileride yüzey ve geometrik tolerans genişletilecek.
+    Parça bazlı: `parca_ayar[kod]["tolerans"]` = {surec, sinif, olcu: {id: ±}}
+    (GUI TOLERANS penceresi); `parca_ayar[kod]["k_faktor"]` (açınım K
+    sütunu, `k_parca` -> `acilim_yaz` / `lazer_yaz`; çizim imzasına girmez).
 
 ## PDF (pafta)
 

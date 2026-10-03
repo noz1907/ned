@@ -570,11 +570,15 @@ class Uygulama(ttk.Frame):
         self._sure_paneli(orta)            # sağda: işlemler ve süreleri
         self.defter = ttk.Notebook(orta)
         self.defter.pack(side="left", fill="both", expand=True)
-        self.sayfa = []
+        self.sayfa, self.sayfa_ic = [], []
         for ad in ADIM:
             f = ttk.Frame(self.defter, padding=10)
             self.defter.add(f, text=ad, state="disabled")
             self.sayfa.append(f)
+            # HER SEKME KAYAR PENCERE (kullanıcı: "sığmayan her durumda
+            # pencere yap, mümkün olan yerde genişlet"): içerik pencereden
+            # uzunsa kaydırılır, kısaysa listeler kalan yeri alır
+            self.sayfa_ic.append(self._kayar_sayfa(f))
         # İptal düğmesi sayfalardan ÖNCE kurulur: _basla/_bitir onu
         # sayfa kurulurken de çağırabilir.
         self._durum_cubugu()
@@ -599,10 +603,11 @@ class Uygulama(ttk.Frame):
         self.gunluk.pack(side="left", fill="both", expand=True)
         gk.pack(side="right", fill="y")
         self._durum_ic.pack(side="bottom", fill="x", pady=(4, 2), before=orta)
-        for i, sf in enumerate(self.sayfa):
+        for i, sf in enumerate(self.sayfa_ic):
             # 1. sayfada yer boldur ve oradaki yol gösterme ("önceki
             # çıktıyı aç ...") her zaman okunmalı: kısaltılmaz.
             self._sayfa_sikistir(sf, kisalt=(i != 0))
+            self._kayar_bagla(sf)
         self._adim_ac(0)
         self._pencereyi_yerlestir(sw, sh)
 
@@ -916,7 +921,7 @@ class Uygulama(ttk.Frame):
 
     # ------------------------------------------------------------ 1 VERİ
     def _sayfa1(self):
-        f = self.sayfa[0]
+        f = self.sayfa_ic[0]
         ttk.Label(f, text="İncelenecek data ve kaydedilecek klasör",
                   style="Baslik.TLabel").grid(row=0, column=0, columnspan=3, sticky="w", pady=(0, 10))
         self.v_step = tk.StringVar(); self.v_out = tk.StringVar()
@@ -954,7 +959,7 @@ class Uygulama(ttk.Frame):
 
     # ------------------------------------------------------------ 2 BOM
     def _sayfa2(self):
-        f = self.sayfa[1]
+        f = self.sayfa_ic[1]
         bf = ttk.Frame(f); bf.pack(fill="x", pady=(0, 6))
         ttk.Label(bf, text="Komponentler, BOM ve malzeme",
                   style="Baslik.TLabel").pack(side="left")
@@ -1067,7 +1072,7 @@ class Uygulama(ttk.Frame):
 
     # ------------------------------------------------------------ 3 AYAR
     def _sayfa3(self):
-        f = self.sayfa[2]
+        f = self.sayfa_ic[2]
         ttk.Label(f, text="Görünüşler, kesit ve çizim ayarları",
                   style="Baslik.TLabel").grid(row=0, column=0, columnspan=3, sticky="w", pady=(0, 8))
         # GÖRÜNÜŞ SEÇİMİ OTOMATİK (kullanıcı: "görünüm sayısı girişi
@@ -1152,6 +1157,7 @@ class Uygulama(ttk.Frame):
         ttk.Button(pf_, text="Kaydet", width=7, command=self.istisna_kaydet).pack(side="left")
         ttk.Button(pf_, text="YALNIZ BU PARÇA (DXF + PDF)  ▸",
                    command=self.tek_parca_uret).pack(side="left", padx=(6, 0))
+        ttk.Button(pf_, text="TOLERANS…", command=self.tolerans_penceresi).pack(side="left", padx=(6, 0))
         # PARÇA BAZLI İSTEK (kullanıcı: "görselleri, detayları, kesit sayısını
         # özellik şeklinde isteyebilirim; komple değil, seçtiğim parça"):
         # görünüş listesi (boş = otomatik), kesit ve perspektif bu parça için.
@@ -1180,7 +1186,7 @@ class Uygulama(ttk.Frame):
 
     # ------------------------------------------------------------ 4 ÖRNEK
     def _sayfa4(self):
-        f = self.sayfa[3]
+        f = self.sayfa_ic[3]
         ust = ttk.Frame(f); ust.pack(fill="x")
         ttk.Label(ust, text="Örnek resmi inceleyin", style="Baslik.TLabel").pack(side="left")
         self.v_ornek_bilgi = tk.StringVar()
@@ -1203,7 +1209,7 @@ class Uygulama(ttk.Frame):
 
     # ------------------------------------------------------------ 5 TÜMÜ
     def _sayfa5(self):
-        f = self.sayfa[4]
+        f = self.sayfa_ic[4]
         ttk.Label(f, text="Tüm çizimler", style="Baslik.TLabel").pack(anchor="w", pady=(0, 8))
         self.v_sonuc = tk.StringVar(value="")
         ttk.Label(f, textvariable=self.v_sonuc, justify="left").pack(anchor="w")
@@ -1292,7 +1298,7 @@ class Uygulama(ttk.Frame):
 
     # ------------------------------------------------------------ 6 AÇINIM
     def _sayfa6(self):
-        f = self._kayar_sayfa(self.sayfa[5])
+        f = self.sayfa_ic[5]
         ttk.Label(f, text="Bükümlü sac parçaların açınımı",
                   style="Baslik.TLabel").pack(anchor="w", pady=(0, 4))
         ttk.Label(f, foreground="#555", justify="left", wraplength=900, text=(
@@ -1310,9 +1316,10 @@ class Uygulama(ttk.Frame):
                   ).pack(anchor="w", pady=(0, 8))
 
         orta = ttk.Frame(f); orta.pack(fill="both", expand=True)
-        sut = ("poz", "kod", "ad", "kalinlik", "acinim", "yontem", "durum")
+        sut = ("poz", "kod", "ad", "kalinlik", "k", "acinim", "yontem", "durum")
         basl = {"poz": ("POZ", 50), "kod": ("KOD", 150), "ad": ("AD", 260),
-                "kalinlik": ("SAC KALINLIK", 100), "acinim": ("AÇINIM  G x B", 150),
+                "kalinlik": ("SAC KALINLIK", 100), "k": ("K", 60),
+                "acinim": ("AÇINIM  G x B", 150),
                 "yontem": ("YÖNTEM", 110), "durum": ("DURUM", 360)}
         self.ac_agac = ttk.Treeview(orta, columns=sut, show="headings",
                                     selectmode="extended", height=14)
@@ -1383,7 +1390,7 @@ class Uygulama(ttk.Frame):
                 continue
             s = self.ac_agac.insert("", "end", values=(
                 pozlar[i], k.get("kod", ""), (k.get("ad") or "")[:60],
-                "", "", "", "taranıyor…"))
+                "", self._k_metni(k), "", "", "taranıyor…"))
             self.ac_satir[s] = i
         self.b_acilim.configure(state="normal" if self.ac_satir else "disabled")
         if profil:
@@ -1536,7 +1543,7 @@ class Uygulama(ttk.Frame):
         try:
             sonuc, hata = self.M.acilim_yaz(
                 self.kayit, self.komp, P, on, kodlar=kodlar, k_faktor=kf,
-                log=self._yaz,
+                k_parca=self._k_parca(), log=self._yaz,
                 ilerleme=lambda y, t, ad: self.kuyruk.put(("ilerleme", (y, t))),
                 iptal=lambda: self.iptal_istendi)
             self.kuyruk.put(("acilim", (sonuc, hata, on)))
@@ -1583,10 +1590,79 @@ class Uygulama(ttk.Frame):
                 "Seçilen parçaların hiçbirinin açınımı çıkarılamadı.\\n\\n"
                 + "\\n\\n".join(f"{a}:\\n{m}" for a, m in hata[:3]))
 
+    def _k_metni(self, k):
+        """Parçanın K sütunu: parça bazlı K varsa o, yoksa boş (ortak K)."""
+        pa = self.parca_ayar if isinstance(getattr(self, "parca_ayar", None), dict) else {}
+        pa = pa.get(k.get("kod") or "") or {}
+        try:
+            return XL.tr(float(pa["k_faktor"]), 2) if isinstance(pa, dict) and pa.get("k_faktor") else ""
+        except (TypeError, ValueError):
+            return ""
+
+    def _k_parca(self):
+        """Motor diline: {sade kod: K} (parça bazlı K'lar)."""
+        out = {}
+        pa = self.parca_ayar if isinstance(getattr(self, "parca_ayar", None), dict) else {}
+        for kod, a in pa.items():
+            if isinstance(a, dict) and a.get("k_faktor"):
+                try:
+                    out[self.M._tr_sade(kod)] = float(a["k_faktor"])
+                except Exception:
+                    pass
+        return out
+
+    def k_duzenle(self, s):
+        """K sütununa çift tık: bu parçanın K-faktörü (boş = ortak K).
+        Değer parca_ayar'da ve klasör ayarında saklanır; sonraki ÜRET
+        yalnız seçili parçaları yeniden hesaplar."""
+        k = self.komp[self.ac_satir[s]]
+        kod = k.get("kod") or ""
+        from tkinter import simpledialog
+        eski = self._k_metni(k)
+        v = simpledialog.askstring(
+            "K-faktörü (parça bazlı)",
+            f"{kod}\n{(k.get('ad') or '')[:60]}\n\nBu parçanın K-faktörü (0,10 - 0,60; "
+            f"boş bırakılırsa ortak K kullanılır):", initialvalue=eski, parent=self.master)
+        if v is None:
+            return
+        v = v.strip().replace(",", ".")
+        a = dict((self.parca_ayar or {}).get(kod) or {})
+        if not v:
+            a.pop("k_faktor", None)
+        else:
+            try:
+                kf = float(v)
+                if not 0.1 <= kf <= 0.6:
+                    raise ValueError
+            except ValueError:
+                messagebox.showwarning("K-faktörü", "K 0,10 ile 0,60 arasında bir sayı olmalı.")
+                return
+            a["k_faktor"] = kf
+        if a:
+            self.parca_ayar[kod] = a
+        else:
+            self.parca_ayar.pop(kod, None)
+        on = (self.v_out.get() or "").strip()
+        if on:
+            try:
+                IS.ayar_kaydet(on, parca_ayar=dict(self.parca_ayar))
+            except Exception:
+                pass
+        self.ac_agac.set(s, "k", self._k_metni(k))
+        self.ac_agac.set(s, "durum", "K değişti - yeniden üretin")
+        self._yaz(f"K-faktörü: {kod} -> {self._k_metni(k) or 'ortak'}")
+
     def acilim_onizle(self, _e=None):
         s = self.ac_agac.focus()
         if not s:
             return
+        if _e is not None and s in getattr(self, "ac_satir", {}):
+            try:
+                if self.ac_agac.identify_column(_e.x) == "#5":     # K sütunu
+                    self.k_duzenle(s)
+                    return
+            except Exception:
+                pass
         d = self.ac_agac.set(s, "durum")
         if d.endswith(".dxf"):
             yol = IS.dosya_bul(self.v_out.get().strip(),
@@ -1596,7 +1672,7 @@ class Uygulama(ttk.Frame):
 
     # ----------------------------------------------------------- 7 PAFTA
     def _sayfa7(self):
-        f = self.sayfa[6]
+        f = self.sayfa_ic[6]
         ttk.Label(f, text="1:1 resimleri standart A3 paftaya yerleştir",
                   style="Baslik.TLabel").pack(anchor="w", pady=(0, 4))
         ttk.Label(f, foreground="#555", justify="left", wraplength=900, text=(
@@ -1727,7 +1803,7 @@ class Uygulama(ttk.Frame):
 
     # ---------------------------------------------------------- 8 LAZER
     def _sayfa8(self):
-        f = self.sayfa[7]
+        f = self.sayfa_ic[7]
         ttk.Label(f, text="Lazer kesim resimleri  (…_Lzr.dxf)",
                   style="Baslik.TLabel").pack(anchor="w", pady=(0, 4))
         ttk.Label(f, foreground="#555", justify="left", wraplength=900, text=(
@@ -1880,7 +1956,7 @@ class Uygulama(ttk.Frame):
         try:
             sonuc, hata = self.M.lazer_yaz(
                 self.kayit, self.komp, on, kodlar=kodlar, k_faktor=kf,
-                acilim=getattr(self, "acilim_liste", None),
+                k_parca=self._k_parca(), acilim=getattr(self, "acilim_liste", None),
                 log=self._yaz,
                 ilerleme=lambda y, t, ad: self.kuyruk.put(("ilerleme", (y, t))),
                 iptal=lambda: self.iptal_istendi)
@@ -2915,6 +2991,8 @@ class Uygulama(ttk.Frame):
                 "gorunusler": [],          # OTO: program özelliklere göre seçer
                 "perspektif": bool(self.v_perspektif.get()) if hasattr(self, "v_perspektif") else True,
                 "kesit": bool(self.v_kesit.get()),
+                "sonuc_analizi": True,
+                "kagit": (self.v_kagit.get() if hasattr(self, "v_kagit") else None) or None,
                 "arac": self._arac(), "parca_ayar": self._parca_ayar_p()}
 
     def _arac(self):
@@ -2949,6 +3027,8 @@ class Uygulama(ttk.Frame):
             for ad in ("kesit", "perspektif"):
                 if a.get(ad) is not None:
                     d[ad] = bool(a[ad])
+            if isinstance(a.get("tolerans"), dict) and a["tolerans"]:
+                d["tolerans"] = dict(a["tolerans"])
             if d:
                 out[kod] = d
         return out
@@ -3019,6 +3099,11 @@ class Uygulama(ttk.Frame):
                 a["kesit"] = uc[self.v_ist_kesit.get()]
             if self.v_ist_persp.get() in uc:
                 a["perspektif"] = uc[self.v_ist_persp.get()]
+        # parça bazlı K ve tolerans bu satırdan girilmez; silinmesin
+        eski = (self.parca_ayar or {}).get(kod) or {}
+        for ad in ("k_faktor", "tolerans"):
+            if eski.get(ad):
+                a[ad] = eski[ad]
         if a:
             self.parca_ayar[kod] = a
         else:
@@ -3031,6 +3116,170 @@ class Uygulama(ttk.Frame):
                 pass
         self._istisna_goster()
         self._yaz(f"istisna: {kod} → {self._istisna_ozet(a)}")
+
+    SUREC_SECENEK = (("otomatik (parça türünden)", ""), ("CNC freze / torna", "cnc"),
+                     ("konvansiyonel torna / freze (+0,15)", "konvansiyonel"),
+                     ("lazer kesim", "lazer"), ("pres - kalıp", "pres"),
+                     ("abkant", "abkant"), ("rollform", "rollform"), ("kaynaklı yapı", "kaynak"))
+    SINIF_SECENEK = (("Pi3D tablosu (kullanıcı)", ""), ("ISO 2768-f (ince)", "iso2768-f"),
+                     ("ISO 2768-m (orta)", "iso2768-m"), ("ISO 2768-c (kaba)", "iso2768-c"),
+                     ("ISO 2768-v (çok kaba)", "iso2768-v"))
+
+    def tolerans_penceresi(self):
+        """TOLERANS DÜZELTME (CLAUDE.md 26; kullanıcı: "resmi çağırıp
+        toleransı toplu ya da belirli ölçüde değiştirebilmeliyim, PDF / DXF
+        güncellensin"): seçili parçanın son çiziminde atanan bütün ölçüler
+        (görünüş, tür, değer, süreç, ±, referanstan uzaklık, zincir
+        birikimi, uyarı) arama kutulu listede; sağda parça resmi, süreç ve
+        sınıf (toplu), seçili ölçüye özel ± . KAYDET ve YENİDEN ÜRET yalnız
+        bu parçanın DXF + PDF'ini yeniler. Açınım / lazer etkilenmez."""
+        kod = self._istisna_kod()
+        if not kod or not self.komp:
+            messagebox.showinfo("Tolerans", "Önce istisna satırından parça seçin."); return
+        sat = next((r for r in (self.satirlar or []) if r.get("kod") == kod), None)
+        liste = (sat or {}).get("olculer") or []
+        if not liste:
+            messagebox.showinfo("Tolerans", "Bu parçanın çizimi henüz üretilmedi ya da ölçü listesi yok: "
+                                "önce çizimleri üretin (ölçüler çizimle birlikte atanır).")
+            return
+        k = next((x for x in self.komp if x.get("kod") == kod), None)
+        pa = dict((self.parca_ayar or {}).get(kod) or {})
+        tol = dict(pa.get("tolerans") or {})
+        ozel = dict(tol.get("olcu") or {})
+        w = tk.Toplevel(self)
+        w.title(f"Tolerans – {kod}")
+        w.transient(self.master)
+        try:
+            sw, sh = w.winfo_screenwidth(), w.winfo_screenheight()
+            gw, gh = min(1180, int(sw * 0.92)), min(640, int(sh * 0.85))
+            w.geometry(f"{gw}x{gh}+{(sw - gw) // 2}+{(sh - gh) // 3}")
+        except Exception:
+            pass
+        ttk.Label(w, text=(f"{kod}: {len(liste)} ölçü. Tolerans referansa göre: bant referanstan uzaklığa "
+                           "göre merdivenden seçilir (≤ 1 m / ≤ 1,5 m / üstü), zincirde birikim ayrıca "
+                           "hesaplanır. Toplu değişim için süreç / sınıf seçin; tek ölçü için satırı "
+                           "seçip ± yazın. Açınım ve lazer resmine tolerans girilmez."),
+                  wraplength=1140, justify="left").pack(anchor="w", padx=10, pady=(8, 4))
+        pw = ttk.PanedWindow(w, orient="horizontal"); pw.pack(fill="both", expand=True, padx=10)
+        sol = ttk.Frame(pw); pw.add(sol, weight=3)
+        kol = ("gorunus", "tur", "yon", "deger", "surec", "tol", "lref", "birikim", "uyari")
+        bas = ("görünüş", "tür", "yön", "değer", "süreç", "±", "ref. uzaklık", "birikim", "uyarı / özel")
+        gen = (80, 70, 50, 70, 70, 55, 85, 60, 230)
+        ag = self._karar_listesi(sol, kol, bas, gen, yuk=18)
+        satir = {}
+        TUR_AD = {"gabari": "gabari", "konum": "konum", "ic_kesim": "iç kesim", "delik_cap": "delik Ø",
+                  "radus": "radüs", "aci": "açı"}
+
+        def satir_degerleri(x):
+            oz = ozel.get(x["id"])
+            tolv = oz if oz is not None else x.get("tol")
+            return (x["gorunus"], TUR_AD.get(x["tur"], x["tur"]), x.get("yon", ""),
+                    XL.tr(x["deger"], 2) + ("°" if x["tur"] == "aci" else ""),
+                    x.get("surec", ""), ("±" + XL.tr(float(tolv), 2)) if tolv is not None else "-",
+                    XL.tr(x.get("L_ref", 0), 0), XL.tr(x["birikim"], 2) if x.get("birikim") else "",
+                    ("ÖZEL  " if oz is not None else "") + (x.get("uyari") or ""))
+        for x in liste:
+            iid = ag.insert("", "end", values=satir_degerleri(x))
+            satir[iid] = x
+        sag = ttk.Frame(pw); pw.add(sag, weight=2)
+        c, resim_goster = self._resim_paneli(w, sag)
+        if k is not None:
+            resim_goster(k)
+        f1 = ttk.Frame(sag); f1.pack(fill="x", padx=4, pady=(6, 2))
+        ttk.Label(f1, text="süreç (toplu):").pack(side="left")
+        v_surec = tk.StringVar(value=next((a for a, v in self.SUREC_SECENEK if v == (tol.get("surec") or "")),
+                                          self.SUREC_SECENEK[0][0]))
+        ttk.Combobox(f1, textvariable=v_surec, state="readonly", width=30,
+                     values=[a for a, _v in self.SUREC_SECENEK]).pack(side="left", padx=(4, 0))
+        f2 = ttk.Frame(sag); f2.pack(fill="x", padx=4, pady=2)
+        ttk.Label(f2, text="sınıf (toplu):").pack(side="left")
+        v_sinif = tk.StringVar(value=next((a for a, v in self.SINIF_SECENEK if v == (tol.get("sinif") or "")),
+                                          self.SINIF_SECENEK[0][0]))
+        ttk.Combobox(f2, textvariable=v_sinif, state="readonly", width=30,
+                     values=[a for a, _v in self.SINIF_SECENEK]).pack(side="left", padx=(4, 0))
+        f3 = ttk.Frame(sag); f3.pack(fill="x", padx=4, pady=(8, 2))
+        ttk.Label(f3, text="seçili ölçüye özel ±:").pack(side="left")
+        v_tol = tk.StringVar()
+        ttk.Entry(f3, textvariable=v_tol, width=8).pack(side="left", padx=(4, 4))
+
+        def secili():
+            sel = ag.selection()
+            return (sel[0], satir.get(sel[0])) if sel else (None, None)
+
+        def ozel_yaz():
+            iid, x = secili()
+            if not x:
+                return
+            v = v_tol.get().strip().replace(",", ".").lstrip("±+")
+            if not v:
+                return
+            try:
+                ozel[x["id"]] = round(abs(float(v)), 3)
+            except ValueError:
+                messagebox.showwarning("Tolerans", "± için bir sayı yazın (0,2 gibi).", parent=w); return
+            ag.item(iid, values=satir_degerleri(x))
+
+        def ozel_kaldir():
+            iid, x = secili()
+            if not x:
+                return
+            ozel.pop(x["id"], None)
+            ag.item(iid, values=satir_degerleri(x))
+
+        def secildi(_e=None):
+            iid, x = secili()
+            if x:
+                oz = ozel.get(x["id"])
+                v_tol.set(XL.tr(oz, 2) if oz is not None else "")
+        ag.bind("<<TreeviewSelect>>", secildi)
+        ttk.Button(f3, text="Uygula", command=ozel_yaz).pack(side="left")
+        ttk.Button(f3, text="Özelini kaldır", command=ozel_kaldir).pack(side="left", padx=4)
+        ttk.Label(sag, foreground="#555", wraplength=380, justify="left", text=(
+            "Özel ± yazılan ölçünün yanına resimde ± yazılır; öbürleri başlıktaki GENEL TOLERANS "
+            "notuyla verilir. Birikim uyarısı: zincir toplamı bandı aşıyor - paralel ölçü ya da "
+            "(CNC / preste) ara referans; abkant ve rollformda ara referans olmaz.")
+                  ).pack(anchor="w", padx=4, pady=(6, 0))
+        alt = ttk.Frame(w); alt.pack(fill="x", padx=10, pady=8)
+        sonuc = {"uygula": False}
+
+        def kaydet(uret):
+            yeni = {}
+            sv = next((v for a, v in self.SUREC_SECENEK if a == v_surec.get()), "")
+            sn = next((v for a, v in self.SINIF_SECENEK if a == v_sinif.get()), "")
+            if sv:
+                yeni["surec"] = sv
+            if sn:
+                yeni["sinif"] = sn
+            if ozel:
+                yeni["olcu"] = dict(ozel)
+            a = dict((self.parca_ayar or {}).get(kod) or {})
+            if yeni:
+                a["tolerans"] = yeni
+            else:
+                a.pop("tolerans", None)
+            if a:
+                self.parca_ayar[kod] = a
+            else:
+                self.parca_ayar.pop(kod, None)
+            on = (self.v_out.get() or "").strip()
+            if on:
+                try:
+                    IS.ayar_kaydet(on, parca_ayar=dict(self.parca_ayar))
+                except Exception:
+                    pass
+            self._yaz(f"tolerans: {kod} -> {yeni or 'varsayılan'}")
+            sonuc["uygula"] = uret
+            w.destroy()
+        ttk.Button(alt, text="KAYDET ve YENİDEN ÜRET (DXF + PDF)  ▸", style="Bas.TButton",
+                   command=lambda: kaydet(True)).pack(side="left", ipadx=8)
+        ttk.Button(alt, text="Yalnız kaydet", command=lambda: kaydet(False)).pack(side="left", padx=8)
+        ttk.Button(alt, text="Vazgeç", command=w.destroy).pack(side="right")
+        self._tolerans_pencere = {"w": w, "ag": ag, "satir": satir, "ozel": ozel, "v_tol": v_tol,
+                                  "v_surec": v_surec, "v_sinif": v_sinif, "kaydet": kaydet}
+        w.wait_window()
+        self._tolerans_pencere = None
+        if sonuc["uygula"]:
+            self.tek_parca_uret()
 
     def tek_parca_uret(self):
         """YALNIZ seçili parçanın detay DXF'i, paftası ve PDF'i yeniden

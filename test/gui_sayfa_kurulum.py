@@ -60,6 +60,7 @@ import pf3_gui as G
 u = G.Uygulama.__new__(G.Uygulama)          # __init__'i atla, alanlari elle kur
 u.master = SahteWidget(); u.M = None
 u.sayfa = [SahteWidget() for _ in G.ADIM]
+u.sayfa_ic = u.sayfa              # kayar sayfa iç çerçeveleri (testte aynı)
 u.gorunus_sirasi = []; u.malzemeler = {}; u.komp = []; u.kayit = []
 u.ac_satir = {}
 import queue as _q
@@ -124,7 +125,7 @@ class SahteAgac:
     """Sutun listesi arayuzden okunur: sutun eklenince test kirilmasin."""
     def __init__(self, sut=None):
         self.satir = {}; self.n = 0
-        self.sut = list(sut or ("poz", "kod", "ad", "kalinlik",
+        self.sut = list(sut or ("poz", "kod", "ad", "kalinlik", "k",
                                 "acinim", "yontem", "durum"))
     def delete(self, *a):
         if a:                       # tek satir silme (tarama elemesi)

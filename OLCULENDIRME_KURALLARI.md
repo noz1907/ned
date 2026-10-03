@@ -163,7 +163,7 @@ katı). Üç kaynağın uzlaşması:
 | 8b.3 | Düzeltme: bölge DETAYA alınır (14. kuralla aynı: köşeye yakınsa köşeye uzar; referans kenar-köşe ya da ana görünüşte ölçülü bağlantı deliği); ana görünüşte dış ölçüler ve uzun zincir kalır. | Kullanıcı: "dış ölçüleri verirdim ama burayı detaya alırdım, ana ölçüden / delikten / köşeden referanslayarak". | K; CH s.20 | `bolge_sec` (kenara 0,5·h), `bolge_plani`, `bolge_detaylari` |
 | 8b.4 | Sorunlu örnekler listede tutulur (test/OKU.md); her değişiklik önce onlarla sınanır. | "Bunları mantıksal bazda sakla; resim datası taranırken 'burası şöyle daha doğru olur' denebilsin." | K | test/OKU.md |
 
-## 11. Tolerans (kullanıcı tablosu, 03.10.2026) - KOD ONAYI BEKLİYOR
+## 11. Tolerans (kullanıcı tablosu, 03.10.2026; onay "tamam", v1.0.18)
 
 Kullanıcı: "sistem referansa göre çalışmalı: referanstan uzaklık önemli,
 ama referans noktasının kendisi ne kadar toleranslıydı o da irdelenmeli;
@@ -174,24 +174,26 @@ sözlükte duracak (`pf3_olcu.TOLERANS`), ISO sınıfı seçeneği ayrıca.
 
 | no | kural | değer (toplam) | gerekçe / kaynak | kod |
 |---|---|---|---|---|
-| 11.1 | **Referanstan uzaklığa göre genel boy toleransı** | <= 1 m: 0,3; <= 1,5 m: 0,5; > 1,5 m: 0,8 | K. Uzaklık arttıkça belirsizlik artar; ISO 2768-m de aynı eğilimi verir (400-1000: ±0,8; 1000-2000: ±1,2) | plan |
-| 11.2 | **Talaşlı imalat** (CNC freze / CNC torna) 11.1'i kullanır; **konvansiyonel torna / dikey freze** +0,15 ekler | 0,45 / 0,65 / 0,95 | K | plan |
-| 11.3 | **Pres - kalıp**: delik konumu | 0,4 | K; DIN 6930-2 m ile uyumlu | plan |
-| 11.4 | **Abkant** (dayama ile): kanat boyu | en az 0,5, toplam 1 | K; DIN 6935 atölye pratiği | plan |
-| 11.5 | **Rollform büküm**: kesit ölçüleri | 0,25 - 0,8 | K; sektör: kesit ±0,25-0,75 | plan |
-| 11.6 | **Düzlemsellik**: rollform 1 m boyda 1; pres 1 m'de 0,8 | 1 / 0,8 | K; rollform doğrusallık 1 mm/m | plan |
-| 11.7 | **İç kesim** (kare, pencere): 0,3 yani toplam 0,6; **delik çapı** 0,2 yani toplam 0,4 | 0,6 / 0,4 | K | plan |
-| 11.8 | **Diklik**: CNC 0,4; pres 0,6 (boyda önemli); rollform 0,6; abkant 1 | | K; ISO 2768-2 K sınıfı 300-1000: 0,8 | plan |
-| 11.9 | **Kaynak pozisyonu** | 1 | K; ISO 13920 A/B | plan |
-| 11.10 | **Açılar** 1° ya da 1,5° toplam; malzeme kalınlığı da düşünülür (çok yumuşak sacda geniş) | 1° - 1,5° | K; ISO 2768 ±30'-±1°; DIN 6935 ±1° | plan |
-| 11.11 | **Toplam boy** lazer kesimde de 1,5 m üstünde 1,5 ya da 2 toplam | 1,5 / 2 | K; ISO 9013 sınıf 1 1000-2000: ±0,6-0,8 (kesim); ısıl çarpılma payı kullanıcı deneyimi | plan |
-| 11.12 | **Lazer / pres kesim küçük parça** | 0,6 | K | plan |
-| 11.13 | **ISO sınıfı seçeneği**: ISO 2768 f / m / c / v (+ H / K / L), ISO 13920 A-D (kaynaklı), ISO 9013 sınıf 1-2 (kesim), DIN 6930 f/m/g/sg (pres) - kullanıcı resim ya da parça için sınıf seçerse bütün ölçülere o tablo uygulanır | | ISO 2768-1/-2, ISO 13920, ISO 9013, DIN 6930-2 (özet: scratchpad kaynak_pdf/tolerans_web.md) | plan |
-| 11.14 | **Referans zinciri**: bir ölçünün toleransı = kendi süreç toleransı, ama okuyucuya ölçünün referansı da gösterilir; zincirde biriken tolerans raporda hesaplanır (0 -> A -> B: B'nin datuma göre belirsizliği A + B); paralel ölçü birikmez. Ölçülendirme biçimi (zincir / paralel) seçilirken birikim de düşünülür | | K ("referans noktası ne kadar toleranslıydı"); CH; ISO 8015 | plan |
-| 11.15 | **Montaj**: toleranslar giydirilerek toplanmaz, REFERANSA göre verilir: delikten montaj yapılıyorsa konum 0,5'i aşamaz; kaynakla diklik veriliyorsa 1'e kadar gidebilir | | K | plan |
-| 11.16 | **Açınım ve lazer DXF'ine tolerans girilmez**: bitmiş üründeki dış ölçüler esastır | | K | plan |
-| 11.17 | **Düzeltme arayüzü**: resmin ölçü listesi çağrılır, tolerans toplu (süreç / sınıf) ya da ölçü ölçü değiştirilir; DXF + PDF birlikte güncellenir | | K | plan |
-| 11.18 | **K-faktörü parça bazlı**: listeden parça seçilir, K yazılır, yalnız o parçanın açınımı (ve lazer DXF'i) yeniden üretilir | | K | plan |
+| 11.1 | **Referanstan uzaklığa göre genel boy toleransı** | <= 1 m: 0,3; <= 1,5 m: 0,5; > 1,5 m: 0,8 | K. Uzaklık arttıkça belirsizlik artar; ISO 2768-m de aynı eğilimi verir (400-1000: ±0,8; 1000-2000: ±1,2) | `tolerans_isle` |
+| 11.2 | **Talaşlı imalat** (CNC freze / CNC torna) 11.1'i kullanır; **konvansiyonel torna / dikey freze** +0,15 ekler | 0,45 / 0,65 / 0,95 | K | `TOLERANS`, `tolerans_bandi` |
+| 11.3 | **Pres - kalıp**: delik konumu | 0,4 | K; DIN 6930-2 m ile uyumlu | `tolerans_isle` |
+| 11.4 | **Abkant** (dayama ile): kanat boyu | en az 0,5, toplam 1 | K; DIN 6935 atölye pratiği | `tolerans_isle` |
+| 11.5 | **Rollform büküm**: kesit ölçüleri | 0,25 - 0,8 | K; sektör: kesit ±0,25-0,75 | `tolerans_isle` |
+| 11.6 | **Düzlemsellik**: rollform 1 m boyda 1; pres 1 m'de 0,8 | 1 / 0,8 | K; rollform doğrusallık 1 mm/m | `tolerans_isle` |
+| 11.7 | **İç kesim** (kare, pencere): 0,3 yani toplam 0,6; **delik çapı** 0,2 yani toplam 0,4 | 0,6 / 0,4 | K | `TOLERANS`, `tolerans_bandi` |
+| 11.8 | **Diklik**: CNC 0,4; pres 0,6 (boyda önemli); rollform 0,6; abkant 1 | | K; ISO 2768-2 K sınıfı 300-1000: 0,8 | `tolerans_isle` |
+| 11.9 | **Kaynak pozisyonu** | 1 | K; ISO 13920 A/B | `tolerans_isle` |
+| 11.10 | **Açılar** 1° ya da 1,5° toplam; malzeme kalınlığı da düşünülür (çok yumuşak sacda geniş) | 1° - 1,5° | K; ISO 2768 ±30'-±1°; DIN 6935 ±1° | `tolerans_isle` |
+| 11.11 | **Toplam boy** lazer kesimde de 1,5 m üstünde 1,5 ya da 2 toplam | 1,5 / 2 | K; ISO 9013 sınıf 1 1000-2000: ±0,6-0,8 (kesim); ısıl çarpılma payı kullanıcı deneyimi | `tolerans_isle` |
+| 11.12 | **Lazer / pres kesim küçük parça** | 0,6 | K | `TOLERANS`, `tolerans_bandi` |
+| 11.13 | **ISO sınıfı seçeneği**: ISO 2768 f / m / c / v (+ H / K / L), ISO 13920 A-D (kaynaklı), ISO 9013 sınıf 1-2 (kesim), DIN 6930 f/m/g/sg (pres) - kullanıcı resim ya da parça için sınıf seçerse bütün ölçülere o tablo uygulanır | | ISO 2768-1/-2, ISO 13920, ISO 9013, DIN 6930-2 (özet: scratchpad kaynak_pdf/tolerans_web.md) | `tolerans_isle` |
+| 11.14 | **Referans zinciri**: bir ölçünün toleransı = kendi süreç toleransı, ama okuyucuya ölçünün referansı da gösterilir; zincirde biriken tolerans raporda hesaplanır (0 -> A -> B: B'nin datuma göre belirsizliği A + B); paralel ölçü birikmez. Ölçülendirme biçimi (zincir / paralel) seçilirken birikim de düşünülür | | K ("referans noktası ne kadar toleranslıydı"); CH; ISO 8015 | `tolerans_isle` |
+| 11.15 | **Montaj**: toleranslar giydirilerek toplanmaz, REFERANSA göre verilir: delikten montaj yapılıyorsa konum 0,5'i aşamaz; kaynakla diklik veriliyorsa 1'e kadar gidebilir | | K | `TOLERANS`, `tolerans_bandi` |
+| 11.16 | **Açınım ve lazer DXF'ine tolerans girilmez**: bitmiş üründeki dış ölçüler esastır | | K | `TOLERANS`, `tolerans_bandi` |
+| 11.17 | **Düzeltme arayüzü**: resmin ölçü listesi çağrılır, tolerans toplu (süreç / sınıf) ya da ölçü ölçü değiştirilir; DXF + PDF birlikte güncellenir | | K | `TOLERANS`, `tolerans_bandi` |
+| 11.14b | **Ara referans**: CNC ve preste boydan boya işte her ~500 mm'de referans noktası (her biri 0,3) zinciri böler; 3 m'de bile ±2'nin altına inilir. **Abkant ve rollformda ara referans yoktur** | | K | birikim uyarısı metni süreçe göre |
+| 11.19 | **Hassas işler** (kontrol fikstürü, honlama, hassas taşlama, yüzey toleransı) bu genel tablonun dışındadır: parça bazlı özel ± / ISO sınıfı; yüzey ve geometrik tolerans ileride | | K | parca_ayar tolerans |
+| 11.18 | **K-faktörü parça bazlı**: listeden parça seçilir, K yazılır, yalnız o parçanın açınımı (ve lazer DXF'i) yeniden üretilir | | K | `TOLERANS`, `tolerans_bandi` |
 
 ## 9. Kitapta olup programda (henüz) olmayanlar
 

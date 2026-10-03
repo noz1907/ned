@@ -1,6 +1,6 @@
 Pi3D  –  3B modelden parça listesi ve teknik resim
 
-Sürüm   : v1.0.17  (03.10.2026)
+Sürüm   : v1.0.18  (03.10.2026)
 Kaynak  : github.com/noz1907/ned   dal: claude/fikstur-parca-stp-57hwc1
 
 KURULUM
@@ -155,6 +155,35 @@ BU SÜRÜMDE NE VAR
     - kırmızı yalnız kaynağın kendisi (uzun sac kenarı artık kırmızı
       değil); kaynak ekseni ince mavi kesikli.
 
+  v1.0.18 (03.10.2026): sonuç analizi döngüsü, tolerans, parça bazlı K,
+  kayar arayüz
+    - SONUÇ ANALİZİ DÖNGÜSÜ (kâğıt ölçeğinde): her detay resmi çizildikten
+      sonra pafta planı kuru koşulur (dosyaya yazılmaz), ölçü rakamının
+      kâğıttaki boyu (en az 2,5 mm) ve yazıların birbirine yakınlığı
+      (0,8 mm) ölçülür; sorun varsa yazı boyu büyütülüp / yığılma aralığı
+      genişletilip yeniden çizilir (en çok 3 tur; büyütmek kâğıtta
+      kazandırmıyorsa durur, en iyi tur dosyada kalır). Her turun bulgusu
+      ve kararı günlükte ve olculer.json'da ("analiz"). Komut satırı
+      --analiz-yok, --kagit.
+    - TOLERANS MOTORU (kullanıcı tablosu): her ölçüye süreç (CNC,
+      konvansiyonel, lazer, pres, abkant, rollform, kaynak) ve tür (boy /
+      gabari, konum, delik Ø, iç kesim, açı) atanır; bant referanstan
+      uzaklığa göre merdivenden (CNC <= 1 m 0,3 / <= 1,5 m 0,5 / üstü 0,8;
+      konvansiyonel +0,15; pres konum 0,4; abkant 1; rollform 0,8; lazer
+      boy 3 m'ye kadar 1,5, üstü 2; delik Ø 0,4; iç kesim 0,6; açı 1°,
+      ince sacda 1,5°). Zincirde birikim hesaplanır, bandı aşarsa uyarı
+      (paralel ölçü ya da - CNC / preste - ara referans; abkant ve
+      rollformda ara referans olmaz). ISO 2768 f/m/c/v seçeneği. Başlığa
+      GENEL TOLERANS notu; parça bazlı özel ± ölçünün yanına. Açınım ve
+      lazer DXF'ine tolerans girilmez. Ölçü listesi olculer.json'da.
+    - TOLERANS PENCERESİ (3. sekme, istisna satırı > TOLERANS…): parçanın
+      ölçü listesi (arama kutulu), parça resmi, süreç / sınıf toplu, seçili
+      ölçüye özel ±; "KAYDET ve YENİDEN ÜRET" yalnız o parçanın DXF + PDF'i.
+    - K-FAKTÖRÜ PARÇA BAZLI: açınım listesinde K sütunu; çift tıkla parçanın
+      K'si yazılır (boş = ortak K), klasör ayarında saklanır; açınım ve
+      lazer o parça için bu K ile hesaplanır.
+    - HER SEKME KAYAR PENCERE: içerik pencereden uzunsa kaydırılır,
+      listeler kalan yeri alır.
   v1.0.17 (03.10.2026): sonuç analizi - yığılan köşe detaya
     - SONUÇ ANALİZİ ve DÜZELTME DÖNGÜSÜ (kullanıcı onayı "tamam"): deneme
       geçişinde çizilen İÇ konum ölçülerinin (ölçü çizgisi görünüşün

@@ -1206,6 +1206,20 @@ yalnız dış ölçüler ve uzun zincir kalır (kasa ön duvar sacının köşel
 Komut satırında `PI3D_AYRINTI=1` ile her denemenin kayıp / yığılma /
 bölge dökümü yazılır.
 
+**Sonuç analizi (kâğıtta):** her resim çizildikten sonra pafta ölçeği
+hesaplanır ve ölçü rakamının kâğıttaki boyu ölçülür; 2,5 mm'nin altında
+ya da yazılar birbirine 0,8 mm'den yakınsa resim yazısı büyütülerek
+yeniden çizilir (en çok 3 tur, en iyisi kalır). Günlükte her tur yazar:
+"analiz tur 1: 1:9, rakam 2,2 mm, yığılma 1 -> yeniden çiz ...".
+
+**Tolerans:** resim başlığında GENEL TOLERANS notu (sürece göre: lazer /
+pres / abkant / CNC; boy referanstan uzaklığa göre). Bir parçanın
+toleransını değiştirmek için 3. sekmede istisna satırından parçayı seçip
+**TOLERANS…** deyin: ölçü listesi (arama kutulu), süreç ve ISO 2768 sınıfı
+toplu, seçili ölçüye özel ±; **KAYDET ve YENİDEN ÜRET** yalnız o parçanın
+DXF + PDF'ini yeniler. Zincir birikimi bandı aşan ölçü listede uyarı
+alır. Açınım ve lazer resmine tolerans yazılmaz.
+
 ### Adım 4 — ÖRNEK ONAY
 
 Örnek resim tuvale **iki yönde de sığdırılır** (geniş resimde üst ve alt
@@ -1252,6 +1266,10 @@ okunmaz bu sayfa açılır.
    ondalık ayracı virgül ya da nokta olabilir. **Verdiğiniz
    değer saklanır**, bir daha girmeniz gerekmez.
 3. **İŞARETLİ PARÇALARIN AÇINIMINI ÜRET** deyin.
+
+**K-faktörü parça bazlı:** listedeki **K** sütununa çift tıklayın, o
+parçanın K'sini yazın (boş = yukarıdaki ortak K). Değer saklanır; ÜRET
+yalnız seçili parçaları bu K ile yeniden hesaplar.
 
 Sayfa **kayar penceredir**: pencere kısaysa listenin altındaki özet
 satırı ve düğmeler sağdaki kaydırma çubuğuyla (ya da fare tekerleğiyle)

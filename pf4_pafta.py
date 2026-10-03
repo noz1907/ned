@@ -1472,7 +1472,7 @@ def _pafta_cerceve_ciz(pafta, kagit, resim_no="", resim_adi="", bilgi="",
 def pafta_kur(kaynak_dxf, cikti_dxf=None, kagit=VARSAYILAN_KAGIT, olcek=None,
               buyutme=False, pafta_adi="PAFTA", bilgi=True, cok=True,
               resim_no=None, resim_adi=None, sablon=None, antet=None,
-              pi3d_antet=None):
+              pi3d_antet=None, yalniz_plan=False):
     """1:1 DXF'in KOPYASINA standart bir pafta ekler.
 
     kaynak_dxf : 1:1 çizim.
@@ -1692,6 +1692,15 @@ def pafta_kur(kaynak_dxf, cikti_dxf=None, kagit=VARSAYILAN_KAGIT, olcek=None,
             d.layouts.delete(pafta_adi)
         except Exception:
             pass
+    if yalniz_plan:
+        # SONUÇ ANALİZİ için KURU ÇALIŞMA (CLAUDE.md 25): yalnız plan ve
+        # ölçek hesaplanır, dosyaya hiçbir şey yazılmaz. Çizim motoru
+        # kâğıttaki yazı boyunu buradan öğrenip gerekirse yeniden çizer.
+        yz = en_kucuk_yazi(kaynak_dxf) * olcek
+        return {"olcek": olcek, "olcek_metni": olcek_metni(olcek), "kagit": kagit,
+                "yazi_mm": round(yz, 2), "yazi_kucuk": 0 < yz < EN_AZ_YAZI_MM,
+                "dagitildi": bool(plan), "sayfa2": bool(plan and plan.get("sayfa2")),
+                "olcu": (gx, gy)}
     pafta = d.layouts.new(pafta_adi)
     kg, ky = KAGIT[kagit]              # seçilen yönün ölçüleri
     pafta.page_setup(size=(round(kg), round(ky)), margins=(0, 0, 0, 0),

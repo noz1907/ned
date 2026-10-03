@@ -6667,6 +6667,458 @@ def _varlik_geri_al(msp, onceki):
             pass
 
 
+# ------------------------------------------------------------------
+# TOLERANS (CLAUDE.md 26, OLCULENDIRME 11; kullanıcı tablosu 03.10.2026).
+# Değerler TOPLAM bant (mm); resme ± olarak yarısı yazılır. Tolerans
+# REFERANSA GÖRE: boy / konum bandı referanstan uzaklığa göre merdivenden
+# seçilir (uzaklık arttıkça belirsizlik artar); zincirde birikim ayrıca
+# hesaplanır. CNC ve preste boydan boya işte ara referans noktaları
+# (ör. her 500 mm'de bir, her biri 0,3) zinciri böler ve 3 m'de bile
+# ±2'nin altına inilir; abkant ve rollformda bu yapılamaz (kullanıcı).
+_SONSUZ = float("inf")
+TOLERANS = {
+    # boy: referanstan uzaklığa göre merdiven [(üst sınır mm, toplam bant)]
+    "boy": {"cnc": ((1000, 0.3), (1500, 0.5), (_SONSUZ, 0.8)),
+            "konvansiyonel": ((1000, 0.45), (1500, 0.65), (_SONSUZ, 0.95)),   # CNC + 0,15
+            "lazer": ((1000, 0.6), (1500, 1.0), (3000, 1.5), (_SONSUZ, 2.0)),
+            "pres": ((1000, 0.6), (1500, 1.0), (3000, 1.5), (_SONSUZ, 2.0)),
+            "abkant": ((_SONSUZ, 1.0),), "rollform": ((_SONSUZ, 0.8),),
+            "kaynak": ((_SONSUZ, 1.0),)},
+    # konum (delik, kesik): pres / lazer 0,4; CNC merdiveni; abkant 1; rollform 0,8
+    "konum": {"cnc": ((1000, 0.3), (1500, 0.5), (_SONSUZ, 0.8)),
+              "konvansiyonel": ((1000, 0.45), (1500, 0.65), (_SONSUZ, 0.95)),
+              "lazer": ((_SONSUZ, 0.4),), "pres": ((_SONSUZ, 0.4),),
+              "abkant": ((_SONSUZ, 1.0),), "rollform": ((_SONSUZ, 0.8),),
+              "kaynak": ((_SONSUZ, 1.0),)},
+    "delik_cap": 0.4,          # delik çapı 0,2 yani toplam 0,4
+    "ic_kesim": 0.6,           # kare / pencere / slot iç kesim 0,3 yani 0,6
+    "aci": 1.0,                # derece, toplam; ince sacda (t < 1,5) 1,5°
+    "aci_ince_sac": 1.5,
+    "diklik": {"cnc": 0.4, "konvansiyonel": 0.55, "pres": 0.6, "lazer": 0.6,
+               "rollform": 0.6, "abkant": 1.0, "kaynak": 1.0},
+    "duzlemsellik_m": {"rollform": 1.0, "pres": 0.8, "lazer": 0.8, "abkant": 1.0},
+}
+# ISO 2768-1 doğrusal (± mm) sınıf f / m / c / v; anma aralığı üst sınırı
+ISO2768 = {
+    "siniflar": ("f", "m", "c", "v"),
+    "boy": ((3, (0.05, 0.1, 0.2, None)), (6, (0.05, 0.1, 0.3, 0.5)), (30, (0.1, 0.2, 0.5, 1.0)),
+            (120, (0.15, 0.3, 0.8, 1.5)), (400, (0.2, 0.5, 1.2, 2.5)), (1000, (0.3, 0.8, 2.0, 4.0)),
+            (2000, (0.5, 1.2, 3.0, 6.0)), (4000, (None, 2.0, 4.0, 8.0))),
+    # açı (derece, ±), kısa kenar boyuna göre
+    "aci": ((10, (1.0, 1.0, 1.5, 3.0)), (50, (0.5, 0.5, 1.0, 2.0)), (120, (1 / 3, 1 / 3, 0.5, 1.0)),
+            (400, (1 / 6, 1 / 6, 0.25, 0.5)), (_SONSUZ, (1 / 12, 1 / 12, 1 / 6, 1 / 3))),
+}
+SUREC_AD = {"cnc": "CNC", "konvansiyonel": "konvansiyonel", "lazer": "lazer", "pres": "pres",
+            "abkant": "abkant", "rollform": "rollform", "kaynak": "kaynak"}
+
+
+def _merdiven(m, L):
+    for ust, bant in m:
+        if L <= ust:
+            return bant
+    return m[-1][1]
+
+
+def tolerans_bandi(tur, surec, L=0.0, t=None, sinif=None):
+    """Bir ölçünün TOPLAM tolerans bandı (mm; açıda derece). tur: boy /
+    konum / delik_cap / ic_kesim / aci; surec: TOLERANS anahtarları; L
+    referanstan uzaklık (boy / konum) ya da açı için kısa kenar; sinif
+    verilirse (iso2768-f/m/c/v) ISO tablosu (doğrusal ve açı)."""
+    if sinif and str(sinif).lower().startswith("iso2768"):
+        sn = str(sinif).lower().split("-")[-1][:1]
+        if sn in ISO2768["siniflar"]:
+            i = ISO2768["siniflar"].index(sn)
+            tablo = ISO2768["aci" if tur == "aci" else "boy"]
+            for ust, degerler in tablo:
+                if L <= ust:
+                    v = degerler[i]
+                    if v is not None:
+                        return round(2 * v, 3)
+                    break
+            v = tablo[-1][1][i] or tablo[-2][1][i]
+            return round(2 * v, 3)
+    if tur in ("boy", "konum"):
+        return _merdiven(TOLERANS[tur].get(surec) or TOLERANS[tur]["cnc"], L)
+    if tur == "delik_cap":
+        return TOLERANS["delik_cap"]
+    if tur == "ic_kesim":
+        return TOLERANS["ic_kesim"]
+    if tur == "aci":
+        return TOLERANS["aci_ince_sac"] if (t is not None and t < 1.5) else TOLERANS["aci"]
+    return None
+
+
+def surec_tahmini(o, k, sac_kanat, sac_kesit):
+    """Parçanın imalat süreci (ölçü türüne göre): bükümlü sac -> kesim
+    lazer, konum pres, kanat abkant; düz sac -> lazer / pres; profil ->
+    kesim lazer (testere), konum pres; öbürü talaşlı -> CNC. Kullanıcı
+    parça başına ezebilir (parca_ayar tolerans.surec)."""
+    if sac_kanat:
+        return {"boy": "lazer", "konum": "pres", "kanat": "abkant", "aci": "abkant", "ad": "lazer + abkant"}
+    if o.get("sac_kalinlik_mm") or str(k.get("tip") or "").startswith(("düz sac", "duz sac")):
+        return {"boy": "lazer", "konum": "pres", "kanat": "abkant", "aci": "lazer", "ad": "lazer / pres"}
+    if k.get("profil"):
+        return {"boy": "lazer", "konum": "pres", "kanat": "abkant", "aci": "lazer", "ad": "profil kesim"}
+    return {"boy": "cnc", "konum": "cnc", "kanat": "cnc", "aci": "cnc", "ad": "CNC"}
+
+
+def tolerans_isle(msp, o, k, P, gkutu, kaydir, detaylar, kplan, h, sac_kesit, sac_kanat):
+    """Çizilmiş HER ölçüye tolerans atar (ölçüler çizildikten sonra, başlık
+    yazılmadan önce). Döner: (liste, not satırları, uyarı sayısı).
+
+    Liste öğesi: id (görünüş|tür|yön|değer|uçlar; aynı model ve ayarla
+    yeniden çizilince aynı kalır), gorunus, tur, yon, deger, surec, bant
+    (toplam), tol (±), L_ref (referanstan uzaklık), birikim (zincirde
+    datuma göre toplam belirsizlik), uyari. Parça bazlı ezme:
+    P["tolerans"] = {"surec": ..., "sinif": "iso2768-m", "olcu": {id: ±}}.
+    Açınım ve lazer DXF'ine uygulanmaz (bitmiş ürün ölçüleri esastır)."""
+    ayar = dict(P.get("tolerans") or {})
+    sur = surec_tahmini(o, k, sac_kanat, sac_kesit)
+    if ayar.get("surec") in SUREC_AD:
+        sur = dict(sur, boy=ayar["surec"], konum=ayar["surec"], aci=ayar["surec"],
+                   ad=SUREC_AD[ayar["surec"]] + (" + abkant" if sac_kanat else ""))
+    sinif = ayar.get("sinif")
+    ozel = {str(a): v for a, v in (ayar.get("olcu") or {}).items()}
+    t_sac = o.get("sac_kalinlik_mm")
+    L, W, T = (o.get("boy_mm") or 0), (o.get("en_mm") or 0), (o.get("kalinlik_mm") or 0)
+    gabari_deg = {round(float(v), 1) for v in (L, W, T) if v}
+    pencereler = list(gkutu.items()) + [(ad, kt) for ad, kt in (detaylar or [])]
+    liste, uyari = [], 0
+
+    def gorunus_bul(ky):
+        cx, cy = (ky[0] + ky[2]) / 2, (ky[1] + ky[3]) / 2
+        en_iyi, uz = None, None
+        for ad, kt in pencereler:
+            d_ = _nokta_kutu_uzaklik((cx, cy), kt)
+            if uz is None or d_ < uz:
+                en_iyi, uz = ad, d_
+        return en_iyi or "?"
+    for e in msp.query("DIMENSION"):
+        try:
+            tip = e.dxf.dimtype & 7
+            ky = _olcu_yazi_kutusu(_Olcu(e)) or _dim_kutusu(_Olcu(e))
+            if not ky:
+                continue
+            try:
+                lfac = float(e.override().get("dimlfac", 1.0) or 1.0)
+            except Exception:
+                lfac = 1.0
+            olc = float(e.get_measurement()) if tip not in (2, 5) else None
+            metin = str(e.dxf.text or "")
+        except Exception:
+            continue
+        gad = gorunus_bul(ky)
+        ana = gad.split(" ")[0] if gad.startswith("DETAY") else gad
+        dx, dy = kaydir.get(gad, kaydir.get(ana, (0.0, 0.0)))
+        if tip in (2, 5):                                   # açı
+            try:
+                deger = float(e.get_measurement())
+            except Exception:
+                continue
+            tur, yon, L_ref = "aci", "", min(L, W) or 0.0
+            uclar = ()
+        elif tip == 3:
+            deger = olc * lfac; tur, yon, L_ref, uclar = "delik_cap", "", deger, ()
+        elif tip == 4:
+            deger = olc * lfac; tur, yon, L_ref, uclar = "radus", "", deger, ()
+        else:
+            deger = olc * lfac
+            try:
+                aci = float(e.dxf.get("angle", 0.0)) % 180.0
+            except Exception:
+                aci = 0.0
+            yon = "yatay" if (aci < 45.0 or aci > 135.0) else "dusey"
+            p1, p2 = e.dxf.defpoint2, e.dxf.defpoint3
+            uclar = (round(p1[0] - dx, 1), round(p1[1] - dy, 1), round(p2[0] - dx, 1), round(p2[1] - dy, 1))
+            # GABARİ: değer gabariye eşit VE uçları görünüşün iki kenarında
+            # (değer eşitliği yetmez: 500'lük zincir halkası 500 enli
+            # parçada gabari sanılıyordu)
+            gk_ = gkutu.get(ana)
+            kenar_kenar = False
+            if gk_:
+                gx0, gy0, gx1, gy1 = gk_[0] - dx, gk_[1] - dy, gk_[2] - dx, gk_[3] - dy
+                if yon == "yatay":
+                    a_, b_ = sorted((p1[0] - dx, p2[0] - dx))
+                    kenar_kenar = abs(a_ - gx0) < 0.6 and abs(b_ - gx1) < 0.6
+                else:
+                    a_, b_ = sorted((p1[1] - dy, p2[1] - dy))
+                    kenar_kenar = abs(a_ - gy0) < 0.6 and abs(b_ - gy1) < 0.6
+            if "SLOT" in metin.upper():
+                tur = "ic_kesim"
+            elif round(deger, 1) in gabari_deg and (kenar_kenar or not gk_):
+                tur = "gabari"
+            else:
+                tur = "konum"
+            # referanstan uzaklık: datumdan uzak uç
+            dat = None
+            pl = (kplan or {}).get(ana) if kplan else None
+            if pl and (pl.get("datum") or {}).get(yon) is not None:
+                dat = float(pl["datum"][yon])
+            if dat is not None and tur != "gabari":
+                a_ = (p1[0] - dx) if yon == "yatay" else (p1[1] - dy)
+                b_ = (p2[0] - dx) if yon == "yatay" else (p2[1] - dy)
+                L_ref = max(abs(a_ - dat), abs(b_ - dat)) / max(lfac, 1e-9) * lfac
+                L_ref = max(abs(a_ - dat), abs(b_ - dat))
+            else:
+                L_ref = deger
+        if tur == "radus":
+            bant = None
+        elif tur == "gabari":
+            bant = tolerans_bandi("boy", sur["boy"], L_ref, t_sac, sinif)
+        elif tur == "konum":
+            srec = sur["kanat"] if (gad in (sac_kesit or {}) and sac_kanat) else sur["konum"]
+            bant = tolerans_bandi("konum", srec, L_ref, t_sac, sinif)
+        elif tur == "aci":
+            bant = tolerans_bandi("aci", sur["aci"], L_ref, t_sac, sinif)
+        else:
+            bant = tolerans_bandi(tur, sur["boy"], L_ref, t_sac, sinif)
+        kimlik = "|".join([gad, tur, yon, XL.tr(round(deger, 2), 2)] + [str(v) for v in uclar])
+        oge = {"id": kimlik, "gorunus": gad, "tur": tur, "yon": yon, "deger": round(deger, 3),
+               "surec": (sur["kanat"] if (tur == "konum" and gad in (sac_kesit or {}) and sac_kanat)
+                         else sur["aci"] if tur == "aci" else sur["boy"] if tur == "gabari" else sur["konum"]),
+               "bant": bant, "tol": (round(bant / 2.0, 3) if bant else None),
+               "L_ref": round(float(L_ref or 0.0), 1), "uclar": uclar, "ozel": False}
+        if kimlik in ozel and ozel[kimlik] is not None:
+            try:
+                v = ozel[kimlik]
+                oge["tol"] = round(float(v if not isinstance(v, (list, tuple)) else max(abs(float(v[0])), abs(float(v[1])))), 3)
+                oge["bant"] = round(2 * oge["tol"], 3)
+                oge["ozel"] = True
+            except Exception:
+                pass
+        liste.append(oge)
+    # ZİNCİR BİRİKİMİ: aynı görünüş + yönde uç uca eklenen konum ölçüleri
+    # (bir ölçünün ucu öbürünün başlangıcı) datumdan itibaren toplanır;
+    # birikim o uzaklığın bandını aşıyorsa uyarı (paralel ölçü / ara
+    # referans önerilir - CNC ve preste; abkant ve rollformda ara referans
+    # olmaz).
+    for gad in {x["gorunus"] for x in liste}:
+        for yon in ("yatay", "dusey"):
+            zinc = [x for x in liste if x["gorunus"] == gad and x["yon"] == yon
+                    and x["tur"] == "konum" and x["bant"] and x["uclar"]]
+            if len(zinc) < 2:
+                continue
+            ix = (0, 2) if yon == "yatay" else (1, 3)
+            for x in zinc:
+                x["_a"], x["_b"] = sorted((x["uclar"][ix[0]], x["uclar"][ix[1]]))
+            zinc.sort(key=lambda x: x["_a"])
+            # her ölçü için: başlangıcı bir öncekinin bitişine değen zincir
+            for x in zinc:
+                top, cur = x["bant"], x
+                while True:
+                    onceki = [y for y in zinc if y is not cur and abs(y["_b"] - cur["_a"]) < 0.11]
+                    if not onceki:
+                        break
+                    cur = onceki[0]
+                    top += cur["bant"]
+                    if top > 50 or cur is x:
+                        break
+                x["birikim"] = round(top, 3)
+                izin = tolerans_bandi("konum", x["surec"], x["L_ref"], t_sac, sinif) or top
+                if top > izin + 1e-6 and top > x["bant"] + 1e-6:
+                    x["uyari"] = (f"zincir birikimi {XL.tr(top, 2)} > {XL.tr(izin, 2)}: paralel ölçü ya da "
+                                  + ("ara referans (CNC / pres)" if x["surec"] in ("cnc", "konvansiyonel", "pres", "lazer")
+                                     else "bu süreçte ara referans olmaz"))
+                    uyari += 1
+            for x in zinc:
+                x.pop("_a", None); x.pop("_b", None)
+    # GENEL TOLERANS NOTU (başlığa): süreç ve merdiven
+    def pm(v):
+        return "±" + XL.tr(v / 2.0, 2)
+    if sinif:
+        notlar = [f"GENEL TOLERANS: {str(sinif).upper()} (ISO 2768), açı ISO 2768 - aksi belirtilmedikçe"]
+    else:
+        boy_m = TOLERANS["boy"].get(sur["boy"]) or TOLERANS["boy"]["cnc"]
+        boy_txt = " / ".join(f"{pm(b)} ({'≤ ' + XL.tr(u / 1000.0, 1) + ' m' if u != _SONSUZ else 'üstü'})" for u, b in boy_m)
+        kon = tolerans_bandi("konum", sur["konum"], 0, t_sac)
+        aci_ = tolerans_bandi("aci", sur["aci"], 0, t_sac)
+        notlar = [f"GENEL TOLERANS (Pi3D tablosu, {sur['ad']}; aksi belirtilmedikçe): boy {boy_txt}",
+                  f"delik / kesik konumu {pm(kon)} · delik Ø {pm(TOLERANS['delik_cap'])} · iç kesim {pm(TOLERANS['ic_kesim'])}"
+                  + (f" · kanat {pm(tolerans_bandi('konum', 'abkant'))}" if sac_kanat else "")
+                  + f" · açı ±{XL.tr(aci_ / 2.0, 2)}°"
+                  + (f" · diklik {XL.tr(TOLERANS['diklik'].get(sur['konum'], 0.6), 1)}" if sur['konum'] in TOLERANS['diklik'] else "")]
+    return liste, notlar, uyari
+
+
+def tolerans_etiketleri(msp, liste, h):
+    """Parça bazlı ÖZEL toleransı olan ölçülerin yanına "±x" yazar (genel
+    tolerans notu dışına çıkanlar; ISO: yalnız sapan ölçüye yazılır).
+    Yer ölçülerek bulunur: yazıya ya da çizgiye değerse yazılmaz, sayılır."""
+    ozel = [x for x in liste if x.get("ozel") and x.get("tol") is not None]
+    if not ozel:
+        return 0
+    kimlik = {x["id"]: x for x in ozel}
+    yazilan = 0
+    dolu = _yazi_kutulari(msp)
+    for e in msp.query("DIMENSION"):
+        try:
+            ky = _olcu_yazi_kutusu(_Olcu(e))
+        except Exception:
+            ky = None
+        if not ky:
+            continue
+        # eşleşme: yazı kutusu merkezi (liste id'si yazı kutusundan türetilmedi,
+        # o yüzden değer + görünüş karşılaştırılır)
+        try:
+            olc = float(e.get_measurement())
+        except Exception:
+            continue
+        aday = [x for x in ozel if abs(x["deger"] - olc) < 0.06 or abs(x["deger"] - olc * 2) < 0.06
+                or abs(x["deger"] - olc * 2.5) < 0.06]
+        if not aday:
+            continue
+        x = aday[0]
+        metin = "±" + XL.tr(x["tol"], 2)
+        cizgi = _cizgi_parcalari(msp, (ky[0] - 6 * h, ky[1] - 4 * h, ky[2] + 10 * h, ky[3] + 4 * h),
+                                 katman=("GORUNEN", "GIZLI", "OLCU", "EKSEN", "BOLGE"))
+        for (xx, yy) in ((ky[2] + 0.3 * h, ky[1]), (ky[0], ky[3] + 0.3 * h), (ky[0], ky[1] - 1.0 * h)):
+            te = _yaz(msp, metin, xx, yy, 0.7 * h)
+            kt = _yazi_siniri(te)
+            if kt and not _cakisiyor(kt, dolu, 0.15 * h) and not _cizgi_kesiyor(kt, cizgi, 0.1 * h):
+                dolu.append(kt)
+                yazilan += 1
+                break
+            msp.delete_entity(te)
+        ozel.remove(x)
+    return yazilan
+
+
+# ------------------------------------------------------------------
+# SONUÇ ANALİZİ DÖNGÜSÜ (CLAUDE.md 25; kullanıcı: "PDF'te sonuç analiz
+# edilsin, gerekirse düzeltme, sonra PDF ve DXF yeniden çıksın")
+SONUC_YAZI_MM = 2.5     # kâğıtta ölçü rakamı en az bu kadar (ISO 3098; ANAYASA "asla < 2,5")
+SONUC_ARALIK_MM = 0.8   # kâğıtta iki yazı arası bundan az ise "birbirine girmiş"
+SONUC_TUR = 3           # en çok bu kadar çizim turu
+SONUC_KAT_EN_COK = 1.8  # yazı boyu çarpanı bu katı aşmaz
+
+
+def kagit_olcumu(dxf_yol, kagit, h):
+    """Çizim KÂĞIT ÖLÇEĞİNDE ölçülür: pafta planı kuru çalıştırılır
+    (dosyaya yazılmaz), ölçek ve ölçü rakamının kâğıttaki boyu çıkar;
+    ölçü yazıları ve görünüş adları arasındaki kâğıt mm aralıkları
+    sayılır. Döner: {olcek, olcek_metni, yazi_mm, en_kucuk_yazi_mm,
+    yigilma, sayfa2, dagitildi}."""
+    import pf4_pafta as PF
+    r = PF.pafta_kur(dxf_yol, None, kagit, yalniz_plan=True)
+    o = float(r["olcek"])
+    d = ezdxf.readfile(dxf_yol)
+    msp = d.modelspace()
+    kutular = []
+    for e in msp.query("DIMENSION"):
+        ky = _olcu_yazi_kutusu(_Olcu(e))
+        if ky:
+            kutular.append(ky)
+    # görünüş adları ("ÖN", "ARKA" ...; 1,3 h ile yazılır)
+    for e in msp.query("TEXT"):
+        try:
+            if abs(float(e.dxf.height) - 1.3 * h) < 0.05 * h and str(e.dxf.text).strip() in GORUNUS_AD.values():
+                ky = _yazi_siniri(e)
+                if ky:
+                    kutular.append(ky)
+        except Exception:
+            continue
+    esik = SONUC_ARALIK_MM / max(o, 1e-9)
+    n = 0
+    for i in range(len(kutular)):
+        for j in range(i + 1, len(kutular)):
+            if _kutu_uzaklik(kutular[i], kutular[j]) < esik:
+                n += 1
+    return {"olcek": o, "olcek_metni": r["olcek_metni"], "kagit": r["kagit"],
+            "yazi_mm": round(h * o, 2), "en_kucuk_yazi_mm": r["yazi_mm"],
+            "yigilma": n, "sayfa2": bool(r.get("sayfa2")), "dagitildi": bool(r.get("dagitildi"))}
+
+
+def sonuc_analizi_dongusu(ciz, dxf_yol, P, log=print, kagit=None):
+    """Çizim bittikten sonra KÂĞITTA ölçülür, gerekirse yeniden çizilir.
+
+    ciz(P) resmi dxf_yol'a çizen çağrı. Her turda: pafta planı kuru
+    koşulur, ölçü rakamının kâğıt boyu (SONUC_YAZI_MM) ve yazı aralıkları
+    (SONUC_ARALIK_MM) denetlenir. Sorun varsa karar KURALLA verilir: rakam
+    küçükse yazı boyu çarpanı büyütülür (çizim büyür, yığılma denetimi
+    sertleşir, sıkışan bölgeler detaya gider); yazılar birbirine girmişse
+    yığılma aralığı genişletilir; sonra DXF yeniden çizilir (PDF paftası
+    aynı DXF'ten üretildiği için ikisi birlikte yenilenmiş olur). En çok
+    SONUC_TUR tur; sorunsuz ilk tur ya da en iyi tur (rakam en büyük,
+    yığılma en az) dosyada kalır. Her turun ne bulduğu ve neden ne
+    yaptığı döner (günlük ve olculer.json'a yazılır)."""
+    import shutil
+    kagit = kagit or P.get("kagit") or (ayar_oku().get("kagit") if callable(ayar_oku) else None) or "A3"
+    P_ = dict(P)
+    turlar, kopyalar = [], {}
+    for tur in range(1, SONUC_TUR + 1):
+        if tur > 1:
+            ciz(P_)
+        h = float(SON_RAPOR.get("yazi_h") or 0.0) or 1.0
+        try:
+            olc = kagit_olcumu(dxf_yol, kagit, h)
+        except Exception as ex:
+            turlar.append({"tur": tur, "hata": f"kâğıt ölçümü yapılamadı: {ex}"[:120]})
+            break
+        kayit = {"tur": tur, "yazi_kat": round(float(P_.get("yazi_kat") or 1.0), 3),
+                 "yigilma_aralik": round(float(P_.get("yigilma_aralik") or YIGILMA_ARALIK), 2),
+                 "olcek": olc["olcek_metni"], "yazi_mm": olc["yazi_mm"],
+                 "yigilma": olc["yigilma"], "detay": SON_RAPOR.get("detay_sayisi"),
+                 "sayfa2": olc["sayfa2"]}
+        sorun = []
+        if olc["yazi_mm"] < SONUC_YAZI_MM:
+            sorun.append(f"ölçü rakamı kâğıtta {XL.tr(olc['yazi_mm'], 1)} mm (< {XL.tr(SONUC_YAZI_MM, 1)})")
+        if olc["yigilma"]:
+            sorun.append(f"{olc['yigilma']} yazı çifti {XL.tr(SONUC_ARALIK_MM, 1)} mm'den yakın")
+        kayit["sorun"] = sorun
+        turlar.append(kayit)
+        kopyalar[tur] = dxf_yol + f".tur{tur}"
+        try:
+            shutil.copyfile(dxf_yol, kopyalar[tur])
+        except Exception:
+            kopyalar.pop(tur, None)
+        if not sorun:
+            kayit["karar"] = "kabul"
+            break
+        if tur == SONUC_TUR:
+            kayit["karar"] = "son tur: en iyi tur alındı"
+            break
+        onceki = turlar[-2] if len(turlar) >= 2 and "hata" not in turlar[-2] else None
+        if onceki and olc["yazi_mm"] <= onceki["yazi_mm"] + 1e-9 and olc["yigilma"] >= onceki["yigilma"]:
+            # yazıyı büyütmek kâğıtta kazandırmadı (çizim büyüyüp ölçek
+            # düştü): daha fazla tur boşa zaman, en iyi tur alınır
+            kayit["karar"] = "yazı büyütmek kâğıtta kazandırmadı: en iyi tur alındı"
+            break
+        kat = float(P_.get("yazi_kat") or 1.0)
+        if olc["yazi_mm"] < SONUC_YAZI_MM:
+            kat = min(SONUC_KAT_EN_COK, kat * (SONUC_YAZI_MM / max(olc["yazi_mm"], 0.1)) * 1.05)
+        aralik = float(P_.get("yigilma_aralik") or YIGILMA_ARALIK) + (0.5 if olc["yigilma"] else 0.0)
+        if abs(kat - float(P_.get("yazi_kat") or 1.0)) < 1e-6 and not olc["yigilma"]:
+            kayit["karar"] = "yazı boyu üst sınırda: en iyi tur alındı"
+            break
+        kayit["karar"] = f"yeniden çiz: yazı boyu x{XL.tr(kat, 2)}, yığılma aralığı {XL.tr(aralik, 1)} h"
+        P_ = dict(P_, yazi_kat=kat, yigilma_aralik=aralik)
+    # en iyi tur: sorunsuz ilk; yoksa rakam en büyük, yığılma en az
+    gecerli = [t for t in turlar if "hata" not in t]
+    if gecerli:
+        temiz = [t for t in gecerli if not t["sorun"]]
+        en_iyi = temiz[0] if temiz else max(gecerli, key=lambda t: (t["yazi_mm"], -t["yigilma"]))
+        en_iyi["secildi"] = True
+        if en_iyi["tur"] != gecerli[-1]["tur"] and en_iyi["tur"] in kopyalar:
+            try:
+                shutil.copyfile(kopyalar[en_iyi["tur"]], dxf_yol)
+            except Exception:
+                pass
+    for y in kopyalar.values():
+        try:
+            os.remove(y)
+        except Exception:
+            pass
+    for t in turlar:
+        if "hata" in t:
+            log(f"    analiz tur {t['tur']}: {t['hata']}")
+            continue
+        log(f"    analiz tur {t['tur']}: {t['olcek']}, rakam {XL.tr(t['yazi_mm'], 1)} mm, "
+            f"yığılma {t['yigilma']}, {t['detay'] or 0} detay"
+            + (" -> " + t["karar"] if t.get("karar") else "")
+            + ("  [seçildi]" if t.get("secildi") and len(turlar) > 1 else ""))
+    return turlar
+
+
 class _Olcu:
     """Çizilmiş DIMENSION varlığını _olcu_yazi_kutusu'nun beklediği biçime
     (``.dimension``) sarar."""
@@ -6681,7 +7133,7 @@ YIGILMA_UC = 3.0       # iki İÇ ölçünün uçları (özellikleri) bu kadar y
 YIGILMA_EN_AZ = 3      # bir öbekte en az bu kadar ölçü yığılmışsa bölge detaya gider
 
 
-def yigilma_kayiplari(msp, onceki_h, gkutu, kaydir, h, kayip):
+def yigilma_kayiplari(msp, onceki_h, gkutu, kaydir, h, kayip, aralik=None):
     """SONUÇ ANALİZİ (CLAUDE.md 25; kullanıcı: "ölçüler birbirine girmesin:
     dış ölçüleri verirdim ama burayı detaya alırdım"): deneme geçişinde
     ÇİZİLMİŞ konum ölçülerinin yazı kutuları ÖLÇÜLÜR. Birbirine
@@ -6754,7 +7206,7 @@ def yigilma_kayiplari(msp, onceki_h, gkutu, kaydir, h, kayip):
         for j in range(i + 1, n):
             if dims[i]["gad"] != dims[j]["gad"]:
                 continue
-            if _kutu_uzaklik(dims[i]["ky"], dims[j]["ky"]) < YIGILMA_ARALIK * h \
+            if _kutu_uzaklik(dims[i]["ky"], dims[j]["ky"]) < (aralik or YIGILMA_ARALIK) * h \
                     or uc_yakin(dims[i], dims[j]):
                 obek[kok(i)] = kok(j)
     gruplar = defaultdict(list)
@@ -10932,7 +11384,7 @@ def sac_parcalari(kayit, komp, log=print):
     return kod
 
 
-def acilim_yaz(kayit, komp, P, klasor, kodlar=None, k_faktor=K_FAKTOR,
+def acilim_yaz(kayit, komp, P, klasor, kodlar=None, k_faktor=K_FAKTOR, k_parca=None,
                log=print, ilerleme=None, iptal=None, eksik=False):
     """Seçilen parçaların açınımını hesaplar, DXF ve tablo yazar.
 
@@ -10958,6 +11410,10 @@ def acilim_yaz(kayit, komp, P, klasor, kodlar=None, k_faktor=K_FAKTOR,
     secili = [(pozlar[i], k) for i, k in enumerate(komp)
               if kodlar is None or (k.get("kod") or k.get("ad")) in kodlar]
     for i, (poz, k) in enumerate(secili):
+        # PARÇA BAZLI K (kullanıcı: "K değişimi parça bazlı olacak, seçip
+        # yazıp değiştirebilmeliyim"): parca_ayar'daki K bu parça için
+        # ortak K'yi ezer
+        kf = float((k_parca or {}).get(_tr_sade(k.get("kod") or k.get("ad") or ""), k_faktor))
         if iptal and iptal():
             break
         ad = k.get("kod") or k.get("ad") or "?"
@@ -10966,14 +11422,14 @@ def acilim_yaz(kayit, komp, P, klasor, kodlar=None, k_faktor=K_FAKTOR,
         # güncel açınım atlanır - lazer dosyası da varsa (eski sürüm
         # açınımın yanına lazer yazmıyordu)
         if eksik and IS.onceden_uretilmis(kok, "acinim", ad, step_oz,
-                                          k_faktor=k_faktor) \
-                and IS.onceden_uretilmis(kok, "lazer", ad, step_oz, k_faktor=k_faktor):
+                                          k_faktor=kf) \
+                and IS.onceden_uretilmis(kok, "lazer", ad, step_oz, k_faktor=kf):
             log(f"  {ad}: açınım güncel (aynı model, K={k_faktor}) - atlandı")
             continue
         denenen.add(ad)
         try:
             sh = kayit[k["indeks"][0]][1]
-            r = sac_acilim(sh, k, k_faktor=k_faktor)
+            r = sac_acilim(sh, k, k_faktor=kf)
         except AcilimYok as e:
             hata.append((ad, str(e)))
             log(f"  {ad}: açınım yok - {str(e).splitlines()[0]}")
@@ -10996,7 +11452,7 @@ def acilim_yaz(kayit, komp, P, klasor, kodlar=None, k_faktor=K_FAKTOR,
         r["dxf"] = os.path.basename(dosya)
         sonuc.append(r)
         IS.cizim_kaydet(kok, "acinim", ad, dxf=r["dxf"], step_ozet=step_oz,
-                        k_faktor=k_faktor)
+                        k_faktor=kf)
         log(f"  {os.path.basename(dosya)}  {XL.tr(r['acinim_genislik_mm'])} x "
             f"{XL.tr(r['acinim_boy_mm'])} mm, t={XL.tr(r['kalinlik_mm'])}, "
             f"{r['bukum_sayisi']} büküm")
@@ -11054,7 +11510,7 @@ def acilim_yaz(kayit, komp, P, klasor, kodlar=None, k_faktor=K_FAKTOR,
     return sonuc, hata
 
 
-def lazer_yaz(kayit, komp, klasor, kodlar=None, k_faktor=K_FAKTOR,
+def lazer_yaz(kayit, komp, klasor, kodlar=None, k_faktor=K_FAKTOR, k_parca=None,
               acilim=None, log=print, ilerleme=None, iptal=None):
     """Seçilen sac parçalar için LAZER KESİM resimleri (..._Lzr.dxf).
 
@@ -11080,6 +11536,10 @@ def lazer_yaz(kayit, komp, klasor, kodlar=None, k_faktor=K_FAKTOR,
               if k.get("sinif") == "parca"
               and (kodlar is None or (k.get("kod") or k.get("ad")) in kodlar)]
     for i, (poz, k) in enumerate(secili):
+        # PARÇA BAZLI K (kullanıcı: "K değişimi parça bazlı olacak, seçip
+        # yazıp değiştirebilmeliyim"): parca_ayar'daki K bu parça için
+        # ortak K'yi ezer
+        kf = float((k_parca or {}).get(_tr_sade(k.get("kod") or k.get("ad") or ""), k_faktor))
         if iptal and iptal():
             log("! iptal edildi")
             break
@@ -11094,7 +11554,7 @@ def lazer_yaz(kayit, komp, klasor, kodlar=None, k_faktor=K_FAKTOR,
                 dis, ic = r["kontur_dis"], r["kontur_delik"]
                 t, nere = r["kalinlik_mm"], "açınım"
             elif sac_taramasi(sh)["tip"] == "bukumlu sac":
-                a = sac_acilim(sh, k, k_faktor=k_faktor)
+                a = sac_acilim(sh, k, k_faktor=kf)
                 if not a.get("kontur_dis"):
                     raise AcilimYok(
                         "Açınım çıktı ama kesim konturu çıkarılamadı; "
@@ -11514,7 +11974,11 @@ def dxf_komponent(s, o, k, yol, P):
     # Yazı boyu parçaya göre: küçük parçada küçük, büyükte büyük ama okunur.
     # Kullanıcı: "DXF'te ve PDF'te de punto azalt" - eskisi (boy / 45, en
     # çok 25) yoğun resimde ölçüleri birbirine bindiriyordu.
-    h = yazi_boyu(L, W, T)
+    # SONUÇ ANALİZİ geri beslemesi (CLAUDE.md 25): kâğıtta yazı küçük
+    # kalınca bir sonraki turda yazı boyu çarpanı (yazi_kat) büyütülür -
+    # yazı büyüyünce yığılma denetimi de (yazı boyuna bağlı) sertleşir,
+    # sıkışan bölgeler detaya gider.
+    h = yazi_boyu(L, W, T) * float(P.get("yazi_kat") or 1.0)
     olcu_stili(doc, h)
     gorunusler = gorunus_sec(P.get("gorunusler"))
     # Parça bazlı ya da komut satırından AÇIKÇA verilen görünüş listesi
@@ -11691,7 +12155,8 @@ def dxf_komponent(s, o, k, yol, P):
             # ölçü öbekleri (yığılan köşe) de detaya aday (CLAUDE.md 25)
             n_yig = 0
             if P.get("yigilma_analizi", True):
-                n_yig = yigilma_kayiplari(msp, onceki_h, gkutu, kaydir, h, kayip_d)
+                n_yig = yigilma_kayiplari(msp, onceki_h, gkutu, kaydir, h, kayip_d,
+                                          aralik=float(P.get("yigilma_aralik") or YIGILMA_ARALIK))
             _varlik_geri_al(msp, onceki_h)
             if not kayip_d:
                 break
@@ -11740,6 +12205,8 @@ def dxf_komponent(s, o, k, yol, P):
                                   engel=[kt for _a, kt in detaylar])
     SON_RAPOR.clear()
     SON_RAPOR.update(atlanan)            # denetim / test: son resmin eksikleri
+    SON_RAPOR["yazi_h"] = h
+    SON_RAPOR["detay_sayisi"] = len(detaylar)
     for gad, gk_ in gkutu.items():
         ust[gad] = max(ust.get(gad, gk_[3]), gorunus_etiketi(msp, gad, gk_, h) + 0.5 * h)
     izo_kutu = None
@@ -11800,12 +12267,27 @@ def dxf_komponent(s, o, k, yol, P):
     kod_ = str(k.get("kod") or "")
     # kod ile ad aynıysa (ya da ad kodu içeriyorsa) bir kez yazılır
     kimlik = ad_ if (not kod_ or kod_ == ad_ or kod_ in ad_) else f"{kod_}   {ad_}"
+    # TOLERANS (CLAUDE.md 26): çizilmiş her ölçüye süreç ve bant; genel not
+    # başlığa; parça bazlı özel toleranslar ölçünün yanına ± olarak
+    tol_not = []
+    if P.get("tolerans_acik", True):
+        try:
+            tol_liste, tol_not, tol_uyari = tolerans_isle(
+                msp, o, k, P, gkutu, kaydir, detaylar, kplan_ana if kplan else None,
+                h, sac_kesit, sac_kanat)
+            k["olculer"] = tol_liste
+            k["tolerans_uyari"] = tol_uyari
+            SON_RAPOR["tolerans_uyari"] = tol_uyari
+            SON_RAPOR["tolerans_etiket"] = tolerans_etiketleri(msp, tol_liste, h)
+        except Exception as ex:
+            tol_not = [f"tolerans hesaplanamadı: {ex}"[:90]]
     diger = [
         (f"adet: {k['adet']}", 1.1 * h),
         (gabari_satiri(o), 1.1 * h),
         (f"kütle {XL.tr(o['kutle_kg'], 3)} kg   malzeme: {k.get('malzeme_ad', '-')}", 1.1 * h),
     ] + ([(P["sade_not"], 1.1 * h)] if P.get("sade_not") else []) + [
         (f"! MODEL KONTROL: {u}", 1.1 * h) for u in uyari[:2]] + [
+        (t_, 1.0 * h) for t_ in tol_not] + [
         # Ölçek ve birim resmin üstünde yazsın: DXF başka bir çizime
         # eklendiğinde ölçek kaymışsa bu satırdan anlaşılır.
         ("ölçek 1:1   birim: mm", 1.1 * h),
@@ -13238,9 +13720,17 @@ def calistir(step, on, kayit, komp, P, asama=(1, 2, 3), esl=None, agac=None,
                     P_ = dict(P_, kesit=bool(pa["kesit"]))
                 if pa.get("perspektif") is not None:
                     P_ = dict(P_, perspektif=bool(pa["perspektif"]))
+                if pa.get("tolerans"):
+                    P_ = dict(P_, tolerans=dict(pa["tolerans"]))
                 if sat.get("model_uyari"):
                     P_ = dict(P_, model_uyari=[sat["model_uyari"]])
-                dxf_komponent(s2, o_, sat, os.path.join(dxf_kl, dosya), P_)
+                dxf_yolu = os.path.join(dxf_kl, dosya)
+                dxf_komponent(s2, o_, sat, dxf_yolu, P_)
+                if P.get("sonuc_analizi", True):
+                    # SONUÇ ANALİZİ: kâğıtta ölç, gerekirse yeniden çiz
+                    sat["analiz"] = sonuc_analizi_dongusu(
+                        lambda P2, _s=s2, _o=o_, _sat=sat, _y=dxf_yolu: dxf_komponent(_s, _o, _sat, _y, P2),
+                        dxf_yolu, P_, log=log, kagit=P.get("kagit"))
                 IS.cizim_kaydet(on, "dxf", dosya, imza=im, kod=k["kod"],
                                 step_ozet=step_oz)
                 sat["dxf"] = dosya
@@ -13379,6 +13869,11 @@ uretir: KAYNAK/<grup>_kaynak.pdf (yalniz PDF; buyuk modelde uzun surer).
                          "ON,ARKA,SAG,SOL,UST,ALT")
     ap.add_argument("--perspektif-yok", action="store_true",
                     help="resme küçük izometrik perspektif konmasın")
+    ap.add_argument("--analiz-yok", action="store_true",
+                    help="sonuç analizi döngüsü kapalı: çizim kâğıtta ölçülüp "
+                         "gerekirse yeniden çizilmesin (hızlı deneme)")
+    ap.add_argument("--kagit", default=None,
+                    help="sonuç analizinde ölçülecek kâğıt (A4..A0, varsayılan ayar / A3)")
     ap.add_argument("--kesit", action="store_true",
                     help="parçanın ortasından A-A tam kesit görünüşü ekle")
     ap.add_argument("--acinim", default="OTO",
@@ -13422,6 +13917,7 @@ uretir: KAYNAK/<grup>_kaynak.pdf (yalniz PDF; buyuk modelde uzun surer).
     P = {"gizli": a.gizli, "en_az_delik": a.en_az_delik, "yogunluk": RHO,
          "gorunusler": list(gor), "kesit": bool(a.kesit),
          "perspektif": not a.perspektif_yok,
+         "sonuc_analizi": not a.analiz_yok, "kagit": a.kagit,
          "kaynak_resmi": bool(a.kaynak_resmi), "kaynak_balon": bool(a.kaynak_balon)}
     print("görünüşler: " + ("otomatik (özelliklere göre, 6'ya kadar)" if oto
                            else ", ".join(GORUNUS_AD[g] for g in gor))
