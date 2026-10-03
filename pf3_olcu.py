@@ -11901,6 +11901,9 @@ def dxf_acilim(r, k, yol, P=None):
 # açınım resmi kuralı değişince artırılır: eski açınımlar yeniden çizilir
 ACINIM_CIZIM_SURUMU = "2026.10.03b"
 ACINIM_YAZI_KAT_EN_COK = 3.0
+# açınım rakamının kâğıttaki en az boyu (kullanıcı 03.10.2026: "1,5'ta
+# olabilir"): bunu geçen açınımda yazı büyütülmez, resim en büyük kalır
+ACINIM_YAZI_EN_AZ_MM = 1.5
 PROFIL_EN_COK = 30.0             # açınım profilinin en uzun kenarı en çok bu kadar yazı boyu     # kâğıt döngüsünde yazı boyu en çok bu kat büyür
 
 
@@ -11909,8 +11912,8 @@ def acinim_kagit_dongusu(r, k, yol, P=None, log=None):
     küçültme gereken resimde 1. sayfa ön resim + tablo + yan görünüş,
     kalan 2. sayfa; resimler A3'ün antet ve kenar dışındaki alanını en
     çok kaplar"): çizilir, pafta planı kuru kurulur (2. sayfa kararıyla
-    birlikte), en küçük yazının kâğıttaki boyu ölçülür; SONUC_YAZI_MM
-    (2,5) altındaysa yazı boyu büyütülüp yeniden çizilir. En çok SONUC_TUR
+    birlikte), en küçük yazının kâğıttaki boyu ölçülür; ACINIM_YAZI_EN_AZ_MM
+    (1,5; kullanıcı) altındaysa yazı boyu büyütülüp yeniden çizilir. En çok SONUC_TUR
     tur; büyütmek kâğıtta kazandırmıyorsa durur, en iyi tur kalır.
     Döner: [(yazı katı, ölçek metni, kâğıtta yazı mm, sayfa sayısı)]."""
     import shutil
@@ -11945,11 +11948,11 @@ def acinim_kagit_dongusu(r, k, yol, P=None, log=None):
         if en_iyi is None or yz > en_iyi[1] + 1e-9:
             en_iyi = (tur, yz)
             shutil.copyfile(yol, yol + ".eniyi")
-        if yz >= SONUC_YAZI_MM - 0.05:
+        if yz >= ACINIM_YAZI_EN_AZ_MM - 0.05:
             break
         if len(turlar) >= 2 and yz <= turlar[-2][2] + 1e-9:
             break                                   # büyütmek kazandırmadı
-        yeni = min(ACINIM_YAZI_KAT_EN_COK, kat * SONUC_YAZI_MM / max(yz, 0.1) * 1.05)
+        yeni = min(ACINIM_YAZI_KAT_EN_COK, kat * ACINIM_YAZI_EN_AZ_MM / max(yz, 0.1) * 1.05)
         if yeni <= kat + 1e-6:
             break
         kat = yeni

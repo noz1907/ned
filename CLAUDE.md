@@ -445,7 +445,8 @@ DXF'te yazı boyunun katı olarak uygulanır):
   Sağ sütun ölçülü açınımın ölçülmüş sağ sınırından başlar, başlık
   satırları açınımın genişliğinde kırılır (pencereler üst üste binerse
   pafta tek pencereye düşüyordu). Açınım KÂĞITTA ölçülür
-  (`acinim_kagit_dongusu`): rakam 2,5 mm altındaysa yazı büyütülüp
+  (`acinim_kagit_dongusu`): rakam 1,5 mm (`ACINIM_YAZI_EN_AZ_MM`; kullanıcı:
+  "1,5'ta olabilir; üst ve sol kenar sıkıntı yok") altındaysa yazı büyütülüp
   yeniden çizilir, ama ölçeği ilk turun %85'inin altına düşüren tur
   alınmaz (resim büyük kalır). 2. sayfa aynı kâğıt boyunda, sığan en
   büyük ölçekte. DXF'te sayfalar PAFTA, PAFTA_2 ... sekmeleridir. Örnek:

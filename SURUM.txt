@@ -172,7 +172,8 @@ BU SÜRÜMDE NE VAR
       görünüş, ÖN, bir yan, kesit.
     - Büyük açınım profili küçültülerek çizilir (ölçeği başlığında);
       başlık satırları açınım genişliğinde kırılır; açınım kâğıtta
-      ölçülür, rakam küçükse yazı büyütülür ama resim küçültülmez.
+      ölçülür; rakam kâğıtta en az 1,5 mm (kullanıcı: "1,5'ta
+      olabilir"), altındaysa yazı büyütülür ama resim küçültülmez.
     - Eğik büküm etiketlerinin üstünden konum kılavuzu geçmez (yazılar da
       engel).
 
