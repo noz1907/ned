@@ -26,6 +26,7 @@ def denetle(yol):
                   "update_idletasks", "destroy", "quit", "columnconfigure",
                   "rowconfigure", "master", "focus_set", "clipboard_clear",
                   "clipboard_append", "register", "nametowidget",
+                  "winfo_children", "pack_slaves", "winfo_toplevel",
                   # tk.Canvas'tan gelenler
                   "delete", "create_text", "create_line", "create_polygon",
                   "create_oval", "create_rectangle", "create_image",

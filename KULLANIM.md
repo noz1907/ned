@@ -373,6 +373,17 @@ basılmasın.
 
 Komut satırında: `python pf3_olcu.py model.stp -o cikti --eksik`
 
+### YENİ İŞ ve ÇIKIŞ (alt çubuk, Dosya menüsü)
+
+İş bitince programı kapatıp açmak gerekmez: alt çubuktaki **YENİ İŞ**
+(Dosya > Yeni iş, Ctrl+N) ekranı ilk açılıştaki haline getirir - seçili
+model, listeler, "yapıldı" işaretleri ve bu oturumun süreleri temizlenir;
+hesap motoru yeniden yüklenmez, lisans ve kayıtlı ayarlar (malzeme
+tablosu, K-faktörü, kâğıt, firma anteti) ve üretilmiş dosyalar aynen
+kalır. Çalışan iş varsa önce **İPTAL** gerekir. **ÇIKIŞ** (Dosya > Çıkış,
+Ctrl+Q, pencere çarpısı) programı kapatır; iş çalışıyorsa sorar - yarım
+kalan iş sonraki açılışta aynı klasörle *eksikleri üret* ile tamamlanır.
+
 ### İşlemler ve süreler (sağdaki panel)
 
 Pencerenin sağında yapılan her işlem, açıklaması ve süresi listelenir:

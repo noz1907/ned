@@ -169,6 +169,11 @@ BU SÜRÜMDE NE VAR
     - Ana görünüş = en büyük alan; delik sayısı yalnız eşit alanlarda.
     - Model gürültüsü (0,05 mm içinde iki delik sırası) aynı dizi
       ölçüsünü iki kez yazdırmaz, "MODEL KONTROL" uyarısı çıkarmaz.
+    - YENİ İŞ ve ÇIKIŞ düğmeleri (alt çubuk; Dosya menüsü, Ctrl+N /
+      Ctrl+Q): iş bitince ekran kapatılıp açılmadan sıfırlanır (motor,
+      lisans, kayıtlı ayarlar ve üretilmiş dosyalar kalır); ÇIKIŞ çalışan
+      iş varsa sorar (kullanıcı: "işlem bittikten sonra sistemi
+      yenileyebilmeliyim, kapatıp açma gerekmemeli; bir de quit butonu").
     - Açınım sayfası KAYAR PENCERE: kısa pencerede listenin altındaki
       özet ve ÜRET düğmesi kaydırma çubuğu / fare tekerleğiyle görülür
       (kullanıcı: "kayar pencere o, onu istiyorum").

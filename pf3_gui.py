@@ -718,7 +718,10 @@ class Uygulama(ttk.Frame):
 
     def _pencereyi_yerlestir(self, sw, sh):
         """Pencere ekrandan büyük açılmasın. Küçük ekranda tam ekran
-        (Windows'ta 'zoomed'), büyükte ekranın %90'ı."""
+        (Windows'ta 'zoomed'), büyükte ekranın %90'ı. YENİ İŞ'te
+        kullanıcının pencere boyutu korunur."""
+        if getattr(self, "_yeniden_kuruluyor", False):
+            return
         try:
             if self.kucuk:
                 try:
@@ -742,6 +745,13 @@ class Uygulama(ttk.Frame):
         olmuyordu."""
         ic = ttk.Frame(self)
         self._durum_ic = ic               # _kur alta sabitler
+        # Sağda: ÇIKIŞ, YENİ İŞ, İPTAL (kullanıcı: "işlem bittikten sonra
+        # sistemi yenileyebilmeliyim, kapatıp açma gerekmemeli; bir de
+        # quit butonu"). Her sayfadan görünür.
+        self.b_cikis = ttk.Button(ic, text="ÇIKIŞ", command=self.cikis, width=8)
+        self.b_cikis.pack(side="right", padx=(8, 0))
+        self.b_yeni = ttk.Button(ic, text="YENİ İŞ", command=self.yeni_is, width=9)
+        self.b_yeni.pack(side="right", padx=(8, 0))
         self.b_iptal = ttk.Button(ic, text="İPTAL", command=self.iptal,
                                   state="disabled", width=9)
         self.b_iptal.pack(side="right", padx=(8, 0))
@@ -2686,6 +2696,12 @@ class Uygulama(ttk.Frame):
         """Pencerenin üstündeki Yardım menüsü (F1: kullanım kılavuzu)."""
         try:
             cubuk = tk.Menu(self.master, tearoff=0)
+            d = tk.Menu(cubuk, tearoff=0)
+            d.add_command(label="Yeni iş  (ekranı sıfırla)", accelerator="Ctrl+N",
+                          command=self.yeni_is)
+            d.add_separator()
+            d.add_command(label="Çıkış", accelerator="Ctrl+Q", command=self.cikis)
+            cubuk.add_cascade(label="Dosya", menu=d)
             y = tk.Menu(cubuk, tearoff=0)
             y.add_command(label="Malzemeyi CAD'den al  (adım adım)…",
                           command=self.malzeme_sihirbazi)
@@ -2700,8 +2716,98 @@ class Uygulama(ttk.Frame):
             cubuk.add_cascade(label="Yardım", menu=y)
             self.master.config(menu=cubuk)
             self.master.bind("<F1>", lambda _e: self.kilavuz_ac())
+            self.master.bind("<Control-n>", lambda _e: self.yeni_is())
+            self.master.bind("<Control-q>", lambda _e: self.cikis())
+            self.master.protocol("WM_DELETE_WINDOW", self.cikis)
         except Exception:
             pass                       # menü olmadan da çalışır
+
+    # ------------------------------------------------------------ yeni iş / çıkış
+    # __init__'teki iş durumu: YENİ İŞ bunları sıfırlar, motor (M), lisans
+    # ve kalıcı ayarlar (malzeme tablosu, K-faktörü, kâğıt, antet) kalır.
+    _IS_DURUMU = dict(kayit=None, komp=None, sablon=None, acilim_liste=list,
+                      tarama=dict, tarama_kod=dict, satirlar=list,
+                      malzemeler=dict, parca_ayar=dict, arac_oneri=None,
+                      ornek_dxf=None, onizleme_png=None, onizleme_resmi=None,
+                      _yapildi=dict, calisiyor=False, iptal_istendi=False,
+                      ornek_adaylar=list, agac=None, rapor=None,
+                      _bekleyen_islem=list, _lisans_pencere=None,
+                      _standart_pencere=None, sihirbaz=None)
+
+    def yeni_is(self, sor=True):
+        """YENİ İŞ: arayüz kapatılıp açılmadan sıfırlanır (kullanıcı:
+        "işlem bittikten sonra sistemi yenileyebilmeliyim, kapatıp açma
+        gerekmemeli"). Çalışan iş varsa önce İPTAL istenir. Açık yardımcı
+        pencereler kapanır, sekmeler ve listeler ilk açılıştaki gibi
+        yeniden kurulur; hesap motoru yeniden yüklenmez (saniyeler
+        kazanılır), lisans ve kayıtlı ayarlar aynen kalır. Üretilmiş
+        dosyalara dokunulmaz."""
+        if getattr(self, "calisiyor", False):
+            messagebox.showinfo("Yeni iş", "Bir iş çalışıyor. Önce İPTAL "
+                                "deyin, iş durunca YENİ İŞ yapabilirsiniz.")
+            return False
+        if sor and not messagebox.askyesno(
+                "Yeni iş", "Ekran sıfırlansın mı?\n\nSeçili model, listeler ve "
+                "bu oturumun süreleri temizlenir; üretilmiş dosyalar, "
+                "lisans ve kayıtlı ayarlar (malzeme, K-faktörü, kâğıt, "
+                "antet) kalır."):
+            return False
+        self._yardimci_pencereleri_kapat()
+        for ad, deger in self._IS_DURUMU.items():
+            setattr(self, ad, deger() if callable(deger) else deger)
+        try:
+            while True:
+                self.kuyruk.get_nowait()
+        except queue.Empty:
+            pass
+        for w in list(self.winfo_children()):
+            try:
+                w.destroy()
+            except Exception:
+                pass
+        self._yeniden_kuruluyor = True
+        try:
+            self._kur()
+        finally:
+            self._yeniden_kuruluyor = False
+        if self.M is not None:
+            self._motor_geldi(self.M)
+            self.v_durum.set("yeni iş – STEP dosyasını seçin")
+        self._yaz("===== YENİ İŞ: ekran sıfırlandı =====")
+        return True
+
+    def _yardimci_pencereleri_kapat(self):
+        """Ana pencereye bağlı açık Toplevel'ler (lisans, standart parça,
+        malzeme sihirbazı, önizleme) kapatılır."""
+        try:
+            kok = self.master.winfo_toplevel()
+            for w in list(kok.winfo_children()):
+                if isinstance(w, tk.Toplevel):
+                    try:
+                        w.destroy()
+                    except Exception:
+                        pass
+        except Exception:
+            pass
+
+    def cikis(self):
+        """ÇIKIŞ (düğme, Dosya > Çıkış, Ctrl+Q, pencere çarpısı). Çalışan
+        iş varsa sorar: yarım kalan iş sonraki açılışta 'eksikleri üret'
+        ile tamamlanabilir."""
+        if getattr(self, "calisiyor", False):
+            if not messagebox.askyesno(
+                    "Çıkış", "Bir iş çalışıyor. Yine de çıkılsın mı?\n\n"
+                    "Yarım kalan iş sonraki açılışta aynı klasörle "
+                    "tamamlanabilir."):
+                return False
+        try:
+            self.master.winfo_toplevel().destroy()
+        except Exception:
+            try:
+                self.master.quit()
+            except Exception:
+                pass
+        return True
 
     def malzeme_sihirbazi(self):
         if self.M is None:
