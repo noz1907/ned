@@ -421,6 +421,36 @@ DXF'te yazı boyunun katı olarak uygulanır):
   orada, yeni satır / sütun açıyorsa serbest pencere (yan kapakta
   ızgaraya satır olarak girip 1:7'yi 1:11'e düşürmüştü). Perspektif
   (IZO) serbest pencere, hep 1. sayfada.
+- **ÇOK KÜÇÜLTME GEREKEN RESİMDE SAYFA KURALI** (kullanıcı, 03.10.2026:
+  "bu tarz çok fazla küçültme yapılacak resimlerde: tablo seçilirse ön
+  resim + tablo + yan görünüş sağ ya da sol 1. sayfada; ölçüsüz resim ya
+  da kalan görünüm 2. sayfada; her zaman, her durumda, her paftada, PDF'te
+  ve DXF'te geçerli"; "resimler ya da ne varsa A3'ün antet ve kenar
+  boşlukları dışındaki alanının en çoğunu kaplayacak; 2. sayfa ilk sayfa
+  hangi boydaysa o boyda"; "kural koy buna da"). UYGULAMA: tek sayfada
+  yazı `SAYFA_AYIR_YAZI_MM` (1,2 mm) altına düşüyorsa:
+  1. kademe ekstralar 2. sayfaya (yukarıdaki kural); 2. kademe yazı hâlâ
+  küçükse üst / alt görünüş de gider - 1. sayfada ana görünüş, ÖN, bir
+  yan (SAĞ, yoksa SOL), kesit (`_yan_cekirdek`). TABLO (delik koordinat
+  tablosu, açınım büküm / abkant tablosu) ve açınımın PROFİL'i (yan
+  görünüş) 1. sayfada kalan serbest pencerelerdir (`SAYFA1_ONEK`); TABLO
+  penceresi KENDİ ÖLÇEĞİNDE: yazısı kâğıtta `TABLO_YAZI_MM` (2,5) olacak
+  kadar (ana ölçekten küçük değil; yer yoksa `TABLO_ESNEK` ile geri).
+  AÇINIM resmi bölümlerini işaretler (`gorunus_isareti`: ON = ölçülü
+  açınım, `TABLO ACINIM`, `PROFIL`, `IZOMETRIK`, `BASLIK`, `OLCUSUZ`);
+  açınımda ana görünüş ÖN'dür (`_ana_gorunus`: yalnız standart adlar),
+  çok küçültmede ÖLÇÜSÜZ açınım ve İZOMETRİK 2. sayfaya gider (kazanç
+  şartı aranmaz). Büyük profil DXF'te küçültülür (`PROFIL_EN_COK` 30
+  yazı boyu; etiketler temiz yerleşmezse bir büyük ölçeğe dönülür).
+  Sağ sütun ölçülü açınımın ölçülmüş sağ sınırından başlar, başlık
+  satırları açınımın genişliğinde kırılır (pencereler üst üste binerse
+  pafta tek pencereye düşüyordu). Açınım KÂĞITTA ölçülür
+  (`acinim_kagit_dongusu`): rakam 2,5 mm altındaysa yazı büyütülüp
+  yeniden çizilir, ama ölçeği ilk turun %85'inin altına düşüren tur
+  alınmaz (resim büyük kalır). 2. sayfa aynı kâğıt boyunda, sığan en
+  büyük ölçekte. DXF'te sayfalar PAFTA, PAFTA_2 ... sekmeleridir. Örnek:
+  Karluna ÜST SAÇ açınımı 1:16 tek sayfa (rakam 0,5 mm) -> 1. sayfa 1:7
+  (açınım + tablo + profil), 2. sayfa ölçüsüz + izometrik.
 - Çizim kâğıdın yaklaşık %70-75'ini doldurur; ölçek serbest ve ara
   değerde olabilir (1:12, 1:14, 1:17 ...). Standart 1-2-5 serisine
   zorlanmaz.

@@ -11486,7 +11486,7 @@ def dxf_acilim(r, k, yol, P=None):
     doc = dxf_kur(); msp = doc.modelspace()
     # Yazı boyu KISA kenara göre: uzun bir profilde boya göre seçilirse
     # yazılar açınım genişliğinden büyük çıkar, etiketler üst üste biner.
-    h = min(12.0, max(2.0, min(gen, boy) / 30.0))
+    h = min(12.0, max(2.0, min(gen, boy) / 30.0)) * float((P or {}).get("yazi_kat") or 1.0)
     olcu_stili(doc, h)
     if kesim:
         for w in r["kontur_dis"]:
@@ -11579,7 +11579,28 @@ def dxf_acilim(r, k, yol, P=None):
     # tablonun üstüne biniyorlardı.
     # Büküm yoksa çizelge de olmaz; ama BAŞLIK yine yazılır, o yüzden
     # burada çıkılmaz, yalnız çizelge atlanır.
-    x = max(boy + 4.0 * h, etiket_sag + 2.0 * h)
+    # PAFTA İÇİN BÖLÜMLER (kullanıcı: "çok küçültme gereken resimde 1.
+    # sayfa ön resim + tablo + yan görünüş; ölçüsüz resim ya da kalan
+    # görünüm 2. sayfa; her paftada, PDF'te ve DXF'te"): her bölümün
+    # varlıkları ayrı toplanır, sonunda görünüş işaretiyle (gorunus_isareti)
+    # paftaya bildirilir. Ölçülü açınım (ON), tablo, profil (yan görünüş),
+    # izometrik, başlık, ölçüsüz açınım.
+    bolum = {"ON": [e_.dxf.handle for e_ in msp]}
+    _sira = set(bolum["ON"])
+
+    def _bolum_kapat(ad_):
+        yeni_ = [e_.dxf.handle for e_ in msp if e_.dxf.handle not in _sira]
+        _sira.update(yeni_)
+        bolum[ad_] = yeni_
+    # sağ sütun ölçülü açınımın ÖLÇÜLMÜŞ sağ sınırından başlar: büküm
+    # etiketleri ve koordinat rakamları kontur dışına taşar; sütun onlara
+    # değerse paftada pencereler üst üste biner, resim tek pencereye düşer
+    try:
+        _on_bb = ezdxf.bbox.extents(list(msp))
+        _on_sag = _on_bb.extmax.x if _on_bb.has_data else boy
+    except Exception:
+        _on_sag = boy
+    x = max(boy + 4.0 * h, etiket_sag + 2.0 * h, _on_sag + 3.0 * h)
     y = gen
     # TABLOLAR SEÇENEKLİ (kullanıcı: "tablo kalsın ya da seçenek koy,
     # müşteri isteyebilir"): büküm çizelgesi, abkant kanat dış ölçüleri
@@ -11627,6 +11648,7 @@ def dxf_acilim(r, k, yol, P=None):
                       + (f"B{i:<5d} {XL.tr(180.0 - b['aci_derece'], 1, False):>6s}  "
                          f"{XL.tr(b['r_ic'], 2, False):>6s}" if b else "-"), x, y, h)
             y -= 1.8 * h
+    _bolum_kapat("TABLO ACINIM")
     pr = r.get("profil")
     if pr and pr.get("cizgi"):
         # PROFİL görünüşü: bükümlerin yönü buradan okunur (K / B etiketleri
@@ -11649,68 +11671,94 @@ def dxf_acilim(r, k, yol, P=None):
                 olc = v
                 if en_kisa * v >= 5.0 * yazi_h:
                     break
-        pr = dict(pr, cizgi=[[(a * olc, b * olc) for a, b in q] for q in pr["cizgi"]],
-                  kanat=[((p[0] * olc, p[1] * olc), n) for p, n in pr["kanat"]],
-                  bukum=[(m[0] * olc, m[1] * olc) for m in pr["bukum"]])
-        pts = [p for q in pr["cizgi"] for p in q]
-        px0, py0 = min(p[0] for p in pts), min(p[1] for p in pts)
-        px1, py1 = max(p[0] for p in pts), max(p[1] for p in pts)
-        y -= 1.5 * h
-        _gad = pr.get("gorunus")
-        _yaz(msp, "PROFİL - büküm ekseni yönünden bakış"
-             + (f", araç yönünde ({GORUNUS_AD.get(_gad, _gad)} görünüş gibi)" if _gad else "")
-             + " (K: kanat, B: büküm)"
-             + (f"   ölçek {XL.tr(olc)}:1" if olc != 1.0 else ""), x, y, h)
-        # profil etiketleri (B, K) profilin üstüne de taşar: başlıkla arası
-        # 4 yazı boyu (P05 UST_SAC'ta B2 başlığa biniyordu)
-        y -= 4.0 * h
-        ox, oy = x + 3.0 * h - px0, y - (py1 - py0) - 2.0 * h - py0
-        for q in pr["cizgi"]:
-            msp.add_lwpolyline([(a + ox, b + oy) for a, b in q],
-                               dxfattribs={"layer": "GORUNEN"})
-        cx, cy = (px0 + px1) / 2.0, (py0 + py1) / 2.0
-        # Etiketlerin yeri ÖLÇÜLÜR (kural 12: yazı çizgiye binmez): kısa
-        # kanatta "K1 13,3" yazısı kanadın dışına taşıp komşu kanadın
-        # çizgisine biniyordu. Kanat normali boyunca artan uzaklıklarda,
-        # iki yanda ve kanat boyunca kaydırarak ilk temiz yer alınır.
-        # büküm işaretleri (küçük daire) etiketlerden ÖNCE çizilir ki
-        # etiket yeri ölçülürken görülsün ("K4 15" B4'ün dairesine biniyordu)
-        for m in pr["bukum"]:
-            msp.add_circle((m[0] + ox, m[1] + oy), 0.25 * yazi_h, dxfattribs={"layer": "EKSEN"})
-        alan_ = (px0 + ox - 12 * h, py0 + oy - 12 * h, px1 + ox + 12 * h, py1 + oy + 12 * h)
-        cz_ = _cizgi_parcalari(msp, alan_, katman=("GORUNEN", "EKSEN", "OLCU"))
-        dolu_ = []
+        # BÜYÜK PROFİL KÜÇÜLTÜLÜR (kullanıcı: "1. sayfa ön resim + tablo +
+        # yan görünüş; A3'ün en çok alanı"): ÜST SAÇ'ın 786 mm'lik profili
+        # gerçek boyda 1. sayfayı dolduruyor, ana açınım 1:10'a düşüyordu.
+        # Profil şematik yan görünüştür, ölçeği başlığında yazar; en uzun
+        # kenarı PROFIL_EN_COK yazı boyunu aşmaz (etiketler okunur kalır).
+        if olc == 1.0 and ext > PROFIL_EN_COK * yazi_h:
+            for v in (0.5, 0.4, 0.25, 0.2, 0.1, 0.05):
+                olc = v
+                if ext * v <= PROFIL_EN_COK * yazi_h:
+                    break
+        # küçültme adayları: etiketler temiz yerleşmezse bir büyük ölçeğe
+        # dönülür (K10 33,9 ile B10 sıkışıp çakışıyordu)
+        olc_aday = [olc] + ([v for v in (0.5, 0.4, 0.25, 0.2, 0.1, 0.05, 1.0)
+                             if v > olc] if olc < 1.0 else [])
+        pr0 = pr
+        y_bas = y
+        for _deneme, olc in enumerate(olc_aday):
+            y = y_bas
+            _once = {e_.dxf.handle for e_ in msp}
+            kirli = [False]
+            pr = dict(pr0, cizgi=[[(a * olc, b * olc) for a, b in q] for q in pr0["cizgi"]],
+                      kanat=[((p[0] * olc, p[1] * olc), n) for p, n in pr0["kanat"]],
+                      bukum=[(m[0] * olc, m[1] * olc) for m in pr0["bukum"]])
+            pts = [p for q in pr["cizgi"] for p in q]
+            px0, py0 = min(p[0] for p in pts), min(p[1] for p in pts)
+            px1, py1 = max(p[0] for p in pts), max(p[1] for p in pts)
+            y -= 1.5 * h
+            _gad = pr.get("gorunus")
+            _yaz(msp, "PROFİL - büküm ekseni yönünden bakış"
+                 + (f", araç yönünde ({GORUNUS_AD.get(_gad, _gad)} görünüş gibi)" if _gad else "")
+                 + " (K: kanat, B: büküm)"
+                 + (f"   ölçek {olcek_yazisi_kisa(olc)}" if olc != 1.0 else ""), x, y, h)
+            # profil etiketleri (B, K) profilin üstüne de taşar: başlıkla arası
+            # 4 yazı boyu (P05 UST_SAC'ta B2 başlığa biniyordu)
+            y -= 4.0 * h
+            ox, oy = x + 3.0 * h - px0, y - (py1 - py0) - 2.0 * h - py0
+            for q in pr["cizgi"]:
+                msp.add_lwpolyline([(a + ox, b + oy) for a, b in q],
+                                   dxfattribs={"layer": "GORUNEN"})
+            cx, cy = (px0 + px1) / 2.0, (py0 + py1) / 2.0
+            # Etiketlerin yeri ÖLÇÜLÜR (kural 12: yazı çizgiye binmez): kısa
+            # kanatta "K1 13,3" yazısı kanadın dışına taşıp komşu kanadın
+            # çizgisine biniyordu. Kanat normali boyunca artan uzaklıklarda,
+            # iki yanda ve kanat boyunca kaydırarak ilk temiz yer alınır.
+            # büküm işaretleri (küçük daire) etiketlerden ÖNCE çizilir ki
+            # etiket yeri ölçülürken görülsün ("K4 15" B4'ün dairesine biniyordu)
+            for m in pr["bukum"]:
+                msp.add_circle((m[0] + ox, m[1] + oy), 0.25 * yazi_h, dxfattribs={"layer": "EKSEN"})
+            alan_ = (px0 + ox - 12 * h, py0 + oy - 12 * h, px1 + ox + 12 * h, py1 + oy + 12 * h)
+            cz_ = _cizgi_parcalari(msp, alan_, katman=("GORUNEN", "EKSEN", "OLCU"))
+            dolu_ = []
 
-        def _etiket_koy(et, px, py, nx, ny, boy_h, kat):
-            en_ = None
-            for uz in (1.2, 2.4, 3.8, 5.4, 7.2, 9.2):
-                for sg in (1.0, -1.0):
-                    for kay in (0.0, 1.5, -1.5, 3.0, -3.0, 4.5, -4.5, 6.0, -6.0):
-                        tx = px + sg * nx * (t / 2.0 + uz * boy_h) - ny * kay * boy_h + ox
-                        ty = py + sg * ny * (t / 2.0 + uz * boy_h) + nx * kay * boy_h + oy
-                        e_ = _yaz(msp, et, tx - 0.36 * len(et) * boy_h, ty - 0.45 * boy_h,
-                                  boy_h, kat=kat)
-                        kt = _yazi_siniri(e_)
-                        if kt and not _cakisiyor(kt, dolu_, 0.15 * boy_h) \
-                                and not _cizgi_kesiyor(kt, cz_, 0.1 * boy_h):
-                            dolu_.append(kt)
-                            return
-                        if en_ is None:
-                            en_ = (tx, ty)
-                        msp.delete_entity(e_)
-            tx, ty = en_
-            e_ = _yaz(msp, et, tx - 0.36 * len(et) * boy_h, ty - 0.45 * boy_h, boy_h, kat=kat)
-            kt = _yazi_siniri(e_)
-            if kt:
-                dolu_.append(kt)
-        for i, (p, n) in enumerate(pr["kanat"], 1):
-            sg = 1.0 if (p[0] - cx) * n[0] + (p[1] - cy) * n[1] >= 0 else -1.0
-            et = f"K{i}" + (f" {XL.tr(kdo[i - 1], 1)}" if tablo and len(kdo) == len(pr["kanat"]) else "")
-            _etiket_koy(et, p[0], p[1], sg * n[0], sg * n[1], yazi_h, "OLCU")
-        for i, m in enumerate(pr["bukum"], 1):
-            dx_, dy_ = m[0] - cx, m[1] - cy
-            L_ = math.hypot(dx_, dy_) or 1.0
-            _etiket_koy(f"B{i}", m[0], m[1], dx_ / L_, dy_ / L_, 0.8 * yazi_h, "EKSEN")
+            def _etiket_koy(et, px, py, nx, ny, boy_h, kat):
+                en_ = None
+                for uz in (1.2, 2.4, 3.8, 5.4, 7.2, 9.2):
+                    for sg in (1.0, -1.0):
+                        for kay in (0.0, 1.5, -1.5, 3.0, -3.0, 4.5, -4.5, 6.0, -6.0):
+                            tx = px + sg * nx * (t / 2.0 + uz * boy_h) - ny * kay * boy_h + ox
+                            ty = py + sg * ny * (t / 2.0 + uz * boy_h) + nx * kay * boy_h + oy
+                            e_ = _yaz(msp, et, tx - 0.36 * len(et) * boy_h, ty - 0.45 * boy_h,
+                                      boy_h, kat=kat)
+                            kt = _yazi_siniri(e_)
+                            if kt and not _cakisiyor(kt, dolu_, 0.15 * boy_h) \
+                                    and not _cizgi_kesiyor(kt, cz_, 0.1 * boy_h):
+                                dolu_.append(kt)
+                                return
+                            if en_ is None:
+                                en_ = (tx, ty)
+                            msp.delete_entity(e_)
+                kirli[0] = True
+                tx, ty = en_
+                e_ = _yaz(msp, et, tx - 0.36 * len(et) * boy_h, ty - 0.45 * boy_h, boy_h, kat=kat)
+                kt = _yazi_siniri(e_)
+                if kt:
+                    dolu_.append(kt)
+            for i, (p, n) in enumerate(pr["kanat"], 1):
+                sg = 1.0 if (p[0] - cx) * n[0] + (p[1] - cy) * n[1] >= 0 else -1.0
+                et = f"K{i}" + (f" {XL.tr(kdo[i - 1], 1)}" if tablo and len(kdo) == len(pr["kanat"]) else "")
+                _etiket_koy(et, p[0], p[1], sg * n[0], sg * n[1], yazi_h, "OLCU")
+            for i, m in enumerate(pr["bukum"], 1):
+                dx_, dy_ = m[0] - cx, m[1] - cy
+                L_ = math.hypot(dx_, dy_) or 1.0
+                _etiket_koy(f"B{i}", m[0], m[1], dx_ / L_, dy_ / L_, 0.8 * yazi_h, "EKSEN")
+            if not kirli[0] or _deneme == len(olc_aday) - 1:
+                break
+            # etiket temiz yerleşmedi: bu deneme silinir, büyük ölçekle yeniden
+            for e_ in [e_ for e_ in msp if e_.dxf.handle not in _once]:
+                msp.delete_entity(e_)
         y = oy + py0 - 2.0 * h
         # profil etiketleri (K12, B12 ...) profilin altına taşabilir: başlık
         # ölçülen en alt yazının altından başlar (PERSPEKTİF yazısı B12'ye
@@ -11718,6 +11766,18 @@ def dxf_acilim(r, k, yol, P=None):
         alt_ = [kt[1] for kt in _yazi_kutulari(msp) if kt[0] >= x - 1e-6]
         if alt_:
             y = min(y, min(alt_) - 1.2 * h)
+    # profil etiketleri sola taşabilir: bölüm ölçülür, sağ sütunun
+    # başından (x) sola taşıyorsa bütünüyle sağa kaydırılır
+    _pr_h = [e_ for e_ in msp if e_.dxf.handle not in _sira]
+    if _pr_h:
+        try:
+            _pb = ezdxf.bbox.extents(_pr_h)
+            if _pb.has_data and _pb.extmin.x < x - 1e-6:
+                for e_ in _pr_h:
+                    e_.translate(x - _pb.extmin.x, 0.0, 0.0)
+        except Exception:
+            pass
+    _bolum_kapat("PROFIL")
     izo = r.get("izo")
     if izo:
         pts = [p for q in izo for p in q]
@@ -11738,6 +11798,7 @@ def dxf_acilim(r, k, yol, P=None):
     # Büküm ekseni KONUM ÖLÇÜLERİ (zincir + paralel) kaldırıldı (kullanıcı:
     # açınımda yalnız dış ölçüler ve delik konumları); büküm eksenlerinin
     # yeri büküm çizelgesinde (EKSEN sütunu) yazılıdır.
+    _bolum_kapat("IZOMETRIK")
     poz = f"POZ {k['poz']}   " if k.get("poz") else ""
     sat = [(f"{poz}{k.get('kod','')}   {(k.get('ad') or '')[:60]}   AÇINIM", 1.5 * h),
            (f"adet: {k.get('adet','-')}", 1.1 * h),
@@ -11782,10 +11843,20 @@ def dxf_acilim(r, k, yol, P=None):
                     f"üstünden geçeceği için burada): " + "  ".join(
                         f"{XL.tr(x_, 1)}; {XL.tr(y_, 1)}" for x_, y_ in tabloya[:12])
                     + ("  ..." if len(tabloya) > 12 else ""), 1.0 * h))
+    # başlık satırları AÇINIMIN GENİŞLİĞİNDE kırılır: yazı büyüyünce uzun
+    # not satırları (delik konumu, yöntem) resmin üç katı genişliğe çıkıp
+    # pafta ölçeğini düşürüyordu (ÜST SAÇ: 5,2 m'lik başlık, 1:20)
+    sat2 = []
+    for metin, yaz_h in sat:
+        n_ = max(40, int(max(boy, 20.0 * h) / (0.62 * yaz_h)))
+        for parca_ in (textwrap.wrap(metin, n_) or [metin]):
+            sat2.append((parca_, yaz_h))
+    sat = sat2
     y = gen + 4.0 * h + ust_band + len(sat) * 2.2 * h
     for metin, yaz_h in sat:
         _yaz(msp, metin, 0.0, y, yaz_h)
         y -= 2.2 * h
+    _bolum_kapat("BASLIK")
     # İKİNCİ RESİM: ÖLÇÜSÜZ AÇINIM (kullanıcı: "üç resim olacak: ölçülü,
     # ölçüsüz ve izometrik bükümlü; hem DXF'te hem PDF'te"). Aynı kontur,
     # delikler ve büküm eksenleri, hiçbir ölçü ve yazı olmadan; ölçülünün
@@ -11811,12 +11882,84 @@ def dxf_acilim(r, k, yol, P=None):
                 orta = (b["acinimda_bas_mm"] + b["acinimda_son_mm"]) / 2.0
                 (x1_, y1_), (x2_, y2_) = (0.0, orta), (boy, orta)
             msp.add_line((x1_, y1_ + dy), (x2_, y2_ + dy), dxfattribs={"layer": "EKSEN"})
+    _bolum_kapat("OLCUSUZ")
+    tut = {e_.dxf.handle: e_ for e_ in msp}
+    for ad_, hs in bolum.items():
+        kt_ = [tut[h_] for h_ in hs if h_ in tut]
+        if not kt_:
+            continue
+        try:
+            bb_ = ezdxf.bbox.extents(kt_)
+        except Exception:
+            continue
+        if bb_.has_data:
+            gorunus_isareti(msp, ad_, (bb_.extmin.x, bb_.extmin.y, bb_.extmax.x, bb_.extmax.y))
     doc.saveas(yol)
     return yol
 
 
 # açınım resmi kuralı değişince artırılır: eski açınımlar yeniden çizilir
-ACINIM_CIZIM_SURUMU = "2026.10.03"
+ACINIM_CIZIM_SURUMU = "2026.10.03b"
+ACINIM_YAZI_KAT_EN_COK = 3.0
+PROFIL_EN_COK = 30.0             # açınım profilinin en uzun kenarı en çok bu kadar yazı boyu     # kâğıt döngüsünde yazı boyu en çok bu kat büyür
+
+
+def acinim_kagit_dongusu(r, k, yol, P=None, log=None):
+    """AÇINIM KÂĞITTA OKUNUR (kural 25 ile aynı mantık; kullanıcı: "çok
+    küçültme gereken resimde 1. sayfa ön resim + tablo + yan görünüş,
+    kalan 2. sayfa; resimler A3'ün antet ve kenar dışındaki alanını en
+    çok kaplar"): çizilir, pafta planı kuru kurulur (2. sayfa kararıyla
+    birlikte), en küçük yazının kâğıttaki boyu ölçülür; SONUC_YAZI_MM
+    (2,5) altındaysa yazı boyu büyütülüp yeniden çizilir. En çok SONUC_TUR
+    tur; büyütmek kâğıtta kazandırmıyorsa durur, en iyi tur kalır.
+    Döner: [(yazı katı, ölçek metni, kâğıtta yazı mm, sayfa sayısı)]."""
+    import shutil
+    import pf4_pafta as PF
+    P = dict(P or {})
+    kagit = P.get("kagit") or ayar_oku().get("kagit") or "A3"
+    kat = float(P.get("yazi_kat") or 1.0)
+    turlar, en_iyi = [], None
+    for tur in range(1, SONUC_TUR + 1):
+        dxf_acilim(r, k, yol, dict(P, yazi_kat=kat))
+        try:
+            pl = PF.pafta_kur(yol, None, kagit, yalniz_plan=True)
+            # ölçü RAKAMI (yazı boyu h) kâğıtta: kural 2,5 mm rakam içindir
+            h_ = min(12.0, max(2.0, min(float(r["acinim_genislik_mm"]),
+                                         float(r["acinim_boy_mm"])) / 30.0)) * kat
+            yz = h_ * float(pl["olcek"])
+        except Exception as ex:
+            if log:
+                log(f"    açınım kâğıt ölçümü yapılamadı: {ex}"[:120])
+            break
+        turlar.append((kat, pl.get("olcek_metni"), yz, pl.get("sayfa")))
+        o_ = float(pl["olcek"])
+        if tur == 1:
+            o_ilk = o_
+        # RESİM BÜYÜK KALIR (kullanıcı: "A3'ün antet ve kenar dışındaki
+        # alanını en çok kaplayacak"): yazı büyütmek ölçeği ilk turun
+        # %85'inin altına düşürüyorsa o tur alınmaz (yazı büyüdükçe tablo,
+        # başlık, koordinat rakamları da büyüyor; ÜST SAÇ 1:7'den 1:14'e
+        # düşüyordu)
+        if o_ < 0.85 * o_ilk - 1e-12:
+            break
+        if en_iyi is None or yz > en_iyi[1] + 1e-9:
+            en_iyi = (tur, yz)
+            shutil.copyfile(yol, yol + ".eniyi")
+        if yz >= SONUC_YAZI_MM - 0.05:
+            break
+        if len(turlar) >= 2 and yz <= turlar[-2][2] + 1e-9:
+            break                                   # büyütmek kazandırmadı
+        yeni = min(ACINIM_YAZI_KAT_EN_COK, kat * SONUC_YAZI_MM / max(yz, 0.1) * 1.05)
+        if yeni <= kat + 1e-6:
+            break
+        kat = yeni
+    if en_iyi and os.path.isfile(yol + ".eniyi"):
+        shutil.copyfile(yol + ".eniyi", yol)
+        os.remove(yol + ".eniyi")
+    if log and turlar:
+        log("    açınım kâğıtta: " + "; ".join(
+            f"x{XL.tr(a, 2)} {b} rakam {XL.tr(c, 1)} mm" for a, b, c, _d in turlar))
+    return turlar
 ACINIM_KONUM_EN_COK = 60   # bir yönde bundan çok farklı konum varsa ölçülmez (lazer DXF'i verir)
 
 
@@ -11917,6 +12060,15 @@ def _acinim_delik_konumlari(msp, r, boy, gen, h):
         for i in range(1, len(p)):
             p[i] = max(p[i], p[i - 1] + aralik)
         return p
+    # VAR OLAN YAZILAR da engeldir (kural 12): eğik bükümün B etiketi
+    # kontur dışında, kılavuzun geçeceği yerde durabilir (SOL DİKME: B7-B9
+    # sol kenarda, Y kılavuzları üstlerinden geçiyordu)
+    _yazilar = _yazi_kutulari(msp)
+
+    def yazi_engel(p, q):
+        x0, x1 = min(p[0], q[0]) - 0.15 * h, max(p[0], q[0]) + 0.15 * h
+        y0, y1 = min(p[1], q[1]) - 0.15 * h, max(p[1], q[1]) + 0.15 * h
+        return any(k[0] < x1 and k[2] > x0 and k[1] < y1 and k[3] > y0 for k in _yazilar)
     tabloya, ust, alt, sol = [], [], [], []
     for xv in xs_:
         aday = [c for c in delik if abs(c[0] - xv) <= 0.05]
@@ -11926,14 +12078,15 @@ def _acinim_delik_konumlari(msp, r, boy, gen, h):
         for yan, _uz, c in secenek:
             hedef = gen if yan == "ust" else 0.0
             bas = c[2][3] if yan == "ust" else c[2][1]
-            if not engel_var((xv, bas), (xv, hedef), c):
+            uc = hedef + (8.0 * h if yan == "ust" else -8.0 * h)
+            if not engel_var((xv, bas), (xv, hedef), c) and not yazi_engel((xv, bas), (xv, uc)):
                 (ust if yan == "ust" else alt).append((xv, c))
                 break
         else:
             tabloya.append((tepe[0], tepe[1]))
     for yv in ys_:
         c = min((c for c in delik if abs(c[1] - yv) <= 0.05), key=lambda c: c[0])
-        if engel_var((0.0, yv), (c[2][0], yv), c):
+        if engel_var((0.0, yv), (c[2][0], yv), c) or yazi_engel((-8.0 * h, yv), (c[2][0], yv)):
             if (c[0], c[1]) not in tabloya:
                 tabloya.append((c[0], c[1]))
             continue
@@ -12189,7 +12342,10 @@ def acilim_yaz(kayit, komp, P, klasor, kodlar=None, k_faktor=K_FAKTOR, k_parca=N
                                            k.get("ad"), acinim=True))
         IS.eskiyi_kaldir(kok, "acinim", ad, os.path.basename(dosya), log,
                          korunan=yazilan_ac)
-        dxf_acilim(r, dict(k, poz=poz), dosya, P)
+        if (P or {}).get("acinim_kagit", True):
+            acinim_kagit_dongusu(r, dict(k, poz=poz), dosya, P, log)
+        else:
+            dxf_acilim(r, dict(k, poz=poz), dosya, P)
         yazilan_ac.add(os.path.basename(dosya))
         r["kod"] = ad
         r["ad"] = k.get("ad", "")

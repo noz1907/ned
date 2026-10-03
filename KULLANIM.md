@@ -1633,6 +1633,13 @@ varsayılan kapalı, çünkü sık basamaklı parçada bu ölçüler konturla
 
 ### Adım 7 — PAFTA
 
+**Sayfa kuralı (çok küçültme gereken resim):** 1. sayfada ön resim, tablo
+(seçiliyse) ve bir yan görünüş durur. Ölçüsüz açınım, izometrik ve kalan
+görünüşler 2. sayfaya gider. Her sayfa A3'ün antet ve kenar boşlukları
+dışındaki alanını en çok kaplar; 2. sayfa aynı kâğıt boyundadır.
+Tablolar kendi ölçeğindedir, yazıları kâğıtta 2,5 mm. Aynı sayfalar
+DXF'te PAFTA, PAFTA_2 sekmeleridir.
+
 Buraya kadar çıkan resimler **1:1**'dir ve öyle kalır. Bu adım onları
 silmez, ölçeklerini değiştirmez, çizimin kendisine dokunmaz. Yaptığı iş
 şudur: **resmin kendi DXF dosyasına** `PAFTA` adında bir kâğıt sekmesi

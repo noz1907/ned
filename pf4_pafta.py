@@ -636,13 +636,68 @@ def _gorunus_kutulari(d, alanlar, haric=()):
 
 IZO_AD = "IZO"           # küçük perspektif (pf3_olcu.IZO_AD); serbest, hep 1. sayfada
 SAYFA1_SERBEST = (IZO_AD, BASLIK_AD)   # 2. sayfaya gitmeyen serbest pencereler (bilgi bloğu ayrıca)
+# 1. SAYFADA KALAN serbest pencereler (kullanıcı: "çok küçültme gereken
+# resimde 1. sayfa ön resim + tablo + yan görünüş sağ ya da sol; ölçüsüz
+# resim ya da kalan görünüm 2. sayfa; her paftada, PDF'te ve DXF'te"):
+# perspektif (IZO, kural 18), başlık, TABLO (delik koordinat tablosu,
+# açınım büküm / abkant tablosu - seçiliyse) ve açınımın PROFİL'i (yan
+# görünüş). Detaylar, yardımcı görünüşler, açınımın İZOMETRİK'i 2. sayfaya
+# gidebilir.
+SAYFA1_ONEK = ("TABLO", "PROFIL")
+# standart görünüş adları: ANA görünüş yalnız bunlardan seçilir (açınımın
+# ÖLÇÜSÜZ kopyası ölçülüyle aynı alanda; ana o olmamalı)
+STANDART_GORUNUS = ("ON", "ARKA", "SAG", "SOL", "UST", "ALT")
+
+
+TABLO_YAZI_MM = 2.5     # tablo penceresinde yazının kâğıttaki hedef boyu (ISO 3098 en az 2,5)
+TABLO_ESNEK = (1.0, 0.85, 0.7, 0.55, 0.0)   # yer yoksa hedeften bu kadar geri (0: ana ölçek)
+
+
+def _tablo_mu(ad):
+    return str(ad).startswith("TABLO")
+
+
+def _kutu_yazi_boyu(d, k):
+    """Kutudaki TEXT / MTEXT yazılarının en küçük yüksekliği (yoksa None)."""
+    en = None
+    for e in d.modelspace().query("TEXT MTEXT"):
+        try:
+            p = e.dxf.insert
+            hh = float(e.dxf.char_height if e.dxftype() == "MTEXT" else e.dxf.height)
+        except Exception:
+            continue
+        if k[0] - 1e-6 <= p[0] <= k[2] + 1e-6 and k[1] - 1e-6 <= p[1] <= k[3] + 1e-6 and hh > 0:
+            en = hh if en is None else min(en, hh)
+    return en
+
+
+def serbest_olcek(plan, ad):
+    """Serbest pencerenin kendi ölçeği: TABLO pencereleri (yalnız yazı)
+    ana resmin ölçeğine bağlı değildir (kullanıcı: "1. sayfa ön resim +
+    tablo + yan görünüş"; tablo karınca duası olmaz): yazı kâğıtta
+    TABLO_YAZI_MM olacak kadar büyür (ana ölçekten küçük, 1:1'den büyük
+    olmaz). Öbürleri ana ölçekte."""
+    return (plan.get("serbest_olcek") or {}).get(ad, plan["olcek"])
+
+
+def _sayfa1_mi(ad):
+    ad = str(ad)
+    return ad in SAYFA1_SERBEST or ad.startswith(SAYFA1_ONEK)
+
+
+def _ana_gorunus(al_):
+    """1. sayfanın ANA görünüşü: standart adlılar arasında en büyük alan;
+    eşitlikte ÖN."""
+    aday = [a for a in al_ if a in STANDART_GORUNUS] or list(al_)
+    return max(aday, key=lambda a: ((al_[a][2] - al_[a][0]) * (al_[a][3] - al_[a][1]), a == "ON"))
 
 
 def _serbest_mi(ad):
     """DETAY ve PERSPEKTİF görünüşleri izdüşüm ızgarasının parçası değildir:
     kâğıdın boş yerine SERBEST pencere olarak konur (bkz. _serbest_yerlestir)."""
     ad = str(ad)
-    return ad.startswith("DETAY") or ad == IZO_AD or ad.startswith("YARDIMCI") or ad.startswith("TABLO")
+    return (ad.startswith("DETAY") or ad == IZO_AD or ad.startswith("YARDIMCI")
+            or ad.startswith("TABLO") or ad.startswith("PROFIL") or ad.startswith("IZOMETRIK"))
 
 
 def _serbest_kutular(d, alanlar):
@@ -939,9 +994,9 @@ def cok_pencere_plani(d, kutu, alan_g, alan_y, olcek_zorla=None, serbest_izin=Fa
     if serbest and not (serbest_izin or serbest_sayfa2):
         return None          # detaylar yalnız tam kâğıt planında yerleşir
     # Detaylar 2. SAYFAYA gidebilir; perspektif (IZO) hep 1. sayfada kalır
-    sayfa2 = {a: b for a, b in serbest.items() if a not in SAYFA1_SERBEST} if serbest_sayfa2 else {}
+    sayfa2 = {a: b for a, b in serbest.items() if not _sayfa1_mi(a)} if serbest_sayfa2 else {}
     if serbest_sayfa2:
-        serbest = {a: b for a, b in serbest.items() if a in SAYFA1_SERBEST}
+        serbest = {a: b for a, b in serbest.items() if _sayfa1_mi(a)}
     serbest = dict(serbest, **bilgi_serbest)   # bilgi bloğu hep 1. sayfada
     if baslik_serbest and baslik is not None and serbest_izin:
         # BAŞLIK BLOĞU SERBEST: öbeğin üstünde tam genişlikte şerit açmak
@@ -1048,16 +1103,28 @@ def tam_kagit_plani(d, kutu, kagit=VARSAYILAN_KAGIT, sablon=None, serbest_sayfa2
                 if any(k_[0] < ant[2] and k_[2] > ant[0] and k_[1] < ant[3] and k_[3] > ant[1]
                        for k_ in kut):
                     continue
-                sy = _serbest_yerlestir(p, kut, ic, ant)
+                sy = None
+                tablolar = {a: b for a, b in (p.get("serbest") or {}).items() if _tablo_mu(a)}
+                for f_ in (TABLO_ESNEK if tablolar else (0.0,)):
+                    so = {}
+                    for a, b in tablolar.items():
+                        hy = _kutu_yazi_boyu(d, b)
+                        hedef = min(1.0, TABLO_YAZI_MM / hy) if hy else o
+                        so[a] = max(o, hedef * f_)
+                    p["serbest_olcek"] = so
+                    sy = _serbest_yerlestir(p, kut, ic, ant)
+                    if sy is not None:
+                        break
                 if sy is None:
                     continue           # detaylar bu yerleşimde kâğıda sığmıyor
                 cx, cy = sol + pg / 2.0, alt + py / 2.0
                 u = (cx - (fx0 + fx1) / 2.0) ** 2 + (cy - (fy0 + fy1) / 2.0) ** 2
                 if en_iyi is None or u < en_iyi[0]:
-                    en_iyi = (u, sol, alt, sy)
+                    en_iyi = (u, sol, alt, sy, dict(p.get("serbest_olcek") or {}))
         if en_iyi:
             p["sabit_yer"] = (en_iyi[1], en_iyi[2])
             p["serbest_yer"] = en_iyi[3]
+            p["serbest_olcek"] = en_iyi[4]
             p["yer"], p["alan"] = "tam", ic
             return p
     return None
@@ -1079,6 +1146,19 @@ def _ekstra_gorunusler(al_, ana):
         if "KESIT" in str(a).upper():
             cekirdek.add(a)
     return tuple(sorted((a for a in al_ if a not in cekirdek), key=lambda a: al_[a][0]))
+
+
+def _yan_cekirdek(al_, ana):
+    """İkinci kademede 1. sayfada kalan görünüşler: ana, ÖN, bir yan (SAĞ
+    varsa SAĞ, yoksa SOL) ve kesit(ler)."""
+    c = {ana, "ON"} & set(al_) | {ana}
+    if not c & {"SAG", "SOL"}:
+        for g in ("SAG", "SOL"):
+            if g in al_:
+                c.add(g)
+                break
+    c |= {a for a in al_ if "KESIT" in str(a).upper()}
+    return c
 
 
 def _gorunus_sirasi_yerlestir(gor, o, ic, ant):
@@ -1128,7 +1208,8 @@ def _serbest_yerlestir(plan, dolu, ic, ant, adim=4.0):
     # yoksa kâğıdın başka boş yeri.
     obek_alt = min(k[1] for k in dolu) - ARA_EN_AZ if dolu else ic[3]
     for ad, b in sorted(serbest.items(), key=lambda t: (-round(t[1][3], -1), t[1][0])):
-        w, hh = (b[2] - b[0]) * o, (b[3] - b[1]) * o
+        o_ = serbest_olcek(plan, ad)
+        w, hh = (b[2] - b[0]) * o_, (b[3] - b[1]) * o_
         en_iyi = None
         for alt_sart in (True, False):
             y = ic[1]
@@ -1204,7 +1285,7 @@ def _detay_sayfalari(d, pafta_adi, kagit, detaylar, no, resim_adi, sablon, deger
         # alınmaz (kural 8.1)
         gorunus_var = any(not _serbest_mi(a) for a in secim)
         not_ = (f"{kagit_adi(kagit)}  sayfa {n}  ÖLÇEK {olcek_metni(olcek)}"
-                + ("  (detay büyütmesi ayrıca yazılı)" if any(_serbest_mi(a) for a in secim) else "")
+                + ("  (detay / perspektif ölçeği kendi başlığında)" if any(_serbest_mi(a) for a in secim) else "")
                 + ("" if gorunus_var else "  DETAYLAR"))
         _pafta_cerceve_ciz(pafta, kagit, no, resim_adi, not_, sablon=sablon,
                            antet_degerleri=dict(deger or {}, sayfa=n,
@@ -1250,7 +1331,8 @@ def _cok_pencere_ciz(pafta, plan, sol, alt):
     # serbest pencereler (detaylar): tam kâğıt planının bulduğu yerde
     for ad, (x, y) in (plan.get("serbest_yer") or {}).items():
         c = plan["serbest"][ad]
-        w, hh = (c[2] - c[0]) * o, (c[3] - c[1]) * o
+        o_ = serbest_olcek(plan, ad)
+        w, hh = (c[2] - c[0]) * o_, (c[3] - c[1]) * o_
         pafta.add_viewport(
             center=(x + w / 2.0, y + hh / 2.0), size=(w, hh),
             view_center_point=((c[0] + c[2]) / 2.0, (c[1] + c[3]) / 2.0),
@@ -1576,13 +1658,31 @@ def pafta_kur(kaynak_dxf, cikti_dxf=None, kagit=VARSAYILAN_KAGIT, olcek=None,
             # izdüşüm düzeninde kalır; ARKA, ikinci yan, ikinci üst/alt
             # 2. sayfaya alınabilir.
             if len(al_) >= 2 and (yon_en is None or yz_tek < SAYFA_AYIR_YAZI_MM):
-                ana = max(al_, key=lambda a: (al_[a][2] - al_[a][0]) * (al_[a][3] - al_[a][1]))
+                ana = _ana_gorunus(al_)
                 digerleri = _ekstra_gorunusler(al_, ana)
                 tp3 = (tam_kagit_plani(d, (x0, y0, x1, y1), kg_ad, sablon, serbest_sayfa2=True,
                                        sayfa2_gorunus=digerleri) if digerleri else None)
+                # AÇINIM (ölçüsüz kopyası olan resim): kullanıcının kuralı
+                # doğrudan uygulanır - fazla küçültmede ölçüsüz açınım ve
+                # izometrik 2. sayfaya; 1. sayfa küçülmüyorsa yeter
+                oran_ = 1.0 if "OLCUSUZ" in al_ else SAYFA_AYIR_ORAN
                 if tp3 and (yon_en is None
-                            or tp3["olcek"] > yon_en["olcek"] * SAYFA_AYIR_ORAN + 1e-12):
+                            or tp3["olcek"] >= yon_en["olcek"] * oran_ - 1e-12):
                     yon_en = tp3
+                # İKİNCİ KADEME (kullanıcı: "çok küçültme gereken resimde 1.
+                # sayfa ön resim + tablo + yan görünüş; kalan görünüm 2.
+                # sayfa"): ekstralar gittikten sonra da yazı küçükse üst / alt
+                # görünüş de 2. sayfaya; 1. sayfada ana görünüş, ÖN, bir yan
+                # (SAĞ, yoksa SOL), kesit, tablo, profil, perspektif, başlık.
+                yz2 = (en_kucuk_yazi(kaynak_dxf) * yon_en["olcek"]) if yon_en else 0.0
+                cekirdek2 = _yan_cekirdek(al_, ana)
+                kalan2 = tuple(sorted((a for a in al_ if a not in cekirdek2), key=lambda a: al_[a][0]))
+                if kalan2 and set(kalan2) != set(digerleri) and (yon_en is None or yz2 < SAYFA_AYIR_YAZI_MM):
+                    tp4 = tam_kagit_plani(d, (x0, y0, x1, y1), kg_ad, sablon, serbest_sayfa2=True,
+                                          sayfa2_gorunus=kalan2)
+                    if tp4 and (yon_en is None
+                                or tp4["olcek"] > yon_en["olcek"] * SAYFA_AYIR_ORAN + 1e-12):
+                        yon_en = tp4
             if yon_en and (plan is None or yon_en["olcek"] > plan["olcek"] + 1e-12):
                 plan, kagit = yon_en, kg_ad
 

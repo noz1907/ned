@@ -1,6 +1,6 @@
 Pi3D  –  3B modelden parça listesi ve teknik resim
 
-Sürüm   : v1.0.19  (03.10.2026)
+Sürüm   : v1.0.20  (03.10.2026)
 Kaynak  : github.com/noz1907/ned   dal: claude/fikstur-parca-stp-57hwc1
 
 KURULUM
@@ -154,6 +154,27 @@ BU SÜRÜMDE NE VAR
       6 yazı boyu), SİM. notu balonun altında.
     - kırmızı yalnız kaynağın kendisi (uzun sac kenarı artık kırmızı
       değil); kaynak ekseni ince mavi kesikli.
+
+  v1.0.20 (03.10.2026): çok küçültme gereken resimde sayfa kuralı
+    - Kullanıcının kuralı: 1. sayfada ön resim + tablo (seçiliyse) + bir
+      yan görünüş; ölçüsüz resim ya da kalan görünüşler 2. sayfada; her
+      paftada, PDF'te ve DXF'te. Her sayfa A3'ün antet ve kenar dışındaki
+      alanını en çok kaplar, 2. sayfa aynı kâğıt boyunda.
+    - AÇINIM paftası artık bölümlere ayrılıyor (ölçülü açınım, tablo,
+      profil, izometrik, başlık, ölçüsüz açınım). Önce hepsi tek
+      pencerede küçülüyordu: Karluna ÜST SAÇ 1:16, rakam 0,5 mm. Şimdi 1.
+      sayfa 1:7 (açınım + tablo + profil), 2. sayfa ölçüsüz açınım ve
+      izometrik.
+    - Tablolar kendi ölçeğinde: yazısı kâğıtta 2,5 mm (delik koordinat
+      tablosu da). Tablolar 1. sayfada kalır.
+    - Detay resminde ikinci kademe: ekstra görünüşler gittikten sonra yazı
+      hâlâ küçükse üst / alt görünüş de 2. sayfaya; 1. sayfada ana
+      görünüş, ÖN, bir yan, kesit.
+    - Büyük açınım profili küçültülerek çizilir (ölçeği başlığında);
+      başlık satırları açınım genişliğinde kırılır; açınım kâğıtta
+      ölçülür, rakam küçükse yazı büyütülür ama resim küçültülmez.
+    - Eğik büküm etiketlerinin üstünden konum kılavuzu geçmez (yazılar da
+      engel).
 
   v1.0.19 (03.10.2026): ölçü / tolerans düzenleme, açınımda yalnız dış ölçü
   ve delik konumu
