@@ -731,7 +731,8 @@ def acilim3(sh, t, k_faktor, M, hacim=None, en_cok_sapma=0.03):
     for b in bkm:
         b["bas"] = dondur(b["bas"]); b["son"] = dondur(b["son"])
     xs = [p[0] for w in dis for p in w]; ys = [p[1] for w in dis for p in w]
-    if max(xs) - min(xs) < max(ys) - min(ys):        # uzun kenar X'e
+    takas = max(xs) - min(xs) < max(ys) - min(ys)
+    if takas:                                         # uzun kenar X'e
         dis = [[(y, -x) for x, y in w] for w in dis]; ic = [[(y, -x) for x, y in w] for w in ic]
         for b in bkm:
             b["bas"] = [(y, -x) for x, y in b["bas"]]; b["son"] = [(y, -x) for x, y in b["son"]]
@@ -752,7 +753,29 @@ def acilim3(sh, t, k_faktor, M, hacim=None, en_cok_sapma=0.03):
         t, [math.sqrt(w["alan"]) for w in duvarlar],
         [b["r_ic"] for b in bkm], [math.radians(b["aci_derece"]) for b in bkm],
         max(ys) - min(ys))
-    return {"yontem": yon_, "profil": None, "cok_yonlu": True,
+    # DÜZLEM EKSENLERİ 3B'de (girdi katının çerçevesinde; araç yönüne
+    # oturtmak için, bkz. pf3_olcu.acinim_arac_yonu): her duvarın düzlem
+    # çerçevesi (e1, e2) bu duvarın serme dönüşümüyle ve son döndürmeyle
+    # düzleme gider; dönüşüm ortogonaldir, tersi devriğidir.
+    def son_yon(v2):
+        x, y = v2
+        x, y = x * ca - y * sa, x * sa + y * ca
+        return (y, -x) if takas else (x, y)
+    duz_duvar, kok_x = [], None
+    for wi, don in harita.items():
+        try:
+            e1, e2, n_, _o = _cerceve(duvarlar[wi])
+            a1, a2 = son_yon(don.yon(e1))
+            b1, b2 = son_yon(don.yon(e2))
+        except Exception:
+            continue
+        yy = _n(_p(_s(e1, a2), _s(e2, b2)))          # düzlemin +Y'si 3B'de
+        xx = _n(_p(_s(e1, a1), _s(e2, b1)))          # düzlemin +X'i 3B'de
+        duz_duvar.append((duvarlar[wi]["alan"], yy, tuple(n_)))
+        if wi == kok:
+            kok_x = xx
+    duz_yon = {"x": kok_x, "duvar": duz_duvar} if kok_x and duz_duvar else None
+    return {"yontem": yon_, "profil": None, "cok_yonlu": True, "duz_yon": duz_yon,
             "baglanamayan_alan_mm2": round(alan_d, 1), "baglanamayan_duvar": len(disarda),
             "kontur_dis": [kay(w) for w in dis], "kontur_delik": [kay(w) for w in ic],
             "delik_adedi": len(ic),

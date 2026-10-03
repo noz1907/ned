@@ -179,7 +179,12 @@ def main():
         dogru("büküm resminde PERSPEKTİF", "PERSPEKTİF" in yazi)
         dogru("profilde kanat dış ölçüsü (K1 105)", "K1 105" in yazi, yazi[-300:])
         eks = [e for e in acd.modelspace() if e.dxftype() == "LINE" and e.dxf.layer == "EKSEN"]
-        esit("tek büküm için tek büküm ekseni", len(eks), 1)
+        # açınım resminde iki çizim var (ölçülü + ölçüsüz, kural 28): her
+        # birinde tek büküm ekseni, ikisi aynı boyda
+        esit("tek büküm için her resimde tek büküm ekseni (ölçülü + ölçüsüz)", len(eks), 2)
+        if len(eks) == 2:
+            dogru("iki eksen aynı boyda",
+                  abs(eks[0].dxf.start.distance(eks[0].dxf.end) - eks[1].dxf.start.distance(eks[1].dxf.end)) < 0.01)
 
     print("\nSONUC: " + ("TUM DENETIMLER GECTI" if not HATA
                          else f"{len(HATA)} DENETIM KALDI: " + ", ".join(HATA)))

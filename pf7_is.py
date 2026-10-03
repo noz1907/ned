@@ -45,7 +45,7 @@ DURUM_DOSYASI = "pi3d_is.json"
 # satırı (--surum), kaynak resmi anteti ve paket adı buradan okur.
 # Her teslim edilen pakette artırılır: büyük.küçük.düzeltme
 PI3D_SURUM = "1.0.19"
-PI3D_SURUM_TARIHI = "01.10.2026"
+PI3D_SURUM_TARIHI = "03.10.2026"
 CIZIM_SURUMU = "2026.09.26"
 
 _kilit = threading.RLock()

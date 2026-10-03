@@ -394,7 +394,9 @@ DXF'te yazı boyunun katı olarak uygulanır):
     yönünden bakan detay görünüşü gibi (eksen X -> SAĞ, Y -> ÖN, Z ->
     ÜST; `profil_araca_oturt`). Karluna ÜST SAÇ açınımı baş aşağıydı
     (menteşeler üstte; araçta altta), ön panel profili yatıktı. 3B
-    (çok yönlü) açınımda düzlem yönü bilinmez, hesap yönünde kalır.
+    (çok yönlü) açınımda da aynı: her duvarın serme dönüşümünden düzlem
+    eksenleri 3B'de çıkar (kök duvarın +X'i), eğik büküm çizgileri birlikte
+    döner.
     Açınım kaydına `cizim` (ACINIM_CIZIM_SURUMU) ve `arac` girer: kod ya
     da araç yönü değişince eski açınım yeniden çizilir.
 

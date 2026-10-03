@@ -192,6 +192,8 @@ BU SÜRÜMDE NE VAR
       etiketleri ve lazer DXF'i birlikte. İzometrik bükümlü resim ve
       PROFİL resmi de araç yönünde (profil, büküm ekseni yönünden bakan
       detay görünüşü gibi: ön panelde 70,5'luk ön yüz artık dik).
+      3B (çok yönlü bükümlü) açınımlar da aynı kuralla. Dik duran uzun
+      parça (dikme) yatık çizilir, altı solda.
       Eski açınımlar kendiliğinden yeniden çizilir.
     - LAZER DXF'inde ölçü / yazı yok (yalnız KESIM katmanında konturlar;
       denetimle güvence altında).

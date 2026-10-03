@@ -11342,7 +11342,7 @@ def acinim_arac_yonu(r, R):
     araçta yukarı bakar (resim 90° yatıktır, ters değildir).
     Döner: (fx, fy, görünüş adı) - fx / fy: X / Y çevrilsin mi."""
     dy = r.get("duz_yon")
-    if not dy or not R or r.get("cok_yonlu"):
+    if not dy or not R or not dy.get("x") or not dy.get("duvar"):
         return False, False, None
 
     def cev(v):
@@ -11453,11 +11453,14 @@ def acinim_cevir(r, fx, fy):
         if fy and "acinimda_bas_mm" in b:
             b["acinimda_bas_mm"], b["acinimda_son_mm"] = (round(H - b["acinimda_son_mm"], 2),
                                                           round(H - b["acinimda_bas_mm"], 2))
-        if b.get("cizgi"):
-            b["cizgi"] = [p(q) for q in b["cizgi"]]
+        for ad in ("cizgi", "bas", "son"):          # eğik büküm (3B açınım)
+            if b.get(ad):
+                b[ad] = [p(q) for q in b[ad]]
         bk.append(b)
     if fy:
-        bk.sort(key=lambda b: b.get("acinimda_bas_mm", 0.0))
+        # B1 alt kenarda: düz bükümde başından, eğik bükümde çizgi ortasından
+        bk.sort(key=lambda b: ((b["cizgi"][0][1] + b["cizgi"][1][1]) if b.get("cizgi")
+                               else b.get("acinimda_bas_mm", 0.0)))
     if r.get("bukumler") is not None:
         r["bukumler"] = bk
         r["bukum_yerleri"] = [(b["acinimda_bas_mm"], b["acinimda_son_mm"]) for b in bk
