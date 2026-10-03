@@ -446,9 +446,9 @@ DXF'te yazı boyunun katı olarak uygulanır):
   satırları açınımın genişliğinde kırılır (pencereler üst üste binerse
   pafta tek pencereye düşüyordu). Açınım KÂĞITTA ölçülür
   (`acinim_kagit_dongusu`): rakam 1,5 mm (`ACINIM_YAZI_EN_AZ_MM`; kullanıcı:
-  "1,5'ta olabilir; üst ve sol kenar sıkıntı yok") altındaysa yazı büyütülüp
-  yeniden çizilir, ama ölçeği ilk turun %85'inin altına düşüren tur
-  alınmaz (resim büyük kalır). 2. sayfa aynı kâğıt boyunda, sığan en
+  "1,5'ta olabilir; üst ve sol kenar sıkıntı yok") altındaysa yazı yalnız 1,5 mm'ye yetecek
+  kadar büyütülüp yeniden çizilir (geçiyorsa büyütülmez, resim en büyük
+  ölçekte kalır). 2. sayfa aynı kâğıt boyunda, sığan en
   büyük ölçekte. DXF'te sayfalar PAFTA, PAFTA_2 ... sekmeleridir. Örnek:
   Karluna ÜST SAÇ açınımı 1:16 tek sayfa (rakam 0,5 mm) -> 1. sayfa 1:7
   (açınım + tablo + profil), 2. sayfa ölçüsüz + izometrik.

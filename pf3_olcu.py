@@ -11935,16 +11935,11 @@ def acinim_kagit_dongusu(r, k, yol, P=None, log=None):
                 log(f"    açınım kâğıt ölçümü yapılamadı: {ex}"[:120])
             break
         turlar.append((kat, pl.get("olcek_metni"), yz, pl.get("sayfa")))
-        o_ = float(pl["olcek"])
-        if tur == 1:
-            o_ilk = o_
-        # RESİM BÜYÜK KALIR (kullanıcı: "A3'ün antet ve kenar dışındaki
-        # alanını en çok kaplayacak"): yazı büyütmek ölçeği ilk turun
-        # %85'inin altına düşürüyorsa o tur alınmaz (yazı büyüdükçe tablo,
-        # başlık, koordinat rakamları da büyüyor; ÜST SAÇ 1:7'den 1:14'e
-        # düşüyordu)
-        if o_ < 0.85 * o_ilk - 1e-12:
-            break
+        # RESİM BÜYÜK KALIR, RAKAM 1,5 mm'DEN KÜÇÜK OLMAZ (kullanıcı: "A3'ün
+        # antet ve kenar dışındaki alanını en çok kaplayacak"; "1,5'ta
+        # olabilir"): rakam 1,5 mm'yi geçiyorsa yazı büyütülmez (ilk tur,
+        # en büyük ölçek); geçmiyorsa yazı yalnız 1,5 mm'ye yetecek kadar
+        # büyütülür - ölçek o kadar düşer, fazlası değil
         if en_iyi is None or yz > en_iyi[1] + 1e-9:
             en_iyi = (tur, yz)
             shutil.copyfile(yol, yol + ".eniyi")
