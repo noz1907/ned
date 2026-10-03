@@ -7060,7 +7060,7 @@ def sonuc_analizi_dongusu(ciz, dxf_yol, P, log=print, kagit=None):
                  "yigilma": olc["yigilma"], "detay": SON_RAPOR.get("detay_sayisi"),
                  "sayfa2": olc["sayfa2"]}
         sorun = []
-        if olc["yazi_mm"] < SONUC_YAZI_MM:
+        if olc["yazi_mm"] < SONUC_YAZI_MM - 0.05:
             sorun.append(f"ölçü rakamı kâğıtta {XL.tr(olc['yazi_mm'], 1)} mm (< {XL.tr(SONUC_YAZI_MM, 1)})")
         if olc["yigilma"]:
             sorun.append(f"{olc['yigilma']} yazı çifti {XL.tr(SONUC_ARALIK_MM, 1)} mm'den yakın")
@@ -7084,7 +7084,7 @@ def sonuc_analizi_dongusu(ciz, dxf_yol, P, log=print, kagit=None):
             kayit["karar"] = "yazı büyütmek kâğıtta kazandırmadı: en iyi tur alındı"
             break
         kat = float(P_.get("yazi_kat") or 1.0)
-        if olc["yazi_mm"] < SONUC_YAZI_MM:
+        if olc["yazi_mm"] < SONUC_YAZI_MM - 0.05:
             kat = min(SONUC_KAT_EN_COK, kat * (SONUC_YAZI_MM / max(olc["yazi_mm"], 0.1)) * 1.05)
         aralik = float(P_.get("yigilma_aralik") or YIGILMA_ARALIK) + (0.5 if olc["yigilma"] else 0.0)
         if abs(kat - float(P_.get("yazi_kat") or 1.0)) < 1e-6 and not olc["yigilma"]:
