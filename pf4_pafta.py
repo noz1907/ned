@@ -39,6 +39,7 @@ from __future__ import annotations
 import os
 import sys
 
+import re
 import ezdxf
 import ezdxf.bbox
 import pf9_excel as XL
@@ -1753,6 +1754,10 @@ def pafta_kur(kaynak_dxf, cikti_dxf=None, kagit=VARSAYILAN_KAGIT, olcek=None,
             f"İÇ HATA: model uzayı değişti ({once} -> {sonra}). "
             "Pafta yazılmadı, 1:1 çizim korundu.")
 
+    # SAYFA NUMARASI "n / toplam" (kullanıcı: "1-2 ya da daha çok sayfaysa
+    # antette 1/2 gibi sayfa kısmı var, değil mi"): bütün sayfalar
+    # açıldıktan sonra her sayfadaki "sayfa n" yazısı tamamlanır.
+    _sayfa_sayisini_yaz(d, pafta_adi, sayfa)
     d.set_modelspace_vport(height=max(gx, gy) * 1.1,
                            center=((x0 + x1) / 2.0, (y0 + y1) / 2.0))
     try:
@@ -1778,6 +1783,38 @@ def pafta_kur(kaynak_dxf, cikti_dxf=None, kagit=VARSAYILAN_KAGIT, olcek=None,
             "yazi_kucuk": 0 < yz < EN_AZ_YAZI_MM,
             "pencere": pencere, "dagitildi": bool(plan), "sayfa": sayfa,
             "obek": (round(pg, 1), round(py, 1))}
+
+
+_SAYFA_DESEN = re.compile(r"sayfa (\d+)(?!\s*/)")
+
+
+def _sayfa_sayisini_yaz(d, pafta_adi, toplam):
+    """Pafta sayfalarındaki (PAFTA, PAFTA_2 ...) "sayfa n" yazılarını
+    "sayfa n / toplam" yapar (antet hücresi ve sağ üst not; ISO 7200
+    "sheet 1/2"). Toplam sayfa ancak bütün detay sayfaları açılınca
+    bilinir; o yüzden sonradan yazılır. Döner: değişen yazı sayısı."""
+    n = 0
+    for ad in d.layout_names():
+        if ad != pafta_adi and not (ad.startswith(pafta_adi + "_")
+                                    and ad[len(pafta_adi) + 1:].isdigit()):
+            continue
+        try:
+            lay = d.layout(ad)
+        except Exception:
+            continue
+        for e in list(lay.query("TEXT MTEXT")):
+            try:
+                t = e.dxf.text if e.dxftype() == "TEXT" else e.text
+                y = _SAYFA_DESEN.sub(lambda m_: f"sayfa {m_.group(1)} / {toplam}", t)
+                if y != t:
+                    if e.dxftype() == "TEXT":
+                        e.dxf.text = y
+                    else:
+                        e.text = y
+                    n += 1
+            except Exception:
+                continue
+    return n
 
 
 def _en_buyuk_alan_metni(kagit, sablon=None):

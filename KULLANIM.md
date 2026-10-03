@@ -1198,6 +1198,14 @@ malzemeyi görür, BOM'u yeniden çıkarmak gerekmez.
 
 **ÖRNEK DXF ÜRET ▸**
 
+**Sonuç analizi (yığılan köşe detaya):** program konum ölçülerini bir
+kez deneme olarak yerleştirir, çizilen iç ölçülerin yazılarını ve
+uçlarını ölçer; bir köşede birbirine giren 3 ve daha çok ölçü ya da
+rakamdan kısa halkalı 2 ölçü varsa o bölge DETAY olur, ana görünüşte
+yalnız dış ölçüler ve uzun zincir kalır (kasa ön duvar sacının köşeleri).
+Komut satırında `PI3D_AYRINTI=1` ile her denemenin kayıp / yığılma /
+bölge dökümü yazılır.
+
 ### Adım 4 — ÖRNEK ONAY
 
 Örnek resim tuvale **iki yönde de sığdırılır** (geniş resimde üst ve alt
@@ -2483,7 +2491,8 @@ ne birbirine ne görünüşe biner.
 
 Katmanlar: `GORUNEN` (ana gövde, **0,18 mm** - ölçü çizgisinden bir tık
 kalın, ISO 128 kalın : ince = 2 : 1), `GIZLI` (kesik), `EKSEN` (uzun-kısa),
-`OLCU`, `YAZI`, `TARAMA` — bunlar 0,09 mm. Kalınlık DXF katmanındadır;
+`OLCU`, `YAZI`, `TARAMA` — bunlar 0,09 mm. Antette sayfa "n / toplam"
+yazar (iki sayfalı resimde "sayfa 1 / 2", "sayfa 2 / 2"). Kalınlık DXF katmanındadır;
 PDF'te de öyle basılır; lazer kesim DXF'i (`KESIM`) 0,09 kalır. (DXF'te
 çizgi kalınlığı serbest bir sayı değil, sabit bir merdivendir: 0,05 –
 0,09 – 0,13 – 0,15 – 0,18… "0,10" o listede yok; yazılırsa 0,13'e

@@ -6667,6 +6667,139 @@ def _varlik_geri_al(msp, onceki):
             pass
 
 
+class _Olcu:
+    """Çizilmiş DIMENSION varlığını _olcu_yazi_kutusu'nun beklediği biçime
+    (``.dimension``) sarar."""
+    __slots__ = ("dimension",)
+
+    def __init__(self, e):
+        self.dimension = e
+
+
+YIGILMA_ARALIK = 1.0   # iki ölçü yazısı birbirine yazı boyunun bu katından yakınsa "yığılmış"
+YIGILMA_UC = 3.0       # iki İÇ ölçünün uçları (özellikleri) bu kadar yakınsa aynı öbek
+YIGILMA_EN_AZ = 3      # bir öbekte en az bu kadar ölçü yığılmışsa bölge detaya gider
+
+
+def yigilma_kayiplari(msp, onceki_h, gkutu, kaydir, h, kayip):
+    """SONUÇ ANALİZİ (CLAUDE.md 25; kullanıcı: "ölçüler birbirine girmesin:
+    dış ölçüleri verirdim ama burayı detaya alırdım"): deneme geçişinde
+    ÇİZİLMİŞ konum ölçülerinin yazı kutuları ÖLÇÜLÜR. Birbirine
+    YIGILMA_ARALIK·h'den yakın yazılar bir öbektir; öbekte YIGILMA_EN_AZ ve
+    daha çok ölçü varsa ya da öbekteki bir ölçünün halkası KISA_HALKA·h'den
+    kısaysa o ölçülerin özellikleri kayıp sayılır: bölge seçimi (bolge_sec)
+    onları detaya taşır, ana görünüşte dış ölçüler kalır. Yalnız doğrusal
+    (yatay / düşey) konum ölçüleri; gabari henüz çizilmediği için dışarıda.
+    Kasa P01 ARKA sol üst köşe: 66, 5, 50, 21,5, 7,5, 73 iç içeydi.
+    Döner: eklenen kayıp sayısı."""
+    dims = []
+    for e in msp.query("DIMENSION"):
+        if e.dxf.handle in onceki_h:
+            continue
+        try:
+            if (e.dxf.dimtype & 7) not in (0, 1):
+                continue
+            p1, p2 = e.dxf.defpoint2, e.dxf.defpoint3
+            ky = _olcu_yazi_kutusu(_Olcu(e))
+        except Exception:
+            continue
+        if not ky:
+            continue
+        # Yön ölçünün AÇISINDAN (0 yatay, 90 düşey): uçların farkından
+        # değil - 5 x 50 çapraz duran iki delik arasındaki "5" yatay ölçüdür
+        try:
+            aci = float(e.dxf.get("angle", 0.0)) % 180.0
+        except Exception:
+            aci = 0.0
+        yon = "yatay" if (aci < 45.0 or aci > 135.0) else "dusey"
+        boy = abs(p2[0] - p1[0]) if yon == "yatay" else abs(p2[1] - p1[1])
+        gad = None
+        for g_, gk in gkutu.items():
+            if gk[0] - 30 * h <= ky[0] <= gk[2] + 30 * h and gk[1] - 30 * h <= ky[1] <= gk[3] + 30 * h:
+                if gad is None or _kutu_uzaklik(ky, gk) < _kutu_uzaklik(ky, gkutu[gad]):
+                    gad = g_
+        if gad is None:
+            continue
+        # İÇ ölçü: ölçü çizgisi görünüşün İÇİNDE (özelliğin yanına konmuş
+        # yerel ölçü, grup içi). Dış zincir (ölçü çizgisi görünüşün
+        # dışında) katılmaz: halkaları yan yana olduğu için hepsi tek öbek
+        # çıkar, kısa halkası zaten _kosu_hatti'nde ayıklanır.
+        gk = gkutu[gad]
+        try:
+            dp = e.dxf.defpoint
+            ic = (gk[1] < dp[1] < gk[3]) if yon == "yatay" else (gk[0] < dp[0] < gk[2])
+        except Exception:
+            ic = False
+        if not ic:
+            continue
+        dims.append({"ky": ky, "p1": (p1[0], p1[1]), "p2": (p2[0], p2[1]),
+                     "yon": yon, "boy": boy, "gad": gad})
+    if len(dims) < 2:
+        return 0
+    # öbekler: yazıları YIGILMA_ARALIK·h içinde birbirine değen YA DA uçları
+    # (özellikleri) YIGILMA_UC·h içinde olan iç ölçüler
+    n = len(dims)
+    obek = list(range(n))
+
+    def kok(i):
+        while obek[i] != i:
+            obek[i] = obek[obek[i]]
+            i = obek[i]
+        return i
+
+    def uc_yakin(a, b):
+        return min(math.hypot(u[0] - v[0], u[1] - v[1])
+                   for u in (a["p1"], a["p2"]) for v in (b["p1"], b["p2"])) < YIGILMA_UC * h
+    for i in range(n):
+        for j in range(i + 1, n):
+            if dims[i]["gad"] != dims[j]["gad"]:
+                continue
+            if _kutu_uzaklik(dims[i]["ky"], dims[j]["ky"]) < YIGILMA_ARALIK * h \
+                    or uc_yakin(dims[i], dims[j]):
+                obek[kok(i)] = kok(j)
+    gruplar = defaultdict(list)
+    for i in range(n):
+        gruplar[kok(i)].append(dims[i])
+    eklenen = 0
+    for uyeler in gruplar.values():
+        kisa = any(d["boy"] < KISA_HALKA * h for d in uyeler)
+        if len(uyeler) < YIGILMA_EN_AZ and not (kisa and len(uyeler) >= 2):
+            continue
+        kutu = (min(d["ky"][0] for d in uyeler), min(d["ky"][1] for d in uyeler),
+                max(d["ky"][2] for d in uyeler), max(d["ky"][3] for d in uyeler))
+        for d in uyeler:
+            dx, dy = kaydir[d["gad"]]
+            # iç ölçünün İKİ ucu da özelliktir (datum ucu yok): ikisi de
+            # bölgeye girer - yalnız yazıya yakın uç alınınca bölge öbür
+            # deliği dışarıda bırakıyor, ölçü ne detaya ne ana görünüşe
+            # giriyordu (kasa P01 ARKA sağ üst "5")
+            for u in (d["p1"], d["p2"]):
+                hx, hy = u[0] - dx, u[1] - dy
+                if d["yon"] == "yatay":
+                    kayip.append({"gad": d["gad"], "yon": "yatay", "a": hx, "b": hx,
+                                  "dik_a": [hy], "dik_b": [hy], "metin": None,
+                                  "kayd": dx, "dkay": dy, "yigilma": True})
+                else:
+                    kayip.append({"gad": d["gad"], "yon": "dusey", "a": hy, "b": hy,
+                                  "dik_a": [hx], "dik_b": [hx], "metin": None,
+                                  "kayd": dy, "dkay": dx, "yigilma": True})
+                eklenen += 1
+    return eklenen
+
+
+def _kutu_uzaklik(a, b):
+    """İki dikdörtgen arasındaki en kısa uzaklık (kesişiyorsa 0)."""
+    dx = max(b[0] - a[2], a[0] - b[2], 0.0)
+    dy = max(b[1] - a[3], a[1] - b[3], 0.0)
+    return math.hypot(dx, dy)
+
+
+def _nokta_kutu_uzaklik(p, k):
+    dx = max(k[0] - p[0], p[0] - k[2], 0.0)
+    dy = max(k[1] - p[1], p[1] - k[3], 0.0)
+    return math.hypot(dx, dy)
+
+
 def _kayip_noktalari(k):
     """Kayıp ölçünün ÖZELLİK noktaları (ham izdüşüm): b ucundakiler."""
     yat = k["yon"] == "yatay"
@@ -6714,10 +6847,13 @@ def bolge_sec(kayip, gkutu, kaydir, h):
                  max(q[0] for q in o_) + BOLGE_PAY * h, max(q[1] for q in o_) + BOLGE_PAY * h]
             for i in (0, 1):
                 boy = gk[i + 2] - gk[i]
+                # kenara uzatma: kenarın 0,5·h dışına kadar (1,5·h idi;
+                # fazla pay köşe bölgesini DETAY_BANT_EN'in üstüne taşırıp
+                # ikiye böldürüyordu - kasa P01 ARKA sol üst köşe)
                 if k[i] - gk[i] <= BOLGE_UC * boy:
-                    k[i] = gk[i] - 1.5 * h                   # sol / alt kenar
+                    k[i] = gk[i] - 0.5 * h                   # sol / alt kenar
                 if gk[i + 2] - k[i + 2] <= BOLGE_UC * boy:
-                    k[i + 2] = gk[i + 2] + 1.5 * h           # sağ / üst kenar
+                    k[i + 2] = gk[i + 2] + 0.5 * h           # sağ / üst kenar
             kutular.append(k)
         # kesişen bölgeler birleşir
         degisti = True
@@ -11551,11 +11687,21 @@ def dxf_komponent(s, o, k, yol, P):
             kayip_d = []
             konum_olculeri(msp, _copy.deepcopy(kplan_ana), kaydir, gkutu, h,
                            rapor=Counter(), kayip=kayip_d)
+            # SONUÇ ANALİZİ: temiz yerleşmiş görünse de birbirine giren
+            # ölçü öbekleri (yığılan köşe) de detaya aday (CLAUDE.md 25)
+            n_yig = 0
+            if P.get("yigilma_analizi", True):
+                n_yig = yigilma_kayiplari(msp, onceki_h, gkutu, kaydir, h, kayip_d)
             _varlik_geri_al(msp, onceki_h)
             if not kayip_d:
                 break
             kayip_top.extend(kayip_d)
             bolgeler = bolge_sec(kayip_top, gkutu, kaydir, h)
+            if os.environ.get("PI3D_AYRINTI"):
+                print(f"    deneme {_deneme + 1}: {len(kayip_d) - n_yig} temiz yerleşmeyen + "
+                    f"{n_yig} yığılma -> {len(bolgeler)} bölge: "
+                    + "; ".join(f"{b['gad']} {tuple(round(v) for v in b['k'])} n={b['n']}"
+                                for b in bolgeler))
             if not bolgeler:
                 break
             kplan_ana, bolge_olcu = bolge_plani(kplan, bolgeler, kaydir, h, kayip_top)

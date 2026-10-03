@@ -277,28 +277,26 @@ DXF'te yazı boyunun katı olarak uygulanır):
     denebilsin; PDF'te sonuç analiz edilsin, gerekirse düzeltme, sonra
     PDF ve DXF yeniden çıksın"; "ölçüler birbirine girmesin: dış ölçüleri
     verirdim ama burayı detaya alırdım, ana ölçüden / delikten / köşeden
-    referanslayarak"). Çizim bitince sonuç KÂĞIT ÖLÇEĞİNDE (PDF'teki
-    gerçek rakam boyuyla) ÖLÇÜLEREK denetlenir, sorunlu bölge DETAYA
-    alınır, DXF ve PDF birlikte yeniden üretilir. Sorun ölçütleri:
-    - halka rakamdan kısa (`KISA_HALKA`·h): 5, 7,5 gibi ölçüler ana
-      görünüşte okunmaz;
-    - aynı köşede yığılan ölçüler: iki ölçü yazısı birbirine 1 yazı
-      boyundan yakın, ya da bir köşe kutusunda (3·h x 3·h) 3'ten çok ölçü;
-    - görünüş adı ("ARKA") ile ölçü yazısı / çizgisi çakışması;
-    - **delik grubu ölçüleri** (ilk delik referanstan, sonra delikten
-      deliğe) bugün dış zincirin kısa-halka / detay denetiminden GEÇMİYOR
-      (`_delik_gruplari` ayrı yol): grubun ilk halkası kısa ya da grup
-      başka ölçüyle yığılıyorsa grup bütünüyle detaya gider.
-    Düzeltme: bölge = yığılan ölçülerin özellik kutusu, köşeye yakınsa
-    köşeye uzar; ana görünüşte dış ölçüler (gabari, uzun zincir) KALIR,
-    bölgenin bütün konumları detayda; detay referansı bölge datum
-    kenarını / köşeyi içeriyorsa kenar-köşe, içermiyorsa ana görünüşte
-    ölçülü BAĞLANTI deliği (14. kuralla aynı). Örnek: kasa P01 "K0 KABIN
-    KORUMA - ON DUVAR SACI" ARKA sol üst köşe: 66, 5, 50, 21,5, 7,5, 73 ve
-    "ARKA" yazısı iç içe; 164/260/912/404/67, 465,5, 435 kalmalı, köşe
-    DETAY olmalı. Sorunlu örnekler `test/OKU.md`'deki listede tutulur,
-    her değişiklik onlarla sınanır. UYGULAMA KULLANICI ONAYI ("tamam")
-    BEKLİYOR.
+    referanslayarak"; onay "tamam" 03.10.2026). UYGULAMA: konum
+    ölçülerinin DENEME geçişinde çizilen İÇ ölçüler (ölçü çizgisi
+    görünüşün içinde: özelliğin yanına konmuş yerel ölçü, delik grubu içi;
+    dış zincir katılmaz, onun kısa halkası `_kosu_hatti`'nde ayıklanır)
+    ÖLÇÜLÜR (`yigilma_kayiplari`): yazı kutuları `YIGILMA_ARALIK`·h (1)
+    içinde değen ya da uçları `YIGILMA_UC`·h (3) içinde olan ölçüler bir
+    öbektir; öbekte `YIGILMA_EN_AZ` (3) ve daha çok ölçü ya da kısa
+    halkalı (`KISA_HALKA`·h) en az 2 ölçü varsa iki ucu da (iç ölçünün iki
+    ucu da özelliktir) kayıp listesine girer; `bolge_sec` bölgeyi seçer
+    (köşeye yakınsa köşeye uzar, kenarın 0,5·h dışına kadar), `bolge_plani`
+    bölgedeki konumları ana görünüşten çıkarır, detayda referans bölge
+    datum kenarını / köşeyi içeriyorsa kenar, içermiyorsa ana görünüşte
+    ölçülü BAĞLANTI özelliği (14. kuralla aynı). Yön ölçünün açısından
+    okunur (5 x 50 çapraz iki deliğin "5"i yataydır). Örnek: kasa P01 "K0
+    KABIN KORUMA - ON DUVAR SACI" ARKA sol üst köşe (66, 5, 50, 21,5, 7,5,
+    73 + "ARKA" iç içeydi) -> DETAY D, sağ üst (66, 5, 67) -> DETAY F,
+    164/260/912/.../435 ana görünüşte. Kapatma: `P["yigilma_analizi"]`.
+    Ayrıntı günlüğü: `PI3D_AYRINTI=1` (her deneme: kayıp, yığılma, bölge).
+    Sorunlu örnekler `test/OKU.md`'deki listede tutulur, her değişiklik
+    onlarla sınanır (`test/yigilma_denetimi.py`).
 
 ## PDF (pafta)
 
@@ -330,6 +328,8 @@ DXF'te yazı boyunun katı olarak uygulanır):
   (`pf5_antet.otomatik_tanim`, LOCALAPPDATA\Pi3D\antet, ayar
   `antet_sablon`), pafta / PDF / kaynak resminde kullanılır. Tek exe
   (1/2 derleme seçimi kalktı). Firma antet DXF'i depoya girmez.
+- Antette sayfa "n / toplam" (ISO 7200; kullanıcı: "1/2 gibi sayfa
+  kısmı"): bütün sayfalar açıldıktan sonra yazılır (`_sayfa_sayisini_yaz`).
 - Antet alanına ÇİZİM GİRMEZ. Pi3D anteti çizilirken (DENEME ya da firma
   anteti yokken) kutu ALÇAKTIR: A3'te sağ alt 150 x 40 mm (logo şeridi 12 + 4 satır)
   (`ANTET_BOY_PI3D`; kullanıcı: "antet yüksek gelmiş, normal antette bu

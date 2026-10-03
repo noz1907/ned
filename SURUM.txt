@@ -1,6 +1,6 @@
 Pi3D  –  3B modelden parça listesi ve teknik resim
 
-Sürüm   : v1.0.16  (03.10.2026)
+Sürüm   : v1.0.17  (03.10.2026)
 Kaynak  : github.com/noz1907/ned   dal: claude/fikstur-parca-stp-57hwc1
 
 KURULUM
@@ -155,6 +155,24 @@ BU SÜRÜMDE NE VAR
     - kırmızı yalnız kaynağın kendisi (uzun sac kenarı artık kırmızı
       değil); kaynak ekseni ince mavi kesikli.
 
+  v1.0.17 (03.10.2026): sonuç analizi - yığılan köşe detaya
+    - SONUÇ ANALİZİ ve DÜZELTME DÖNGÜSÜ (kullanıcı onayı "tamam"): deneme
+      geçişinde çizilen İÇ konum ölçülerinin (ölçü çizgisi görünüşün
+      içinde: özelliğin yanına konmuş yerel / grup içi ölçü) yazı kutuları
+      ve uçları ÖLÇÜLÜR; yazıları 1 yazı boyundan yakın ya da uçları 3 yazı
+      boyu içinde olan ölçüler bir öbektir; öbekte 3 ve daha çok ölçü ya
+      da kısa halkalı (KISA_HALKA·h) 2 ölçü varsa özellikleri "kayıp"
+      sayılır ve bölge seçimi onları DETAYA taşır; ana görünüşte dış
+      ölçüler ve uzun zincir kalır (yigilma_kayiplari, CLAUDE.md 25).
+      Kasa P01 ON DUVAR SACI ARKA: sol üst köşedeki 66, 5, 50, 21,5, 7,5,
+      73 ve sağ üst köşedeki 66, 5, 67 artık DETAY D / F'de (2:1), "ARKA"
+      yazısı serbest; alt soldaki 5 / 50 çifti DETAY E. Çakışma 0.
+    - Bölge kenara uzatması 1,5·h'den 0,5·h'ye: fazla pay köşe bölgesini
+      detay sınırının üstüne taşırıp ikiye böldürüyordu.
+    - ANTETTE SAYFA "n / toplam" (kullanıcı: "1-2 ya da daha çok sayfaysa
+      antette 1/2 gibi sayfa kısmı var, değil mi"): bütün sayfalar
+      açıldıktan sonra her sayfadaki "sayfa n" yazısı "sayfa n / toplam"
+      olur (Pi3D anteti ve sağ üst not; ISO 7200).
   v1.0.16 (03.10.2026): arayüz ve çizgi kalınlığı
     - ANA GÖVDE ÇİZGİSİ BİR TIK KALIN: görünen kontur 0,18 mm, ölçü /
       uzatma / eksen / gizli / tarama 0,09 mm (ISO 128 çizgi grubu, kalın :
