@@ -1220,6 +1220,10 @@ okunmaz bu sayfa açılır.
    değer saklanır**, bir daha girmeniz gerekmez.
 3. **İŞARETLİ PARÇALARIN AÇINIMINI ÜRET** deyin.
 
+Sayfa **kayar penceredir**: pencere kısaysa listenin altındaki özet
+satırı ve düğmeler sağdaki kaydırma çubuğuyla (ya da fare tekerleğiyle)
+aşağı kaydırılarak görülür; pencere yeterince yüksekse çubuk iş yapmaz.
+
 **Profil parçalar** (ekstrüzyon, kutu, boru, çekme L / U) açınım ve
 lazer listesine **girmez**: açınımları yoktur, `PROFIL.xlsx` kesim
 listesindedirler. İnce eşit cidarlı alüminyum ekstrüzyon eskiden taramaya

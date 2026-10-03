@@ -1216,9 +1216,61 @@ class Uygulama(ttk.Frame):
         # (İptal düğmesi artık ortak durum çubuğunda, her sayfadan
         #  erişilebilir.)
 
+    def _kayar_sayfa(self, f):
+        """Sayfayı KAYAR PENCERE yapar (kullanıcı: açınım sayfasında
+        listenin altındaki özet ve düğmeler pencerenin altında kalıyordu,
+        "kayar pencere o, onu istiyorum"): içerik bir tuvalin içindeki
+        çerçeveye kurulur, sağda düşey kaydırma çubuğu; içerik
+        pencereden uzunsa fare tekerleği / çubukla kaydırılır, kısaysa
+        çubuk görünse de iş yapmaz. Dönen çerçeve sayfanın yerine
+        kullanılır."""
+        tuval = tk.Canvas(f, highlightthickness=0, borderwidth=0)
+        cubuk = ttk.Scrollbar(f, orient="vertical", command=tuval.yview)
+        tuval.configure(yscrollcommand=cubuk.set)
+        cubuk.pack(side="right", fill="y")
+        tuval.pack(side="left", fill="both", expand=True)
+        ic = ttk.Frame(tuval)
+        kimlik = tuval.create_window((0, 0), window=ic, anchor="nw")
+
+        def _ic_degisti(_e=None):
+            tuval.configure(scrollregion=tuval.bbox("all"))
+
+        def _tuval_degisti(e):
+            # iç çerçeve tuval kadar geniş; pencere içerikten yüksekse
+            # içerik de o yüksekliğe açılır (liste alanı genişler)
+            yuk = max(e.height, ic.winfo_reqheight())
+            tuval.itemconfigure(kimlik, width=e.width, height=yuk)
+            tuval.configure(scrollregion=(0, 0, e.width, yuk))
+
+        def _teker(e):
+            if tuval.winfo_height() >= ic.winfo_reqheight():
+                return
+            adim = -1 if (e.num == 4 or e.delta > 0) else 1
+            tuval.yview_scroll(adim, "units")
+
+        ic.bind("<Configure>", _ic_degisti)
+        tuval.bind("<Configure>", _tuval_degisti)
+        for w in (tuval, ic):
+            w.bind("<MouseWheel>", _teker)
+            w.bind("<Button-4>", _teker)
+            w.bind("<Button-5>", _teker)
+        ic.kayar_tuval = tuval
+        ic.kayar_teker = _teker
+        return ic
+
+    def _kayar_bagla(self, ic):
+        """Sayfa kurulduktan sonra: fare tekerleği içerikteki her öğenin
+        üstünde de sayfayı kaydırır (Tk'de olay üst çerçeveye çıkmaz).
+        Liste (Treeview) kendi kaydırmasını yapar, ona dokunulmaz."""
+        for w in self._tum_cocuklar(ic):
+            if w.winfo_class() == "Treeview":
+                continue
+            for olay in ("<MouseWheel>", "<Button-4>", "<Button-5>"):
+                w.bind(olay, ic.kayar_teker)
+
     # ------------------------------------------------------------ 6 AÇINIM
     def _sayfa6(self):
-        f = self.sayfa[5]
+        f = self._kayar_sayfa(self.sayfa[5])
         ttk.Label(f, text="Bükümlü sac parçaların açınımı",
                   style="Baslik.TLabel").pack(anchor="w", pady=(0, 4))
         ttk.Label(f, foreground="#555", justify="left", wraplength=900, text=(
@@ -1274,6 +1326,7 @@ class Uygulama(ttk.Frame):
             style="Bas.TButton",
             command=self.acilim_uret, state="disabled")
         self.b_acilim.pack(side="right", padx=4, ipadx=10, ipady=3)
+        self._kayar_bagla(f)
 
     def _onceki_uretim(self, tur):
         """Bu klasörde AYNI MODELDEN daha önce üretilmiş açınım/lazer
