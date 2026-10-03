@@ -298,6 +298,20 @@ DXF'te yazı boyunun katı olarak uygulanır):
     Sorunlu örnekler `test/OKU.md`'deki listede tutulur, her değişiklik
     onlarla sınanır (`test/yigilma_denetimi.py`).
 
+26. **TOLERANS** (kullanıcı tablosu 03.10.2026; kod onayı bekliyor):
+    tolerans REFERANS ZİNCİRİNE göre verilir (referansın kendi
+    belirsizliği + uzaklık); değerler toplam bant: boy <= 1 m 0,3, <= 1,5
+    m 0,5, üstü 0,8 (CNC; konvansiyonel +0,15); pres delik konumu 0,4;
+    abkant 1; rollform 0,25-0,8; düzlemsellik rollform 1/m, pres 0,8/m;
+    iç kesim 0,6, delik çapı 0,4; diklik CNC 0,4 / pres 0,6 / rollform 0,6
+    / abkant 1; kaynak konumu 1; açı 1°-1,5° (kalınlığa göre); toplam boy
+    1,5 m üstü 1,5-2; küçük lazer / pres parça 0,6. ISO sınıfı seçeneği
+    (ISO 2768 f/m/c/v + H/K/L, ISO 13920 A-D, ISO 9013, DIN 6930).
+    Montajda giydirme değil referansa göre; açınım / lazer DXF'ine
+    tolerans girilmez; düzeltme arayüzü toplu ya da ölçü ölçü, DXF + PDF
+    birlikte güncellenir; K-faktörü parça bazlı. Ayrıntı ve kaynaklar:
+    `OLCULENDIRME_KURALLARI.md` 11.
+
 ## PDF (pafta)
 
 - PDF okumak ve atölyede iş yapmak içindir; DXF'le aynı şey değildir.
