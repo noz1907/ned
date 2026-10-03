@@ -985,9 +985,13 @@ class Uygulama(ttk.Frame):
         self.v_parca_ad = tk.StringVar(value="listeden bir satır seçin")
         ttk.Label(rf, textvariable=self.v_parca_ad, wraplength=230, justify="left",
                   foreground="#333").pack(anchor="w", pady=(0, 4))
+        # Tuval kalan yeri alır ve GERÇEK boyutuna göre çizer: eskiden 230x150
+        # ayarlı tuval kısa listede alttan kesiliyor, resim kesilen kısımda
+        # kalıyordu (kullanıcı: "burada parça görünüyor mu?" - görünmüyordu).
         self.c_parca = tk.Canvas(rf, width=230, height=150, background="white",
                                  highlightthickness=1, highlightbackground="#ccc")
-        self.c_parca.pack()
+        self.c_parca.pack(fill="both", expand=True)
+        self._tuval_yeniden_ciz(self.c_parca)
         self._resim_onbellek, self._resim_istek = {}, None
         self.ag = ttk.Treeview(cer, columns=sut, show="tree headings",
                                selectmode="extended")
@@ -3611,27 +3615,68 @@ class Uygulama(ttk.Frame):
         c.delete("all")
         c.create_text(115, 100, text="çiziliyor…", fill="#888")
         sh = self.kayit[k["indeks"][0]][1]
-        threading.Thread(target=self._parca_resmi_is, args=(anahtar, sh),
-                         daemon=True).start()
+        self._resim_isi_ver(anahtar, sh,
+                            lambda a, ken: self.kuyruk.put(("parca_resmi", (a, ken))))
 
-    def _parca_resmi_is(self, anahtar, sh):
+    def _resim_isi_ver(self, anahtar, sh, sonuc_cb):
+        """Parça resmi (HLR) istekleri TEK işçi iş parçacığında sırayla
+        çizilir: listede hızlı gezinince her satır için ayrı iş parçacığı
+        açılıyor, OCC'nin HLR'si yan yana koşunca kat kat yavaşlıyordu
+        (BOM arama testinde TABAN resmi 180 sn'de gelmiyordu). İşçi en
+        SON isteği çizer, arada yığılanları atlar (zaten gösterilmez);
+        sonuç sonuc_cb(anahtar, kenarlar) ile çağırana döner."""
+        if not hasattr(self, "_resim_istekler"):
+            self._resim_istekler = queue.Queue()
+            threading.Thread(target=self._resim_iscisi, daemon=True).start()
+        self._resim_istekler.put((anahtar, sh, sonuc_cb))
+
+    def _resim_iscisi(self):
+        while True:
+            anahtar, sh, cb = self._resim_istekler.get()
+            try:
+                while True:          # yığılan istekler: yalnız sonuncusu
+                    anahtar, sh, cb = self._resim_istekler.get_nowait()
+            except queue.Empty:
+                pass
+            ken = self._parca_resmi_is(sh)
+            try:
+                cb(anahtar, ken)
+            except Exception:
+                pass
+
+    def _parca_resmi_is(self, sh):
         try:
             r3 = 1.0 / math.sqrt(3.0)
             r2 = 1.0 / math.sqrt(2.0)
-            ken = self.M.hlr(sh, (r3, -r3, r3), (r2, r2, 0.0), gizli=False)["GORUNEN"]
+            return self.M.hlr(sh, (r3, -r3, r3), (r2, r2, 0.0), gizli=False)["GORUNEN"]
         except Exception:
-            ken = None
-        self.kuyruk.put(("parca_resmi", (anahtar, ken)))
+            return None
 
     def _parca_resmi_geldi(self, anahtar, ken):
         self._resim_onbellek[anahtar] = ken
         if anahtar == self._resim_istek:
             self._parca_resmi_ciz(ken)
 
+    def _tuval_yeniden_ciz(self, c):
+        """Tuvalin boyutu değişince son resim yeni boyuta göre yeniden
+        çizilir (resim hep görünen alana sığar)."""
+        def degisti(e):
+            son = getattr(c, "_son_ken", None)
+            if son is None:
+                return
+            if (e.width, e.height) != getattr(c, "_son_boy", None):
+                c._son_boy = (e.width, e.height)
+                self._parca_resmi_ciz(son, c)
+        c.bind("<Configure>", degisti)
+
     def _parca_resmi_ciz(self, ken, c=None):
         c = c or self.c_parca
         c.delete("all")
-        W, H, pay = int(c["width"]), int(c["height"]), 10
+        c._son_ken = ken
+        # görünen boyut; henüz yerleşmediyse ayarlanan boyut
+        W = c.winfo_width() if c.winfo_width() > 10 else int(c["width"])
+        H = c.winfo_height() if c.winfo_height() > 10 else int(c["height"])
+        pay = 10
         if not ken:
             c.create_text(W / 2, H / 2, text="resim çıkarılamadı", fill="#888")
             return
@@ -4149,20 +4194,13 @@ class Uygulama(ttk.Frame):
         kol = ("durum", "kod", "ad", "adet", "olcu", "sinif", "karar")
         bas = ("durum", "kod", "ad", "adet", "ölçü", "şimdiki", "karar")
         gen = (175, 110, 210, 40, 110, 70, 110)
-        ag = ttk.Treeview(sol, columns=kol, show="headings", height=20, selectmode="browse")
-        for k_, b_, g_ in zip(kol, bas, gen):
-            ag.heading(k_, text=b_); ag.column(k_, width=g_, anchor="w")
-        sb = ttk.Scrollbar(sol, orient="vertical", command=ag.yview)
-        ag.configure(yscrollcommand=sb.set)
-        ag.pack(side="left", fill="both", expand=True); sb.pack(side="right", fill="y")
+        ag = self._karar_listesi(sol, kol, bas, gen)
         satir_k, satir_r = {}, {}
         for r in liste:
             iid = ag.insert("", "end", values=(r[0], str(r[1])[:30], str(r[2])[:50], r[3], r[4], r[5], ""))
             satir_k[iid], satir_r[iid] = kod_k.get(r[1]), r
         sag = ttk.Frame(pw); pw.add(sag, weight=2)
-        c = tk.Canvas(sag, width=380, height=290, bg="white", highlightthickness=1,
-                      highlightbackground="#bbb")
-        c.pack(padx=4, pady=(4, 2))
+        c, resim_goster = self._resim_paneli(w, sag)
         v_bilgi = tk.StringVar(value="listeden bir parça seçin")
         ttk.Label(sag, textvariable=v_bilgi, wraplength=370, justify="left").pack(anchor="w", padx=4)
         af = ttk.Frame(sag); af.pack(anchor="w", padx=4, pady=(6, 2), fill="x")
@@ -4170,8 +4208,6 @@ class Uygulama(ttk.Frame):
         v_ad = tk.StringVar()
         ttk.Entry(af, textvariable=v_ad, width=42).pack(side="left", padx=(4, 0), fill="x", expand=True)
         bf = ttk.Frame(sag); bf.pack(anchor="w", padx=4, pady=4)
-        kuyruk_ = queue.Queue()
-        istek = {"id": None}
         self._standart_pencere = {"ag": ag, "satir_k": satir_k, "v_ad": v_ad, "sonuc": sonuc, "w": w}
 
         def secili():
@@ -4186,37 +4222,7 @@ class Uygulama(ttk.Frame):
             v_bilgi.set(f"{k['kod']}\n{k['ad']}\nölçü: {r[4]}   adet: {r[3]}\n"
                         f"şimdiki sınıf: {r[5]}   öneri: {r[6] or '-'}\ngerekçe: {str(r[7])[:160]}")
             v_ad.set(k["ad"])
-            anahtar = id(k); istek["id"] = anahtar
-            if anahtar in self._resim_onbellek:
-                self._parca_resmi_ciz(self._resim_onbellek[anahtar], c)
-                return
-            c.delete("all")
-            if not self.kayit:
-                c.create_text(190, 145, text="model yüklü değil", fill="#888")
-                return
-            c.create_text(190, 145, text="çiziliyor…", fill="#888")
-            sh = self.kayit[k["indeks"][0]][1]
-
-            def is_():
-                try:
-                    r3 = 1.0 / math.sqrt(3.0); r2 = 1.0 / math.sqrt(2.0)
-                    ken = self.M.hlr(sh, (r3, -r3, r3), (r2, r2, 0.0), gizli=False)["GORUNEN"]
-                except Exception:
-                    ken = None
-                kuyruk_.put((anahtar, ken))
-            threading.Thread(target=is_, daemon=True).start()
-
-        def bekle():
-            try:
-                while True:
-                    anahtar, ken = kuyruk_.get_nowait()
-                    self._resim_onbellek[anahtar] = ken
-                    if anahtar == istek["id"]:
-                        self._parca_resmi_ciz(ken, c)
-            except queue.Empty:
-                pass
-            if w.winfo_exists():
-                w.after(120, bekle)
+            resim_goster(k)
 
         def ad_uygula(k):
             """Ad kutusu değiştiyse ad / kod düzeltilir ve kural saklanır."""
@@ -4273,7 +4279,6 @@ class Uygulama(ttk.Frame):
         ttk.Button(alt, text="Vazgeç", command=lambda: bitir(None)).pack(side="right")
         w.protocol("WM_DELETE_WINDOW", lambda: bitir(None))
         ag.bind("<<TreeviewSelect>>", secildi)
-        bekle()
         if ag.get_children():
             ag.selection_set(ag.get_children()[0]); secildi()
         try:
@@ -4289,32 +4294,239 @@ class Uygulama(ttk.Frame):
             self.v_bom_ozet.set(f"{sonuc['degisen']} sınıf, {sonuc['ad']} ad düzeltildi – BOM yeniden çıkarılacak")
         return sonuc["cvp"]
 
+    # ------------------------------------------------------------ karar pencereleri: ortak
+    # KURAL (kullanıcı): parça hakkında karar isteyen her soru (standart mı
+    # üretim mi, ekstrüzyon profilin malzemesi ...) EVET / HAYIR kutusuyla
+    # değil, AYNI TÜR PENCEREYLE sorulur: sorunlu parçaların listesi, ARAMA
+    # kutusu (binlerce parçada bulunabilsin), seçilince parçanın resmi ve
+    # bilgisi, parça başına karar. Ortak parçalar aşağıda.
+    def _karar_listesi(self, ust, kol, bas, gen, yuk=20):
+        """Arama kutulu liste: üstte 'ara' kutusu (kod / ad / her sütunda
+        geçen metin; büyük-küçük harf aranmaz), altında kaydırmalı
+        Treeview. Aramaya uymayan satırlar listeden kaldırılır (detach),
+        kutu temizlenince sırası bozulmadan geri gelir."""
+        ust_ = ttk.Frame(ust); ust_.pack(fill="x", pady=(0, 3))
+        ttk.Label(ust_, text="Ara:").pack(side="left")
+        v_ara = tk.StringVar()
+        e = ttk.Entry(ust_, textvariable=v_ara, width=32)
+        e.pack(side="left", padx=(4, 6))
+        v_say = tk.StringVar(value="")
+        ttk.Label(ust_, textvariable=v_say, foreground="#555").pack(side="left")
+        cer = ttk.Frame(ust); cer.pack(fill="both", expand=True)
+        ag = ttk.Treeview(cer, columns=kol, show="headings", height=yuk, selectmode="browse")
+        for k_, b_, g_ in zip(kol, bas, gen):
+            ag.heading(k_, text=b_); ag.column(k_, width=g_, anchor="w")
+        sb = ttk.Scrollbar(cer, orient="vertical", command=ag.yview)
+        ag.configure(yscrollcommand=sb.set)
+        ag.pack(side="left", fill="both", expand=True); sb.pack(side="right", fill="y")
+        tum = []                                  # ekleme sırasıyla bütün satırlar
+
+        def suz(*_a):
+            if not tum:
+                tum.extend(ag.get_children())
+            # Tüm satırlar geri takılır, sonra uymayanlar ayrılır: sıra korunur
+            for i, iid in enumerate(tum):
+                ag.reattach(iid, "", i)
+            ara = self.M._tr_sade(v_ara.get()) if self.M else v_ara.get().lower()
+            ara = (ara or "").strip()
+            gor = len(tum)
+            if ara:
+                for iid in tum:
+                    metin = " ".join(str(x) for x in ag.item(iid, "values"))
+                    metin = self.M._tr_sade(metin) if self.M else metin.lower()
+                    if ara not in metin:
+                        ag.detach(iid); gor -= 1
+            v_say.set(f"{gor} / {len(tum)} satır" if ara else f"{len(tum)} satır")
+            kalan = ag.get_children()
+            if kalan and not (ag.selection() and ag.selection()[0] in kalan):
+                ag.selection_set(kalan[0]); ag.see(kalan[0])
+        v_ara.trace_add("write", suz)
+        ag.ara_kutusu, ag.v_ara, ag.suz = e, v_ara, suz
+        ag.after(50, lambda: (not tum and tum.extend(ag.get_children()),
+                              v_say.set(f"{len(tum)} satır")))
+        return ag
+
+    def _resim_paneli(self, w, sag):
+        """Sağ panel: seçili parçanın izometrik resmi (arka planda çizilir,
+        önbelleğe alınır). Döner (tuval, goster): goster(k) parçayı çizer."""
+        c = tk.Canvas(sag, width=380, height=290, bg="white", highlightthickness=1,
+                      highlightbackground="#bbb")
+        c.pack(padx=4, pady=(4, 2), fill="both", expand=True)
+        self._tuval_yeniden_ciz(c)
+        kuyruk_ = queue.Queue()
+        istek = {"id": None}
+
+        def goster(k):
+            anahtar = id(k); istek["id"] = anahtar
+            if anahtar in self._resim_onbellek:
+                self._parca_resmi_ciz(self._resim_onbellek[anahtar], c)
+                return
+            c.delete("all")
+            if not self.kayit:
+                c.create_text(190, 145, text="model yüklü değil", fill="#888")
+                return
+            c.create_text(190, 145, text="çiziliyor…", fill="#888")
+            sh = self.kayit[k["indeks"][0]][1]
+            self._resim_isi_ver(anahtar, sh, lambda a, ken: kuyruk_.put((a, ken)))
+
+        def bekle():
+            try:
+                while True:
+                    anahtar, ken = kuyruk_.get_nowait()
+                    self._resim_onbellek[anahtar] = ken
+                    if anahtar == istek["id"]:
+                        self._parca_resmi_ciz(ken, c)
+            except queue.Empty:
+                pass
+            if w.winfo_exists():
+                w.after(120, bekle)
+        bekle()
+        return c, goster
+
+    def _malzeme_karar_penceresi(self, ek):
+        """MALZEMESİ BELİRSİZ PROFİLLER AYRI PENCEREDE (kullanıcı: "hani ben
+        değiştirebiliyordum, resim gösteriyordun; listede binlerce parça
+        varsa nereden bulacağım, arama da yok; aynı standart penceresi
+        gibi pencere aç, sorunlu parçaları listele, seçebileyim"): solda
+        arama kutulu liste, sağda seçili parçanın resmi, kesiti, ölçüsü;
+        malzeme kutusu (bütün malzeme tablosu) + ALÜMİNYUM / ÇELİK kısa
+        yolları; "bu parçaya" ya da "kararsız kalanların hepsine" uygulanır.
+        Karar anında malzemeler sözlüğüne yazılır (klasör ayarında saklanır,
+        bir daha sorulmaz). Döner: True devam (hepsi kararlı), None vazgeç."""
+        M = self.M
+        w = tk.Toplevel(self)
+        w.title("Ekstrüzyon profil malzemesi")
+        w.transient(self.master)
+        w.geometry("1120x600")
+        sonuc = {"cvp": None, "karar": 0}
+        ttk.Label(w, text=(f"{len(ek)} ekstrüzyon profilin malzemesi CAD'de tanımlı değil. Program "
+                           "çelik ya da alüminyum varsaymaz: satırı seçin, resmine bakın, malzemesini "
+                           "verin. Kararlar saklanır, bir daha sorulmaz."),
+                  wraplength=1080, justify="left").pack(anchor="w", padx=10, pady=(8, 4))
+        pw = ttk.PanedWindow(w, orient="horizontal")
+        pw.pack(fill="both", expand=True, padx=10)
+        sol = ttk.Frame(pw); pw.add(sol, weight=3)
+        kol = ("kod", "ad", "adet", "kesit", "olcu", "karar")
+        bas = ("kod", "ad", "adet", "kesit", "ölçü", "malzeme")
+        gen = (120, 230, 40, 150, 110, 150)
+        ag = self._karar_listesi(sol, kol, bas, gen)
+        satir_k = {}
+
+        def olcu(k):
+            o = k.get("olc") or []
+            return " x ".join(XL.tr(v, 1) for v in o[:3]) if o else ""
+
+        def kesit(k):
+            r = k.get("profil") or {}
+            return str(r.get("kesit") or k.get("tip") or "ekstrüzyon")[:40]
+        for k in ek:
+            iid = ag.insert("", "end", values=(str(k["kod"])[:30], str(k["ad"])[:60], k.get("adet", 1),
+                                               kesit(k), olcu(k), ""))
+            satir_k[iid] = k
+        sag = ttk.Frame(pw); pw.add(sag, weight=2)
+        c, resim_goster = self._resim_paneli(w, sag)
+        v_bilgi = tk.StringVar(value="listeden bir parça seçin")
+        ttk.Label(sag, textvariable=v_bilgi, wraplength=370, justify="left").pack(anchor="w", padx=4)
+        mf = ttk.Frame(sag); mf.pack(anchor="w", padx=4, pady=(8, 2), fill="x")
+        ttk.Label(mf, text="malzeme:").pack(side="left")
+        adlar = [f"{a} – {t} ({XL.tr(r)} g/cm³)" for a, (t, r) in M.MALZEME.items()]
+        v_mal = tk.StringVar(value=next((a for a in adlar if a.startswith("aluminyum ")), adlar[0]))
+        cb = ttk.Combobox(mf, textvariable=v_mal, values=adlar, state="readonly", width=40)
+        cb.pack(side="left", padx=(4, 0), fill="x", expand=True)
+        kf = ttk.Frame(sag); kf.pack(anchor="w", padx=4, pady=2)
+        self._malzeme_pencere = {"ag": ag, "satir_k": satir_k, "v_mal": v_mal, "sonuc": sonuc, "w": w}
+
+        def secili():
+            sel = ag.selection()
+            return (sel[0], satir_k.get(sel[0])) if sel else (None, None)
+
+        def secildi(_e=None):
+            iid, k = secili()
+            if not k:
+                return
+            v_bilgi.set(f"{k['kod']}\n{k['ad']}\nkesit: {kesit(k)}   ölçü: {olcu(k)}   "
+                        f"adet: {k.get('adet', 1)}\nşimdiki malzeme: {ag.set(iid, 'karar') or '(belirsiz)'}")
+            resim_goster(k)
+
+        def anahtar():
+            return v_mal.get().split(" – ")[0].strip()
+
+        def uygula(iid, k, m):
+            self.malzemeler[M._tr_sade(k["kod"])] = m
+            ag.set(iid, "karar", M.MALZEME[m][0])
+            sonuc["karar"] += 1
+            self._yaz(f"profil malzemesi: {k['kod'][:40]} -> {M.MALZEME[m][0]} (kullanıcı seçti)")
+
+        def bu_parcaya(m=None):
+            iid, k = secili()
+            if not k:
+                return
+            uygula(iid, k, m or anahtar())
+            secildi()
+            nxt = ag.next(iid)
+            if nxt:
+                ag.selection_set(nxt); ag.see(nxt)
+
+        def kalanlara(m=None):
+            m = m or anahtar()
+            for iid, k in satir_k.items():
+                if not ag.set(iid, "karar"):
+                    uygula(iid, k, m)
+            secildi()
+        self._malzeme_pencere.update(bu_parcaya=bu_parcaya, kalanlara=kalanlara)
+        ttk.Button(kf, text="ALÜMİNYUM", command=lambda: bu_parcaya("aluminyum")).pack(side="left")
+        ttk.Button(kf, text="ÇELİK", command=lambda: bu_parcaya("celik")).pack(side="left", padx=6)
+        ttk.Button(kf, text="Kutudaki malzemeyi bu parçaya", command=lambda: bu_parcaya()).pack(side="left")
+        kf2 = ttk.Frame(sag); kf2.pack(anchor="w", padx=4, pady=2)
+        ttk.Button(kf2, text="Kutudaki malzemeyi KARARSIZ KALANLARIN hepsine",
+                   command=lambda: kalanlara()).pack(side="left")
+        ttk.Label(sag, foreground="#555", wraplength=370, justify="left", text=(
+            "Karar anında uygulanır, çıktı klasörünün ayarında saklanır; malzeme 2. adımdaki "
+            "listeden sonradan da değiştirilebilir.")).pack(anchor="w", padx=4, pady=(6, 0))
+        alt = ttk.Frame(w); alt.pack(fill="x", padx=10, pady=8)
+
+        def devam():
+            kalan = [iid for iid in satir_k if not ag.set(iid, "karar")]
+            if kalan:
+                messagebox.showwarning("Malzeme", f"{len(kalan)} profilin malzemesi hâlâ belirsiz. "
+                                       "Her birine malzeme verin ya da kutudaki malzemeyi kalanlara "
+                                       "uygulayın.", parent=w)
+                ag.selection_set(kalan[0]); ag.see(kalan[0]); secildi()
+                return
+            sonuc["cvp"] = True
+            w.destroy()
+
+        def vazgec():
+            sonuc["cvp"] = None
+            w.destroy()
+        ttk.Button(alt, text="DEVAM", style="Bas.TButton", command=devam).pack(side="left", ipadx=10)
+        ttk.Button(alt, text="Vazgeç (malzemeyi 2. adımda kendim veririm)", command=vazgec).pack(side="right")
+        w.protocol("WM_DELETE_WINDOW", vazgec)
+        ag.bind("<<TreeviewSelect>>", secildi)
+        if ag.get_children():
+            ag.selection_set(ag.get_children()[0]); secildi()
+        try:
+            w.grab_set()
+        except Exception:
+            pass
+        w.wait_window()
+        self._malzeme_pencere = None
+        if sonuc["karar"]:
+            self._malzeme_satirlari_guncelle()
+        return sonuc["cvp"]
+
     def _profil_malzeme_sor(self):
         """EKSTRÜZYON profilin malzemesi CAD'den / dosyadan gelmiyorsa SORAR
-        (program çelik ya da alüminyum varsaymaz - kullanıcı kararı). Cevap
-        o profillerin koduna yazılır, klasör ayarında saklanır: bir daha
-        sorulmaz. True: devam."""
+        (program çelik ya da alüminyum varsaymaz - kullanıcı kararı):
+        arama kutulu, resimli, parça başına kararlı pencere
+        (_malzeme_karar_penceresi). Cevap o profillerin koduna yazılır,
+        klasör ayarında saklanır: bir daha sorulmaz. True: devam."""
         if not (self.M and self.komp) or not hasattr(self.M, "malzemesi_sorulacak"):
             return True
         ek = self.M.malzemesi_sorulacak(self.komp, dict(self.malzemeler))
         if not ek:
             return True
-        ornek = "\n".join(f"  • {k['ad'][:40]}  x{k['adet']}" for k in ek[:5])
-        cvp = messagebox.askyesnocancel(
-            "Ekstrüzyon profil malzemesi",
-            f"{len(ek)} ekstrüzyon profilin malzemesi CAD'de tanımlı değil:\n\n{ornek}"
-            + ("\n  ..." if len(ek) > 5 else "")
-            + "\n\nEVET  →  Alüminyum (2,70 g/cm³)\nHAYIR →  Çelik (7,85 g/cm³)\n"
-              "İPTAL →  vazgeç (malzemeyi 2. adımda kendiniz verin)")
-        if cvp is None:
-            return False
-        m = "aluminyum" if cvp else "celik"
-        for k in ek:
-            self.malzemeler[self.M._tr_sade(k["kod"])] = m
-        self._malzeme_satirlari_guncelle()
-        self._yaz(f"ekstrüzyon profil malzemesi: {len(ek)} profil -> "
-                  f"{self.M.MALZEME[m][0]} (kullanıcı seçti)")
-        return True
+        return bool(self._malzeme_karar_penceresi(ek))
 
     def bom_cikart(self):
         if not self._standart_kontrol():
