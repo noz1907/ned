@@ -18,8 +18,8 @@ set "PI3D_LOGO=1"
 if exist ".venv\Scripts\python.exe" (set "PYEXE=.venv\Scripts\python.exe") else (set "PYEXE=python")
 echo.
 echo  Pi3D derleme
-echo    1  Yalniz exe (gelistirici denemesi)        -> dist\Pi3D\Pi3D.exe
-echo    2  Musteri kurulum paketi (bariyer + Inno)  -> installer\Output\Pi3D_Kurulum_v...exe
+echo    1  Yalniz exe (gelistirici denemesi)        : dist\Pi3D\Pi3D.exe
+echo    2  Musteri kurulum paketi (bariyer + Inno)  : installer\Output\Pi3D_Kurulum_v...exe
 echo    3  Ikisi de (once exe, sonra paket)
 echo.
 set "SECIM=%~1"
