@@ -445,10 +445,9 @@ DXF'te yazı boyunun katı olarak uygulanır):
   Sağ sütun ölçülü açınımın ölçülmüş sağ sınırından başlar, başlık
   satırları açınımın genişliğinde kırılır (pencereler üst üste binerse
   pafta tek pencereye düşüyordu). Açınım KÂĞITTA ölçülür
-  (`acinim_kagit_dongusu`): rakam 1,5 mm (`ACINIM_YAZI_EN_AZ_MM`; kullanıcı:
-  "1,5'ta olabilir; üst ve sol kenar sıkıntı yok") altındaysa yazı yalnız 1,5 mm'ye yetecek
-  kadar büyütülüp yeniden çizilir (geçiyorsa büyütülmez, resim en büyük
-  ölçekte kalır). 2. sayfa aynı kâğıt boyunda, sığan en
+  (`acinim_kagit_dongusu`): rakam 2,5 mm (kitap) altındaysa yazı büyütülüp
+  yeniden çizilir, ama ölçeği ilk turun %85'inin altına düşüren tur
+  alınmaz (`ACINIM_OLCEK_KORU`; resim büyük kalır). 2. sayfa aynı kâğıt boyunda, sığan en
   büyük ölçekte. DXF'te sayfalar PAFTA, PAFTA_2 ... sekmeleridir. Örnek:
   Karluna ÜST SAÇ açınımı 1:16 tek sayfa (rakam 0,5 mm) -> 1. sayfa 1:7
   (açınım + tablo + profil), 2. sayfa ölçüsüz + izometrik.
@@ -469,5 +468,12 @@ DXF'te yazı boyunun katı olarak uygulanır):
   yerleşim mümkün"); firma kendi antetini yapıştıracaksa (`antet_pi3d:
   0`) 150 x 100 boş kalır. Dolu pencereler (görünüşler, başlık) antete
   değmez, boş hücre antetin üstüne düşebilir.
+- **KENAR PAYI** (kullanıcı, 03.10.2026: "üst ve sol 1,5 olabilir, tüm
+  resimlerde; ama sağ ve alt olmaz, çünkü antet ve değişiklik bilgileri
+  vs oralara yazılacak"): resim çerçeveye üstte ve solda 1,5 mm'ye kadar
+  yaklaşabilir (`IC_PAY_UST`, `IC_PAY_SOL`); sağda ve altta 12 mm kalır
+  (`IC_PAY`), antete de 12 mm. Firma anteti yokken sağ üstteki resim no /
+  ad şeridi ayrıca engeldir, genişliği yazısından ölçülür (`engeller`,
+  `ic_alan`, `_SERIT_GEN`). Bütün paftalarda, 2. sayfada da.
 - Görünüşler birbirine yakın durur (arası en çok 15 mm), dağılmaz.
 - Yazılar okunur olmalı; "karınca duası" resim kabul edilmez.

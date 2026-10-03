@@ -205,16 +205,21 @@ try:
     esit("antet boyu (firma yapıştıracak)", P.antet_kutusu("A3")[3] - 15.0, 100.0)
     P.pi3d_antet_acik = _eski_acik
     a = P.cizim_alanlari("A3")
-    # Alanlar çerçeveye ve antete dayanmaz: her yönde IC_PAY boşluk kalır.
-    # Üst kenarda ayrıca sağ üstteki başlık yazısı vardır; başlık bu iç
-    # payın İÇİNE yazılır, ayrı bir şerit açmaz. Yalnız başlığın ölçülen
-    # yüksekliği iç paydan biraz fazlaysa aradaki fark kadar (0,3 mm)
-    # alan kısalır.
-    ust_pay = max(P.IC_PAY, P.BASLIK_SERIT + 1.0)
+    # Alanlar çerçeveye ve antete dayanmaz. Kullanıcı (03.10.2026): "üst ve
+    # sol 1,5 olabilir, tüm resimlerde; sağ ve alt olmaz, antet ve
+    # değişiklik bilgileri oraya yazılacak": üstte / solda IC_PAY_UST /
+    # IC_PAY_SOL (1,5), sağda / altta IC_PAY (12). Antetin üstündeki tam
+    # genişlik alan sağ üstteki resim no / ad şeridinin altında kalır;
+    # antetin solundaki alan şeride değmiyorsa çerçeveye 1,5 mm yaklaşır.
+    ust_pay = P.BASLIK_SERIT + 1.0 + P.IC_PAY_UST
     esit("üstteki boşluk", (a["ust"][2] - a["ust"][0], a["ust"][3] - a["ust"][1]),
-         (390.0 - 2 * P.IC_PAY, (282.0 - P.antet_kutusu("A3")[3]) - P.IC_PAY - ust_pay))
+         (390.0 - P.IC_PAY_SOL - P.IC_PAY, (282.0 - P.antet_kutusu("A3")[3]) - P.IC_PAY - ust_pay))
+    serit_x0 = 405.0 - P._SERIT_GEN[0] - P.IC_PAY_SOL
+    sol_ust = P.IC_PAY_UST if serit_x0 >= P.antet_kutusu("A3")[0] - P.IC_PAY else ust_pay
     esit("soldaki boşluk", (a["sol"][2] - a["sol"][0], a["sol"][3] - a["sol"][1]),
-         (240.0 - 2 * P.IC_PAY, 267.0 - P.IC_PAY - ust_pay))
+         (240.0 - P.IC_PAY_SOL - P.IC_PAY, 267.0 - P.IC_PAY - sol_ust))
+    dogru("üst ve sol pay 1,5 mm; sağ ve alt 12 mm (antet, değişiklik bilgileri)",
+          P.IC_PAY_UST == 1.5 and P.IC_PAY_SOL == 1.5 and P.IC_PAY == 12.0)
     for ad, r in a.items():
         dogru(f"{ad} boşluğu antete girmiyor", not kesisir(r, ak), str(r))
 
@@ -226,7 +231,8 @@ try:
     # yerleştir"): SIĞAN EN BÜYÜK ölçek seçilir. 1860 mm 1:6'da 310 mm,
     # 2480 mm 1:7'de 354 mm; 366 mm'lik üst boşluğa sığar, bir büyüğü
     # (1:5 -> 372, 1:6 -> 413) sığmaz.
-    esit("1860x238 A3", P.yerlesim(1860, 238, "A3")["olcek"], 1 / 6)
+    # sol pay 1,5 mm olunca 1:6'dan 1:5'e çıkar (kullanıcı: "üst ve sol 1,5")
+    esit("1860x238 A3", P.yerlesim(1860, 238, "A3")["olcek"], 1 / 5)
     esit("2480x233 A3", P.yerlesim(2480, 233, "A3")["olcek"], 1 / 7)
     for g_ in ((1860, 238), (2480, 233)):
         y_ = P.yerlesim(*g_, "A3")
@@ -277,10 +283,10 @@ try:
                   f"{P.antet_kutusu(kagit)} ile kesişiyor")
             kg, ky = P.KAGIT[kagit]
             en_az = P.KENAR + P.IC_PAY
-            dogru(f"{ad}: kenardan {en_az:.0f} mm uzak",
-                  (p[0] >= en_az - 1e-6 and p[1] >= en_az - 1e-6
+            dogru(f"{ad}: kenardan uzak (üst / sol {P.IC_PAY_UST}, sağ / alt {P.IC_PAY:.0f} mm)",
+                  (p[0] >= P.KENAR + P.IC_PAY_SOL - 1e-6 and p[1] >= en_az - 1e-6
                    and p[2] <= kg - en_az + 1e-6
-                   and p[3] <= ky - en_az + 1e-6),
+                   and p[3] <= ky - P.KENAR - P.IC_PAY_UST + 1e-6),
                   f"pencere {tuple(round(v, 1) for v in p)}")
             dogru(f"{ad}: antet alanından {P.IC_PAY:.0f} mm uzak",
                   not kesisir(p, tuple(
@@ -518,9 +524,10 @@ try:
     # ölçek merdiveninde bir basamak 2 katıdır, yani ölçek düşmez.
     ust = P.cizim_alanlari("A3")["ust"]
     sol = P.cizim_alanlari("A3")["sol"]
-    esit("çizim alanı başlık yüzünden daralmadı",
+    esit("çizim alanı (üst / sol 1,5 mm pay)",
          (round(ust[3] - ust[1]), round(sol[3] - sol[1])),
-         (202, 242))
+         (round(282.0 - P.antet_kutusu("A3")[3] - P.IC_PAY - P.BASLIK_SERIT - 1.0 - P.IC_PAY_UST),
+          round(267.0 - P.IC_PAY - sol_ust)))
     dogru("başlık için ayrılan yer iç paydan büyük değil",
           P.BASLIK_SERIT + 1.0 <= P.IC_PAY + 0.8,
           f"BASLIK_SERIT={P.BASLIK_SERIT} IC_PAY={P.IC_PAY}")

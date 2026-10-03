@@ -1640,6 +1640,10 @@ dışındaki alanını en çok kaplar; 2. sayfa aynı kâğıt boyundadır.
 Tablolar kendi ölçeğindedir, yazıları kâğıtta 2,5 mm. Aynı sayfalar
 DXF'te PAFTA, PAFTA_2 sekmeleridir.
 
+**Kenar payı:** resim çerçeveye üstte ve solda 1,5 mm'ye kadar yaklaşır;
+sağda ve altta 12 mm boş kalır (antet ve değişiklik bilgileri için). Sağ
+üstteki resim no / ad yazısının altına resim girmez.
+
 Buraya kadar çıkan resimler **1:1**'dir ve öyle kalır. Bu adım onları
 silmez, ölçeklerini değiştirmez, çizimin kendisine dokunmaz. Yaptığı iş
 şudur: **resmin kendi DXF dosyasına** `PAFTA` adında bir kâğıt sekmesi

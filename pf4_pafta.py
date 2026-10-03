@@ -118,7 +118,15 @@ BOLGE_HARF = "ABCDEFGHIJKL"
 GORUNUS_KATMAN = "PI3D_GORUNUS_ALANI"   # motorun bıraktığı görünüş yerleri
 GORUNUS_APPID = "PI3D"
 BASLIK_AD = "BASLIK"
-IC_PAY = 12.0            # çerçevenin ve antet alanının resme uzaklığı
+IC_PAY = 12.0            # çerçevenin (SAĞ ve ALT) ve antet alanının resme uzaklığı
+# ÜST ve SOL kenarda resim çerçeveye 1,5 mm'ye kadar yaklaşabilir
+# (kullanıcı, 03.10.2026: "üst ve sol 1,5 olabilir, tüm resimlerde; ama
+# sağ ve alt olmaz, çünkü antet ve değişiklik bilgileri vs oralara
+# yazılacak"). Sağ üstteki resim no / ad şeridi (firma anteti yokken)
+# ayrıca engeldir.
+IC_PAY_UST = 1.5
+IC_PAY_SOL = 1.5
+_SERIT_GEN = [150.0]     # sağ üst şeridin genişliği; pafta_kur yazılara göre ölçer
 # Çerçevenin üstünde resim no/isim için ayrılan şerit. Yazıların
 # gerçekten ihtiyacı kadar: 4,5 + 3,0 mm yazı + paylar. Bir mm fazlası
 # ölçeği bir kademe düşürebiliyor (A3'te 1:2 yerine 1:5), o yüzden dar
@@ -867,14 +875,39 @@ def cizim_alanlari(kagit=VARSAYILAN_KAGIT, sablon=None):
     fx0, fy0, fx1, fy1 = cerceve(kagit, sablon)
     ax0, _, _, ay1 = antet_kutusu(kagit, sablon)
     p = IC_PAY
-    # Resim no/isim, çerçevenin üstündeki İÇ PAYIN İÇİNE yazılır; o pay
-    # zaten boştu. Ayrıca yer ayırmak gereksiz yere ölçek düşürüyordu -
-    # A3'te 1:2 yerine 1:5, yani resim yarı yarıya küçülüyordu.
-    # Firma anteti varsa resim no ve isim ANTETE yazılır; çerçevenin
-    # üstünde ayrıca başlık şeridine gerek yoktur.
-    ust = fy1 - (p if sablon is not None else max(p, BASLIK_SERIT + 1.0))
-    return {"ust": (fx0 + p, ay1 + p, fx1 - p, ust),
-            "sol": (fx0 + p, fy0 + p, ax0 - p, ust)}
+    # Resim no/isim sağ üst şeride yazılır; antetin üstündeki tam genişlik
+    # alan şeridin altında kalır. Antetin solundaki alan şeride değmez:
+    # üstte çerçeveye IC_PAY_UST kadar yaklaşır (kullanıcı: "üst ve sol
+    # 1,5 olabilir"). Firma anteti varsa resim no ve isim ANTETE yazılır.
+    ust_tam = fy1 - (IC_PAY_UST if sablon is not None else BASLIK_SERIT + 1.0 + IC_PAY_UST)
+    serit_x0 = fx1 - _SERIT_GEN[0] - IC_PAY_SOL
+    # antetin solundaki alan şeridin altına girmiyorsa çerçeveye kadar çıkar
+    ust_sol = fy1 - IC_PAY_UST if (sablon is not None or serit_x0 >= ax0 - p) else ust_tam
+    return {"ust": (fx0 + IC_PAY_SOL, ay1 + p, fx1 - p, ust_tam),
+            "sol": (fx0 + IC_PAY_SOL, fy0 + p, ax0 - p, ust_sol)}
+
+
+def ic_alan(kagit=VARSAYILAN_KAGIT, sablon=None):
+    """Resmin girebileceği alan: çerçeveden üstte ve solda IC_PAY_UST /
+    IC_PAY_SOL, sağda ve altta IC_PAY içeride."""
+    fx0, fy0, fx1, fy1 = cerceve(kagit, sablon)
+    return (fx0 + IC_PAY_SOL, fy0 + IC_PAY, fx1 - IC_PAY, fy1 - IC_PAY_UST)
+
+
+def engeller(kagit=VARSAYILAN_KAGIT, sablon=None):
+    """Resmin girmeyeceği kutular: antet (IC_PAY payıyla) ve firma anteti
+    yokken sağ üstteki resim no / ad şeridi."""
+    a = antet_kutusu(kagit, sablon)
+    out = [(a[0] - IC_PAY, a[1] - IC_PAY, a[2] + IC_PAY, a[3] + IC_PAY)]
+    if sablon is None:
+        fx0, fy0, fx1, fy1 = cerceve(kagit, sablon)
+        out.append((fx1 - _SERIT_GEN[0] - IC_PAY_SOL, fy1 - BASLIK_SERIT - 1.0 - IC_PAY_UST,
+                    fx1, fy1))
+    return out
+
+
+def _kesisir(k, e):
+    return k[0] < e[2] and k[2] > e[0] and k[1] < e[3] and k[3] > e[1]
 
 
 def sigan_olcek(gx, gy, alan_g, alan_y, buyutme=False):
@@ -1068,9 +1101,8 @@ def tam_kagit_plani(d, kutu, kagit=VARSAYILAN_KAGIT, sablon=None, serbest_sayfa2
     kâğıdın yarısı boş kalıyordu.
     Döner: plan ("sabit_yer": (sol, alt) ile) ya da None."""
     fx0, fy0, fx1, fy1 = cerceve(kagit, sablon)
-    ic = (fx0 + IC_PAY, fy0 + IC_PAY, fx1 - IC_PAY, fy1 - IC_PAY)
-    ant = antet_kutusu(kagit, sablon)
-    ant = (ant[0] - IC_PAY, ant[1] - IC_PAY, ant[2] + IC_PAY, ant[3] + IC_PAY)
+    ic = ic_alan(kagit, sablon)
+    ant = engeller(kagit, sablon)
     ilkler = [cok_pencere_plani(d, kutu, ic[2] - ic[0], ic[3] - ic[1], serbest_izin=True,
                                 serbest_sayfa2=serbest_sayfa2, sayfa2_gorunus=sayfa2_gorunus,
                                 baslik_serbest=bs) for bs in (False, True)]
@@ -1100,8 +1132,7 @@ def tam_kagit_plani(d, kutu, kagit=VARSAYILAN_KAGIT, sablon=None, serbest_sayfa2
                 if any(k_[0] < ic[0] - 1e-6 or k_[1] < ic[1] - 1e-6 or k_[2] > ic[2] + 1e-6
                        or k_[3] > ic[3] + 1e-6 for k_ in kut):
                     continue
-                if any(k_[0] < ant[2] and k_[2] > ant[0] and k_[1] < ant[3] and k_[3] > ant[1]
-                       for k_ in kut):
+                if any(_kesisir(k_, e_) for k_ in kut for e_ in ant):
                     continue
                 sy = None
                 tablolar = {a: b for a, b in (p.get("serbest") or {}).items() if _tablo_mu(a)}
@@ -1183,7 +1214,7 @@ def _gorunus_sirasi_yerlestir(gor, o, ic, ant):
         w, hh = (c[2] - c[0]) * o, (c[3] - c[1]) * o
         alt = ust - boy + (c[1] - y0) * o
         k = (x, alt, x + w, alt + hh)
-        if k[0] < ant[2] and k[2] > ant[0] and k[1] < ant[3] and k[3] > ant[1]:
+        if any(_kesisir(k, e_) for e_ in (ant if isinstance(ant, list) else [ant])):
             return None
         out[a] = (x, alt)
         x += w + ARA_EN_AZ
@@ -1200,7 +1231,7 @@ def _serbest_yerlestir(plan, dolu, ic, ant, adim=4.0):
         return {}
     o = plan["olcek"]
     engel = [(k[0] - ARA_EN_AZ, k[1] - ARA_EN_AZ, k[2] + ARA_EN_AZ, k[3] + ARA_EN_AZ)
-             for k in dolu] + [ant]
+             for k in dolu] + (list(ant) if isinstance(ant, list) else [ant])
     out = {}
     # Okuma sırası: resimdeki (DXF) sırayla - yukarıdan aşağı, soldan sağa;
     # her detay görünüş öbeğinin ALTINDA, olabildiğince yukarıda ve solda
@@ -1244,9 +1275,8 @@ def _detay_sayfalari(d, pafta_adi, kagit, detaylar, no, resim_adi, sablon, deger
     detay geometrisi zaten büyütülmüş olduğundan 1:1'e kadar) satır satır
     dizilir; antete değmez. Döner: açılan pencere sayısı."""
     fx0, fy0, fx1, fy1 = cerceve(kagit, sablon)
-    ic = (fx0 + IC_PAY, fy0 + IC_PAY, fx1 - IC_PAY, fy1 - IC_PAY)
-    ant = antet_kutusu(kagit, sablon)
-    ant = (ant[0] - IC_PAY, ant[1] - IC_PAY, ant[2] + IC_PAY, ant[3] + IC_PAY)
+    ic = ic_alan(kagit, sablon)
+    ant = engeller(kagit, sablon)
     kalan = dict(detaylar)
     say, n = 0, 2
     while kalan and n < 12:
@@ -1596,6 +1626,12 @@ def pafta_kur(kaynak_dxf, cikti_dxf=None, kagit=VARSAYILAN_KAGIT, olcek=None,
     """
     sablon = lisansli_sablon(sablon)      # DENEME'de firma anteti yok
     _KUTU_ONBELLEK.clear()           # handle'lar belgeye özel
+    # sağ üst şeridin (resim no / ad + ölçek) genişliği ÖLÇÜLÜR: resim üst
+    # kenara 1,5 mm yaklaşabildiği için şeridin altına girmemeli
+    _no = resim_no if resim_no is not None else os.path.splitext(os.path.basename(kaynak_dxf))[0]
+    _alt = "   ".join(x for x in (str(resim_adi or ""), "A3 yatay  ÖLÇEK 1:100  (model 1:1)") if x)
+    _SERIT_GEN[0] = max(len(str(_no)) * HARF_ORAN * BASLIK_YAZI,
+                        len(_alt) * HARF_ORAN * BASLIK_ALT_YAZI) + 3.0
     _IMGDEF.clear()
     if kagit not in KAGIT:
         raise PaftaYok(f"Bilinmeyen kâğıt: {kagit}")
@@ -1749,12 +1785,11 @@ def pafta_kur(kaynak_dxf, cikti_dxf=None, kagit=VARSAYILAN_KAGIT, olcek=None,
         """Bu merkezde duran çizim çerçevenin içinde, kenarlardan ve
         antet kutusundan IC_PAY kadar uzakta mı?"""
         r = (cx - pg / 2, cy - py / 2, cx + pg / 2, cy + py / 2)
-        return (r[0] >= fx0 + IC_PAY - 1e-6 and r[1] >= fy0 + IC_PAY - 1e-6
-                and r[2] <= fx1 - IC_PAY + 1e-6 and r[3] <= fy1 - IC_PAY + 1e-6
-                and not (r[0] < kutu[2] + IC_PAY - 1e-6
-                         and r[2] > kutu[0] - IC_PAY + 1e-6
-                         and r[1] < kutu[3] + IC_PAY - 1e-6
-                         and r[3] > kutu[1] - IC_PAY + 1e-6))
+        ic_ = ic_alan(kagit, sablon)
+        return (r[0] >= ic_[0] - 1e-6 and r[1] >= ic_[1] - 1e-6
+                and r[2] <= ic_[2] + 1e-6 and r[3] <= ic_[3] + 1e-6
+                and not any(_kesisir((r[0] + 1e-6, r[1] + 1e-6, r[2] - 1e-6, r[3] - 1e-6), e_)
+                            for e_ in engeller(kagit, sablon)))
 
     def _kis(v, alt, ust):
         return alt if v < alt else (ust if v > ust else v)

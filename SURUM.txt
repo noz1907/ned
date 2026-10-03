@@ -1,6 +1,6 @@
 Pi3D  –  3B modelden parça listesi ve teknik resim
 
-Sürüm   : v1.0.20  (03.10.2026)
+Sürüm   : v1.0.21  (03.10.2026)
 Kaynak  : github.com/noz1907/ned   dal: claude/fikstur-parca-stp-57hwc1
 
 KURULUM
@@ -155,6 +155,15 @@ BU SÜRÜMDE NE VAR
     - kırmızı yalnız kaynağın kendisi (uzun sac kenarı artık kırmızı
       değil); kaynak ekseni ince mavi kesikli.
 
+  v1.0.21 (03.10.2026): kenar payı
+    - Resim çerçeveye üstte ve solda 1,5 mm'ye kadar yaklaşır, sağda ve
+      altta 12 mm kalır (kullanıcı: "üst ve sol 1,5 olabilir, tüm
+      resimlerde; sağ ve alt olmaz, antet ve değişiklik bilgileri oraya
+      yazılacak"). Sağ üstteki resim no / ad şeridine resim girmez.
+    - v1.0.20'deki "açınım rakamı en az 1,5 mm" kuralı yanlış anlamaydı,
+      kaldırıldı: açınımda rakam hedefi yine 2,5 mm (kitap), resim %15'ten
+      çok küçültülmez.
+
   v1.0.20 (03.10.2026): çok küçültme gereken resimde sayfa kuralı
     - Kullanıcının kuralı: 1. sayfada ön resim + tablo (seçiliyse) + bir
       yan görünüş; ölçüsüz resim ya da kalan görünüşler 2. sayfada; her
@@ -172,8 +181,8 @@ BU SÜRÜMDE NE VAR
       görünüş, ÖN, bir yan, kesit.
     - Büyük açınım profili küçültülerek çizilir (ölçeği başlığında);
       başlık satırları açınım genişliğinde kırılır; açınım kâğıtta
-      ölçülür; rakam kâğıtta en az 1,5 mm (kullanıcı: "1,5'ta
-      olabilir"), altındaysa yazı büyütülür ama resim küçültülmez.
+      ölçülür, rakam küçükse yazı büyütülür ama resim %15'ten çok
+      küçültülmez.
     - Eğik büküm etiketlerinin üstünden konum kılavuzu geçmez (yazılar da
       engel).
 
