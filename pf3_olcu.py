@@ -11904,6 +11904,7 @@ ACINIM_YAZI_KAT_EN_COK = 3.0
 # açınım rakamının kâğıttaki en az boyu (kullanıcı 03.10.2026: "1,5'ta
 # olabilir"): bunu geçen açınımda yazı büyütülmez, resim en büyük kalır
 ACINIM_YAZI_EN_AZ_MM = 1.5
+ACINIM_TUR = 5                   # kâğıt döngüsünde en çok tur (uzun parçada her büyütme ölçeği de düşürür)
 PROFIL_EN_COK = 30.0             # açınım profilinin en uzun kenarı en çok bu kadar yazı boyu     # kâğıt döngüsünde yazı boyu en çok bu kat büyür
 
 
@@ -11913,7 +11914,7 @@ def acinim_kagit_dongusu(r, k, yol, P=None, log=None):
     kalan 2. sayfa; resimler A3'ün antet ve kenar dışındaki alanını en
     çok kaplar"): çizilir, pafta planı kuru kurulur (2. sayfa kararıyla
     birlikte), en küçük yazının kâğıttaki boyu ölçülür; ACINIM_YAZI_EN_AZ_MM
-    (1,5; kullanıcı) altındaysa yazı boyu büyütülüp yeniden çizilir. En çok SONUC_TUR
+    (1,5; kullanıcı) altındaysa yazı boyu büyütülüp yeniden çizilir. En çok ACINIM_TUR
     tur; büyütmek kâğıtta kazandırmıyorsa durur, en iyi tur kalır.
     Döner: [(yazı katı, ölçek metni, kâğıtta yazı mm, sayfa sayısı)]."""
     import shutil
@@ -11922,7 +11923,7 @@ def acinim_kagit_dongusu(r, k, yol, P=None, log=None):
     kagit = P.get("kagit") or ayar_oku().get("kagit") or "A3"
     kat = float(P.get("yazi_kat") or 1.0)
     turlar, en_iyi = [], None
-    for tur in range(1, SONUC_TUR + 1):
+    for tur in range(1, ACINIM_TUR + 1):
         dxf_acilim(r, k, yol, dict(P, yazi_kat=kat))
         try:
             pl = PF.pafta_kur(yol, None, kagit, yalniz_plan=True)
@@ -11947,7 +11948,7 @@ def acinim_kagit_dongusu(r, k, yol, P=None, log=None):
             break
         if len(turlar) >= 2 and yz <= turlar[-2][2] + 1e-9:
             break                                   # büyütmek kazandırmadı
-        yeni = min(ACINIM_YAZI_KAT_EN_COK, kat * ACINIM_YAZI_EN_AZ_MM / max(yz, 0.1) * 1.05)
+        yeni = min(ACINIM_YAZI_KAT_EN_COK, kat * ACINIM_YAZI_EN_AZ_MM / max(yz, 0.1) * 1.12)
         if yeni <= kat + 1e-6:
             break
         kat = yeni
