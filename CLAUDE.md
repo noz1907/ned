@@ -378,6 +378,25 @@ DXF'te yazı boyunun katı olarak uygulanır):
     `--acinim-tablo-yok`; kapalıyken profil ve izometrik kalır, K / B
     adları kalır, kanat değerleri yazılmaz. Açınım kaydına `tablo` girer.
     Ölçüsüz kopya çizilmiş HER ŞEYİN altına ölçülerek konur.
+    **AÇINIM ARAÇ YÖNÜNDE** (kural 17; kullanıcı: "bu resim neden ters;
+    ölçerek değil, araç konumunda hangi yöndeyse; alt ve üst
+    karışmamalı; arka görüntü aynı, sadece tersi olur"): açınım hesabı
+    parçayı büküm ekseni Z olacak biçimde yatırır; düzlemin eksenleri
+    3B'de bilinir (`duz_yon`: +X büküm ekseni, her duvarda +Y = B·u) ve
+    çizim (araç) çerçevesine çevrilir (`acinim_araca_oturt`,
+    `acinim_arac_yonu`, `acinim_cevir`). Parça DİKEY ise (dikey duvar
+    alanı yataydan büyük) alanca ağır basan dikey duvarlar YUKARI okunur;
+    YATAY ise (levha, dikey dudakları olsa da) ÜST görünüş gibi. Sağ-sol
+    görünüşün sağına eşlenir (olmazsa ayna kabul). Kontur, delik, büküm
+    yeri / sırası (B1 hep alt kenarda), profil etiket sırası ve lazer
+    DXF'i birlikte çevrilir. İZOMETRİK bükümlü resim detaydaki
+    perspektifle aynı çerçeveden (`IZO_GOZ`); PROFİL resmi büküm ekseni
+    yönünden bakan detay görünüşü gibi (eksen X -> SAĞ, Y -> ÖN, Z ->
+    ÜST; `profil_araca_oturt`). Karluna ÜST SAÇ açınımı baş aşağıydı
+    (menteşeler üstte; araçta altta), ön panel profili yatıktı. 3B
+    (çok yönlü) açınımda düzlem yönü bilinmez, hesap yönünde kalır.
+    Açınım kaydına `cizim` (ACINIM_CIZIM_SURUMU) ve `arac` girer: kod ya
+    da araç yönü değişince eski açınım yeniden çizilir.
 
 ## PDF (pafta)
 

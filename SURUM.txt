@@ -182,6 +182,17 @@ BU SÜRÜMDE NE VAR
       koordinatla verilir; ölçü çizgileri desenin içinden geçmez. Desen
       ayrılınca öbür delikler yine ölçülür (Karluna ÜST SAÇ: 114 delikte
       önce hiç konum yoktu). Konum rakamları kenara sığmazsa ölçü konmaz.
+    - AÇINIM ARAÇ YÖNÜNDE (kullanıcı: "bu resim neden ters; araç
+      konumunda hangi yöndeyse, alt ve üst karışmamalı"): açınım, büküm
+      ekseni Z'ye yatırılmış hesap çerçevesinde çiziliyordu; Karluna ÜST
+      SAÇ baş aşağı çıkıyordu (menteşeler üstte, araçta altta). Artık
+      düzlemin eksenleri araç çerçevesine çevrilir: dikey parçada üstü
+      üstte, yatay parçada ÜST görünüş gibi; sağ-sol görünüşle aynı
+      (olmazsa ayna). Kontur, delik, büküm sırası (B1 hep altta), profil
+      etiketleri ve lazer DXF'i birlikte. İzometrik bükümlü resim ve
+      PROFİL resmi de araç yönünde (profil, büküm ekseni yönünden bakan
+      detay görünüşü gibi: ön panelde 70,5'luk ön yüz artık dik).
+      Eski açınımlar kendiliğinden yeniden çizilir.
     - LAZER DXF'inde ölçü / yazı yok (yalnız KESIM katmanında konturlar;
       denetimle güvence altında).
     - Açınımda profil etiketleri (B12) PERSPEKTİF yazısına binmiyor; ölçüsüz

@@ -10016,6 +10016,19 @@ def _sac_acilim_2b(sh, o=None, k_faktor=K_FAKTOR, istasyon=11,
                 ac = acilim_kesim(ham, t, k_faktor, hacim=hac)
             except AcilimYok:
                 ac = acilim_kesim(sh, t, k_faktor, hacim=hac)
+                # döndürülmüş katıdan açıldı: düzlem yönleri MODEL çerçevesine
+                if ac.get("duz_yon"):
+                    tr_ = gp_Trsf()
+                    tr_.SetTransformation(gp_Ax3(gp_Pnt(0, 0, 0), gp_Dir(*eksen)))
+                    ters = tr_.Inverted()
+
+                    def geri(v, ters=ters):
+                        w = gp_Vec(*v).Transformed(ters)
+                        return (w.X(), w.Y(), w.Z())
+                    dy_ = ac["duz_yon"]
+                    ac["duz_yon"] = {"x": geri(dy_["x"]), "px": geri(dy_["px"]),
+                                     "py": geri(dy_["py"]),
+                                     "duvar": [(a_, geri(y_), geri(n_)) for a_, y_, n_ in dy_["duvar"]]}
             sonuc.update(ac)
             # İki bağımsız yöntem aynı genişliği vermeli: kesitten çıkan
             # orta çizgi hesabı ile yüzeyden açılan konturun genişliği.
@@ -10292,7 +10305,17 @@ def acilim_kesim(sh, t, k_faktor, hacim=None, en_cok_sapma=0.03):
             "bukum_sayisi": len(bkm),
             "bukumler": bkm,
             "bukum_yerleri": [(b["acinimda_bas_mm"], b["acinimda_son_mm"])
-                              for b in bkm]}
+                              for b in bkm],
+            # düzlemin eksenleri 3B'de (girdi katının çerçevesinde): +X büküm
+            # ekseni (Z); her duvarda düzlemin +Y'si B·u yönüdür. Açınımın
+            # ARAÇ YÖNÜNE oturtulması bundan okunur (acinim_arac_yonu).
+            # profil (büküm ekseni yönünden bakış) resminin 2B eksenleri 3B'de
+            "duz_yon": {"px": (1.0, 0.0, 0.0), "py": (0.0, 1.0, 0.0),
+                        "x": (0.0, 0.0, 1.0),
+                        "duvar": [(duvarlar[wi]["alan"],
+                                   (B * duvarlar[wi]["u"][0], B * duvarlar[wi]["u"][1], 0.0),
+                                   tuple(duvarlar[wi]["n"]))
+                                  for wi, (A, B) in harita.items()]}}
 
 
 # ------------------------------------------------------- açınım konturu
@@ -11302,6 +11325,152 @@ def _kontur_basamak_olculeri(msp, r, boy, gen, h, d, en_cok=6, sol_bas=0.0):
                                        dxfattribs={"layer": "OLCU"}).render()
 
 
+def acinim_arac_yonu(r, R):
+    """AÇINIM ARAÇ YÖNÜNDE (kural 17; kullanıcı: "ölçerek değil, araç
+    konumunda hangi yöndeyse; alt ve üst karışmamalı; arka görüntü aynı,
+    sadece tersi olur"). Düzlemin eksenleri 3B'de bilinir (`duz_yon`:
+    +X büküm ekseni, her duvarda +Y); R model -> çizim (araç) çerçevesi.
+    Karar:
+      1. Parça DİKEY ise (dikey duvar alanı yataydan büyük) ve +Y'nin
+         alanca ağırlıklı düşey bileşeni toplamın %5'inden büyükse:
+         alanca ağır basan dikey duvarlar YUKARI okunur (araçta üstü
+         resimde üstte). Görünüş: dikey duvarların normaline göre ÖN / SAĞ.
+      2. Yoksa (levha, tavan sacı; dikey dudakları olsa da): ÜST görünüş
+         gibi okunur (detay resmindeki ÜST ile aynı yön).
+    Sağ-sol görünüşün sağına eşlenir; olmuyorsa ayna kalır (arkadan bakış
+    aynı resmin tersidir, kabul). Büküm ekseni düşeyse düzlemin +X'i
+    araçta yukarı bakar (resim 90° yatıktır, ters değildir).
+    Döner: (fx, fy, görünüş adı) - fx / fy: X / Y çevrilsin mi."""
+    dy = r.get("duz_yon")
+    if not dy or not R or r.get("cok_yonlu"):
+        return False, False, None
+
+    def cev(v):
+        return tuple(sum(R[i][j] * v[j] for j in range(3)) for i in range(3))
+    xd = cev(dy["x"])
+    duv = [(a, cev(y), cev(n)) for a, y, n in dy["duvar"]]
+    top = sum(a for a, _y, _n in duv) or 1.0
+    dik = sum(a * y[2] for a, y, _n in duv)
+    # parça DİKEY mi YATAY mı: duvar alanları normallerine göre bölüşülür
+    # (tavan sacının küçük dikey dudakları onu dikey yapmaz)
+    yatay_alan = sum(a * abs(n[2]) for a, _y, n in duv)
+    dikey_alan = sum(a * math.hypot(n[0], n[1]) for a, _y, n in duv)
+    if dikey_alan >= yatay_alan and abs(dik) > 0.05 * top:
+        fy = dik < 0.0
+        nx = sum(a * abs(n[0]) for a, _y, n in duv if abs(n[2]) < 0.5)
+        ny = sum(a * abs(n[1]) for a, _y, n in duv if abs(n[2]) < 0.5)
+        gad = "SAG" if nx > ny else "ON"
+    else:
+        gad = "UST"
+        goz, sag = GORUNUS[gad]
+        yuk = (goz[1] * sag[2] - goz[2] * sag[1], goz[2] * sag[0] - goz[0] * sag[2],
+               goz[0] * sag[1] - goz[1] * sag[0])
+        yy = sum(a * sum(y[i] * yuk[i] for i in range(3)) for a, y, _n in duv)
+        fy = yy < -0.05 * top
+    sag = GORUNUS[gad][1]
+    sx = sum(xd[i] * sag[i] for i in range(3))
+    if abs(sx) > 0.5:
+        fx = sx < 0.0
+    else:
+        fx = xd[2] < -0.5               # büküm ekseni düşey: +X yukarı
+    return fx, fy, gad
+
+
+def acinim_araca_oturt(r, sh, P=None, log=None, izo=True):
+    """Açınımı ve izometrik bükümlü resmi ARAÇ YÖNÜNE alır (kural 17):
+    çizim çerçevesi (araç yönü, üstü üstte) + acinim_arac_yonu +
+    acinim_cevir. Açınım ve lazer aynı yönde çıkar."""
+    P = P or {}
+    try:
+        s_arac, R_arac = cizim_cercevesi(sh, P.get("arac"), P.get("montaj_merkez"))
+    except Exception as e:
+        if log:
+            log(f"    araç yönü kurulamadı ({type(e).__name__}); açınım hesap yönünde")
+        return r
+    if izo:
+        try:
+            r["izo"] = hlr(s_arac, *IZO_GOZ, gizli=False)["GORUNEN"]
+        except Exception:
+            pass
+    fx, fy, gad = acinim_arac_yonu(r, R_arac)
+    acinim_cevir(r, fx, fy)
+    r["arac_gorunus"] = gad
+    profil_araca_oturt(r, R_arac)
+    return r
+
+
+def profil_araca_oturt(r, R):
+    """PROFİL resmi (büküm ekseni yönünden bakış) ARAÇ YÖNÜNDE: büküm
+    ekseni çizim çerçevesinde hangi eksene yakınsa o yönden bakan detay
+    görünüşü gibi (X -> SAĞ, Y -> ÖN, Z -> ÜST) çizilir; üstü üstte. Önce
+    açınım hesabının yatırdığı çerçevede çiziliyordu (ön panelin dik
+    70,5'luk yüzü yatay görünüyordu). Dönüşüm ortogonaldir, ölçü değişmez."""
+    dy = r.get("duz_yon") or {}
+    pr = r.get("profil")
+    if not (isinstance(pr, dict) and pr.get("cizgi") and dy.get("px") and R):
+        return r
+
+    def cev(v):
+        return [sum(R[i][j] * v[j] for j in range(3)) for i in range(3)]
+    ax = cev(dy["x"])
+    k = max(range(3), key=lambda i: abs(ax[i]))
+    gad = ("SAG", "ON", "UST")[k]
+    goz, sag = GORUNUS[gad]
+    yuk = (goz[1] * sag[2] - goz[2] * sag[1], goz[2] * sag[0] - goz[0] * sag[2],
+           goz[0] * sag[1] - goz[1] * sag[0])
+    ex, ey = cev(dy["px"]), cev(dy["py"])
+
+    def ic(a, b):
+        return sum(a[i] * b[i] for i in range(3))
+    m = ((ic(sag, ex), ic(sag, ey)), (ic(yuk, ex), ic(yuk, ey)))
+
+    def d(q):
+        return (m[0][0] * q[0] + m[0][1] * q[1], m[1][0] * q[0] + m[1][1] * q[1])
+    r["profil"] = dict(pr, cizgi=[[d(q) for q in w] for w in pr["cizgi"]],
+                       kanat=[(d(p), d(n)) for p, n in pr.get("kanat") or []],
+                       bukum=[d(b) for b in pr.get("bukum") or []],
+                       gorunus=gad)
+    return r
+
+
+def acinim_cevir(r, fx, fy):
+    """Açınımı düzlemde çevirir (fx: x -> boy - x, fy: y -> en - y): kesim
+    konturu, delikler, büküm yerleri / çizgileri, profil etiket sırası
+    (K1 her zaman açınımın ALT kenarındaki kanattır) birlikte. Ölçü
+    değişmez, yalnız resmin yönü."""
+    if not (fx or fy):
+        return r
+    L, H = float(r["acinim_boy_mm"]), float(r["acinim_genislik_mm"])
+
+    def p(q):
+        return ((L - q[0]) if fx else q[0], (H - q[1]) if fy else q[1])
+    for ad in ("kontur_dis", "kontur_delik"):
+        if r.get(ad):
+            r[ad] = [[p(q) for q in w] for w in r[ad]]
+    bk = []
+    for b in r.get("bukumler") or []:
+        b = dict(b)
+        if fy and "acinimda_bas_mm" in b:
+            b["acinimda_bas_mm"], b["acinimda_son_mm"] = (round(H - b["acinimda_son_mm"], 2),
+                                                          round(H - b["acinimda_bas_mm"], 2))
+        if b.get("cizgi"):
+            b["cizgi"] = [p(q) for q in b["cizgi"]]
+        bk.append(b)
+    if fy:
+        bk.sort(key=lambda b: b.get("acinimda_bas_mm", 0.0))
+    if r.get("bukumler") is not None:
+        r["bukumler"] = bk
+        r["bukum_yerleri"] = [(b["acinimda_bas_mm"], b["acinimda_son_mm"]) for b in bk
+                              if "acinimda_bas_mm" in b]
+    if fy and isinstance(r.get("profil"), dict):
+        pr = dict(r["profil"])
+        for ad in ("kanat", "bukum"):
+            if pr.get(ad):
+                pr[ad] = list(reversed(pr[ad]))
+        r["profil"] = pr
+    return r
+
+
 def dxf_acilim(r, k, yol, P=None):
     """Açınım resmi: kesim konturu, delikler ve büküm çizgileri.
 
@@ -11484,7 +11653,10 @@ def dxf_acilim(r, k, yol, P=None):
         px0, py0 = min(p[0] for p in pts), min(p[1] for p in pts)
         px1, py1 = max(p[0] for p in pts), max(p[1] for p in pts)
         y -= 1.5 * h
-        _yaz(msp, "PROFİL - büküm ekseni yönünden bakış (K: kanat, B: büküm)"
+        _gad = pr.get("gorunus")
+        _yaz(msp, "PROFİL - büküm ekseni yönünden bakış"
+             + (f", araç yönünde ({GORUNUS_AD.get(_gad, _gad)} görünüş gibi)" if _gad else "")
+             + " (K: kanat, B: büküm)"
              + (f"   ölçek {XL.tr(olc)}:1" if olc != 1.0 else ""), x, y, h)
         # profil etiketleri (B, K) profilin üstüne de taşar: başlıkla arası
         # 4 yazı boyu (P05 UST_SAC'ta B2 başlığa biniyordu)
@@ -11640,6 +11812,8 @@ def dxf_acilim(r, k, yol, P=None):
     return yol
 
 
+# açınım resmi kuralı değişince artırılır: eski açınımlar yeniden çizilir
+ACINIM_CIZIM_SURUMU = "2026.10.03"
 ACINIM_KONUM_EN_COK = 60   # bir yönde bundan çok farklı konum varsa ölçülmez (lazer DXF'i verir)
 
 
@@ -11958,6 +12132,14 @@ def acilim_yaz(kayit, komp, P, klasor, kodlar=None, k_faktor=K_FAKTOR, k_parca=N
     pozlar = poz_numaralari(komp)
     secili = [(pozlar[i], k) for i, k in enumerate(komp)
               if kodlar is None or (k.get("kod") or k.get("ad")) in kodlar]
+    # araç yönü ve montaj merkezi (izometrik resim için; GUI'den gelen P'de
+    # montaj merkezi olmayabilir)
+    P_ac = dict(P or {})
+    if P_ac.get("montaj_merkez") is None:
+        try:
+            P_ac["montaj_merkez"] = montaj_merkezi(kayit, komp)
+        except Exception:
+            pass
     for i, (poz, k) in enumerate(secili):
         # PARÇA BAZLI K (kullanıcı: "K değişimi parça bazlı olacak, seçip
         # yazıp değiştirebilmeliyim"): parca_ayar'daki K bu parça için
@@ -11971,8 +12153,12 @@ def acilim_yaz(kayit, komp, P, klasor, kodlar=None, k_faktor=K_FAKTOR, k_parca=N
         # güncel açınım atlanır - lazer dosyası da varsa (eski sürüm
         # açınımın yanına lazer yazmıyordu)
         tablo_ = bool((P or {}).get("acinim_tablo", ayar_oku().get("acinim_tablo", True)))
+        # açınım kodu (ACINIM_CIZIM_SURUMU) ya da araç yönü değiştiyse eski
+        # açınım güncel sayılmaz
+        arac_ = str(P_ac.get("arac") or "")
         if eksik and IS.onceden_uretilmis(kok, "acinim", ad, step_oz,
-                                          k_faktor=kf, tablo=tablo_) \
+                                          k_faktor=kf, tablo=tablo_,
+                                          cizim=ACINIM_CIZIM_SURUMU, arac=arac_) \
                 and IS.onceden_uretilmis(kok, "lazer", ad, step_oz, k_faktor=kf):
             log(f"  {ad}: açınım güncel (aynı model, K={k_faktor}) - atlandı")
             continue
@@ -11980,6 +12166,13 @@ def acilim_yaz(kayit, komp, P, klasor, kodlar=None, k_faktor=K_FAKTOR, k_parca=N
         try:
             sh = kayit[k["indeks"][0]][1]
             r = sac_acilim(sh, k, k_faktor=kf)
+            # İZOMETRİK BÜKÜMLÜ RESİM ARAÇ YÖNÜNDE (kural 17; kullanıcı:
+            # "araç konumunda hangi yöndeyse, alt ve üst karışmamalı"):
+            # sac_acilim parçayı büküm ekseni Z olacak biçimde yatırır, onun
+            # izometriği tavan sacını dik gösteriyordu. Detay resmindeki
+            # perspektifle aynı: çizim çerçevesi (araç yönü, üstü üstte,
+            # yalnız düşey eksen etrafında) + IZO_GOZ.
+            acinim_araca_oturt(r, sh, P_ac, log)
         except AcilimYok as e:
             hata.append((ad, str(e)))
             log(f"  {ad}: açınım yok - {str(e).splitlines()[0]}")
@@ -12002,7 +12195,7 @@ def acilim_yaz(kayit, komp, P, klasor, kodlar=None, k_faktor=K_FAKTOR, k_parca=N
         r["dxf"] = os.path.basename(dosya)
         sonuc.append(r)
         IS.cizim_kaydet(kok, "acinim", ad, dxf=r["dxf"], step_ozet=step_oz,
-                        k_faktor=kf, tablo=tablo_)
+                        k_faktor=kf, tablo=tablo_, cizim=ACINIM_CIZIM_SURUMU, arac=arac_)
         log(f"  {os.path.basename(dosya)}  {XL.tr(r['acinim_genislik_mm'])} x "
             f"{XL.tr(r['acinim_boy_mm'])} mm, t={XL.tr(r['kalinlik_mm'])}, "
             f"{r['bukum_sayisi']} büküm")
@@ -12061,7 +12254,7 @@ def acilim_yaz(kayit, komp, P, klasor, kodlar=None, k_faktor=K_FAKTOR, k_parca=N
 
 
 def lazer_yaz(kayit, komp, klasor, kodlar=None, k_faktor=K_FAKTOR, k_parca=None,
-              acilim=None, log=print, ilerleme=None, iptal=None):
+              acilim=None, log=print, ilerleme=None, iptal=None, P=None):
     """Seçilen sac parçalar için LAZER KESİM resimleri (..._Lzr.dxf).
 
     Kontur nereden gelir:
@@ -12109,6 +12302,8 @@ def lazer_yaz(kayit, komp, klasor, kodlar=None, k_faktor=K_FAKTOR, k_parca=None,
                     raise AcilimYok(
                         "Açınım çıktı ama kesim konturu çıkarılamadı; "
                         "lazer resmi verilemez.")
+                # açınım resmiyle AYNI yön (araç yönü)
+                acinim_araca_oturt(a, sh, P, izo=False)
                 dis, ic = a["kontur_dis"], a["kontur_delik"]
                 t, nere = a["kalinlik_mm"], "açınım"
             else:

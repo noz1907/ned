@@ -1287,7 +1287,11 @@ alt köşeden koordinatlı ölçü; "0" köşede). Sık delik deseni (ızgara,
 altıgen delikler) tek tek ölçülmez: kesik çerçeveyle işaretlenir, başı
 ve sonu verilir, deliklerin kendisi lazer DXF'indedir. Ölçü çizgisi
 başka bir deliğin ya da desenin üstünden geçecekse o deliğin konumu
-başlıkta "x; y" olarak yazılır. Büküm yerleri büküm çizelgesinde. Resimde üç çizim: ölçülü açınım, altında ÖLÇÜSÜZ açınım,
+başlıkta "x; y" olarak yazılır. Büküm yerleri büküm çizelgesinde.
+Açınım, izometrik ve profil resmi **araç yönündedir**: parça araçta nasıl
+duruyorsa üstü üstte (yatay levha ÜST görünüş gibi); sağ-sol detay
+resmindeki görünüşle aynıdır, olmuyorsa ayna (arkadan bakış) olur. Araç
+yönü ayarı değişince açınımlar yeniden çizilir. Resimde üç çizim: ölçülü açınım, altında ÖLÇÜSÜZ açınım,
 sağda izometrik bükümlü resim. Lazer DXF'inde ölçü ve yazı yoktur.
 Büküm çizelgesi ve abkant kanat ölçüleri tablosu isteğe bağlıdır:
 6. sekmedeki **Açınım resminde tablolar** kutusu (seçim saklanır;

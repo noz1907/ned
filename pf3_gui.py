@@ -1981,17 +1981,17 @@ class Uygulama(ttk.Frame):
         self._basla("lazer resimleri hazırlanıyor…",
                     f"Lazer resmi ({len(kodlar)} parça)")
         threading.Thread(target=self._lazer_is,
-                         args=(on, kodlar, kf, dict(self.lz_satir)),
+                         args=(on, kodlar, kf, dict(self.lz_satir), self._P()),
                          daemon=True).start()
 
-    def _lazer_is(self, on, kodlar, kf, satirlar):
+    def _lazer_is(self, on, kodlar, kf, satirlar, P=None):
         try:
             sonuc, hata = self.M.lazer_yaz(
                 self.kayit, self.komp, on, kodlar=kodlar, k_faktor=kf,
                 k_parca=self._k_parca(), acilim=getattr(self, "acilim_liste", None),
                 log=self._yaz,
                 ilerleme=lambda y, t, ad: self.kuyruk.put(("ilerleme", (y, t))),
-                iptal=lambda: self.iptal_istendi)
+                iptal=lambda: self.iptal_istendi, P=P)
             self.kuyruk.put(("lazer", (sonuc, hata, satirlar)))
         except Exception:
             self.kuyruk.put(("hata", "Lazer resmi üretilirken hata:\n\n"
