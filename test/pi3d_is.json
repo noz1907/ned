@@ -1,0 +1,30 @@
+{
+ "surum": 1,
+ "step": "",
+ "step_ozet": "",
+ "ayar": {},
+ "dxf": {},
+ "acinim": {},
+ "lazer": {},
+ "islemler": [
+  {
+   "ad": "BOM çıkarma",
+   "sure": 0.0,
+   "sonuc": "tamam",
+   "tarih": "2026-10-03 10:17:53"
+  },
+  {
+   "ad": "Tüm çizimler (1 parça)",
+   "sure": 0.0,
+   "sonuc": "tamam",
+   "tarih": "2026-10-03 10:17:53"
+  },
+  {
+   "ad": "BOM çıkarma",
+   "sure": 0.0,
+   "sonuc": "hata",
+   "tarih": "2026-10-03 10:17:53"
+  }
+ ],
+ "standart_kontrol": {}
+}

@@ -259,6 +259,7 @@ class Uygulama(ttk.Frame):
         self.onizleme_png = None
         self.onizleme_resmi = None       # PhotoImage referansı (GC'ye yem olmasın)
         self.kuyruk = queue.Queue()
+        self._yapildi = {}               # düğme anahtarı -> işin yapıldığı girdi imzası
         self.calisiyor = False
         self.iptal_istendi = False
         self.ornek_adaylar = []
@@ -2277,6 +2278,13 @@ class Uygulama(ttk.Frame):
         self.kuyruk.put(("log", metin))
 
     def _kuyruk_isle(self):
+        # alt iş düğmeleri yarım saniyede bir tazelenir (girdi değişti mi?)
+        self._tazele_sayac = getattr(self, "_tazele_sayac", 0) + 1
+        if self._tazele_sayac % 6 == 0 and not getattr(self, "calisiyor", False):
+            try:
+                self._dugmeleri_tazele()
+            except Exception:
+                pass
         try:
             while True:
                 tip, veri = self.kuyruk.get_nowait()
@@ -2465,21 +2473,118 @@ class Uygulama(ttk.Frame):
                     self._bekleyen_islem = []
                 except Exception:
                     pass
+            # YAPILAN İŞİN DÜĞMESİ PASİF KALIR (kullanıcı: "yapılan işin
+            # butonu dezaktif olsun, tekrar tekrar basmayayım"): iş aynı
+            # girdilerle bitti; girdi (model, malzeme, ayar, seçim)
+            # değişince düğme kendiliğinden açılır (_dugmeleri_tazele).
+            if sonuc == "tamam":
+                anahtar = next((k for a, k in self.IS_ANAHTAR if ad.startswith(a)), None)
+                if anahtar:
+                    try:
+                        self._yapildi[anahtar] = self._girdi_imzasi(anahtar)
+                    except Exception:
+                        pass
         self.calisiyor = False
         self.ilerleme.stop(); self.ilerleme.configure(mode="determinate")
+        self._dugmeleri_tazele()
+        self.b_iptal.configure(state="disabled")
+
+    # iş adı (süre panelindeki) -> düğme anahtarı
+    IS_ANAHTAR = (("Model okuma", "incele"), ("STEP okun", "incele"), ("BOM çıkarma", "bom"),
+                  ("Örnek resim", "ornek"), ("Tüm çizimler", "tumu"), ("Eksik çizimler", "tumu"),
+                  ("Kaynak resimleri", "kaynak"), ("Açınım", "acilim"), ("Lazer resmi", "lazer"),
+                  ("Pafta (", "pafta"), ("PDF basımı", "bas"))
+
+    def _girdi_imzasi(self, anahtar):
+        """Bir düğmenin işini belirleyen GİRDİLERİN imzası: değişince iş
+        yeniden yapılabilir (düğme açılır). Ucuz olmalı (yarım saniyede bir
+        hesaplanır)."""
+        step = (self.v_step.get() or "").strip()
+        try:
+            mt = os.path.getmtime(step) if step and os.path.isfile(step) else 0
+        except OSError:
+            mt = 0
+        on = (self.v_out.get() or "").strip()
+        komp = tuple((k.get("kod"), k.get("ad"), k.get("sinif")) for k in (self.komp or []))
+        mal = tuple(sorted((self.malzemeler or {}).items()))
+
+        def ayar():
+            try:
+                return json.dumps(self._P(), sort_keys=True, default=str)
+            except Exception:
+                return ""
+        kf = self.v_kfaktor.get() if hasattr(self, "v_kfaktor") else ""
+        if anahtar == "incele":
+            return (step, mt, on)
+        if anahtar == "bom":
+            return (step, mt, on, komp, mal, self.v_mal.get() if hasattr(self, "v_mal") else "")
+        if anahtar == "ornek":
+            return (step, mt, on, komp, mal, ayar(),
+                    self.cb_ornek.current() if hasattr(self, "cb_ornek") else -1)
+        if anahtar == "tumu":
+            return (step, mt, on, komp, mal, ayar(),
+                    bool(self.v_montaj.get()) if hasattr(self, "v_montaj") else True)
+        if anahtar == "kaynak":
+            return (step, mt, on, komp)
+        if anahtar == "acilim":
+            return (step, mt, on, tuple(self.ac_agac.selection()) if hasattr(self, "ac_agac") else (), kf)
+        if anahtar == "lazer":
+            return (step, mt, on, tuple(self.lz_agac.selection()) if hasattr(self, "lz_agac") else (), kf)
+        if anahtar == "pafta":
+            return (on, tuple(self.pf_agac.selection()) if hasattr(self, "pf_agac") else (),
+                    self.v_kagit.get() if hasattr(self, "v_kagit") else "",
+                    bool(self._antet_acik()) if hasattr(self, "_antet_acik") else True)
+        if anahtar == "bas":
+            return (on, tuple(self.pf_agac.selection()) if hasattr(self, "pf_agac") else (),
+                    tuple(sorted(str(v) for v in (self.pafta_dosya or {}).values())) if hasattr(self, "pafta_dosya") else ())
+        return ()
+
+    def _yapildi_mi(self, anahtar):
+        try:
+            return self._yapildi.get(anahtar) is not None and \
+                self._yapildi.get(anahtar) == self._girdi_imzasi(anahtar)
+        except Exception:
+            return False
+
+    def _dugme_durum(self, b, anahtar, kosul):
+        """Düğme: ön koşul yoksa pasif; iş aynı girdilerle yapıldıysa pasif
+        ve metninde '✓ yapıldı'; yoksa aktif, asıl metni."""
+        if b is None:
+            return
+        if not hasattr(b, "_asil_metin"):
+            b._asil_metin = b.cget("text")
+        yapildi = bool(kosul) and self._yapildi_mi(anahtar)
+        try:
+            b.configure(state="normal" if (kosul and not yapildi) else "disabled",
+                        text=(b._asil_metin.replace("▸", "").rstrip() + "   ✓ yapıldı") if yapildi
+                        else b._asil_metin)
+        except Exception:
+            pass
+
+    def _dugmeleri_tazele(self):
+        """Alt iş düğmelerinin durumu: ön koşul + yapıldı mı (girdi imzası)."""
+        if getattr(self, "calisiyor", False):
+            return
+        if not hasattr(self, "_yapildi"):
+            self._yapildi = {}
         # Motor (OpenCascade) yüklenmeden İNCELE açılmaz: yüklenmemişken
         # basılırsa self.M None'dır ve program çöküyordu.
-        self.b_incele.configure(state="normal" if (self.v_step.get() and self.M)
-                                else "disabled")
-        self.b_bom.configure(state="normal" if self.komp else "disabled")
-        self.b_ornek.configure(state="normal" if self.komp else "disabled")
-        self.b_onay.configure(state="normal" if self.ornek_dxf else "disabled")
-        if hasattr(self, "b_tumu"):
-            self.b_tumu.configure(state="normal" if self.komp else "disabled")
-        if hasattr(self, "b_kaynak"):
-            self.b_kaynak.configure(state="normal" if any(
-                k.get("sinif") == "kaynak" for k in (self.komp or [])) else "disabled")
-        self.b_iptal.configure(state="disabled")
+        self._dugme_durum(self.b_incele, "incele", bool(self.v_step.get() and self.M))
+        self._dugme_durum(self.b_bom, "bom", bool(self.komp))
+        self._dugme_durum(self.b_ornek, "ornek", bool(self.komp))
+        self._dugme_durum(self.b_onay, "tumu", bool(self.ornek_dxf))
+        self._dugme_durum(getattr(self, "b_tumu", None), "tumu", bool(self.komp))
+        self._dugme_durum(getattr(self, "b_kaynak", None), "kaynak",
+                          any(k.get("sinif") == "kaynak" for k in (self.komp or [])))
+        if hasattr(self, "ac_agac"):
+            self._dugme_durum(getattr(self, "b_acilim", None), "acilim", bool(self.ac_agac.selection()))
+        if hasattr(self, "lz_agac"):
+            self._dugme_durum(getattr(self, "b_lazer", None), "lazer", bool(self.lz_agac.selection()))
+        if hasattr(self, "pf_agac"):
+            self._dugme_durum(getattr(self, "b_pafta", None), "pafta",
+                              bool(self.pf_agac.get_children()) and bool(self.pf_agac.selection()))
+            self._dugme_durum(getattr(self, "b_bas", None), "bas",
+                              bool(getattr(self, "pafta_dosya", None)) and bool(self.pf_agac.selection()))
 
     def iptal(self):
         self.iptal_istendi = True
